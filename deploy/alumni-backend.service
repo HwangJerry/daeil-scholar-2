@@ -1,0 +1,36 @@
+[Unit]
+Description=Alumni Backend API
+After=network.target mariadb.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/app/backend
+ExecStart=/app/backend/server
+Restart=on-failure
+RestartSec=5
+
+Environment="DB_HOST=127.0.0.1"
+Environment="DB_PORT=3306"
+Environment="DB_USER=alumni"
+Environment="DB_PASSWORD=password"
+Environment="DB_NAME=alumni_db"
+Environment="JWT_SECRET=change-me-in-production"
+Environment="ALLOWED_ORIGIN=https://alumni.example.com"
+Environment="KAKAO_CLIENT_ID="
+Environment="KAKAO_CLIENT_SECRET="
+Environment="KAKAO_REDIRECT_URI=https://alumni.example.com/api/auth/kakao/callback"
+Environment="UPLOAD_BASE_PATH=/var/www/uploads"
+Environment="EASYPAY_GW_URL=gw.easypay.co.kr"
+Environment="EASYPAY_RETURN_BASE_URL=https://www.daeilfoundation.or.kr"
+Environment="PG_AUDIT_LOG_PATH=/var/logs/pg/pg-audit.log"
+Environment="GOMEMLIMIT=80MiB"
+Environment="GOMAXPROCS=1"
+OOMScoreAdjust=0
+MemoryMax=120M
+
+StandardOutput=append:/var/logs/alumni/backend.log
+StandardError=append:/var/logs/alumni/backend-error.log
+
+[Install]
+WantedBy=multi-user.target

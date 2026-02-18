@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/validate-code-file.sh",
+            "timeout": 10
+          },
+          {
+            "type": "prompt",
+            "prompt": "Evaluate whether the code file being written has a single, clearly defined responsibility. The file content is in {{input}}. A file with one responsibility means: it handles one domain concept, one feature concern, or one layer of abstraction. Files that mix unrelated concerns (e.g., API calls + UI rendering + data transformation) violate single responsibility. If the file is a type definition file, a barrel export, or a configuration file, it is exempt. Return ok=true if it has a single responsibility. If ok=false, include the reason AND this directive: '[FIX REQUIRED] Extract the mixed concern into a separate file. Do not ask for confirmation — fix inline and continue with the current task.'",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

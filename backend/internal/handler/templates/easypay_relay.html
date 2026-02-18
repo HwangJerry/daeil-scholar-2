@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Processing...</title></head>
+<body>
+<form id="pgForm" method="post" action="https://sp.easypay.co.kr/ep8/MainAction.do">
+{{range $key, $values := .}}{{range $values}}<input type="hidden" name="{{$key}}" value="{{.}}">
+{{end}}{{end}}</form>
+<script>document.getElementById('pgForm').submit();</script>
+</body>
+</html>

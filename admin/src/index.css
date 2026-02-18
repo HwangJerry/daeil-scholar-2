@@ -1,0 +1,33 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  /* Color Palette — shared with User SPA */
+  --color-royal-indigo: #4F46E5;
+  --color-soft-sky: #E0E7FF;
+  --color-pale-slate: #F8FAFC;
+  --color-dark-slate: #1E293B;
+  --color-cool-gray: #64748B;
+
+  --color-primary: var(--color-royal-indigo);
+  --color-background: var(--color-pale-slate);
+  --color-surface: #FFFFFF;
+  --color-text-main: var(--color-dark-slate);
+  --color-text-muted: var(--color-cool-gray);
+
+  --color-primary-dark: #4338CA;
+
+  /* Typography */
+  --font-sans: "Pretendard", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Radius */
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-text-main font-sans antialiased;
+  }
+}

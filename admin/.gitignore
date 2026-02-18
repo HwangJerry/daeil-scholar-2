@@ -1,0 +1,26 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build
+dist
+dist-ssr
+
+# Editor
+*.swp
+*.swo
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+*.local

@@ -1,0 +1,10 @@
+/var/logs/alumni/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    maxsize 50M
+}

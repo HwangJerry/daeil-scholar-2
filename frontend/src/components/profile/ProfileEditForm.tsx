@@ -1,0 +1,239 @@
+// ProfileEditForm — Edit form for profile info including business fields and tags
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { X } from 'lucide-react';
+import { api } from '../../api/client';
+import { Button } from '../ui/Button';
+import type { UserProfile, ProfileUpdateRequest, AlumniFilters } from '../../types/api';
+
+const MAX_TAGS = 5;
+
+export function ProfileEditForm() {
+  const queryClient = useQueryClient();
+
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => api.get<UserProfile>('/api/profile'),
+  });
+
+  const { data: filters } = useQuery({
+    queryKey: ['alumni', 'filters'],
+    queryFn: () => api.get<AlumniFilters>('/api/alumni/filters'),
+    staleTime: 60 * 60_000,
+  });
+
+  const [form, setForm] = useState<ProfileUpdateRequest | null>(null);
+  const [tagInput, setTagInput] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const displayForm: ProfileUpdateRequest = form ?? {
+    usrNick: profile?.usrNick ?? '',
+    usrPhone: profile?.usrPhone ?? '',
+    usrEmail: profile?.usrEmail ?? '',
+    bizName: profile?.bizName ?? '',
+    bizDesc: profile?.bizDesc ?? '',
+    bizAddr: profile?.bizAddr ?? '',
+    jobCat: profile?.jobCat ?? null,
+    tags: profile?.tags ?? [],
+  };
+
+  const mutation = useMutation({
+    mutationFn: (data: ProfileUpdateRequest) => api.put('/api/profile', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+      setSuccessMsg('저장되었습니다.');
+      setTimeout(() => setSuccessMsg(''), 2000);
+    },
+  });
+
+  const handleChange = (field: keyof ProfileUpdateRequest, value: string | number | null) => {
+    setForm((prev) => ({ ...displayForm, ...prev, [field]: value }));
+  };
+
+  const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const tag = tagInput.trim();
+    if (!tag || displayForm.tags.length >= MAX_TAGS) return;
+    if (displayForm.tags.includes(tag)) {
+      setTagInput('');
+      return;
+    }
+    const newTags = [...displayForm.tags, tag];
+    setForm((prev) => ({ ...displayForm, ...prev, tags: newTags }));
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    const newTags = displayForm.tags.filter((t) => t !== tagToRemove);
+    setForm((prev) => ({ ...displayForm, ...prev, tags: newTags }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    mutation.mutate(displayForm);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 rounded-xl bg-surface p-6 shadow-card border border-border-subtle">
+        <div className="h-4 w-32 rounded skeleton-shimmer" />
+        <div className="h-9 rounded skeleton-shimmer" />
+        <div className="h-9 rounded skeleton-shimmer" />
+        <div className="h-9 rounded skeleton-shimmer" />
+      </div>
+    );
+  }
+
+  if (!profile) return null;
+
+  const inputClass =
+    'w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/30 transition-shadow duration-150';
+  const labelClass = 'mb-1 block text-[13px] font-medium text-text-tertiary';
+
+  return (
+    <form onSubmit={handleSubmit} className="rounded-xl bg-surface p-6 shadow-card border border-border-subtle">
+      <h2 className="mb-4 text-lg font-semibold text-text-primary">프로필 수정</h2>
+
+      {/* Name (read-only) */}
+      <div className="mb-4">
+        <label className={labelClass}>이름</label>
+        <p className="py-2 text-sm text-text-primary">{profile.usrName} ({profile.usrFn}기)</p>
+      </div>
+
+      {/* Nickname */}
+      <div className="mb-4">
+        <label className={labelClass}>닉네임</label>
+        <input
+          type="text"
+          value={displayForm.usrNick}
+          onChange={(e) => handleChange('usrNick', e.target.value)}
+          className={inputClass}
+        />
+      </div>
+
+      {/* Phone */}
+      <div className="mb-4">
+        <label className={labelClass}>연락처</label>
+        <input
+          type="tel"
+          value={displayForm.usrPhone}
+          onChange={(e) => handleChange('usrPhone', e.target.value)}
+          className={inputClass}
+        />
+      </div>
+
+      {/* Email */}
+      <div className="mb-4">
+        <label className={labelClass}>이메일</label>
+        <input
+          type="email"
+          value={displayForm.usrEmail}
+          onChange={(e) => handleChange('usrEmail', e.target.value)}
+          className={inputClass}
+        />
+      </div>
+
+      {/* Divider */}
+      <hr className="my-5 border-border" />
+      <h3 className="mb-3 text-base font-semibold text-text-primary">사업장 정보</h3>
+
+      {/* Job Category */}
+      <div className="mb-4">
+        <label className={labelClass}>업종</label>
+        <select
+          value={displayForm.jobCat ?? ''}
+          onChange={(e) => {
+            const val = e.target.value;
+            handleChange('jobCat', val ? Number(val) : null);
+          }}
+          className={`${inputClass} bg-surface`}
+        >
+          <option value="">선택 안함</option>
+          {filters?.jobCategories?.map((cat) => (
+            <option key={cat.seq} value={cat.seq}>
+              {cat.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Business Name */}
+      <div className="mb-4">
+        <label className={labelClass}>사업장명</label>
+        <input
+          type="text"
+          value={displayForm.bizName}
+          onChange={(e) => handleChange('bizName', e.target.value)}
+          placeholder="예: 강남제일부동산"
+          className={inputClass}
+        />
+      </div>
+
+      {/* Business Description */}
+      <div className="mb-4">
+        <label className={labelClass}>사업 설명</label>
+        <textarea
+          value={displayForm.bizDesc}
+          onChange={(e) => handleChange('bizDesc', e.target.value)}
+          placeholder="간단한 사업 설명 (200자 이내)"
+          maxLength={200}
+          rows={3}
+          className={`${inputClass} resize-none`}
+        />
+      </div>
+
+      {/* Business Address */}
+      <div className="mb-4">
+        <label className={labelClass}>위치</label>
+        <input
+          type="text"
+          value={displayForm.bizAddr}
+          onChange={(e) => handleChange('bizAddr', e.target.value)}
+          placeholder="예: 서울시 강남구 삼성동"
+          className={inputClass}
+        />
+      </div>
+
+      {/* Tags */}
+      <div className="mb-6">
+        <label className={labelClass}>태그 (최대 {MAX_TAGS}개)</label>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {displayForm.tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-primary-light text-primary"
+            >
+              #{tag}
+              <button
+                type="button"
+                onClick={() => handleRemoveTag(tag)}
+                className="hover:text-error transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+        {displayForm.tags.length < MAX_TAGS && (
+          <input
+            type="text"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={handleAddTag}
+            placeholder="태그 입력 후 Enter"
+            className={inputClass}
+          />
+        )}
+      </div>
+
+      <Button type="submit" disabled={mutation.isPending} className="w-full">
+        {mutation.isPending ? '저장 중...' : '저장'}
+      </Button>
+      {successMsg && <p className="mt-2 text-center text-sm text-success">{successMsg}</p>}
+      {mutation.isError && (
+        <p className="mt-2 text-center text-sm text-error">저장에 실패했습니다. 다시 시도해주세요.</p>
+      )}
+    </form>
+  );
+}

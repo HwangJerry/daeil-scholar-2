@@ -1,0 +1,10 @@
+/var/logs/pg/*.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    maxsize 50M
+}
