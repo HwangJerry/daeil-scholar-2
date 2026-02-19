@@ -1,4 +1,4 @@
-// TopNav — Desktop top navigation header with message badge for unread count
+// TopNav — Desktop top navigation with serif brand logo and warm editorial style
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import { useUnreadMessages } from "../../hooks/useUnreadMessages";
@@ -16,12 +16,14 @@ export default function TopNav() {
   const { unreadCount } = useUnreadMessages();
 
   return (
-    <header className="hidden md:flex sticky top-0 z-40 w-full bg-surface/80 backdrop-blur-md shadow-xs">
-      <div className="container mx-auto flex h-14 items-center justify-between px-4">
-        <Link to="/" className="flex items-center gap-2">
-          <img src="/logo.png" alt="대일외고 장학회 로고" className="h-8" />
-          <span className="text-lg font-bold text-text-primary">
-            대일외고 장학회
+    <header className="hidden md:flex sticky top-0 z-40 w-full bg-surface/95 backdrop-blur-md shadow-xs border-b border-border-subtle">
+      <div className="container mx-auto flex h-14 items-center justify-between px-6 max-w-[1080px]">
+        <Link to="/" className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+            <span className="text-white font-bold text-sm font-serif">D</span>
+          </div>
+          <span className="text-base font-bold text-text-primary font-serif tracking-tight">
+            대일외국어고등학교 장학회
           </span>
         </Link>
 
@@ -33,10 +35,10 @@ export default function TopNav() {
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  "relative text-[13px] font-medium transition-colors duration-150",
+                  "relative text-[13px] font-medium transition-colors duration-150 pb-1",
                   isActive
-                    ? "text-primary font-semibold"
-                    : "text-text-tertiary hover:text-primary"
+                    ? "text-primary border-b-2 border-primary"
+                    : "text-text-placeholder hover:text-text-primary"
                 )}
               >
                 {item.label}

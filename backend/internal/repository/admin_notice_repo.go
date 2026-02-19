@@ -59,16 +59,21 @@ func (r *AdminNoticeRepository) GetNoticeForEdit(seq int) (*model.NoticeDetail, 
 }
 
 func (r *AdminNoticeRepository) InsertNotice(n *model.AdminNoticeInsert) (int, error) {
-	res, err := r.DB.Exec(`
+	// WEO_BOARDBBS.SEQ is not AUTO_INCREMENT (legacy table); generate next SEQ manually
+	var nextSeq int
+	if err := r.DB.Get(&nextSeq, `SELECT COALESCE(MAX(SEQ), 0) + 1 FROM WEO_BOARDBBS`); err != nil {
+		return 0, err
+	}
+
+	_, err := r.DB.Exec(`
 		INSERT INTO WEO_BOARDBBS
-			(GATE, SUBJECT, CONTENTS, CONTENTS_MD, CONTENT_FORMAT, SUMMARY, THUMBNAIL_URL, IS_PINNED, OPEN_YN, REG_NAME, REG_DATE, HIT)
-		VALUES ('NOTICE', ?, ?, ?, 'MARKDOWN', ?, ?, ?, 'Y', ?, NOW(), 0)
-	`, n.Subject, n.Contents, n.ContentsMD, n.Summary, n.ThumbnailURL, n.IsPinned, n.RegName)
+			(SEQ, GATE, SUBJECT, CONTENTS, CONTENTS_MD, CONTENT_FORMAT, SUMMARY, THUMBNAIL_URL, IS_PINNED, OPEN_YN, REG_NAME, REG_DATE, HIT)
+		VALUES (?, 'NOTICE', ?, ?, ?, 'MARKDOWN', ?, ?, ?, 'Y', ?, NOW(), 0)
+	`, nextSeq, n.Subject, n.Contents, n.ContentsMD, n.Summary, n.ThumbnailURL, n.IsPinned, n.RegName)
 	if err != nil {
 		return 0, err
 	}
-	id, err := res.LastInsertId()
-	return int(id), err
+	return nextSeq, nil
 }
 
 func (r *AdminNoticeRepository) UpdateNotice(seq int, n *model.AdminNoticeInsert) error {

@@ -1,11 +1,13 @@
-// MemberDetailPage — displays member profile and allows status changes
+// MemberDetailPage — displays member profile and allows status changes with confirmation dialog
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '../components/ui/Button.tsx';
 import { Select } from '../components/ui/Select.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog.tsx';
 import { useMemberDetail } from '../hooks/useMemberDetail.ts';
 import { useMemberStatusUpdate } from '../hooks/useMemberStatusUpdate.ts';
+import { useConfirmDialog } from '../hooks/useConfirmDialog.ts';
 
 const STATUS_OPTIONS = [
   { value: 'AAA', label: '탈퇴' },
@@ -22,6 +24,7 @@ export function MemberDetailPage() {
   const navigate = useNavigate();
   const { data: member, isLoading } = useMemberDetail(seq);
   const { updateStatus, isUpdating } = useMemberStatusUpdate(seq);
+  const statusDialog = useConfirmDialog<string>();
 
   if (isLoading) {
     return <div className="py-8 text-center text-cool-gray">로딩 중...</div>;
@@ -31,10 +34,15 @@ export function MemberDetailPage() {
     return <div className="py-8 text-center text-cool-gray">회원을 찾을 수 없습니다.</div>;
   }
 
+  const pendingLabel = STATUS_OPTIONS.find((o) => o.value === statusDialog.pendingValue)?.label ?? '';
+
   const handleStatusChange = (newStatus: string) => {
-    if (window.confirm(`상태를 '${STATUS_OPTIONS.find((o) => o.value === newStatus)?.label}'로 변경하시겠습니까?`)) {
-      updateStatus(newStatus);
-    }
+    statusDialog.open(newStatus);
+  };
+
+  const handleStatusConfirm = () => {
+    const status = statusDialog.confirm();
+    if (status != null) updateStatus(status);
   };
 
   return (
@@ -46,7 +54,7 @@ export function MemberDetailPage() {
         <h2 className="text-xl font-bold text-dark-slate">회원 상세</h2>
       </div>
 
-      <div className="max-w-lg rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+      <div className="max-w-lg rounded-2xl border border-border-light bg-white p-6 shadow-sm">
         <div className="space-y-4">
           <InfoRow label="이름" value={member.usrName} />
           <InfoRow label="아이디" value={member.usrId} />
@@ -58,7 +66,7 @@ export function MemberDetailPage() {
           <InfoRow label="방문 횟수" value={String(member.visitCnt)} />
           <InfoRow label="최근 접속" value={member.visitDate?.slice(0, 10) ?? '—'} />
 
-          <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-between border-t border-border-light pt-4">
             <span className="text-sm font-medium text-cool-gray">상태 변경</span>
             <div className="flex items-center gap-2">
               <Badge variant="muted">{member.usrStatus}</Badge>
@@ -76,6 +84,17 @@ export function MemberDetailPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={statusDialog.isOpen}
+        onOpenChange={(open) => { if (!open) statusDialog.close(); }}
+        title="상태 변경"
+        description={`상태를 '${pendingLabel}'(으)로 변경하시겠습니까?`}
+        confirmLabel="변경"
+        variant="default"
+        onConfirm={handleStatusConfirm}
+        isPending={isUpdating}
+      />
     </div>
   );
 }

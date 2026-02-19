@@ -23,6 +23,7 @@ export interface NoticeItem {
   likeCnt: number;
   commentCnt: number;
   isPinned: string;
+  category?: string;
 }
 
 export interface AdItem {

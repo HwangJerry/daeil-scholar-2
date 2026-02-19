@@ -1,22 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-primary: #4F46E5;
-  --color-primary-hover: #4338CA;
-  --color-primary-light: #EEF2FF;
-  --color-primary-muted: #C7D2FE;
+  /* Primary — 다크 네이비 */
+  --color-primary: #1a1a2e;
+  --color-primary-hover: #0f1b35;
+  --color-primary-light: #E8E5DF;
+  --color-primary-muted: #C8C5BF;
 
-  --color-surface: #FFFFFF;
-  --color-background: #F8FAFC;
-  --color-border: #E2E8F0;
-  --color-border-subtle: #F1F5F9;
+  /* Surface / Background — 웜 톤 */
+  --color-surface: #FAFAF8;
+  --color-background: #F5F4F0;
+  --color-border: #E8E5DF;
+  --color-border-subtle: #F0EDE8;
+  --color-border-hover: #C8C5BF;
 
-  --color-text-primary: #0F172A;
-  --color-text-secondary: #334155;
-  --color-text-tertiary: #64748B;
-  --color-text-placeholder: #94A3B8;
+  /* Text */
+  --color-text-primary: #1a1a2e;
+  --color-text-secondary: #555555;
+  --color-text-tertiary: #888888;
+  --color-text-placeholder: #AAAAAA;
 
+  /* Semantic */
   --color-warm: #F59E0B;
   --color-warm-light: #FFFBEB;
   --color-success: #10B981;
@@ -26,12 +32,49 @@
   --color-kakao: #FEE500;
   --color-kakao-text: #191919;
 
-  --font-sans: "Pretendard", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Semantic status colors */
+  --color-error-subtle: #FEF2F2;
+  --color-error-border: #FECACA;
+  --color-error-text: #DC2626;
+  --color-success-subtle: #ECFDF5;
+  --color-success-text: #047857;
+  --color-warning-subtle: #FFFBEB;
+  --color-warning-text: #92400E;
+  --color-border-light: #F0EDE8;
+
+  /* 카테고리 배지 */
+  --color-cat-notice-bg: #EFF2FF;
+  --color-cat-notice-text: #3B5BDB;
+  --color-cat-notice-border: #C5D0FA;
+  --color-cat-event-bg: #FFF9DB;
+  --color-cat-event-text: #E67700;
+  --color-cat-event-border: #FFE066;
+  --color-cat-scholarship-bg: #EBFBEE;
+  --color-cat-scholarship-text: #2B8A3E;
+  --color-cat-scholarship-border: #8CE99A;
+  --color-cat-career-bg: #F3F0FF;
+  --color-cat-career-text: #6741D9;
+  --color-cat-career-border: #D0BFFF;
+
+  /* Hero gradient */
+  --color-hero-from: #0f1b35;
+  --color-hero-via: #1a2f5a;
+  --color-hero-to: #1e3a6e;
+
+  /* Fonts */
+  --font-sans: 'Instrument Sans', 'Pretendard Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-serif: 'Instrument Sans', 'Pretendard Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* Custom font sizes */
+  --font-size-2xs: 10px;
+  --font-size-caption: 11px;
+  --font-size-body-sm: 13px;
+  --font-size-body-md: 15px;
 
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.02);
   --shadow-card-hover: 0 8px 25px -5px rgb(0 0 0 / 0.08), 0 4px 10px -3px rgb(0 0 0 / 0.03);
-  --shadow-primary-glow: 0 4px 14px 0 rgb(79 70 229 / 0.25);
+  --shadow-primary-glow: 0 4px 14px 0 rgb(26 26 46 / 0.25);
   --shadow-nav: 0 4px 24px 0 rgb(0 0 0 / 0.06);
   --shadow-float: 0 8px 30px rgb(0 0 0 / 0.08);
 
@@ -73,6 +116,10 @@
   100% { background-position: 200% 0; }
 }
 
+@keyframes fill-bar {
+  from { width: 0% }
+}
+
 @utility container-app {
   @apply mx-auto min-h-screen bg-surface overflow-x-clip relative;
 }
@@ -89,8 +136,13 @@
   animation: progress-fill 1s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+@utility animate-fill-bar {
+  animation: fill-bar 1.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: 0.5s;
+}
+
 @utility skeleton-shimmer {
-  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background: linear-gradient(90deg, #F0EDE8 25%, #E8E5DF 50%, #F0EDE8 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }

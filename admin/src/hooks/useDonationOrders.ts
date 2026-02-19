@@ -1,20 +1,23 @@
-// useDonationOrders — fetches paginated donation order list with filters and update mutation
-import { useState } from 'react';
+// useDonationOrders — paginated donation order list with filters, update mutation, and toast
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client.ts';
+import { useToast } from './useToast.ts';
 import type { AdminDonationOrderListResponse, AdminDonationOrderUpdateRequest } from '../types/api.ts';
 
 export function useDonationOrders() {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [payTypeFilter, setPayTypeFilter] = useState('');
   const queryClient = useQueryClient();
+  const addToast = useToast((s) => s.addToast);
 
   const query = useQuery({
-    queryKey: ['admin', 'donation', 'orders', page, search, statusFilter, payTypeFilter],
+    queryKey: ['admin', 'donation', 'orders', page, pageSize, search, statusFilter, payTypeFilter],
     queryFn: () => {
-      const params = new URLSearchParams({ page: String(page), size: '20' });
+      const params = new URLSearchParams({ page: String(page), size: String(pageSize) });
       if (search) params.set('name', search);
       if (statusFilter) params.set('status', statusFilter);
       if (payTypeFilter) params.set('payType', payTypeFilter);
@@ -27,6 +30,10 @@ export function useDonationOrders() {
       api.put(`/api/admin/donation/orders/${seq}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'donation', 'orders'] });
+      addToast({ variant: 'success', title: '주문이 수정되었습니다.' });
+    },
+    onError: () => {
+      addToast({ variant: 'error', title: '주문 수정 실패', description: '다시 시도해 주세요.' });
     },
   });
 
@@ -45,9 +52,15 @@ export function useDonationOrders() {
     setPage(1);
   };
 
+  const handlePageSizeChange = useCallback((size: number) => {
+    setPageSize(size);
+    setPage(1);
+  }, []);
+
   return {
     ...query,
     page,
+    pageSize,
     search,
     statusFilter,
     payTypeFilter,
@@ -55,6 +68,7 @@ export function useDonationOrders() {
     handleSearchChange,
     handleStatusChange,
     handlePayTypeChange,
+    handlePageSizeChange,
     updateMutation,
   };
 }

@@ -1,4 +1,4 @@
-// DonationConfigForm — editable form for donation goal, manual adjustment, and note
+// DonationConfigForm — editable form for donation goal, manual adjustment, and note with a11y
 import { useState } from 'react';
 import { Button } from '../ui/Button.tsx';
 import { Input } from '../ui/Input.tsx';
@@ -24,18 +24,18 @@ function DonationConfigFormInner({
   };
 
   return (
-    <div className="max-w-lg space-y-4 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+    <div className="max-w-lg space-y-4 rounded-2xl border border-border-light bg-white p-6 shadow-sm">
       <div>
-        <label className="mb-1 block text-sm font-medium text-dark-slate">목표 금액 (원)</label>
-        <Input type="number" value={goal} onChange={(e) => setGoal(e.target.value)} />
+        <label htmlFor="dc-goal" className="mb-1 block text-sm font-medium text-dark-slate">목표 금액 (원)</label>
+        <Input id="dc-goal" type="number" value={goal} onChange={(e) => setGoal(e.target.value)} />
       </div>
       <div>
-        <label className="mb-1 block text-sm font-medium text-dark-slate">수동 조정액 (원)</label>
-        <Input type="number" value={manualAdj} onChange={(e) => setManualAdj(e.target.value)} />
+        <label htmlFor="dc-manual-adj" className="mb-1 block text-sm font-medium text-dark-slate">수동 조정액 (원)</label>
+        <Input id="dc-manual-adj" type="number" value={manualAdj} onChange={(e) => setManualAdj(e.target.value)} />
       </div>
       <div>
-        <label className="mb-1 block text-sm font-medium text-dark-slate">조정 메모</label>
-        <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="조정 사유를 입력하세요" />
+        <label htmlFor="dc-note" className="mb-1 block text-sm font-medium text-dark-slate">조정 메모</label>
+        <Textarea id="dc-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="조정 사유를 입력하세요" />
       </div>
       <div className="flex justify-end">
         <Button onClick={handleSave} disabled={isUpdating}>

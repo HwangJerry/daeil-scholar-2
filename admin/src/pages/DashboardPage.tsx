@@ -15,7 +15,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <RecentNotices />
 
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl border border-border-light bg-white p-5 shadow-sm">
           <h3 className="mb-4 font-semibold text-dark-slate">빠른 작업</h3>
           <div className="flex flex-wrap gap-3">
             <Link to="/notice/new">

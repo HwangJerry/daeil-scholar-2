@@ -24,7 +24,7 @@ export function BankTransferConfirm({ orderSeq, amount }: BankTransferConfirmPro
   return (
     <div className="animate-fade-in-up">
       <Card padding="lg" className="space-y-6 text-center">
-        <CheckCircle size={48} className="mx-auto text-emerald-500" />
+        <CheckCircle size={48} className="mx-auto text-success" />
 
         <div className="space-y-1">
           <h2 className="text-lg font-bold text-text-primary">주문이 접수되었습니다</h2>
@@ -46,7 +46,7 @@ export function BankTransferConfirm({ orderSeq, amount }: BankTransferConfirmPro
               onClick={handleCopy}
               className="flex items-center gap-1 rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-secondary hover:bg-surface transition-colors duration-150"
             >
-              {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+              {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
               {copied ? '복사됨' : '복사'}
             </button>
           </div>

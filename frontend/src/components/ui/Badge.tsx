@@ -9,10 +9,10 @@ const badgeVariants = cva(
       variant: {
         default: "bg-primary-light text-primary",
         secondary: "bg-background text-text-tertiary",
-        success: "bg-emerald-50 text-emerald-700",
-        warning: "bg-amber-50 text-amber-700",
+        success: "bg-success-subtle text-success-text",
+        warning: "bg-warning-subtle text-warning-text",
         destructive: "bg-error-light text-error",
-        pinned: "bg-red-50 text-red-600",
+        pinned: "bg-error-subtle text-error-text",
       },
     },
     defaultVariants: {

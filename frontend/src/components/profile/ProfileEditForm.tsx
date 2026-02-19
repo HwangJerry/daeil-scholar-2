@@ -1,7 +1,8 @@
-// ProfileEditForm — Edit form for profile info including business fields and tags
+// ProfileEditForm — Edit form for profile info including business fields and keyword tags
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import { api } from '../../api/client';
 import { Button } from '../ui/Button';
 import type { UserProfile, ProfileUpdateRequest, AlumniFilters } from '../../types/api';
@@ -76,7 +77,7 @@ export function ProfileEditForm() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4 rounded-xl bg-surface p-6 shadow-card border border-border-subtle">
+      <div className="space-y-4 rounded-[20px] bg-surface p-6 shadow-card border border-border">
         <div className="h-4 w-32 rounded skeleton-shimmer" />
         <div className="h-9 rounded skeleton-shimmer" />
         <div className="h-9 rounded skeleton-shimmer" />
@@ -88,12 +89,12 @@ export function ProfileEditForm() {
   if (!profile) return null;
 
   const inputClass =
-    'w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/30 transition-shadow duration-150';
+    'w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/30 transition-shadow duration-150';
   const labelClass = 'mb-1 block text-[13px] font-medium text-text-tertiary';
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl bg-surface p-6 shadow-card border border-border-subtle">
-      <h2 className="mb-4 text-lg font-semibold text-text-primary">프로필 수정</h2>
+    <form onSubmit={handleSubmit} className="rounded-[20px] bg-surface p-6 shadow-card border border-border">
+      <h2 className="mb-4 text-lg font-semibold text-text-primary font-serif">프로필 수정</h2>
 
       {/* Name (read-only) */}
       <div className="mb-4">
@@ -136,7 +137,7 @@ export function ProfileEditForm() {
 
       {/* Divider */}
       <hr className="my-5 border-border" />
-      <h3 className="mb-3 text-base font-semibold text-text-primary">사업장 정보</h3>
+      <h3 className="mb-3 text-base font-semibold text-text-primary font-serif">사업장 정보</h3>
 
       {/* Job Category */}
       <div className="mb-4">
@@ -147,7 +148,7 @@ export function ProfileEditForm() {
             const val = e.target.value;
             handleChange('jobCat', val ? Number(val) : null);
           }}
-          className={`${inputClass} bg-surface`}
+          className={cn(inputClass, 'bg-background')}
         >
           <option value="">선택 안함</option>
           {filters?.jobCategories?.map((cat) => (
@@ -179,7 +180,7 @@ export function ProfileEditForm() {
           placeholder="간단한 사업 설명 (200자 이내)"
           maxLength={200}
           rows={3}
-          className={`${inputClass} resize-none`}
+          className={cn(inputClass, 'resize-none')}
         />
       </div>
 

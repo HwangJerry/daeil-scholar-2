@@ -1,4 +1,4 @@
-// Displays the user's profile banner with avatar, name, class info, and edit button
+// ProfileHeader — User profile banner with dark navy gradient and serif name display
 import { useQuery } from '@tanstack/react-query';
 import { Settings } from 'lucide-react';
 import { api } from '../../api/client';
@@ -24,8 +24,11 @@ export function ProfileHeader({ onEditClick }: ProfileHeaderProps) {
 
   return (
     <>
-      <div className="relative h-28 bg-gradient-to-r from-primary to-violet-500">
-        <div className="absolute -bottom-10 left-4">
+      {/* Dark navy gradient banner */}
+      <div className="relative h-32 bg-gradient-to-br from-hero-from via-hero-via to-hero-to overflow-hidden">
+        {/* Ambient glow */}
+        <div className="absolute top-0 right-0 w-48 h-48 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-12 left-4">
           {photoUrl ? (
             <img
               src={photoUrl}
@@ -33,16 +36,16 @@ export function ProfileHeader({ onEditClick }: ProfileHeaderProps) {
               className="h-24 w-24 rounded-full ring-4 ring-surface shadow-md object-cover"
             />
           ) : (
-            <div className="h-24 w-24 rounded-full ring-4 ring-surface bg-gradient-to-br from-primary-light to-indigo-100 shadow-md flex items-center justify-center text-2xl font-semibold text-primary">
+            <div className="h-24 w-24 rounded-full ring-4 ring-surface bg-gradient-to-br from-primary-light to-border shadow-md flex items-center justify-center text-2xl font-bold text-primary font-serif">
               {displayName.charAt(0)}
             </div>
           )}
         </div>
       </div>
 
-      <div className="px-4 pt-12 space-y-1">
-        <h1 className="text-xl font-bold text-text-primary">{displayName}</h1>
-        {displayFn && <p className="text-text-tertiary">{displayFn}기</p>}
+      <div className="px-4 pt-14 space-y-1">
+        <h1 className="text-xl font-bold text-text-primary font-serif">{displayName}</h1>
+        {displayFn && <p className="text-text-tertiary text-sm">{displayFn}기</p>}
       </div>
 
       <div className="px-4">

@@ -42,7 +42,7 @@ function AlumniContent() {
     <div className="max-w-2xl mx-auto px-4">
       {/* Header */}
       <div className="pt-6 pb-2">
-        <h1 className="text-xl font-bold text-text-primary">전체 보기</h1>
+        <h1 className="text-xl font-bold text-text-primary font-serif">전체 보기</h1>
         <p className="text-sm text-text-tertiary mt-1">
           이름순으로 정렬된 모든 동문 리스트입니다.
         </p>

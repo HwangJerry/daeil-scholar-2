@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Mail, MailOpen, Trash2 } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import { api } from '../../api/client';
 import type { MessageItem, MessageListResponse } from '../../types/api';
 
@@ -58,11 +59,13 @@ function InboxMessageRow({ message }: { message: MessageItem }) {
   return (
     <div
       onClick={handleClick}
-      className={`group relative rounded-xl border p-4 transition-all duration-150 ${
+      className={cn(
+        'group relative rounded-2xl border p-4 transition-all duration-150',
         isUnread
-          ? 'border-primary/20 bg-primary-light/30 cursor-pointer hover:border-primary/30'
-          : 'border-border-subtle bg-surface'
-      } ${deleteMutation.isPending ? 'opacity-40' : ''}`}
+          ? 'border-primary/20 bg-primary-light/20 cursor-pointer hover:border-primary/30 border-l-2 border-l-primary'
+          : 'border-border-subtle bg-surface',
+        deleteMutation.isPending && 'opacity-40'
+      )}
     >
       <div className="flex items-start gap-3">
         {/* Read status icon */}
@@ -78,9 +81,10 @@ function InboxMessageRow({ message }: { message: MessageItem }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span
-              className={`text-sm font-medium ${
+              className={cn(
+                'text-sm font-semibold font-serif',
                 isUnread ? 'text-text-primary' : 'text-text-secondary'
-              }`}
+              )}
             >
               {message.senderName}
             </span>
@@ -89,9 +93,10 @@ function InboxMessageRow({ message }: { message: MessageItem }) {
             )}
           </div>
           <p
-            className={`text-sm leading-relaxed ${
+            className={cn(
+              'text-sm leading-relaxed',
               isUnread ? 'text-text-secondary' : 'text-text-tertiary'
-            }`}
+            )}
           >
             {truncateContent(message.content, CONTENT_TRUNCATE_LENGTH)}
           </p>

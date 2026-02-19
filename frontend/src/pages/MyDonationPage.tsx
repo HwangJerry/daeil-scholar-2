@@ -45,14 +45,14 @@ function SummaryCard({
   totalCount: number;
 }) {
   return (
-    <div className="rounded-xl bg-gradient-to-br from-primary to-indigo-600 p-5 text-white shadow-xl">
-      <p className="text-indigo-200 text-[13px] font-medium mb-1 tracking-wide">
+    <div className="rounded-xl bg-gradient-to-br from-primary to-primary p-5 text-white shadow-xl">
+      <p className="text-primary-muted text-[13px] font-medium mb-1 tracking-wide">
         총 기부금액
       </p>
       <h2 className="text-2xl font-extrabold tracking-tight">
         {totalAmount.toLocaleString()}원
       </h2>
-      <p className="text-indigo-200 text-sm mt-2">{totalCount}건</p>
+      <p className="text-primary-muted text-sm mt-2">{totalCount}건</p>
     </div>
   );
 }
@@ -207,8 +207,8 @@ function MyDonationContent() {
       {isLoading ? (
         <LoadingSkeleton />
       ) : isError ? (
-        <div className="rounded-xl bg-red-50 border border-red-200 p-6 text-center space-y-2">
-          <p className="text-sm text-red-600">기부 내역을 불러올 수 없습니다.</p>
+        <div className="rounded-xl bg-error-subtle border border-error-border p-6 text-center space-y-2">
+          <p className="text-sm text-error-text">기부 내역을 불러올 수 없습니다.</p>
           <p className="text-xs text-text-tertiary">잠시 후 다시 시도해 주세요.</p>
         </div>
       ) : (

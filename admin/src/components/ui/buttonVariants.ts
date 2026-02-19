@@ -7,10 +7,10 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-royal-indigo text-white hover:bg-royal-indigo/90 shadow-sm",
-        destructive: "bg-red-500 text-white hover:bg-red-600",
-        outline: "border border-slate-200 hover:bg-slate-100 hover:text-dark-slate",
+        destructive: "bg-error text-white hover:bg-error/90",
+        outline: "border border-border hover:bg-border-light hover:text-dark-slate",
         secondary: "bg-soft-sky text-royal-indigo hover:bg-soft-sky/80",
-        ghost: "hover:bg-slate-100 hover:text-dark-slate",
+        ghost: "hover:bg-border-light hover:text-dark-slate",
         link: "underline-offset-4 hover:underline text-royal-indigo",
       },
       size: {

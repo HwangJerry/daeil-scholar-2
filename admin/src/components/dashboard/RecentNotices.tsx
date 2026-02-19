@@ -12,7 +12,7 @@ export function RecentNotices() {
   });
 
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-border-light bg-white p-5 shadow-sm">
       <h3 className="mb-4 font-semibold text-dark-slate">최근 공지</h3>
       {data?.items.length ? (
         <ul className="space-y-3">

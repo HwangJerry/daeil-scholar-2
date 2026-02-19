@@ -1,22 +1,33 @@
-// DonationOrderListPage — searchable, paginated donation order table with inline editing
+// DonationOrderListPage — searchable, paginated donation order table with sort, inline editing, and error handling
 import { useState } from 'react';
 import { Input } from '../components/ui/Input.tsx';
 import { Select } from '../components/ui/Select.tsx';
 import { Pagination } from '../components/ui/Pagination.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
+import { ErrorState } from '../components/ui/ErrorState.tsx';
+import { SortableHeader } from '../components/ui/SortableHeader.tsx';
 import { useDonationOrders } from '../hooks/useDonationOrders.ts';
+import { useTableSort } from '../hooks/useTableSort.ts';
+import type { AdminDonationOrderItem } from '../types/api.ts';
 
 const PAY_TYPE_LABELS: Record<string, string> = {
   CARD: '카드',
 };
 
-const PAGE_SIZE = 20;
+const SORT_ACCESSORS: Record<string, (item: AdminDonationOrderItem) => string | number | null> = {
+  amount: (o) => o.amount,
+  payDate: (o) => o.payDate,
+  regDate: (o) => o.regDate,
+};
 
 export function DonationOrderListPage() {
   const {
     data,
     isLoading,
+    isError,
+    refetch,
     page,
+    pageSize,
     search,
     statusFilter,
     payTypeFilter,
@@ -24,8 +35,11 @@ export function DonationOrderListPage() {
     handleSearchChange,
     handleStatusChange,
     handlePayTypeChange,
+    handlePageSizeChange,
     updateMutation,
   } = useDonationOrders();
+
+  const { sort, toggleSort, getSortedItems } = useTableSort();
 
   const [editingSeq, setEditingSeq] = useState<number | null>(null);
   const [editPayment, setEditPayment] = useState('');
@@ -56,12 +70,15 @@ export function DonationOrderListPage() {
   const formatAmount = (amount: number) =>
     `${amount.toLocaleString('ko-KR')}원`;
 
+  const items = data?.items ? getSortedItems(data.items, SORT_ACCESSORS) : [];
+
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-dark-slate">기부 내역 관리</h2>
 
       <div className="flex gap-2">
         <Input
+          aria-label="이름 검색"
           placeholder="기부자 검색..."
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
@@ -86,33 +103,35 @@ export function DonationOrderListPage() {
         </Select>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-border-light bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-100 text-left text-cool-gray">
+            <tr className="border-b border-border-light text-left text-cool-gray">
               <th className="px-4 py-3 font-medium w-20">주문번호</th>
               <th className="px-4 py-3 font-medium">기부자</th>
-              <th className="px-4 py-3 font-medium w-28 text-right">금액</th>
+              <SortableHeader label="금액" column="amount" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-28 text-right" />
               <th className="px-4 py-3 font-medium w-20 text-center">결제방식</th>
               <th className="px-4 py-3 font-medium w-20 text-center">결제상태</th>
-              <th className="px-4 py-3 font-medium w-28">결제일</th>
-              <th className="px-4 py-3 font-medium w-28">주문일</th>
+              <SortableHeader label="결제일" column="payDate" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-28" />
+              <SortableHeader label="주문일" column="regDate" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-28" />
               <th className="px-4 py-3 font-medium w-32 text-center">관리</th>
             </tr>
           </thead>
-          <tbody>
-            {isLoading ? (
+          <tbody aria-live="polite">
+            {isError ? (
+              <ErrorState colSpan={8} onRetry={() => void refetch()} />
+            ) : isLoading ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-cool-gray">
                   로딩 중...
                 </td>
               </tr>
-            ) : data?.items.length ? (
-              data.items.map((order) => {
+            ) : items.length ? (
+              items.map((order) => {
                 const isEditing = editingSeq === order.oSeq;
 
                 return (
-                  <tr key={order.oSeq} className="border-b border-slate-50 hover:bg-slate-50">
+                  <tr key={order.oSeq} className="border-b border-border-light hover:bg-background">
                     <td className="px-4 py-3 text-cool-gray">{order.oSeq}</td>
                     <td className="px-4 py-3 text-dark-slate">{order.usrName}</td>
                     <td className="px-4 py-3 text-right">
@@ -166,7 +185,7 @@ export function DonationOrderListPage() {
                           <button
                             onClick={cancelEdit}
                             disabled={updateMutation.isPending}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-cool-gray hover:bg-slate-50 disabled:opacity-50"
+                            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-cool-gray hover:bg-background disabled:opacity-50"
                           >
                             취소
                           </button>
@@ -174,7 +193,7 @@ export function DonationOrderListPage() {
                       ) : (
                         <button
                           onClick={() => startEdit(order.oSeq, order.payment, order.amount)}
-                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-cool-gray hover:bg-slate-50 hover:text-dark-slate"
+                          className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-cool-gray hover:bg-background hover:text-dark-slate"
                         >
                           수정
                         </button>
@@ -194,11 +213,13 @@ export function DonationOrderListPage() {
         </table>
       </div>
 
-      {data && data.total > PAGE_SIZE && (
+      {data && (
         <Pagination
           page={page}
-          totalPages={Math.ceil(data.total / PAGE_SIZE)}
+          totalPages={Math.ceil(data.total / pageSize)}
           onPageChange={setPage}
+          pageSize={pageSize}
+          onPageSizeChange={handlePageSizeChange}
         />
       )}
     </div>

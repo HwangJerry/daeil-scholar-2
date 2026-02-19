@@ -1,4 +1,4 @@
-// MessagePage — Tab layout for inbox and outbox with auth guard
+// MessagePage — Tab layout for inbox and outbox messages with auth guard
 import { useState } from 'react';
 import { AuthGuard } from '../components/auth/AuthGuard';
 import { MessageInbox } from '../components/message/MessageInbox';
@@ -21,7 +21,7 @@ function MessagePageContent() {
 
   return (
     <div className="px-4 py-6 pb-20">
-      <h1 className="text-xl font-bold text-text-primary mb-4">쪽지함</h1>
+      <h1 className="text-xl font-bold text-text-primary mb-4 font-serif">쪽지함</h1>
 
       {/* Tab bar */}
       <div className="flex border-b border-border mb-5">

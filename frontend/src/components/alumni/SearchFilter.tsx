@@ -1,6 +1,7 @@
 // SearchFilter — Alumni search filter bar with dropdowns for class/dept/jobCat and text inputs
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { cn } from '../../lib/utils';
 import { api } from '../../api/client';
 import { Button } from '../ui/Button';
 import type { AlumniFilters } from '../../types/api';
@@ -45,10 +46,10 @@ export function SearchFilter({ onSearch }: SearchFilterProps) {
 
   const inputClass =
     'h-9 rounded-lg border border-border px-3 text-sm outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/30 transition-shadow duration-150';
-  const selectClass = `${inputClass} bg-surface`;
+  const selectClass = cn(inputClass, 'bg-surface');
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl bg-surface p-4 shadow-card border border-border-subtle">
+    <form onSubmit={handleSubmit} className="rounded-xl bg-surface p-4 shadow-card border border-border">
       <div className="flex flex-wrap gap-2">
         <select
           value={params.fn}

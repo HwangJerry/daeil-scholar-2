@@ -62,7 +62,6 @@ export interface FileAttachment {
 export interface CreateNoticeRequest {
   subject: string;
   contentMd: string;
-  boardId?: string;
   isPinned?: string;
 }
 

@@ -1,6 +1,7 @@
 // LikeButton — Toggle like with optimistic update; redirects to login if unauthenticated
 import { Heart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { cn } from '../../lib/utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useLikeToggle } from '../../hooks/useLikeToggle';
 
@@ -29,13 +30,14 @@ export function LikeButton({ seq, liked, likeCnt }: LikeButtonProps) {
       type="button"
       onClick={handleClick}
       disabled={isPending}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
         liked
-          ? 'bg-red-50 text-red-500'
-          : 'bg-background-secondary text-text-tertiary hover:text-red-400'
-      }`}
+          ? 'bg-error-subtle text-error'
+          : 'bg-background-secondary text-text-tertiary hover:text-error-text',
+      )}
     >
-      <Heart className={`h-4 w-4 ${liked ? 'fill-current' : ''}`} />
+      <Heart className={cn('h-4 w-4', liked && 'fill-current')} />
       <span>{likeCnt}</span>
     </button>
   );

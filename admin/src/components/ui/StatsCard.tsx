@@ -10,7 +10,7 @@ interface StatsCardProps {
 
 export function StatsCard({ label, value, icon, subtext }: StatsCardProps) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+    <div className="bg-white rounded-2xl border border-border-light p-5 shadow-sm">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm text-cool-gray">{label}</span>
         {icon && <span className="text-cool-gray">{icon}</span>}

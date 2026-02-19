@@ -1,4 +1,4 @@
-// Account settings section with donation history link and sign-out action
+// AccountActions — Account settings section with donation history link and logout action
 import { Link } from 'react-router-dom';
 import { Heart, LogOut } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
@@ -15,8 +15,8 @@ export function AccountActions() {
 
   return (
     <div className="px-4 space-y-4">
-      <div className="rounded-xl bg-surface p-4 shadow-card border border-border-subtle space-y-3">
-        <h3 className="font-semibold text-text-primary">활동</h3>
+      <div className="rounded-[20px] bg-surface p-4 shadow-card border border-border space-y-3">
+        <h3 className="font-semibold text-text-primary font-serif">활동</h3>
         <Link
           to="/me/donation"
           className={cn(
@@ -29,11 +29,11 @@ export function AccountActions() {
         </Link>
       </div>
 
-      <div className="rounded-xl bg-surface p-4 shadow-card border border-border-subtle space-y-3">
-        <h3 className="font-semibold text-text-primary">계정</h3>
+      <div className="rounded-[20px] bg-surface p-4 shadow-card border border-border space-y-3">
+        <h3 className="font-semibold text-text-primary font-serif">계정</h3>
         <Button
           variant="ghost"
-          className="w-full justify-start text-error hover:text-red-600 hover:bg-error-light"
+          className="w-full justify-start text-error hover:text-error-text hover:bg-error-light"
           onClick={handleLogout}
         >
           <LogOut className="mr-2 h-4 w-4" />

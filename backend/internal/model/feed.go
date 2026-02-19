@@ -43,10 +43,10 @@ type NoticeDetail struct {
 
 // Comment represents a row in WEO_BOARDCOMAND table.
 type Comment struct {
-	BCSeq    int    `db:"BC_SEQ" json:"bcSeq"`
+	BCSeq    int    `db:"SEQ" json:"bcSeq"`
 	JoinSeq  int    `db:"JOIN_SEQ" json:"joinSeq"`
 	USRSeq   int    `db:"USR_SEQ" json:"usrSeq"`
-	RegName  string `db:"REG_NAME" json:"regName"`
+	RegName  string `db:"NICKNAME" json:"regName"`
 	Contents string `db:"CONTENTS" json:"contents"`
 	RegDate  string `db:"REG_DATE" json:"regDate"`
 }

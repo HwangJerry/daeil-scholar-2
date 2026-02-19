@@ -43,7 +43,7 @@ export function AccountLinkForm({ token }: AccountLinkFormProps) {
   };
 
   const inputClass =
-    'w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-royal-indigo/20';
+    'w-full rounded-2xl border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-royal-indigo/20';
 
   return (
     <div className="mx-auto max-w-md">
@@ -52,7 +52,7 @@ export function AccountLinkForm({ token }: AccountLinkFormProps) {
         <p className="mt-1">신규 회원이시면 새로 가입됩니다.</p>
       </div>
 
-      <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+      <div className="rounded-2xl bg-white p-6 shadow-sm border border-border-subtle">
         <h2 className="mb-1 text-lg font-semibold text-dark-slate">회원 정보 입력</h2>
         <p className="mb-4 text-sm text-text-muted">
           이름과 전화번호를 입력해주세요. 기수는 선택사항입니다.
@@ -96,7 +96,7 @@ export function AccountLinkForm({ token }: AccountLinkFormProps) {
             />
           </div>
 
-          {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+          {error && <p className="mb-3 text-sm text-error-text">{error}</p>}
 
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? '처리 중...' : '확인'}
@@ -104,7 +104,7 @@ export function AccountLinkForm({ token }: AccountLinkFormProps) {
         </form>
       </div>
 
-      <p className="mt-4 text-center text-xs text-slate-400">
+      <p className="mt-4 text-center text-xs text-text-placeholder">
         문제가 있으시면 관리자에게 문의하세요.
       </p>
     </div>

@@ -1,4 +1,4 @@
-// SendMessageDialog — Modal overlay for composing and sending a message to another alumni member
+// SendMessageDialog — Modal overlay for composing and sending a message to an alumni member
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Send, CheckCircle } from 'lucide-react';
@@ -61,10 +61,10 @@ export function SendMessageDialog({
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
 
       {/* Dialog */}
-      <div className="relative w-full max-w-md rounded-2xl bg-surface p-6 shadow-float animate-fade-in-up">
+      <div className="relative w-full max-w-md rounded-[20px] bg-surface p-6 shadow-float animate-fade-in-up border border-border-subtle">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-text-primary">
+          <h2 className="text-lg font-bold text-text-primary font-serif">
             쪽지 보내기
           </h2>
           <button
@@ -77,9 +77,9 @@ export function SendMessageDialog({
         </div>
 
         {/* Recipient */}
-        <div className="mb-4">
-          <span className="text-sm text-text-tertiary">받는 사람</span>
-          <p className="text-sm font-medium text-text-primary mt-0.5">
+        <div className="mb-4 rounded-xl bg-background px-3 py-2.5">
+          <span className="text-xs text-text-placeholder">받는 사람</span>
+          <p className="text-sm font-semibold text-text-primary mt-0.5 font-serif">
             {recipientName}
           </p>
         </div>
@@ -102,7 +102,7 @@ export function SendMessageDialog({
                 maxLength={MAX_CONTENT_LENGTH}
                 rows={6}
                 placeholder="쪽지 내용을 입력하세요"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text-secondary outline-none transition-shadow duration-150 placeholder:text-text-placeholder focus:ring-2 focus:ring-primary/15 focus:border-primary/30 resize-none"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-text-secondary outline-none transition-shadow duration-150 placeholder:text-text-placeholder focus:ring-2 focus:ring-primary/15 focus:border-primary/30 resize-none"
                 disabled={sendMutation.isPending}
               />
               <div className="flex justify-end mt-1.5">

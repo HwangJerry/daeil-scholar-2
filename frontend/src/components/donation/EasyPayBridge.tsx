@@ -82,7 +82,7 @@ export function EasyPayBridge({ params, onError }: EasyPayBridgeProps) {
   }, [params, onError]);
 
   return (
-    <form ref={formRef} name="payment" method="post" style={{ display: 'none' }}>
+    <form ref={formRef} name="payment" method="post" className="hidden">
       {/* Request fields */}
       <input type="hidden" name="sp_mall_id" value={params.mallId} />
       <input type="hidden" name="sp_mall_nm" value={params.mallName} />

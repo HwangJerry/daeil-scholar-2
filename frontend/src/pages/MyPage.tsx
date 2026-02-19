@@ -1,4 +1,4 @@
-// My page with profile overview, edit form toggle, and account actions
+// MyPage — Profile overview with edit form toggle and account actions
 import { useState } from 'react';
 import { AuthGuard } from '../components/auth/AuthGuard';
 import { ProfileHeader } from '../components/profile/ProfileHeader';

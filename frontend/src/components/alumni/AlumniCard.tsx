@@ -1,6 +1,7 @@
-// AlumniCard — Vertical card displaying alumni business info, location, tags, and message action
+// AlumniCard — Alumni profile card with warm editorial styling and message action
 import { useState } from 'react';
 import { Building2, MapPin, MessageCircle } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import type { AlumniItem } from '../../types/api';
 import { SendMessageDialog } from '../message/SendMessageDialog';
 
@@ -20,27 +21,27 @@ export function AlumniCard({ item, currentUsrSeq }: AlumniCardProps) {
 
   return (
     <>
-      <div className="rounded-xl bg-surface p-5 shadow-card border border-border-subtle">
+      <div
+        className={cn(
+          'rounded-[20px] bg-surface p-5 shadow-card',
+          'border border-border-subtle',
+          'transition-all duration-200 hover:shadow-card-hover hover:border-border-hover'
+        )}
+      >
         {/* Header: name + job category badge */}
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-bold text-text-primary">{item.fmName}</h3>
-            <p className="text-xs text-text-tertiary mt-0.5">
+          <div>
+            <h3 className="text-lg font-bold text-text-primary font-serif">{item.fmName}</h3>
+            <p className="text-xs text-text-placeholder mt-0.5">
               {item.fmFn}기 · {item.fmDept}
             </p>
           </div>
           {item.jobCatName ? (
-            <span
-              className="px-2.5 py-1 text-xs font-semibold rounded-full whitespace-nowrap"
-              style={{
-                backgroundColor: `${item.jobCatColor}18`,
-                color: item.jobCatColor,
-              }}
-            >
+            <span className="px-2.5 py-1 text-xs font-semibold rounded-full whitespace-nowrap bg-cat-career-bg text-cat-career-text border border-cat-career-border">
               {item.jobCatName}
             </span>
           ) : (
-            <span className="px-2.5 py-1 text-xs font-semibold rounded-full whitespace-nowrap bg-gray-100 text-gray-400">
+            <span className="px-2.5 py-1 text-xs font-semibold rounded-full whitespace-nowrap bg-border-subtle text-text-placeholder">
               미분류
             </span>
           )}
@@ -91,14 +92,16 @@ export function AlumniCard({ item, currentUsrSeq }: AlumniCardProps) {
           )}
         </div>
 
-        {/* Message button — always visible, disabled for own card */}
+        {/* Message button */}
         <button
           onClick={() => setShowMessageDialog(true)}
           disabled={isSelf}
-          className={isSelf
-            ? 'w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gray-100 text-gray-400 text-sm font-medium cursor-not-allowed'
-            : 'w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary/5 text-primary text-sm font-medium hover:bg-primary/10 transition-colors duration-150'
-          }
+          className={cn(
+            'w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors duration-150',
+            isSelf
+              ? 'bg-border-subtle text-text-placeholder cursor-not-allowed'
+              : 'bg-primary/5 text-primary hover:bg-primary/10'
+          )}
         >
           <MessageCircle size={16} />
           쪽지보내기

@@ -1,10 +1,14 @@
-// MemberListPage — searchable, paginated member table with status filter
+// MemberListPage — searchable, paginated member table with sort, error handling, and a11y
 import { Link } from 'react-router-dom';
 import { Input } from '../components/ui/Input.tsx';
 import { Select } from '../components/ui/Select.tsx';
 import { Pagination } from '../components/ui/Pagination.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
+import { ErrorState } from '../components/ui/ErrorState.tsx';
+import { SortableHeader } from '../components/ui/SortableHeader.tsx';
 import { useMemberList } from '../hooks/useMemberList.ts';
+import { useTableSort } from '../hooks/useTableSort.ts';
+import type { AdminMemberListItem } from '../types/api.ts';
 
 const STATUS_LABELS: Record<string, string> = {
   AAA: '탈퇴',
@@ -26,8 +30,17 @@ const STATUS_VARIANT: Record<string, 'success' | 'default' | 'warning' | 'danger
   ZZZ: 'default',
 };
 
+const SORT_ACCESSORS: Record<string, (item: AdminMemberListItem) => string | number | null> = {
+  usrName: (m) => m.usrName,
+  usrFn: (m) => m.usrFn,
+  visitDate: (m) => m.visitDate,
+};
+
 export function MemberListPage() {
-  const { data, isLoading, page, search, statusFilter, setPage, handleSearchChange, handleStatusChange } = useMemberList();
+  const { data, isLoading, isError, refetch, page, pageSize, search, statusFilter, setPage, handleSearchChange, handleStatusChange, handlePageSizeChange } = useMemberList();
+  const { sort, toggleSort, getSortedItems } = useTableSort();
+
+  const items = data?.items ? getSortedItems(data.items, SORT_ACCESSORS) : [];
 
   return (
     <div className="space-y-4">
@@ -35,6 +48,7 @@ export function MemberListPage() {
 
       <div className="flex gap-2">
         <Input
+          aria-label="이름 검색"
           placeholder="이름 검색..."
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
@@ -56,23 +70,25 @@ export function MemberListPage() {
         </Select>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-border-light bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-100 text-left text-cool-gray">
-              <th className="px-4 py-3 font-medium">이름</th>
-              <th className="px-4 py-3 font-medium w-16">기수</th>
+            <tr className="border-b border-border-light text-left text-cool-gray">
+              <SortableHeader label="이름" column="usrName" sort={sort} onToggle={toggleSort} className="px-4 py-3" />
+              <SortableHeader label="기수" column="usrFn" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-16" />
               <th className="px-4 py-3 font-medium w-20 text-center">상태</th>
               <th className="px-4 py-3 font-medium w-36">연락처</th>
-              <th className="px-4 py-3 font-medium w-28">최근 접속</th>
+              <SortableHeader label="최근 접속" column="visitDate" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-28" />
             </tr>
           </thead>
-          <tbody>
-            {isLoading ? (
+          <tbody aria-live="polite">
+            {isError ? (
+              <ErrorState colSpan={5} onRetry={() => void refetch()} />
+            ) : isLoading ? (
               <tr><td colSpan={5} className="px-4 py-8 text-center text-cool-gray">로딩 중...</td></tr>
-            ) : data?.items.length ? (
-              data.items.map((m) => (
-                <tr key={m.usrSeq} className="border-b border-slate-50 hover:bg-slate-50">
+            ) : items.length ? (
+              items.map((m) => (
+                <tr key={m.usrSeq} className="border-b border-border-light hover:bg-background">
                   <td className="px-4 py-3">
                     <Link to={`/member/${m.usrSeq}`} className="text-dark-slate hover:text-royal-indigo">
                       {m.usrName}
@@ -95,8 +111,14 @@ export function MemberListPage() {
         </table>
       </div>
 
-      {data && data.total > 20 && (
-        <Pagination page={page} totalPages={Math.ceil(data.total / 20)} onPageChange={setPage} />
+      {data && (
+        <Pagination
+          page={page}
+          totalPages={Math.ceil(data.total / pageSize)}
+          onPageChange={setPage}
+          pageSize={pageSize}
+          onPageSizeChange={handlePageSizeChange}
+        />
       )}
     </div>
   );

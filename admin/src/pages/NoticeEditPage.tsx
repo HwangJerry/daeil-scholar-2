@@ -45,7 +45,7 @@ function NoticeEditForm({
 
       {isLegacy ? (
         <div>
-          <div className="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
+          <div className="mb-4 rounded-xl bg-warning-subtle p-4 text-sm text-warning-text">
             이 글은 기존 시스템에서 작성되었습니다.
             Markdown 에디터로 수정하려면 기존 내용을 복사하여 새 글로 작성해주세요.
           </div>
@@ -54,6 +54,7 @@ function NoticeEditForm({
       ) : (
         <div className="space-y-4">
           <Input
+            aria-label="제목"
             placeholder="제목을 입력하세요"
             value={form.subject}
             onChange={(e) => form.setSubject(e.target.value)}
@@ -67,7 +68,7 @@ function NoticeEditForm({
               type="checkbox"
               checked={form.isPinned}
               onChange={(e) => form.setIsPinned(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-royal-indigo focus:ring-royal-indigo"
+              className="h-4 w-4 rounded border-border text-royal-indigo focus:ring-royal-indigo"
             />
             상단 고정
           </label>

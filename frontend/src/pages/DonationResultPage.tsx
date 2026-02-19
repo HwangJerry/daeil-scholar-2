@@ -28,7 +28,7 @@ function SuccessResult({ orderSeq }: { orderSeq: string }) {
   return (
     <div className="flex min-h-[50vh] items-center justify-center animate-fade-in-up">
       <div className="w-full max-w-sm text-center space-y-6 px-4">
-        <CheckCircle size={56} className="mx-auto text-emerald-500" />
+        <CheckCircle size={56} className="mx-auto text-success" />
 
         <div className="space-y-2">
           <h1 className="text-xl font-bold text-text-primary">
@@ -78,7 +78,7 @@ function FailedResult({ reason }: { reason: string }) {
   return (
     <div className="flex min-h-[50vh] items-center justify-center animate-fade-in-up">
       <div className="w-full max-w-sm text-center space-y-6 px-4">
-        <XCircle size={56} className="mx-auto text-red-500" />
+        <XCircle size={56} className="mx-auto text-error-text" />
 
         <div className="space-y-2">
           <h1 className="text-xl font-bold text-text-primary">

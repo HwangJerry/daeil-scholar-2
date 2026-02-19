@@ -48,7 +48,7 @@ export function CommentInput({ seq }: CommentInputProps) {
         </button>
       </form>
       {isError && (
-        <p className="mt-1.5 text-xs text-red-500">
+        <p className="mt-1.5 text-xs text-error-text">
           {error?.message || '댓글 등록에 실패했습니다. 다시 시도해주세요.'}
         </p>
       )}

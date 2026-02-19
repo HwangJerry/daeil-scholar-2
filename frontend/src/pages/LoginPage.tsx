@@ -13,7 +13,7 @@ export function LoginPage() {
   return (
     <div className="flex min-h-[60vh] items-center justify-center animate-fade-in-up">
       <div className="w-full max-w-sm">
-        <h1 className="mb-2 text-center text-xl font-bold text-text-primary">동문 커뮤니티</h1>
+        <h1 className="mb-2 text-center text-xl font-bold text-text-primary">대일외국어고등학교 장학회</h1>
         <p className="mb-6 text-center text-[13px] text-text-tertiary">
           카카오 계정으로 간편하게 로그인하세요.
         </p>

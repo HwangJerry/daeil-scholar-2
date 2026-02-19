@@ -34,8 +34,8 @@ function LoadingSkeleton() {
 
 function ErrorState() {
   return (
-    <div className="rounded-xl bg-red-50 border border-red-200 p-6 text-center space-y-2">
-      <p className="text-sm text-red-600">정기후원 정보를 불러올 수 없습니다.</p>
+    <div className="rounded-xl bg-error-subtle border border-error-border p-6 text-center space-y-2">
+      <p className="text-sm text-error-text">정기후원 정보를 불러올 수 없습니다.</p>
       <p className="text-xs text-text-tertiary">잠시 후 다시 시도해 주세요.</p>
     </div>
   );
@@ -88,9 +88,9 @@ function SubscriptionContent() {
       )}
 
       {cancelMutation.isError && (
-        <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 p-3">
-          <AlertTriangle size={16} className="text-red-500 shrink-0" />
-          <p className="text-xs text-red-600">
+        <div className="flex items-center gap-2 rounded-lg bg-error-subtle border border-error-border p-3">
+          <AlertTriangle size={16} className="text-error-text shrink-0" />
+          <p className="text-xs text-error-text">
             {cancelMutation.error?.message ?? '해지 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.'}
           </p>
         </div>

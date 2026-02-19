@@ -1,7 +1,8 @@
-// MessageOutbox — Paginated list of sent messages with delete action
+// MessageOutbox — Paginated list of sent messages with warm editorial card styling
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Send, Trash2 } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import { api } from '../../api/client';
 import type { MessageItem, MessageListResponse } from '../../types/api';
 
@@ -42,9 +43,10 @@ function OutboxMessageRow({ message }: { message: MessageItem }) {
 
   return (
     <div
-      className={`group relative rounded-xl border border-border-subtle bg-surface p-4 transition-all duration-150 ${
-        deleteMutation.isPending ? 'opacity-40' : ''
-      }`}
+      className={cn(
+        'group relative rounded-2xl border border-border-subtle bg-surface p-4 transition-all duration-150',
+        deleteMutation.isPending && 'opacity-40'
+      )}
     >
       <div className="flex items-start gap-3">
         {/* Icon */}
@@ -55,15 +57,16 @@ function OutboxMessageRow({ message }: { message: MessageItem }) {
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-medium text-text-secondary">
+            <span className="text-sm font-semibold text-text-secondary font-serif">
               {message.recvrName}
             </span>
             <span
-              className={`text-xs px-1.5 py-0.5 rounded-md ${
+              className={cn(
+                'text-xs px-1.5 py-0.5 rounded-md',
                 isRead
-                  ? 'bg-emerald-50 text-emerald-700'
+                  ? 'bg-success-subtle text-success-text'
                   : 'bg-background text-text-placeholder'
-              }`}
+              )}
             >
               {isRead ? '읽음' : '안읽음'}
             </span>

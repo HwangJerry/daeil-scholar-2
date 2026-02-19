@@ -15,7 +15,7 @@ export function CommentDeleteButton({ seq, bcSeq }: CommentDeleteButtonProps) {
       type="button"
       onClick={() => mutate(bcSeq)}
       disabled={isPending}
-      className="shrink-0 p-1 text-text-tertiary transition-colors hover:text-red-500"
+      className="shrink-0 p-1 text-text-tertiary transition-colors hover:text-error-text"
       aria-label="댓글 삭제"
     >
       <Trash2 className="h-3.5 w-3.5" />

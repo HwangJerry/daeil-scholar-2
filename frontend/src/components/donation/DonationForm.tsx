@@ -158,7 +158,7 @@ function PayTypeSelector({
               selected === value
                 ? 'border-primary/40 bg-primary-light/30'
                 : 'border-border-subtle bg-surface',
-              error && !selected && 'border-red-300',
+              error && !selected && 'border-error-border',
             )}
           >
             <input
@@ -182,7 +182,7 @@ function PayTypeSelector({
           </label>
         );
       })}
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-error-text">{error}</p>}
     </div>
   );
 }
@@ -384,7 +384,7 @@ export function DonationForm() {
               onChange={handleCustomAmountChange}
               className={cn(
                 'pr-8',
-                hasAmountError && 'border-red-400 focus:border-red-400 focus:ring-red-100',
+                hasAmountError && 'border-error-border focus:border-error-border focus:ring-error-subtle',
               )}
             />
             {customAmountInput && (
@@ -394,7 +394,7 @@ export function DonationForm() {
             )}
           </div>
           {errors.amount && (
-            <p className="text-xs text-red-500">{errors.amount}</p>
+            <p className="text-xs text-error-text">{errors.amount}</p>
           )}
         </div>
 
@@ -447,14 +447,14 @@ export function DonationForm() {
 
       {/* Mutation error */}
       {(donateOrder.isError || createSubscription.isError) && (
-        <p className="text-center text-xs text-red-500">
+        <p className="text-center text-xs text-error-text">
           {(donateOrder.error ?? createSubscription.error)?.message ?? '주문 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.'}
         </p>
       )}
 
       {/* Bridge error */}
       {bridgeError && (
-        <p className="text-center text-xs text-red-500">{bridgeError}</p>
+        <p className="text-center text-xs text-error-text">{bridgeError}</p>
       )}
     </form>
   );

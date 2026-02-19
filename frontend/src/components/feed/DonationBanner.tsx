@@ -1,6 +1,7 @@
-// DonationBanner — Displays cumulative donation amount, donor count, and goal progress bar
+// DonationBanner — Donation progress widget for feed sidebar and mobile inline
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { TrendingUp } from 'lucide-react';
 import { api } from '../../api/client';
 import { formatAmount } from '../../utils/formatAmount';
 import type { DonationSummary } from '../../types/api';
@@ -15,48 +16,49 @@ export function DonationBanner() {
   });
 
   if (isLoading) {
-    return <div className="h-28 rounded-xl skeleton-shimmer" />;
+    return <div className="h-48 rounded-[20px] skeleton-shimmer" />;
   }
 
-  if (isError) return null;
-
-  if (!data) return null;
+  if (isError || !data) return null;
 
   const rate = Math.min(data.achievementRate, 100);
   const hasGoal = data.goalAmount > 0;
 
   return (
-    <div className="rounded-xl bg-gradient-to-br from-primary to-indigo-600 p-5 text-white shadow-lg animate-fade-in-up">
-      <h3 className="mb-3 text-[13px] font-semibold text-indigo-200 tracking-wide uppercase">누적 기부액</h3>
-      <div className="mb-3 flex flex-wrap gap-2">
-        <div className="rounded-lg bg-white/10 px-3 py-2 backdrop-blur-sm">
-          <p className="text-xl font-bold">{formatAmount(data.displayAmount)}원</p>
-        </div>
-        <div className="rounded-lg bg-white/10 px-3 py-2 backdrop-blur-sm">
-          <p className="text-sm font-medium">{data.donorCount}명 참여</p>
-        </div>
-        {hasGoal && (
-          <div className="rounded-lg bg-white/10 px-3 py-2 backdrop-blur-sm">
-            <p className="text-sm font-medium">달성률 {rate.toFixed(0)}%</p>
-          </div>
-        )}
+    <div className="rounded-[20px] bg-surface border border-border p-7 shadow-card">
+      <p className="text-[10px] font-semibold text-text-placeholder tracking-widest uppercase mb-4">
+        기부 캠페인
+      </p>
+
+      <div className="flex items-center gap-2 mb-1">
+        <TrendingUp size={16} className="text-primary flex-shrink-0" />
+        <span className="text-xs text-text-tertiary">누적 기부액</span>
       </div>
+      <p className="text-2xl font-bold text-text-primary mb-1">
+        {formatAmount(data.displayAmount)}원
+      </p>
+      <p className="text-sm text-text-tertiary mb-4">
+        {data.donorCount}명 참여
+        {hasGoal && <span> · 달성률 {rate.toFixed(0)}%</span>}
+      </p>
+
       {hasGoal && (
-        <>
-          <div className="h-2 overflow-hidden rounded-full bg-indigo-900/30">
+        <div className="mb-4">
+          <div className="h-1.5 overflow-hidden rounded-full bg-border">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-white to-indigo-200 animate-progress"
-              style={{ width: `${rate}%`, boxShadow: '0 0 8px rgba(255,255,255,0.3)' }}
+              className="h-full rounded-full bg-gradient-to-r from-primary to-hero-via animate-fill-bar"
+              style={{ width: `${rate}%` }}
             />
           </div>
-          <p className="mt-1.5 text-right text-xs text-indigo-200">
+          <p className="mt-1.5 text-right text-xs text-text-placeholder">
             목표 {formatAmount(data.goalAmount)}원
           </p>
-        </>
+        </div>
       )}
+
       <Link
         to="/donation"
-        className="mt-3 inline-block rounded-lg bg-white px-5 py-2 text-sm font-semibold text-primary shadow-sm transition-all duration-150 hover:shadow-md hover:bg-indigo-50"
+        className="block w-full text-center rounded-xl border border-primary text-primary text-sm font-semibold py-2.5 transition-all duration-150 hover:bg-primary hover:text-white"
       >
         기부하기
       </Link>

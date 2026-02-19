@@ -47,8 +47,8 @@ export function SubscriptionCard({ subscription, onCancel, isCancelling }: Subsc
           className={cn(
             'rounded-full px-3 py-0.5 text-xs font-medium',
             isActive
-              ? 'bg-emerald-50 text-emerald-600'
-              : 'bg-gray-100 text-text-tertiary',
+              ? 'bg-success-subtle text-success-text'
+              : 'bg-border-subtle text-text-tertiary',
           )}
         >
           {statusLabel}
@@ -81,7 +81,7 @@ export function SubscriptionCard({ subscription, onCancel, isCancelling }: Subsc
       {isActive && (
         <Button
           variant="outline"
-          className="w-full text-red-500 border-red-200 hover:bg-red-50"
+          className="w-full text-error-text border-error-border hover:bg-error-subtle"
           disabled={isCancelling}
           onClick={onCancel}
         >

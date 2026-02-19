@@ -1,5 +1,6 @@
 // Sanitized HTML renderer — wraps DOMPurify as a second defense layer after server-side sanitization
 import DOMPurify from 'dompurify';
+import { cn } from '../../lib/utils';
 
 const ALLOWED_TAGS = [
   'h1','h2','h3','h4','h5','h6','p','a','img','ul','ol','li',
@@ -24,7 +25,7 @@ export function HtmlContent({ html, className }: Props) {
 
   return (
     <div
-      className={`prose prose-lg max-w-none ${className ?? ''}`}
+      className={cn('prose prose-lg max-w-none', className)}
       dangerouslySetInnerHTML={{ __html: clean }}
     />
   );
