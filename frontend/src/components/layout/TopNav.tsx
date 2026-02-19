@@ -18,9 +18,10 @@ export default function TopNav() {
   return (
     <header className="hidden md:flex sticky top-0 z-40 w-full bg-surface/80 backdrop-blur-md shadow-xs">
       <div className="container mx-auto flex h-14 items-center justify-between px-4">
-        <Link to="/" className="flex items-center">
-          <span className="text-lg font-bold bg-gradient-to-r from-primary to-violet-600 bg-clip-text text-transparent">
-            Alumni Connect
+        <Link to="/" className="flex items-center gap-2">
+          <img src="/logo.png" alt="대일외고 장학회 로고" className="h-8" />
+          <span className="text-lg font-bold text-text-primary">
+            대일외고 장학회
           </span>
         </Link>
 
