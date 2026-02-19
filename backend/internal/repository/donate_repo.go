@@ -47,8 +47,34 @@ func (r *DonateRepository) InsertPGData(data *model.PGData) (int64, error) {
 	return result.LastInsertId()
 }
 
+// InsertPGDataTx inserts a PG approval record within an existing transaction.
+func (r *DonateRepository) InsertPGDataTx(tx *sqlx.Tx, data *model.PGData) (int64, error) {
+	result, err := tx.Exec(`
+		INSERT INTO WEO_PG_DATA (CNO, RES_CD, RES_MSG, AMOUNT, NUM_CARD, TRAN_DATE, AUTH_NO, PAY_TYPE, O_SEQ)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, data.CNO, data.ResCD, data.ResMsg, data.Amount, data.NumCard, data.TranDate, data.AuthNo, data.PayType, data.OSeq)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
 func (r *DonateRepository) UpdateOrderPayment(orderSeq int, amount int, pgSeq int64, ip string) (int64, error) {
 	result, err := r.DB.Exec(`
+		UPDATE WEO_ORDER
+		SET O_PAYMENT = 'Y', O_PAY = ?, O_PAYDATE = NOW(), O_PG_SEQ = ?, O_STATUS = 'Y',
+		    EDT_DATE = NOW(), EDT_IPADDR = ?
+		WHERE O_SEQ = ? AND O_PAYMENT = 'N'
+	`, amount, pgSeq, ip, orderSeq)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// UpdateOrderPaymentTx marks an order as paid within an existing transaction.
+func (r *DonateRepository) UpdateOrderPaymentTx(tx *sqlx.Tx, orderSeq int, amount int, pgSeq int64, ip string) (int64, error) {
+	result, err := tx.Exec(`
 		UPDATE WEO_ORDER
 		SET O_PAYMENT = 'Y', O_PAY = ?, O_PAYDATE = NOW(), O_PG_SEQ = ?, O_STATUS = 'Y',
 		    EDT_DATE = NOW(), EDT_IPADDR = ?

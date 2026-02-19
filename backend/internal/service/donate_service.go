@@ -112,6 +112,16 @@ func (s *DonateService) ConfirmPayment(orderNo string, encData string, sessionKe
 		gate = "profile"
 	}
 
+	// Idempotency check BEFORE calling ep_cli.Approve() to prevent duplicate charges
+	orderPrice, paymentStatus, err := s.repo.GetOrderPrice(orderSeq)
+	if err != nil {
+		return fmt.Errorf("주문 조회 실패: %w", err)
+	}
+	if paymentStatus == "Y" {
+		s.logger.Info().Str("orderNo", orderNo).Msg("order already paid (idempotent)")
+		return nil
+	}
+
 	result, err := s.epSvc.Approve(model.ApproveRequest{
 		OrderNo:     orderNo,
 		EncryptData: encData,
@@ -132,14 +142,6 @@ func (s *DonateService) ConfirmPayment(orderNo string, encData string, sessionKe
 
 	s.pgAudit.Log(orderNo, "approve_success", result, nil)
 
-	orderPrice, paymentStatus, err := s.repo.GetOrderPrice(orderSeq)
-	if err != nil {
-		return fmt.Errorf("주문 조회 실패: %w", err)
-	}
-	if paymentStatus == "Y" {
-		s.logger.Info().Str("orderNo", orderNo).Msg("order already paid (idempotent)")
-		return nil
-	}
 	approvedAmount, _ := strconv.Atoi(result.Amount)
 	if orderPrice != approvedAmount {
 		s.logger.Error().Int("orderPrice", orderPrice).Int("approvedAmount", approvedAmount).Str("orderNo", orderNo).Msg("amount mismatch")
@@ -157,19 +159,36 @@ func (s *DonateService) ConfirmPayment(orderNo string, encData string, sessionKe
 		PayType:  result.PayType,
 		OSeq:     orderSeq,
 	}
-	pgSeq, err := s.repo.InsertPGData(pgData)
+
+	// Wrap InsertPGData + UpdateOrderPayment in a single DB transaction
+	tx, err := s.repo.DB.Beginx()
+	if err != nil {
+		s.logger.Error().Err(err).Str("orderNo", orderNo).Msg("failed to begin transaction")
+		s.pgAudit.Log(orderNo, "db_tx_begin_fail", result, err)
+		return fmt.Errorf("트랜잭션 시작 실패: %w", err)
+	}
+	defer tx.Rollback()
+
+	pgSeq, err := s.repo.InsertPGDataTx(tx, pgData)
 	if err != nil {
 		s.logger.Error().Err(err).Str("orderNo", orderNo).Msg("failed to insert PG data")
 		s.pgAudit.Log(orderNo, "db_insert_fail", result, err)
 		return fmt.Errorf("PG 데이터 저장 실패: %w", err)
 	}
 
-	affected, err := s.repo.UpdateOrderPayment(orderSeq, approvedAmount, pgSeq, clientIP)
+	affected, err := s.repo.UpdateOrderPaymentTx(tx, orderSeq, approvedAmount, pgSeq, clientIP)
 	if err != nil {
 		s.logger.Error().Err(err).Str("orderNo", orderNo).Msg("failed to update order payment")
 		s.pgAudit.Log(orderNo, "db_update_fail", result, err)
 		return fmt.Errorf("주문 업데이트 실패: %w", err)
 	}
+
+	if err := tx.Commit(); err != nil {
+		s.logger.Error().Err(err).Str("orderNo", orderNo).Msg("failed to commit transaction")
+		s.pgAudit.Log(orderNo, "db_tx_commit_fail", result, err)
+		return fmt.Errorf("트랜잭션 커밋 실패: %w", err)
+	}
+
 	if affected == 0 {
 		s.logger.Info().Str("orderNo", orderNo).Msg("order already processed (idempotent)")
 		return nil
