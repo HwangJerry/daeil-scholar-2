@@ -53,15 +53,6 @@ export function EasyPayBridge({ params, onError }: EasyPayBridgeProps) {
         return;
       }
 
-      // URL-encode Korean fields for UTF-8 mode (matching v1 dona.htm:522-524)
-      const KOREAN_FIELDS = ['sp_mall_nm', 'sp_product_nm', 'sp_user_nm'];
-      for (const name of KOREAN_FIELDS) {
-        const input = formRef.current.elements.namedItem(name) as HTMLInputElement | null;
-        if (input) {
-          input.value = encodeURIComponent(input.value);
-        }
-      }
-
       hasTriggeredRef.current = true;
       window.easypay_card_webpay(
         formRef.current,

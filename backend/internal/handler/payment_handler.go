@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
+
+	"golang.org/x/text/encoding/korean"
 
 	"github.com/dflh-saf/backend/internal/config"
 	mw "github.com/dflh-saf/backend/internal/middleware"
@@ -59,8 +62,25 @@ func (h *PaymentHandler) EasyPayRelay(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.relayTmpl.Execute(w, r.Form)
+
+	// EasyPay MainAction.do expects EUC-KR encoded form data.
+	r.Form.Set("sp_charset", "EUC-KR")
+
+	// Render template to buffer (UTF-8), then convert to EUC-KR.
+	var buf bytes.Buffer
+	if err := h.relayTmpl.Execute(&buf, r.Form); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	euckrBytes, err := korean.EUCKR.NewEncoder().Bytes(buf.Bytes())
+	if err != nil {
+		http.Error(w, "Encoding Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=euc-kr")
+	w.Write(euckrBytes)
 }
 
 func (h *PaymentHandler) EasyPayReturn(w http.ResponseWriter, r *http.Request) {

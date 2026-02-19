@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/encoding/korean"
+
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/model"
 )
@@ -35,7 +37,7 @@ func (s *EasyPayService) Approve(req model.ApproveRequest, gate string) (*model.
 	defer cancel()
 
 	args := fmt.Sprintf(
-		"order_no=%s,cert_file=%s,mall_id=%s,tr_cd=00101000,gw_url=%s,gw_port=%s,enc_data=%s,snd_key=%s,trace_no=%s,cust_ip=%s,log_dir=%s,log_level=1",
+		"order_no=%s,cert_file=%s,mall_id=%s,tr_cd=00101000,gw_url=%s,gw_port=%s,enc_data=%s,snd_key=%s,trace_no=%s,cust_ip=%s,log_dir=%s,log_level=1,opt=utf-8",
 		req.OrderNo, certFile, mallID,
 		s.cfg.GatewayURL, s.cfg.GatewayPort,
 		req.EncryptData, req.SessionKey, req.TraceNo, req.ClientIP, logDir,
@@ -47,7 +49,13 @@ func (s *EasyPayService) Approve(req model.ApproveRequest, gate string) (*model.
 		return nil, fmt.Errorf("ep_cli execution failed: %w", err)
 	}
 
-	return parseEasyPayResponse(string(output)), nil
+	// ep_cli outputs Korean text fields in EUC-KR; decode to UTF-8
+	utf8Output, decErr := korean.EUCKR.NewDecoder().Bytes(output)
+	if decErr != nil {
+		// Fallback: use raw output (ASCII fields like res_cd still work)
+		return parseEasyPayResponse(string(output)), nil
+	}
+	return parseEasyPayResponse(string(utf8Output)), nil
 }
 
 func parseEasyPayResponse(raw string) *model.ApproveResult {
