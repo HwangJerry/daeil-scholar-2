@@ -23,3 +23,6 @@ Thumbs.db
 backend/server
 backend/backfill
 __debug_bin*
+
+# Design prototypes / scratch files
+daeil-redesign-v2.jsx

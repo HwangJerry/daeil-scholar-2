@@ -23,6 +23,7 @@ export function NetworkWidget() {
 
   const previewItems = data?.items?.slice(0, 5) ?? [];
   const totalCount = data?.totalCount ?? 0;
+  const weeklyCount = data?.weeklyCount;
 
   return (
     <div className="rounded-[20px] bg-surface border border-border p-7 shadow-card">
@@ -65,7 +66,9 @@ export function NetworkWidget() {
         </div>
         <div className="rounded-xl bg-background p-3">
           <p className="text-[10px] text-text-placeholder mb-1">이번 주 가입</p>
-          <p className="text-lg font-bold text-text-primary">—</p>
+          <p className="text-lg font-bold text-text-primary">
+            {weeklyCount !== undefined ? weeklyCount.toLocaleString() : '—'}
+          </p>
         </div>
       </div>
 

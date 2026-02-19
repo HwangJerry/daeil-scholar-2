@@ -146,6 +146,7 @@ export interface AlumniItem {
 export interface AlumniSearchResponse {
   items: AlumniItem[];
   totalCount: number;
+  weeklyCount: number;
   page: number;
   size: number;
   totalPages: number;
