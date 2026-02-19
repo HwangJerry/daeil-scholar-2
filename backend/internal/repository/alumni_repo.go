@@ -91,6 +91,18 @@ func (r *AlumniRepository) GetJobCategories() ([]model.JobCategory, error) {
 	return cats, nil
 }
 
+// GetWeeklyCount returns the number of alumni members who registered in the last 7 days.
+// Joins FUNDAMENTAL_MEMBER for consistency with the alumni search. MariaDB 10.1.38 compatible.
+func (r *AlumniRepository) GetWeeklyCount() (int, error) {
+	var count int
+	err := r.DB.Get(&count, `
+		SELECT COUNT(*) FROM WEO_MEMBER m
+		INNER JOIN FUNDAMENTAL_MEMBER f ON f.FM_SEQ = m.USR_SEQ
+		WHERE m.REG_DATE > DATE_SUB(NOW(), INTERVAL 7 DAY)
+	`)
+	return count, err
+}
+
 func buildAlumniFilters(params model.AlumniSearchParams) (string, []interface{}) {
 	clauses := []string{"1=1"}
 	args := []interface{}{}

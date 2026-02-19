@@ -33,6 +33,10 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 	if err != nil {
 		return nil, err
 	}
+	weeklyCount, err := s.repo.GetWeeklyCount()
+	if err != nil {
+		weeklyCount = 0
+	}
 	items := make([]model.AlumniCard, 0, len(records))
 	for _, record := range records {
 		phone := ""
@@ -104,11 +108,12 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 		totalPages = (total + params.Size - 1) / params.Size
 	}
 	return &model.AlumniSearchResponse{
-		Items:      items,
-		TotalCount: total,
-		Page:       params.Page,
-		Size:       params.Size,
-		TotalPages: totalPages,
+		Items:       items,
+		TotalCount:  total,
+		WeeklyCount: weeklyCount,
+		Page:        params.Page,
+		Size:        params.Size,
+		TotalPages:  totalPages,
 	}, nil
 }
 

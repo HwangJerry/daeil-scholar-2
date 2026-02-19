@@ -60,11 +60,12 @@ type AlumniSearchParams struct {
 
 // AlumniSearchResponse is the API response for GET /api/alumni.
 type AlumniSearchResponse struct {
-	Items      []AlumniCard `json:"items"`
-	TotalCount int          `json:"totalCount"`
-	Page       int          `json:"page"`
-	Size       int          `json:"size"`
-	TotalPages int          `json:"totalPages"`
+	Items       []AlumniCard `json:"items"`
+	TotalCount  int          `json:"totalCount"`
+	WeeklyCount int          `json:"weeklyCount"`
+	Page        int          `json:"page"`
+	Size        int          `json:"size"`
+	TotalPages  int          `json:"totalPages"`
 }
 
 // AlumniFilters holds the available filter options for alumni search.
