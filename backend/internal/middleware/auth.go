@@ -51,7 +51,7 @@ func resolveAuthUser(authService *service.AuthService, r *http.Request) (*model.
 	legacyCookie, err := r.Cookie("DDusrSession_id")
 	if err == nil && legacyCookie.Value != "" {
 		legacyUser, legacyErr := authService.LookupLegacySession(legacyCookie.Value)
-		if legacyErr == nil && legacyUser != nil && (legacyUser.USRStatus == "BBB" || legacyUser.USRStatus == "AAA") {
+		if legacyErr == nil && legacyUser != nil && (legacyUser.USRStatus == "BBB" || legacyUser.USRStatus == "CCC" || legacyUser.USRStatus == "ZZZ") {
 			return legacyUser, nil
 		}
 	}
