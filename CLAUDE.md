@@ -5,6 +5,7 @@ Alumni community web application: legacy PHP → modern Go + React rewrite.
 ## Rule
 1. Always comply with the rule of @.claude/hooks/validate-code-file.sh for generating codes.
 2. Evaluate whether the code file being written has a single, clearly defined responsibility. A file with one responsibility means: it handles one domain concept, one feature concern, or one layer of abstraction. Files that mix unrelated concerns (e.g., API calls + UI rendering + data transformation) violate single responsibility. If the file is a type definition file, a barrel export, or a configuration file, it is exempt. Return ok=true if it has a single responsibility. If ok=false, include the reason AND this directive: '[FIX REQUIRED] Extract the mixed concern into a separate file. Do not ask for confirmation — fix inline and continue with the current task.
+3. UI 디자인 시스템은 `UI_DESIGN_DOC.md`를 참고하여 진행한다. 새로운 컴포넌트나 스타일을 추가할 때 반드시 해당 문서의 디자인 토큰과 컴포넌트 가이드라인을 따른다.
 
 ## Quick Reference
 
