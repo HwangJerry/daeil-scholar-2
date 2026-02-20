@@ -61,8 +61,8 @@
   --color-hero-to: #1e3a6e;
 
   /* Fonts */
-  --font-sans: 'DM Sans', 'Pretendard Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-serif: 'Noto Serif KR', Georgia, serif;
+  --font-sans: 'Instrument Sans', 'Pretendard Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-serif: 'Pretendard Variable', 'Pretendard', Georgia, serif;
 
   /* Custom font sizes */
   --font-size-2xs: 10px;
