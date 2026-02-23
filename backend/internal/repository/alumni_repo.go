@@ -1,3 +1,4 @@
+// alumni_repo.go — Alumni search repository (FUNDAMENTAL_MEMBER-based queries)
 package repository
 
 import (
@@ -18,7 +19,8 @@ func NewAlumniRepository(db *sqlx.DB) *AlumniRepository {
 func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.AlumniRecord, int, error) {
 	where, args := buildAlumniFilters(params)
 	countQuery := `SELECT COUNT(*) FROM FUNDAMENTAL_MEMBER f
-		INNER JOIN WEO_MEMBER m ON f.FM_SEQ = m.USR_SEQ ` + where
+		LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = f.FM_SEQ AND m.USR_STATUS != 'AAA'
+		` + where
 	var total int
 	if err := r.DB.Get(&total, countQuery, args...); err != nil {
 		return nil, 0, err
@@ -34,9 +36,15 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 	argsWithPage := append([]interface{}{}, args...)
 	argsWithPage = append(argsWithPage, limit, (page-1)*limit)
 	query := `
-		SELECT f.FM_SEQ, f.FM_NAME, f.FM_FN, f.FM_DEPT, f.FM_COMPANY, f.FM_POSITION,
-			IFNULL(f.FM_PHONE, m.USR_PHONE) AS FM_PHONE,
-			IFNULL(f.FM_EMAIL, m.USR_EMAIL) AS FM_EMAIL,
+		SELECT
+			f.FM_SEQ,
+			IFNULL(f.FM_NAME, m.USR_NAME)          AS FM_NAME,
+			IFNULL(m.USR_FN,  f.FM_FN)             AS FM_FN,
+			f.FM_DEPT,
+			f.FM_COMPANY,
+			f.FM_POSITION,
+			IFNULL(m.USR_PHONE, f.FM_PHONE)        AS FM_PHONE,
+			IFNULL(m.USR_EMAIL, f.FM_EMAIL)        AS FM_EMAIL,
 			f.FM_SMS, f.FM_SPAM,
 			m.USR_BIZ_NAME, m.USR_BIZ_DESC, m.USR_BIZ_ADDR,
 			jc.AJC_NAME, jc.AJC_COLOR,
@@ -44,10 +52,10 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 			(SELECT GROUP_CONCAT(t.AUT_TAG ORDER BY t.AUT_INDX SEPARATOR ',')
 			 FROM ALUMNI_USER_TAG t WHERE t.USR_SEQ = m.USR_SEQ) AS TAGS
 		FROM FUNDAMENTAL_MEMBER f
-		INNER JOIN WEO_MEMBER m ON f.FM_SEQ = m.USR_SEQ
+		LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = f.FM_SEQ AND m.USR_STATUS != 'AAA'
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
 	` + where + `
-		ORDER BY f.FM_NAME ASC
+		ORDER BY IFNULL(f.FM_NAME, m.USR_NAME) ASC
 		LIMIT ? OFFSET ?
 	`
 	var records []model.AlumniRecord
@@ -58,15 +66,23 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 }
 
 func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
-	var fnList []string
+	fnList := make([]string, 0)
 	if err := r.DB.Select(&fnList, `
-		SELECT DISTINCT FM_FN FROM FUNDAMENTAL_MEMBER ORDER BY FM_FN
+		SELECT DISTINCT IFNULL(m.USR_FN, f.FM_FN) AS FM_FN
+		FROM FUNDAMENTAL_MEMBER f
+		LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = f.FM_SEQ AND m.USR_STATUS != 'AAA'
+		WHERE IFNULL(m.USR_FN, f.FM_FN) IS NOT NULL
+		  AND IFNULL(m.USR_FN, f.FM_FN) != ''
+		ORDER BY FM_FN + 0, FM_FN
 	`); err != nil {
 		return nil, err
 	}
-	var deptList []string
+	deptList := make([]string, 0)
 	if err := r.DB.Select(&deptList, `
-		SELECT DISTINCT FM_DEPT FROM FUNDAMENTAL_MEMBER WHERE FM_DEPT != '' ORDER BY FM_DEPT
+		SELECT DISTINCT f.FM_DEPT
+		FROM FUNDAMENTAL_MEMBER f
+		WHERE f.FM_DEPT IS NOT NULL AND f.FM_DEPT != ''
+		ORDER BY f.FM_DEPT
 	`); err != nil {
 		return nil, err
 	}
@@ -92,22 +108,41 @@ func (r *AlumniRepository) GetJobCategories() ([]model.JobCategory, error) {
 }
 
 // GetWeeklyCount returns the number of alumni members who registered in the last 7 days.
-// Joins FUNDAMENTAL_MEMBER for consistency with the alumni search. MariaDB 10.1.38 compatible.
 func (r *AlumniRepository) GetWeeklyCount() (int, error) {
 	var count int
 	err := r.DB.Get(&count, `
 		SELECT COUNT(*) FROM WEO_MEMBER m
-		INNER JOIN FUNDAMENTAL_MEMBER f ON f.FM_SEQ = m.USR_SEQ
-		WHERE m.REG_DATE > DATE_SUB(NOW(), INTERVAL 7 DAY)
+		WHERE m.USR_STATUS != 'AAA'
+		  AND m.REG_DATE > DATE_SUB(NOW(), INTERVAL 7 DAY)
 	`)
 	return count, err
 }
 
+// GetWidgetPreview returns the first 5 alumni names (alphabetically) and the total alumni count.
+func (r *AlumniRepository) GetWidgetPreview() ([]string, int, error) {
+	var total int
+	if err := r.DB.Get(&total, `
+		SELECT COUNT(*) FROM WEO_MEMBER m
+		LEFT JOIN FUNDAMENTAL_MEMBER f ON f.FM_SEQ = m.USR_SEQ
+		WHERE m.USR_STATUS != 'AAA'`); err != nil {
+		return nil, 0, err
+	}
+	var names []string
+	if err := r.DB.Select(&names, `
+		SELECT IFNULL(f.FM_NAME, m.USR_NAME) FROM WEO_MEMBER m
+		LEFT JOIN FUNDAMENTAL_MEMBER f ON f.FM_SEQ = m.USR_SEQ
+		WHERE m.USR_STATUS != 'AAA'
+		ORDER BY IFNULL(f.FM_NAME, m.USR_NAME) ASC LIMIT 5`); err != nil {
+		return nil, 0, err
+	}
+	return names, total, nil
+}
+
 func buildAlumniFilters(params model.AlumniSearchParams) (string, []interface{}) {
-	clauses := []string{"1=1"}
+	clauses := []string{}
 	args := []interface{}{}
 	if params.FN != "" {
-		clauses = append(clauses, "f.FM_FN = ?")
+		clauses = append(clauses, "IFNULL(m.USR_FN, f.FM_FN) = ?")
 		args = append(args, params.FN)
 	}
 	if params.Dept != "" {
@@ -115,7 +150,7 @@ func buildAlumniFilters(params model.AlumniSearchParams) (string, []interface{})
 		args = append(args, params.Dept)
 	}
 	if params.Name != "" {
-		clauses = append(clauses, "f.FM_NAME LIKE ?")
+		clauses = append(clauses, "(IFNULL(f.FM_NAME, m.USR_NAME) LIKE ?)")
 		args = append(args, params.Name+"%")
 	}
 	if params.Company != "" {
@@ -129,6 +164,9 @@ func buildAlumniFilters(params model.AlumniSearchParams) (string, []interface{})
 	if params.JobCat > 0 {
 		clauses = append(clauses, "m.USR_JOB_CAT = ?")
 		args = append(args, params.JobCat)
+	}
+	if len(clauses) == 0 {
+		return "", args
 	}
 	return "WHERE " + strings.Join(clauses, " AND "), args
 }

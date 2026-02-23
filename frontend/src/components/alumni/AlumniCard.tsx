@@ -1,111 +1,99 @@
-// AlumniCard — Alumni profile card with warm editorial styling and message action
+// AlumniCard — Compact table row view for alumni directory listing
 import { useState } from 'react';
-import { Building2, MapPin, MessageCircle } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { AlumniItem } from '../../types/api';
 import { SendMessageDialog } from '../message/SendMessageDialog';
+import { Button } from '../ui/Button';
+
+const AVATAR_COLORS = [
+  '#5C6BC0', '#EF6C00', '#00897B', '#8E24AA', '#D81B60',
+  '#039BE5', '#43A047', '#E53935', '#6D4C41', '#546E7A',
+];
 
 interface AlumniCardProps {
   item: AlumniItem;
   currentUsrSeq?: number;
+  isLast?: boolean;
 }
 
-export function AlumniCard({ item, currentUsrSeq }: AlumniCardProps) {
+export function AlumniCard({ item, currentUsrSeq, isLast }: AlumniCardProps) {
   const [showMessageDialog, setShowMessageDialog] = useState(false);
-
-  const displayName = item.bizName || item.company;
-  const hasBizInfo = !!displayName;
-  const hasAddr = !!item.bizAddr;
-  const hasTags = item.tags && item.tags.length > 0;
   const isSelf = item.usrSeq === currentUsrSeq;
+  // Dynamic calculation — inline style exception per design doc
+  const avatarColor = AVATAR_COLORS[item.fmSeq % AVATAR_COLORS.length];
+  const bizDisplay = item.bizName || item.company || '—';
+  const hasJobCat = !!item.jobCatName && item.jobCatName !== '미분류';
 
   return (
     <>
       <div
         className={cn(
-          'rounded-[20px] bg-surface p-5 shadow-card',
-          'border border-border-subtle',
-          'transition-all duration-200 hover:shadow-card-hover hover:border-border-hover'
+          'group grid items-center px-5 py-3.5 gap-2 cursor-pointer',
+          'grid-cols-[44px_1fr_88px_48px] md:grid-cols-[44px_1fr_200px_160px_88px_72px]',
+          'hover:bg-background transition-colors duration-150',
+          !isLast && 'border-b border-border-subtle',
         )}
       >
-        {/* Header: name + job category badge */}
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-lg font-bold text-text-primary font-serif">{item.fmName}</h3>
-            <p className="text-xs text-text-placeholder mt-0.5">
-              {item.fmFn}기 · {item.fmDept}
-            </p>
+        {/* Col 1 — Avatar */}
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+          style={{ backgroundColor: avatarColor }}
+        >
+          {item.fmName?.[0] ?? '?'}
+        </div>
+
+        {/* Col 2 — 동문 */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-sm font-semibold text-text-primary font-serif truncate">
+              {item.fmName}
+            </span>
+            <span className="bg-border-subtle text-text-placeholder rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap flex-shrink-0">
+              {item.fmFn}기
+            </span>
           </div>
-          {item.jobCatName ? (
-            <span className="px-2.5 py-1 text-xs font-semibold rounded-full whitespace-nowrap bg-cat-career-bg text-cat-career-text border border-cat-career-border">
-              {item.jobCatName}
-            </span>
-          ) : (
-            <span className="px-2.5 py-1 text-xs font-semibold rounded-full whitespace-nowrap bg-border-subtle text-text-placeholder">
-              미분류
-            </span>
-          )}
+          <span className="text-[11px] text-text-placeholder">{item.fmDept}</span>
         </div>
 
-        {/* Business name */}
-        <div className="flex items-center gap-2 text-sm text-text-secondary mb-1.5">
-          <Building2 size={15} className="text-text-placeholder flex-shrink-0" />
-          {hasBizInfo ? (
-            <span className="truncate">{displayName}</span>
-          ) : (
-            <span className="italic text-text-placeholder text-xs">업체명 없음</span>
-          )}
-        </div>
+        {/* Col 3 — 소속 (hidden on mobile) */}
+        <span className="hidden md:block text-sm text-text-secondary truncate">
+          {bizDisplay}
+        </span>
 
-        {/* Business description */}
-        <p className="text-sm ml-[23px] mb-1.5 line-clamp-2">
-          {item.bizDesc ? (
-            <span className="text-text-tertiary">{item.bizDesc}</span>
-          ) : (
-            <span className="italic text-text-placeholder text-xs">업체 설명 없음</span>
-          )}
-        </p>
+        {/* Col 4 — 직책 (hidden on mobile) */}
+        <span className="hidden md:block text-sm text-text-secondary truncate">
+          {item.position || '—'}
+        </span>
 
-        {/* Address */}
-        <div className="flex items-center gap-2 text-sm text-text-secondary mb-2">
-          <MapPin size={15} className="text-text-placeholder flex-shrink-0" />
-          {hasAddr ? (
-            <span className="truncate">{item.bizAddr}</span>
-          ) : (
-            <span className="italic text-text-placeholder text-xs">주소 없음</span>
-          )}
-        </div>
-
-        {/* Tags */}
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {hasTags ? (
-            item.tags.map((tag) => (
-              <span
-                key={tag}
-                className="px-2 py-0.5 text-xs font-medium rounded-md bg-primary-light text-primary"
-              >
-                #{tag}
-              </span>
-            ))
-          ) : (
-            <span className="italic text-text-placeholder text-xs">태그 없음</span>
-          )}
-        </div>
-
-        {/* Message button */}
-        <button
-          onClick={() => setShowMessageDialog(true)}
-          disabled={isSelf}
+        {/* Col 5 — 업종 */}
+        <span
           className={cn(
-            'w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors duration-150',
-            isSelf
-              ? 'bg-border-subtle text-text-placeholder cursor-not-allowed'
-              : 'bg-primary/5 text-primary hover:bg-primary/10'
+            'rounded-full px-2 py-0.5 text-[11px] border truncate block max-w-full',
+            hasJobCat
+              ? 'bg-cat-notice-bg text-cat-notice-text border-cat-notice-border'
+              : 'bg-border-subtle text-text-placeholder border-border',
           )}
         >
-          <MessageCircle size={16} />
-          쪽지보내기
-        </button>
+          {item.jobCatName || '미분류'}
+        </span>
+
+        {/* Col 6 — 쪽지 */}
+        <div className="flex justify-end">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => setShowMessageDialog(true)}
+            disabled={isSelf}
+            className={cn(
+              'opacity-0 group-hover:opacity-100 transition-opacity',
+              'flex items-center gap-1 whitespace-nowrap',
+            )}
+          >
+            <MessageCircle size={12} />
+            <span className="hidden md:inline">쪽지</span>
+          </Button>
+        </div>
       </div>
 
       {showMessageDialog && (

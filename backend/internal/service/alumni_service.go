@@ -117,6 +117,26 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 	}, nil
 }
 
+const widgetPreviewCacheKey = "alumni:widget:preview"
+
+// GetWidgetPreview returns a cached minimal alumni list + total count for the public widget.
+func (s *AlumniService) GetWidgetPreview() (*model.AlumniWidgetResponse, error) {
+	if cached, found := s.cache.Get(widgetPreviewCacheKey); found {
+		return cached.(*model.AlumniWidgetResponse), nil
+	}
+	names, total, err := s.repo.GetWidgetPreview()
+	if err != nil {
+		return nil, err
+	}
+	items := make([]model.AlumniWidgetItem, 0, len(names))
+	for _, name := range names {
+		items = append(items, model.AlumniWidgetItem{FmName: name})
+	}
+	result := &model.AlumniWidgetResponse{Items: items, TotalCount: total}
+	s.cache.Set(widgetPreviewCacheKey, result, 10*time.Minute)
+	return result, nil
+}
+
 func (s *AlumniService) GetFilters() (*model.AlumniFilters, error) {
 	if cached, found := s.cache.Get("alumni_filters"); found {
 		if filters, ok := cached.(*model.AlumniFilters); ok {

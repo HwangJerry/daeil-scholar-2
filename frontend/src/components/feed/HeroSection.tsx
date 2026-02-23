@@ -1,7 +1,8 @@
 // HeroSection — Pinned notice hero card with dark navy editorial gradient
 import { Link } from 'react-router-dom';
-import { Pin } from 'lucide-react';
+import { Megaphone } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { formatRelativeDate } from '../../utils/date';
 import { useHeroNotice } from '../../hooks/useHeroNotice';
 
 export function HeroSection() {
@@ -12,6 +13,8 @@ export function HeroSection() {
   }
 
   if (isError || !hero) return null;
+
+  const isPinned = hero.isPinned === 'Y';
 
   return (
     <Link
@@ -41,10 +44,17 @@ export function HeroSection() {
       <div className="relative flex flex-col justify-end h-full min-h-[260px] p-6">
         {/* Top label */}
         <div className="flex items-center gap-2 mb-auto pt-1">
-          <span className="flex items-center gap-1.5 text-white/60 text-xs font-medium">
-            <Pin size={12} className="text-white/50" />
-            고정 공지
-          </span>
+          {isPinned ? (
+            <span className="flex items-center gap-1.5 text-white/60 text-xs font-medium">
+              <Megaphone size={12} className="text-white/50" />
+              중요한 소식
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-white/60 text-xs font-medium">
+              <Megaphone size={12} className="text-white/50" />
+              중요한 소식
+            </span>
+          )}
         </div>
 
         {/* Title and meta */}
@@ -56,7 +66,7 @@ export function HeroSection() {
             <p className="mb-3 line-clamp-2 text-[13px] text-white/55 leading-relaxed">{hero.summary}</p>
           )}
           <div className="flex items-center gap-3 text-xs text-white/40">
-            <span>{hero.regDate}</span>
+            <span>{formatRelativeDate(hero.regDate)}</span>
             <span>조회 {hero.hit}</span>
           </div>
         </div>

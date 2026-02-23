@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Mail, MailOpen, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { api } from '../../api/client';
+import { Bone } from '../ui/Skeleton';
 import type { MessageItem, MessageListResponse } from '../../types/api';
 
 const PAGE_SIZE = 20;
@@ -23,6 +24,22 @@ function truncateContent(content: string, maxLength: number): string {
 }
 
 const CONTENT_TRUNCATE_LENGTH = 80;
+
+function MessageRowSkeleton() {
+  return (
+    <div className="rounded-2xl border border-border-subtle p-4">
+      <div className="flex items-start gap-3">
+        <Bone className="w-[18px] h-[18px] flex-shrink-0 rounded mt-0.5" />
+        <div className="flex-1 space-y-2">
+          <Bone className="h-4 w-24" />
+          <Bone className="h-3 w-full" />
+          <Bone className="h-3 w-3/4" />
+          <Bone className="h-2.5 w-16 mt-1" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function InboxMessageRow({ message }: { message: MessageItem }) {
   const queryClient = useQueryClient();
@@ -122,7 +139,7 @@ function InboxMessageRow({ message }: { message: MessageItem }) {
 export function MessageInbox() {
   const [page, setPage] = useState(1);
 
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, isLoading } = useQuery({
     queryKey: ['messages', 'inbox', page],
     queryFn: () =>
       api.get<MessageListResponse>(
@@ -132,15 +149,26 @@ export function MessageInbox() {
 
   return (
     <div className="space-y-3">
-      {/* Loading */}
-      {isFetching && (
-        <div className="flex justify-center py-8">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      {/* Initial loading skeleton */}
+      {isLoading && (
+        <div className="space-y-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 0.05}s` }}>
+              <MessageRowSkeleton />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Re-fetch spinner (e.g., pagination change) */}
+      {!isLoading && isFetching && (
+        <div className="flex justify-center py-4">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
       )}
 
       {/* Empty state */}
-      {data && data.items.length === 0 && !isFetching && (
+      {!isLoading && data && data.items.length === 0 && !isFetching && (
         <div className="flex flex-col items-center justify-center py-16">
           <Mail size={40} className="text-text-placeholder mb-3" />
           <p className="text-sm text-text-tertiary">받은 쪽지가 없습니다</p>
@@ -148,7 +176,7 @@ export function MessageInbox() {
       )}
 
       {/* Message list */}
-      {data && data.items.length > 0 && (
+      {!isLoading && data && data.items.length > 0 && (
         <>
           <div className="space-y-2">
             {data.items.map((msg) => (

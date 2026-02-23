@@ -29,3 +29,16 @@ export function formatRelativeDate(dateStr: string): string {
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}.${m}.${d}`;
 }
+
+/**
+ * Formats a date string as an absolute Korean date: "YYYY. MM. DD"
+ */
+export function formatAbsoluteDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}. ${m}. ${d}`;
+}

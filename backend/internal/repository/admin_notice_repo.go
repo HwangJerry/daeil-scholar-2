@@ -46,7 +46,7 @@ func (r *AdminNoticeRepository) GetNotices(page, size int, keyword string) ([]mo
 func (r *AdminNoticeRepository) GetNoticeForEdit(seq int) (*model.NoticeDetail, error) {
 	var detail model.NoticeDetail
 	err := r.DB.Get(&detail, `
-		SELECT SEQ, SUBJECT, CONTENTS, CONTENTS_MD, CONTENT_FORMAT, SUMMARY, THUMBNAIL_URL, REG_DATE, REG_NAME, HIT
+		SELECT SEQ, SUBJECT, CONTENTS, CONTENTS_MD, CONTENT_FORMAT, SUMMARY, THUMBNAIL_URL, REG_DATE, REG_NAME, HIT, IS_PINNED
 		FROM WEO_BOARDBBS WHERE SEQ = ? AND GATE = 'NOTICE' LIMIT 1
 	`, seq)
 	if err != nil {
@@ -59,17 +59,27 @@ func (r *AdminNoticeRepository) GetNoticeForEdit(seq int) (*model.NoticeDetail, 
 }
 
 func (r *AdminNoticeRepository) InsertNotice(n *model.AdminNoticeInsert) (int, error) {
-	// WEO_BOARDBBS.SEQ is not AUTO_INCREMENT (legacy table); generate next SEQ manually
-	var nextSeq int
-	if err := r.DB.Get(&nextSeq, `SELECT COALESCE(MAX(SEQ), 0) + 1 FROM WEO_BOARDBBS`); err != nil {
+	// WEO_BOARDBBS.SEQ is not AUTO_INCREMENT (legacy table); generate next SEQ manually.
+	// Use sql.NullInt64 to handle the case where the table is empty (MAX returns NULL).
+	var maxSeq sql.NullInt64
+	if err := r.DB.Get(&maxSeq, `SELECT MAX(SEQ) FROM WEO_BOARDBBS`); err != nil {
 		return 0, err
 	}
+	nextSeq := int(maxSeq.Int64) + 1
 
 	_, err := r.DB.Exec(`
 		INSERT INTO WEO_BOARDBBS
-			(SEQ, GATE, SUBJECT, CONTENTS, CONTENTS_MD, CONTENT_FORMAT, SUMMARY, THUMBNAIL_URL, IS_PINNED, OPEN_YN, REG_NAME, REG_DATE, HIT)
-		VALUES (?, 'NOTICE', ?, ?, ?, 'MARKDOWN', ?, ?, ?, 'Y', ?, NOW(), 0)
-	`, nextSeq, n.Subject, n.Contents, n.ContentsMD, n.Summary, n.ThumbnailURL, n.IsPinned, n.RegName)
+			(SEQ, GATE, P_ID, B_NO, R_NO,
+			 SUBJECT, CONTENTS, CONTENTS_MD, CONTENT_FORMAT, CONTENTS_TYPE,
+			 SUMMARY, THUMBNAIL_URL, IS_PINNED, OPEN_YN, OPEN_TYPE, REPLY_MAIL,
+			 STEP, USR_SEQ, REG_NAME, REG_DATE, HIT, LIKE_CNT)
+		VALUES (?, 'NOTICE', 0, 0, 0,
+		        ?, ?, ?, 'MARKDOWN', 'H',
+		        ?, ?, ?, 'Y', 'Y', 'N',
+		        'U', ?, ?, NOW(), 0, 0)
+	`, nextSeq, n.Subject, n.Contents, n.ContentsMD,
+		n.Summary, n.ThumbnailURL, n.IsPinned,
+		n.USRSeq, n.RegName)
 	if err != nil {
 		return 0, err
 	}
@@ -92,6 +102,14 @@ func (r *AdminNoticeRepository) DeleteNotice(seq int) error {
 }
 
 func (r *AdminNoticeRepository) TogglePin(seq int) error {
+	// Step 1: unpin all other notices to enforce single-pin constraint
+	if _, err := r.DB.Exec(`
+		UPDATE WEO_BOARDBBS SET IS_PINNED = 'N'
+		WHERE GATE = 'NOTICE' AND SEQ <> ?
+	`, seq); err != nil {
+		return err
+	}
+	// Step 2: toggle this notice
 	_, err := r.DB.Exec(`
 		UPDATE WEO_BOARDBBS
 		SET IS_PINNED = CASE WHEN IS_PINNED = 'Y' THEN 'N' ELSE 'Y' END

@@ -35,12 +35,12 @@ func (s *LikeService) ToggleLike(bbsSeq int, usrSeq int) (*model.LikeToggleRespo
 		liked = false
 	} else {
 		// Like: check if any row exists (active or inactive)
-		seq, _, findErr := s.likeRepo.FindLike(bbsSeq, usrSeq)
+		exists, findErr := s.likeRepo.HasAnyLikeRow(bbsSeq, usrSeq)
 		if findErr != nil {
 			return nil, findErr
 		}
 
-		if seq > 0 {
+		if exists {
 			// Reactivate: set ALL rows for this user+post to 'Y'
 			if err := s.likeRepo.SetLikeOpenByUser(bbsSeq, usrSeq, "Y"); err != nil {
 				return nil, err

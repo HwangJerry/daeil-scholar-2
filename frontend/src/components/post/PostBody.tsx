@@ -17,7 +17,7 @@ export function PostBody({ thumbnailUrl, subject, contentHtml, files }: PostBody
         <img
           src={thumbnailUrl}
           alt={subject}
-          className="mb-4 w-full rounded-lg object-cover"
+          className="mb-4 w-full aspect-video rounded-lg object-cover"
         />
       )}
 

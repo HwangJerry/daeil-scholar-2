@@ -28,7 +28,7 @@ func (s *AdminNoticeService) GetForEdit(seq int) (*model.NoticeDetail, error) {
 	return s.repo.GetNoticeForEdit(seq)
 }
 
-func (s *AdminNoticeService) Create(subject, markdownText, regName, isPinned string) (int, error) {
+func (s *AdminNoticeService) Create(subject, markdownText, regName string, usrSeq int, isPinned string) (int, error) {
 	encoded, summary, thumbnail, err := ConvertAndEncode(markdownText)
 	if err != nil {
 		return 0, err
@@ -44,6 +44,7 @@ func (s *AdminNoticeService) Create(subject, markdownText, regName, isPinned str
 		ThumbnailURL: thumbnail,
 		IsPinned:     isPinned,
 		RegName:      regName,
+		USRSeq:       usrSeq,
 	})
 }
 

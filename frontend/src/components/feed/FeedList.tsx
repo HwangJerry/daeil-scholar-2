@@ -3,6 +3,7 @@ import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
 import { useFeedPagination } from '../../hooks/useFeedPagination';
 import { NoticeCard } from './NoticeCard';
 import { AdCard } from './AdCard';
+import { FeedCardSkeleton } from './FeedCardSkeleton';
 
 export function FeedList() {
   const { items, hasMore, isFetching, loadMore } = useFeedPagination();
@@ -15,6 +16,18 @@ export function FeedList() {
 
   if (items.length === 0 && !isFetching) {
     return <p className="py-12 text-center text-sm text-text-tertiary">게시글이 없습니다.</p>;
+  }
+
+  if (items.length === 0 && isFetching) {
+    return (
+      <div className="flex flex-col gap-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 0.05}s` }}>
+            <FeedCardSkeleton />
+          </div>
+        ))}
+      </div>
+    );
   }
 
   const staggerClass = (idx: number) => {

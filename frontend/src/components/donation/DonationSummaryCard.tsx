@@ -39,7 +39,7 @@ export function DonationSummaryCard() {
       <p className="relative text-white/50 text-[13px] font-medium mb-1 tracking-wide uppercase">
         누적 기부액
       </p>
-      <h2 className="relative text-3xl font-extrabold tracking-tight mb-4 font-serif">
+      <h2 className="relative text-3xl font-extrabold tracking-tight mb-4 font-serif text-white">
         {formatAmount(displayAmount)}원
       </h2>
 

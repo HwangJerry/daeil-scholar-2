@@ -1,3 +1,4 @@
+// ad_repo.go — Repository for MAIN_AD table operations (retrieval and event logging)
 package repository
 
 import (
@@ -7,22 +8,29 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// AdRepository handles MAIN_AD retrieval and event logging.
 type AdRepository struct {
 	DB *sqlx.DB
 }
 
+// NewAdRepository creates a new AdRepository.
 func NewAdRepository(db *sqlx.DB) *AdRepository {
 	return &AdRepository{DB: db}
 }
 
+// GetActiveAds returns all active ads, excluding any with IDs in excludeIDs.
+// Engagement counts (likeCnt, commentCnt, hit) are fetched via correlated subqueries.
 func (r *AdRepository) GetActiveAds(excludeIDs []int) ([]model.AdItem, error) {
 	args := []interface{}{}
 	query := strings.Builder{}
 	query.WriteString(`
-		SELECT MA_SEQ, IFNULL(MA_NAME,'') AS MA_NAME, IFNULL(MA_URL,'') AS MA_URL,
-		       IFNULL(MA_IMG,'') AS MA_IMG, AD_TIER, AD_TITLE_LABEL
-		FROM MAIN_AD
-		WHERE OPEN_YN = 'Y'
+		SELECT a.MA_SEQ, IFNULL(a.MA_NAME,'') AS MA_NAME, IFNULL(a.MA_URL,'') AS MA_URL,
+		       IFNULL(a.MA_IMG,'') AS MA_IMG, a.AD_TIER, a.AD_TITLE_LABEL,
+		       (SELECT COUNT(*) FROM WEO_AD_LIKE    WHERE MA_SEQ = a.MA_SEQ AND OPEN_YN='Y') AS like_cnt,
+		       (SELECT COUNT(*) FROM WEO_AD_COMMENT WHERE MA_SEQ = a.MA_SEQ AND OPEN_YN='Y') AS comment_cnt,
+		       (SELECT COUNT(*) FROM WEO_AD_LOG     WHERE MA_SEQ = a.MA_SEQ AND AL_TYPE='VIEW') AS hit
+		FROM MAIN_AD a
+		WHERE a.OPEN_YN = 'Y'
 	`)
 	if len(excludeIDs) > 0 {
 		placeholders := make([]string, len(excludeIDs))
@@ -30,11 +38,11 @@ func (r *AdRepository) GetActiveAds(excludeIDs []int) ([]model.AdItem, error) {
 			placeholders[i] = "?"
 			args = append(args, id)
 		}
-		query.WriteString(" AND MA_SEQ NOT IN (")
+		query.WriteString(" AND a.MA_SEQ NOT IN (")
 		query.WriteString(strings.Join(placeholders, ","))
 		query.WriteString(")")
 	}
-	query.WriteString(" ORDER BY FIELD(AD_TIER, 'PREMIUM','GOLD','NORMAL'), INDX ASC")
+	query.WriteString(" ORDER BY FIELD(a.AD_TIER, 'PREMIUM','GOLD','NORMAL'), a.INDX ASC")
 	var ads []model.AdItem
 	if err := r.DB.Select(&ads, query.String(), args...); err != nil {
 		return nil, err
@@ -42,6 +50,7 @@ func (r *AdRepository) GetActiveAds(excludeIDs []int) ([]model.AdItem, error) {
 	return ads, nil
 }
 
+// LogAdEvent records a view or click event for an ad.
 func (r *AdRepository) LogAdEvent(maSeq int, usrSeq int, eventType string, ipAddr string) error {
 	_, err := r.DB.Exec(`
 		INSERT INTO WEO_AD_LOG (MA_SEQ, USR_SEQ, AL_TYPE, AL_DATE, AL_IPADDR)

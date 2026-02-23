@@ -1,63 +1,111 @@
-// ProfileHeader — User profile banner with dark navy gradient and serif name display
+// ProfileHeader — User profile header with inline avatar layout, enriched info (company, dept, bio, tags)
 import { useQuery } from '@tanstack/react-query';
-import { Settings } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/Button';
+import { Bone } from '../ui/Skeleton';
 import type { UserProfile } from '../../types/api';
 
 interface ProfileHeaderProps {
   onEditClick: () => void;
 }
 
+function ProfileHeaderSkeleton() {
+  return (
+    <div className="px-4 py-5 flex items-start justify-between gap-4">
+      <div className="flex items-start gap-4">
+        <Bone className="h-16 w-16 rounded-full flex-shrink-0" />
+        <div className="flex-1 space-y-2 pt-1">
+          <Bone className="h-5 w-28" />
+          <Bone className="h-4 w-36" />
+          <Bone className="h-4 w-24" />
+        </div>
+      </div>
+      <Bone className="h-8 w-20 rounded-lg flex-shrink-0" />
+    </div>
+  );
+}
+
 export function ProfileHeader({ onEditClick }: ProfileHeaderProps) {
   const { user } = useAuth();
 
-  const { data: profile } = useQuery({
+  const { data: profile, isLoading } = useQuery({
     queryKey: ['profile'],
     queryFn: () => api.get<UserProfile>('/api/profile'),
   });
 
+  if (isLoading) return <ProfileHeaderSkeleton />;
+
   const displayName = profile?.usrName ?? user?.usrName ?? '';
   const displayFn = profile?.usrFn ?? '';
   const photoUrl = profile?.usrPhoto;
+  const jobLine = [profile?.bizName, profile?.jobCatName].filter(Boolean).join(' · ');
+  const deptLine = [profile?.fmDept, profile?.bizAddr].filter(Boolean).join(' · ');
+  const hasBio = !!profile?.bizDesc;
+  const hasTags = (profile?.tags?.length ?? 0) > 0;
 
   return (
-    <>
-      {/* Dark navy gradient banner */}
-      <div className="relative h-32 bg-gradient-to-br from-hero-from via-hero-via to-hero-to overflow-hidden">
-        {/* Ambient glow */}
-        <div className="absolute top-0 right-0 w-48 h-48 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-12 left-4">
+    <div className="px-4 py-5 flex items-start justify-between gap-4">
+      {/* Avatar + Info */}
+      <div className="flex items-start gap-4">
+        {/* Avatar */}
+        <div className="flex-shrink-0">
           {photoUrl ? (
             <img
               src={photoUrl}
               alt={displayName}
-              className="h-24 w-24 rounded-full ring-4 ring-surface shadow-md object-cover"
+              className="h-16 w-16 rounded-full ring-2 ring-border shadow-md object-cover"
             />
           ) : (
-            <div className="h-24 w-24 rounded-full ring-4 ring-surface bg-gradient-to-br from-primary-light to-border shadow-md flex items-center justify-center text-2xl font-bold text-primary font-serif">
+            <div className="h-16 w-16 rounded-full ring-2 ring-border bg-gradient-to-br from-primary-light to-border shadow-md flex items-center justify-center text-xl font-bold text-primary font-serif">
               {displayName.charAt(0)}
+            </div>
+          )}
+        </div>
+
+        {/* Info block */}
+        <div className="flex-1 space-y-1 pt-1">
+          {/* Name + generation badge */}
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-text-primary font-serif">{displayName}</h1>
+            {displayFn && (
+              <span className="text-xs text-text-tertiary bg-background border border-border rounded-full px-2.5 py-0.5">
+                {displayFn}기
+              </span>
+            )}
+          </div>
+
+          {/* Company · Job type */}
+          {jobLine && <p className="text-text-secondary text-sm">{jobLine}</p>}
+
+          {/* Dept · Location */}
+          {deptLine && <p className="text-text-tertiary text-xs">{deptLine}</p>}
+
+          {/* Bio */}
+          {hasBio && (
+            <p className="text-text-secondary text-sm leading-relaxed pt-1">{profile!.bizDesc}</p>
+          )}
+
+          {/* Tags */}
+          {hasTags && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {profile!.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full bg-background border border-border text-text-tertiary text-xs px-2.5 py-0.5"
+                >
+                  {tag}
+                </span>
+              ))}
             </div>
           )}
         </div>
       </div>
 
-      <div className="px-4 pt-14 space-y-1">
-        <h1 className="text-xl font-bold text-text-primary font-serif">{displayName}</h1>
-        {displayFn && <p className="text-text-tertiary text-sm">{displayFn}기</p>}
-      </div>
-
-      <div className="px-4">
-        <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={onEditClick}>
-            프로필 수정
-          </Button>
-          <Button variant="ghost" size="icon" className="bg-background">
-            <Settings size={20} />
-          </Button>
-        </div>
-      </div>
-    </>
+      {/* Edit button */}
+      <Button variant="default" size="sm" onClick={onEditClick} className="flex-shrink-0">
+        프로필 수정
+      </Button>
+    </div>
   );
 }

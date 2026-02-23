@@ -24,7 +24,9 @@ func (r *ProfileRepository) GetProfile(usrSeq int) (*model.UserProfile, error) {
 			IFNULL(m.USR_BIZ_ADDR, '') AS USR_BIZ_ADDR,
 			IFNULL(m.USR_JOB_CAT, 0) AS USR_JOB_CAT,
 			IFNULL(jc.AJC_NAME, '') AS AJC_NAME,
-			IFNULL(jc.AJC_COLOR, '') AS AJC_COLOR
+			IFNULL(jc.AJC_COLOR, '') AS AJC_COLOR,
+			IFNULL(f.FM_DEPT, '') AS FM_DEPT,
+			IFNULL(DATE_FORMAT(m.REG_DATE, '%Y. %m'), '') AS REG_DATE_FMT
 		FROM WEO_MEMBER m
 		LEFT JOIN FUNDAMENTAL_MEMBER f ON m.USR_SEQ = f.FM_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
@@ -35,6 +37,7 @@ func (r *ProfileRepository) GetProfile(usrSeq int) (*model.UserProfile, error) {
 		&profile.USRPhone, &profile.USREmail, &profile.USRFN, &profile.USRPhoto,
 		&profile.BizName, &profile.BizDesc, &profile.BizAddr,
 		&profile.JobCat, &profile.JobCatName, &profile.JobCatColor,
+		&profile.FmDept, &profile.RegDate,
 	)
 	if err != nil {
 		return nil, err

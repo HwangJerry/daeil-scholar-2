@@ -94,6 +94,16 @@ export interface AdminAdCreateRequest {
   maIndx: number;
 }
 
+export interface AdminAdUpdateRequest {
+  maName: string;
+  maUrl: string;
+  maImg: string;
+  maStatus: string;   // 'Y' | 'N'
+  adTier: string;     // 'PREMIUM' | 'GOLD' | 'NORMAL'
+  adTitleLabel: string;
+  maIndx: number;
+}
+
 export interface AdminAdStatsItem {
   maSeq: number;
   viewCount: number;

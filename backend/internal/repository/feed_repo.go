@@ -33,7 +33,7 @@ func (r *FeedRepository) GetNotices(cursor int, size int, heroSeq int) ([]model.
 		query.WriteString(" AND SEQ < ?")
 		args = append(args, cursor)
 	}
-	query.WriteString(" ORDER BY IS_PINNED DESC, SEQ DESC LIMIT ?")
+	query.WriteString(" ORDER BY (IS_PINNED = 'Y') DESC, SEQ DESC LIMIT ?")
 	args = append(args, size+1)
 
 	var notices []model.NoticeItem
@@ -50,7 +50,7 @@ func (r *FeedRepository) GetHeroNotice() (*model.NoticeItem, error) {
 		       REG_DATE, REG_NAME, HIT, IS_PINNED
 		FROM WEO_BOARDBBS
 		WHERE GATE = 'NOTICE' AND OPEN_YN = 'Y'
-		ORDER BY SEQ DESC
+		ORDER BY (IS_PINNED = 'Y') DESC, SEQ DESC
 		LIMIT 1
 	`)
 	if err != nil {

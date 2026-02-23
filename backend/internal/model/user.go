@@ -37,6 +37,8 @@ type UserProfile struct {
 	JobCatName  string   `json:"jobCatName"`
 	JobCatColor string   `json:"jobCatColor"`
 	Tags        []string `json:"tags"`
+	FmDept      string   `json:"fmDept"`  // FUNDAMENTAL_MEMBER.FM_DEPT (예: "영어과")
+	RegDate     string   `json:"regDate"` // 가입일 포맷 "YYYY. MM" (예: "2024. 03")
 }
 
 // ProfileUpdateRequest is the request body for PUT /api/profile.

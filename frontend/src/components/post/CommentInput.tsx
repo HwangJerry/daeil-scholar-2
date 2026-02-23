@@ -6,9 +6,10 @@ import { useAuthRedirect } from '../../hooks/useAuthRedirect';
 
 interface CommentInputProps {
   seq: number;
+  autoFocus?: boolean;
 }
 
-export function CommentInput({ seq }: CommentInputProps) {
+export function CommentInput({ seq, autoFocus }: CommentInputProps) {
   const [text, setText] = useState('');
   const onAuthError = useAuthRedirect();
 
@@ -36,6 +37,7 @@ export function CommentInput({ seq }: CommentInputProps) {
           value={text}
           onChange={handleChange}
           placeholder="댓글을 입력하세요"
+          autoFocus={autoFocus}
           maxLength={500}
           className="flex-1 rounded-lg border border-border-subtle bg-background-secondary px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-primary focus:outline-none"
         />

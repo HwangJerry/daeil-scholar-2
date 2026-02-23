@@ -40,8 +40,8 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  get<T>(url: string): Promise<T> {
-    return request<T>(url, { method: 'GET' });
+  get<T>(url: string, options?: RequestInit): Promise<T> {
+    return request<T>(url, { method: 'GET', ...options });
   },
   post<T>(url: string, body?: unknown): Promise<T> {
     return request<T>(url, {

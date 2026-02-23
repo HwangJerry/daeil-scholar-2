@@ -1,51 +1,104 @@
-// AlumniPage — Alumni directory with search filters and vertical card list
+// AlumniPage — Alumni directory with table layout, search filters, and skeleton loading
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { AuthGuard } from '../components/auth/AuthGuard';
 import { SearchFilter, type AlumniSearchParams } from '../components/alumni/SearchFilter';
 import { AlumniCard } from '../components/alumni/AlumniCard';
-import type { AlumniSearchResponse } from '../types/api';
+import { Bone } from '../components/ui/Skeleton';
+import type { AlumniSearchResponse, AlumniItem } from '../types/api';
+
+const PAGE_SIZE = 20;
+const SKELETON_ROW_COUNT = 8;
+const STAGGER_CLASSES = ['stagger-1', 'stagger-2', 'stagger-3', 'stagger-4', 'stagger-5'];
 
 function buildSearchUrl(params: AlumniSearchParams, page: number): string {
   const qs = new URLSearchParams();
   if (params.fn) qs.set('fn', params.fn);
   if (params.dept) qs.set('dept', params.dept);
   if (params.name) qs.set('name', params.name);
-  if (params.company) qs.set('company', params.company);
-  if (params.position) qs.set('position', params.position);
   if (params.jobCat) qs.set('jobCat', params.jobCat);
   qs.set('page', String(page));
-  qs.set('size', '20');
+  qs.set('size', String(PAGE_SIZE));
   return `/api/alumni?${qs.toString()}`;
+}
+
+function TableColumnHeader() {
+  return (
+    <div className="grid items-center px-5 py-2.5 gap-2 bg-background border-b border-border grid-cols-[44px_1fr_88px_48px] md:grid-cols-[44px_1fr_200px_160px_88px_72px]">
+      <div />
+      <span className="text-xs font-medium text-text-placeholder">이름 / 기수</span>
+      <span className="hidden md:block text-xs font-medium text-text-placeholder">소속</span>
+      <span className="hidden md:block text-xs font-medium text-text-placeholder">직책</span>
+      <span className="text-xs font-medium text-text-placeholder">업종</span>
+      <div />
+    </div>
+  );
+}
+
+function AlumniTableSkeleton() {
+  return (
+    <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+      <TableColumnHeader />
+      {Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => (
+        <div
+          key={i}
+          className={`grid items-center px-5 py-3.5 gap-2 animate-fade-in-up grid-cols-[44px_1fr_88px_48px] md:grid-cols-[44px_1fr_200px_160px_88px_72px] ${i < SKELETON_ROW_COUNT - 1 ? 'border-b border-border-subtle' : ''}`}
+          style={{ animationDelay: `${i * 0.05}s` }}
+        >
+          <Bone className="w-8 h-8 rounded-full" />
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <Bone className="h-3.5 w-24" />
+              <Bone className="h-3.5 w-10 rounded-full" />
+            </div>
+            <Bone className="h-2.5 w-20" />
+          </div>
+          <Bone className="hidden md:block h-3 w-28" />
+          <Bone className="hidden md:block h-3 w-16" />
+          <Bone className="h-5 w-14 rounded-full" />
+          <Bone className="h-7 w-10 rounded-lg ml-auto" />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function AlumniContent() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useState<AlumniSearchParams>({
-    fn: '', dept: '', name: '', company: '', position: '', jobCat: '',
+    fn: '', dept: '', name: '', jobCat: '',
   });
-  const [page, setPage] = useState(1);
 
-  const { data, isFetching } = useQuery({
-    queryKey: ['alumni', 'search', searchParams, page],
-    queryFn: () => api.get<AlumniSearchResponse>(buildSearchUrl(searchParams, page)),
+  const { data, fetchNextPage, hasNextPage, isFetching, isLoading } = useInfiniteQuery({
+    queryKey: ['alumni', 'search', searchParams],
+    queryFn: ({ pageParam }) =>
+      api.get<AlumniSearchResponse>(buildSearchUrl(searchParams, pageParam as number)),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
   });
+
+  const allItems: AlumniItem[] = data?.pages.flatMap((p) => p.items) ?? [];
+  const totalCount = data?.pages[0]?.totalCount ?? 0;
+  const remainingCount = totalCount - allItems.length;
 
   const handleSearch = (params: AlumniSearchParams) => {
     setSearchParams(params);
-    setPage(1);
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4">
+    <div className="max-w-[1080px] mx-auto px-4">
       {/* Header */}
-      <div className="pt-6 pb-2">
-        <h1 className="text-xl font-bold text-text-primary font-serif">전체 보기</h1>
-        <p className="text-sm text-text-tertiary mt-1">
-          이름순으로 정렬된 모든 동문 리스트입니다.
-        </p>
+      <div className="pt-6 pb-4">
+        <p className="text-xs font-medium text-text-placeholder uppercase tracking-widest mb-1">Alumni Network</p>
+        <h1 className="text-2xl font-bold text-text-primary font-serif">동문찾기</h1>
+        {totalCount > 0 && (
+          <p className="text-sm text-text-tertiary mt-1">
+            {totalCount.toLocaleString()}명의 동문
+          </p>
+        )}
       </div>
 
       {/* Sticky search filter */}
@@ -53,47 +106,61 @@ function AlumniContent() {
         <SearchFilter onSearch={handleSearch} />
       </div>
 
-      <div className="space-y-4 mt-3">
-        {isFetching && (
-          <div className="flex justify-center py-8">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <div className="mt-4">
+        {/* Initial loading skeleton */}
+        {isLoading && <AlumniTableSkeleton />}
+
+        {/* Empty state */}
+        {!isLoading && allItems.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16">
+            <span className="text-4xl mb-3">🔍</span>
+            <p className="text-sm text-text-tertiary">검색 결과가 없습니다</p>
           </div>
         )}
 
-        {data && data.items.length === 0 && !isFetching && (
-          <p className="py-12 text-center text-sm text-text-tertiary">검색 결과가 없습니다.</p>
+        {/* Table */}
+        {allItems.length > 0 && (
+          <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+            <TableColumnHeader />
+            {allItems.map((item, i) => (
+              <div
+                key={item.fmSeq}
+                className={`animate-fade-in-up ${STAGGER_CLASSES[i % 5]}`}
+              >
+                <AlumniCard
+                  item={item}
+                  currentUsrSeq={user?.usrSeq}
+                  isLast={i === allItems.length - 1}
+                />
+              </div>
+            ))}
+          </div>
         )}
 
-        {data && data.items.length > 0 && (
-          <>
-            <div className="grid gap-3">
-              {data.items.map((item) => (
-                <AlumniCard key={item.fmSeq} item={item} currentUsrSeq={user?.usrSeq} />
-              ))}
-            </div>
+        {/* Load-more spinner */}
+        {isFetching && allItems.length > 0 && (
+          <div className="flex justify-center py-4">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        )}
 
-            {data.totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 py-4">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="rounded-lg px-3 py-1.5 text-sm text-text-tertiary hover:bg-background disabled:opacity-40 transition-colors duration-150"
-                >
-                  이전
-                </button>
-                <span className="text-sm text-text-tertiary">
-                  {page} / {data.totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
-                  disabled={page >= data.totalPages}
-                  className="rounded-lg px-3 py-1.5 text-sm text-text-tertiary hover:bg-background disabled:opacity-40 transition-colors duration-150"
-                >
-                  다음
-                </button>
-              </div>
-            )}
-          </>
+        {/* Load More button */}
+        {!isFetching && hasNextPage && (
+          <div className="mt-4 flex justify-center">
+            <button
+              onClick={() => fetchNextPage()}
+              className="rounded-xl border border-border bg-surface px-6 py-2.5 text-sm font-medium text-text-secondary hover:border-border-hover hover:bg-background transition-colors duration-150"
+            >
+              더 보기 ({remainingCount.toLocaleString()}명 남음)
+            </button>
+          </div>
+        )}
+
+        {/* Footer count */}
+        {allItems.length > 0 && (
+          <p className="mt-3 text-right text-xs text-text-placeholder">
+            {allItems.length.toLocaleString()} / {totalCount.toLocaleString()}명 표시 중
+          </p>
         )}
       </div>
     </div>

@@ -22,6 +22,7 @@ type AdminNoticeInsert struct {
 	ThumbnailURL string
 	IsPinned     string
 	RegName      string
+	USRSeq       int
 }
 
 // --- Ad ---

@@ -35,7 +35,7 @@ func (s *FeedService) GetFeed(cursor int, size int, excludeAdIDs []int, excludeS
 	}
 	ads, err := s.adRepo.GetActiveAds(excludeAdIDs)
 	if err != nil {
-		return nil, err
+		ads = []model.AdItem{} // Non-fatal: render feed without ads
 	}
 	items := interleaveFeed(notices, ads)
 	response := &model.FeedResponse{Items: items, HasMore: hasMore}

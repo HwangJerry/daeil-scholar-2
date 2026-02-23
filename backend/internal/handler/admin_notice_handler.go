@@ -65,7 +65,7 @@ func (h *AdminNoticeHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
 		return
 	}
-	seq, err := h.service.Create(req.Subject, req.ContentMd, user.USRName, req.IsPinned)
+	seq, err := h.service.Create(req.Subject, req.ContentMd, user.USRName, user.USRSeq, req.IsPinned)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "CREATE_FAILED", "Failed to create notice")
 		return

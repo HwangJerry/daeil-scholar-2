@@ -1,83 +1,51 @@
 // NetworkWidget — Alumni network summary widget for feed sidebar
 import { Link } from 'react-router-dom';
-import { Users, ArrowRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { cn } from '../../lib/utils';
 import { api } from '../../api/client';
-import type { AlumniSearchResponse } from '../../types/api';
+import { Bone } from '../ui/Skeleton';
+import type { AlumniWidgetResponse } from '../../types/api';
 
-const AVATAR_COLORS = [
-  'bg-cat-notice-bg text-cat-notice-text',
-  'bg-cat-event-bg text-cat-event-text',
-  'bg-cat-scholarship-bg text-cat-scholarship-text',
-  'bg-cat-career-bg text-cat-career-text',
-  'bg-primary-light text-primary',
-];
+function NetworkWidgetSkeleton() {
+  return (
+    <div className="rounded-[20px] bg-surface border border-border p-7 shadow-card">
+      <Bone className="h-2.5 w-20 mb-5" />
+      <Bone className="h-6 w-full mb-2" />
+      <Bone className="h-6 w-3/4 mb-8" />
+      <Bone className="h-14 w-full rounded-2xl" />
+    </div>
+  );
+}
 
 export function NetworkWidget() {
-  const { data } = useQuery({
-    queryKey: ['alumni', 'preview'],
-    queryFn: () => api.get<AlumniSearchResponse>('/api/alumni?page=1&size=5'),
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['alumni', 'widget'],
+    queryFn: () => api.get<AlumniWidgetResponse>('/api/alumni/widget'),
     staleTime: 10 * 60_000,
   });
 
-  const previewItems = data?.items?.slice(0, 5) ?? [];
+  if (isLoading) return <NetworkWidgetSkeleton />;
+  if (isError) return null;
+
   const totalCount = data?.totalCount ?? 0;
-  const weeklyCount = data?.weeklyCount;
 
   return (
     <div className="rounded-[20px] bg-surface border border-border p-7 shadow-card">
-      <div className="flex items-center gap-2 mb-4">
-        <Users size={15} className="text-text-placeholder" />
-        <p className="text-[10px] font-semibold text-text-placeholder tracking-widest uppercase">
-          동문 네트워크
-        </p>
-      </div>
+      <p className="text-[10px] font-semibold text-text-placeholder tracking-widest uppercase mb-5">
+        동문 네트워크
+      </p>
 
-      {/* Avatar stack */}
-      <div className="flex items-center mb-4">
-        <div className="flex -space-x-2">
-          {previewItems.map((item, idx) => (
-            <div
-              key={item.fmSeq}
-              className={cn(
-                'h-8 w-8 rounded-full ring-2 ring-surface flex items-center justify-center text-xs font-bold',
-                AVATAR_COLORS[idx % AVATAR_COLORS.length]
-              )}
-            >
-              {item.fmName.charAt(0)}
-            </div>
-          ))}
-        </div>
-        {totalCount > 5 && (
-          <span className="ml-3 text-sm text-text-tertiary font-medium">
-            +{totalCount.toLocaleString()}명
-          </span>
-        )}
-      </div>
-
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-3 mb-5">
-        <div className="rounded-xl bg-background p-3">
-          <p className="text-[10px] text-text-placeholder mb-1">전체 동문</p>
-          <p className="text-lg font-bold text-text-primary">
-            {totalCount > 0 ? totalCount.toLocaleString() : '—'}
-          </p>
-        </div>
-        <div className="rounded-xl bg-background p-3">
-          <p className="text-[10px] text-text-placeholder mb-1">이번 주 가입</p>
-          <p className="text-lg font-bold text-text-primary">
-            {weeklyCount !== undefined ? weeklyCount.toLocaleString() : '—'}
-          </p>
-        </div>
+      <div className="mb-8">
+        <span className="block text-2xl font-bold text-text-primary leading-none mb-1">
+          {totalCount > 0 ? totalCount.toLocaleString() : '—'}
+        </span>
+        <span className="text-xs text-text-tertiary">명의 동문이 함께하고 있습니다</span>
       </div>
 
       <Link
         to="/alumni"
-        className="flex items-center justify-center gap-1.5 w-full rounded-xl border border-border text-text-secondary text-sm font-medium py-2.5 transition-all duration-150 hover:border-border-hover hover:text-text-primary"
+        className="flex items-center justify-center w-full rounded-2xl bg-background text-text-secondary text-sm font-medium py-4 transition-colors duration-150 hover:bg-border"
       >
-        동문 찾기
-        <ArrowRight size={14} />
+        동문 찾기 →
       </Link>
     </div>
   );

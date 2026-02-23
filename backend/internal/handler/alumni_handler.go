@@ -41,6 +41,16 @@ func (h *AlumniHandler) Search(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, result)
 }
 
+// GetWidgetPreview handles GET /api/alumni/widget — public endpoint, no auth required.
+func (h *AlumniHandler) GetWidgetPreview(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.GetWidgetPreview()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "WIDGET_FAILED", "Failed to load widget data")
+		return
+	}
+	respondJSON(w, http.StatusOK, result)
+}
+
 func (h *AlumniHandler) GetFilters(w http.ResponseWriter, r *http.Request) {
 	filters, err := h.service.GetFilters()
 	if err != nil {

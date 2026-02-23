@@ -21,6 +21,8 @@ type handlers struct {
 	alumni         *handler.AlumniHandler
 	profile        *handler.ProfileHandler
 	ad             *handler.AdHandler
+	adLike         *handler.AdLikeHandler
+	adComment      *handler.AdCommentHandler
 	adminNotice    *handler.AdminNoticeHandler
 	adminAd        *handler.AdminAdHandler
 	adminDonation  *handler.AdminDonationHandler
@@ -78,6 +80,7 @@ func registerPublicRoutes(r chi.Router, h handlers) {
 	r.Get("/api/auth/kakao/callback", h.auth.KakaoCallback)
 	r.Post("/api/auth/login", h.auth.Login)
 	r.Post("/api/auth/kakao/link", h.auth.KakaoLink)
+	r.Get("/api/alumni/widget", h.alumni.GetWidgetPreview)
 }
 
 // registerAuthRoutes registers endpoints that require authentication.
@@ -96,6 +99,9 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Post("/api/feed/{seq}/like", h.like.ToggleLike)
 		r.Post("/api/feed/{seq}/comments", h.comment.CreateComment)
 		r.Delete("/api/feed/{seq}/comments/{cSeq}", h.comment.DeleteComment)
+		r.Post("/api/ad/{maSeq}/like", h.adLike.ToggleLike)
+		r.Post("/api/ad/{maSeq}/comments", h.adComment.CreateComment)
+		r.Delete("/api/ad/{maSeq}/comments/{acSeq}", h.adComment.DeleteComment)
 		r.Post("/api/donation/subscription", h.subscription.CreateSubscription)
 		r.Get("/api/donation/subscription", h.subscription.GetMySubscription)
 		r.Delete("/api/donation/subscription", h.subscription.CancelSubscription)
@@ -117,6 +123,7 @@ func registerOptionalAuthRoutes(r chi.Router, h handlers, authService *service.A
 		r.Get("/api/feed/{seq}/comments", h.comment.ListComments)
 		r.Post("/api/ad/{maSeq}/view", h.ad.TrackView)
 		r.Post("/api/ad/{maSeq}/click", h.ad.TrackClick)
+		r.Get("/api/ad/{maSeq}/comments", h.adComment.ListComments)
 	})
 }
 

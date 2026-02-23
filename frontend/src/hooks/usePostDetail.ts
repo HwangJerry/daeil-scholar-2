@@ -6,7 +6,7 @@ import type { NoticeDetail } from '../types/api';
 export function usePostDetail(seq: string | undefined) {
   return useQuery({
     queryKey: ['feed', 'detail', seq],
-    queryFn: () => api.get<NoticeDetail>(`/api/feed/${seq}`),
+    queryFn: ({ signal }) => api.get<NoticeDetail>(`/api/feed/${seq}`, { signal }),
     enabled: !!seq,
     staleTime: 30_000,
     retry: 2,

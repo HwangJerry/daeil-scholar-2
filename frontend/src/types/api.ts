@@ -34,6 +34,21 @@ export interface AdItem {
   imageUrl: string;
   adTier: 'PREMIUM' | 'GOLD' | 'NORMAL';
   titleLabel: string;
+  sponsor?: string;
+  cta?: string;
+  regDate?: string;
+  likeCnt: number;
+  commentCnt: number;
+  hit: number;
+}
+
+export interface AdComment {
+  acSeq: number;
+  maSeq: number;
+  usrSeq: number;
+  nickname: string;
+  contents: string;
+  regDate: string;
 }
 
 export type FeedItem = NoticeItem | AdItem;
@@ -179,6 +194,8 @@ export interface UserProfile {
   jobCatName: string;
   jobCatColor: string;
   tags: string[];
+  fmDept: string;
+  regDate: string;
 }
 
 export interface ProfileUpdateRequest {
@@ -202,6 +219,15 @@ export interface KakaoLinkRequest {
 export interface LoginRequest {
   usrId: string;
   password: string;
+}
+
+export interface AlumniWidgetItem {
+  fmName: string;
+}
+
+export interface AlumniWidgetResponse {
+  items: AlumniWidgetItem[];
+  totalCount: number;
 }
 
 export interface MessageItem {

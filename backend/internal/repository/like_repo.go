@@ -2,7 +2,6 @@
 package repository
 
 import (
-	"database/sql"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -31,24 +30,18 @@ func (r *LikeRepository) HasUserLiked(bbsSeq int, usrSeq int) (bool, error) {
 	return count > 0, nil
 }
 
-// FindLike returns the SEQ and current OPEN_YN of an existing like row, or 0 if not found.
-func (r *LikeRepository) FindLike(bbsSeq int, usrSeq int) (int, string, error) {
-	var row struct {
-		SEQ    int    `db:"SEQ"`
-		OpenYN string `db:"OPEN_YN"`
-	}
-	err := r.DB.Get(&row, `
-		SELECT SEQ, OPEN_YN FROM WEO_BOARDLIKE
+// HasAnyLikeRow returns true if any row (active or inactive) exists for this user+post.
+// Uses COUNT(*) to avoid NULL SEQ scan errors from legacy PHP rows.
+func (r *LikeRepository) HasAnyLikeRow(bbsSeq int, usrSeq int) (bool, error) {
+	var count int
+	err := r.DB.Get(&count, `
+		SELECT COUNT(*) FROM WEO_BOARDLIKE
 		WHERE BBS_SEQ = ? AND USR_SEQ = ?
-		LIMIT 1
 	`, bbsSeq, usrSeq)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return 0, "", nil
-		}
-		return 0, "", err
+		return false, err
 	}
-	return row.SEQ, row.OpenYN, nil
+	return count > 0, nil
 }
 
 // InsertLike creates a new like row with OPEN_YN='Y'.

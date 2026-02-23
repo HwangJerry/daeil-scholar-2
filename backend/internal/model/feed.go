@@ -33,6 +33,7 @@ type NoticeDetail struct {
 	RegDate       string `db:"REG_DATE" json:"regDate"`
 	RegName       string `db:"REG_NAME" json:"regName"`
 	Hit           int    `db:"HIT" json:"hit"`
+	IsPinned      string `db:"IS_PINNED" json:"isPinned"`
 	LikeCnt       int    `json:"likeCnt"`
 	CommentCnt    int    `json:"commentCnt"`
 	UserLiked     bool   `json:"userLiked"`
@@ -70,6 +71,19 @@ type AdItem struct {
 	ImageURL   string `db:"MA_IMG" json:"imageUrl"`
 	AdTier     string `db:"AD_TIER" json:"adTier"`
 	TitleLabel string `db:"AD_TITLE_LABEL" json:"titleLabel"`
+	LikeCnt    int    `db:"like_cnt" json:"likeCnt"`
+	CommentCnt int    `db:"comment_cnt" json:"commentCnt"`
+	Hit        int    `db:"hit" json:"hit"`
+}
+
+// AdComment represents a row in WEO_AD_COMMENT table.
+type AdComment struct {
+	ACSeq    int    `db:"AC_SEQ" json:"acSeq"`
+	MASeq    int    `db:"MA_SEQ" json:"maSeq"`
+	USRSeq   int    `db:"USR_SEQ" json:"usrSeq"`
+	Nickname string `db:"NICKNAME" json:"nickname"`
+	Contents string `db:"CONTENTS" json:"contents"`
+	RegDate  string `db:"REG_DATE" json:"regDate"`
 }
 
 // FileRecord represents a row in WEO_FILES table.

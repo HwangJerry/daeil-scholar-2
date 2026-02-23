@@ -89,3 +89,14 @@ type UserTag struct {
 	Tag    string `db:"AUT_TAG" json:"tag"`
 	Indx   int    `db:"AUT_INDX" json:"indx"`
 }
+
+// AlumniWidgetItem is a minimal alumni entry for the public widget (name only).
+type AlumniWidgetItem struct {
+	FmName string `json:"fmName"`
+}
+
+// AlumniWidgetResponse is the API response for GET /api/alumni/widget.
+type AlumniWidgetResponse struct {
+	Items      []AlumniWidgetItem `json:"items"`
+	TotalCount int                `json:"totalCount"`
+}

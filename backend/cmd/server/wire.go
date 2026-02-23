@@ -31,6 +31,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	alumniRepo := repository.NewAlumniRepository(db)
 	profileRepo := repository.NewProfileRepository(db)
 	adRepo := repository.NewAdRepository(db)
+	adLikeRepo := repository.NewAdLikeRepository(db)
+	adCommentRepo := repository.NewAdCommentRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
 	fileRepo := repository.NewFileRepository(db)
 	adminNoticeRepo := repository.NewAdminNoticeRepository(db)
@@ -52,6 +54,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	alumniService := service.NewAlumniService(alumniRepo, cacheStore)
 	profileService := service.NewProfileService(profileRepo)
 	adService := service.NewAdService(adRepo)
+	adLikeService := service.NewAdLikeService(adLikeRepo)
+	adCommentService := service.NewAdCommentService(adCommentRepo)
 	adminNoticeSvc := service.NewAdminNoticeService(adminNoticeRepo)
 	adminAdSvc := service.NewAdminAdService(adminAdRepo)
 	adminDonationSvc := service.NewAdminDonationService(adminDonationRepo, donationRepo)
@@ -86,6 +90,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		alumni:         handler.NewAlumniHandler(alumniService),
 		profile:        handler.NewProfileHandler(profileService),
 		ad:             handler.NewAdHandler(adService),
+		adLike:         handler.NewAdLikeHandler(adLikeService),
+		adComment:      handler.NewAdCommentHandler(adCommentService),
 		adminNotice:    handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
 		adminAd:        handler.NewAdminAdHandler(adminAdSvc),
 		adminDonation:  handler.NewAdminDonationHandler(adminDonationSvc),

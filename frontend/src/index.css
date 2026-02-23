@@ -55,6 +55,14 @@
   --color-cat-career-text: #6741D9;
   --color-cat-career-border: #D0BFFF;
 
+
+  /* 동문 네트워크 아바타 */
+  --color-avatar-1: #7C3AED;
+  --color-avatar-2: #EA7316;
+  --color-avatar-3: #0D9488;
+  --color-avatar-4: #BE185D;
+  --color-avatar-5: #8B5CF6;
+
   /* Hero gradient */
   --color-hero-from: #0f1b35;
   --color-hero-via: #1a2f5a;
@@ -115,6 +123,29 @@
   100% { background-position: 200% 0; }
 }
 
+@keyframes heart-pop {
+  0%   { transform: scale(1);    }
+  15%  { transform: scale(0.82); }
+  40%  { transform: scale(1.42); }
+  65%  { transform: scale(0.92); }
+  80%  { transform: scale(1.12); }
+  100% { transform: scale(1);    }
+}
+@keyframes heart-unset {
+  0%   { transform: scale(1);    }
+  40%  { transform: scale(0.78); }
+  100% { transform: scale(1);    }
+}
+@keyframes heart-ring {
+  0%   { transform: translate(-50%,-50%) scale(0.3); opacity: 0.9; }
+  60%  { opacity: 0.5; }
+  100% { transform: translate(-50%,-50%) scale(1.6); opacity: 0; }
+}
+@keyframes heart-dot {
+  0%   { transform: translate(-50%,-50%) rotate(var(--deg)) translateY(0)     scale(1); opacity: 1; }
+  100% { transform: translate(-50%,-50%) rotate(var(--deg)) translateY(-18px) scale(0); opacity: 0; }
+}
+
 @keyframes fill-bar {
   from { width: 0% }
 }
@@ -151,3 +182,8 @@
 @utility stagger-3 { animation-delay: 150ms; }
 @utility stagger-4 { animation-delay: 200ms; }
 @utility stagger-5 { animation-delay: 250ms; }
+
+@utility animate-heart-pop   { animation: heart-pop   0.5s cubic-bezier(0.36,0.07,0.19,0.97) forwards; }
+@utility animate-heart-unset { animation: heart-unset 0.25s ease forwards; }
+@utility animate-heart-ring  { animation: heart-ring  0.5s ease-out forwards; }
+@utility animate-heart-dot   { animation: heart-dot   0.55s ease-out forwards; }

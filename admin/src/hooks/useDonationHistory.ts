@@ -6,6 +6,6 @@ import type { DonationSnapshot } from '../types/api.ts';
 export function useDonationHistory() {
   return useQuery({
     queryKey: ['admin', 'donation', 'history'],
-    queryFn: () => api.get<DonationSnapshot[]>('/api/admin/donation/history'),
+    queryFn: () => api.get<DonationSnapshot[]>('/api/admin/donation/history?days=30'),
   });
 }

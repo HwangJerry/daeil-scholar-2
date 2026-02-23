@@ -37,9 +37,5 @@ export function useLikeToggle(seq: number) {
         queryClient.setQueryData(detailKey, context.previous);
       }
     },
-
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: detailKey });
-    },
   });
 }
