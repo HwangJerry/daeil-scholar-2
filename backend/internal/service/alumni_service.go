@@ -79,13 +79,17 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 			tags = []string{}
 		}
 
+		fmSeq := 0
+		if record.FMSEQ.Valid {
+			fmSeq = int(record.FMSEQ.Int64)
+		}
 		usrSeq := 0
 		if record.USRSeq.Valid {
 			usrSeq = int(record.USRSeq.Int64)
 		}
 
 		items = append(items, model.AlumniCard{
-			FMSeq:       record.FMSEQ,
+			FMSeq:       fmSeq,
 			FMName:      record.FMName,
 			FMFN:        nullString(record.FMFN),
 			FMDept:      nullString(record.FMDept),

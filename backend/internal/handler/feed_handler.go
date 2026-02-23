@@ -22,7 +22,11 @@ func NewFeedHandler(svc *service.FeedService, likeSvc *service.LikeService, pres
 
 func (h *FeedHandler) GetFeed(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	feed, err := h.service.GetFeed(parseCursor(q.Get("cursor")), parseIntParam(q.Get("size")), parseExcludeAds(q.Get("exclude_ads")), parseIntParam(q.Get("exclude_seq")))
+	userSeq := 0
+	if user := middleware.GetAuthUser(r.Context()); user != nil {
+		userSeq = user.USRSeq
+	}
+	feed, err := h.service.GetFeed(parseCursor(q.Get("cursor")), parseIntParam(q.Get("size")), parseExcludeAds(q.Get("exclude_ads")), parseIntParam(q.Get("exclude_seq")), userSeq)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "FEED_FAILED", "Failed to load feed")
 		return

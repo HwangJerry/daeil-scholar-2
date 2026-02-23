@@ -1,5 +1,6 @@
-// Application route definitions
-import { Routes, Route } from 'react-router-dom';
+// Application route definitions — page routes with background-location awareness
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import type { Location } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import { FeedPage } from './pages/FeedPage';
 import { AlumniPage } from './pages/AlumniPage';
@@ -13,27 +14,36 @@ import { DonationResultPage } from './pages/DonationResultPage';
 import { MyDonationPage } from './pages/MyDonationPage';
 import { SubscriptionPage } from './pages/SubscriptionPage';
 import { MessagePage } from './pages/MessagePage';
+import { ModalRoutes } from './ModalRoutes';
 
 export default function AppRoutes() {
-  return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<FeedPage />} />
-        <Route path="post/:seq" element={<PostDetailPage />} />
-        <Route path="alumni" element={<AlumniPage />} />
-        <Route path="donation" element={<DonationPage />} />
-        <Route path="donation/result" element={<DonationResultPage />} />
-        <Route path="me" element={<MyPage />} />
-        <Route path="me/donation" element={<MyDonationPage />} />
-        <Route path="me/subscription" element={<SubscriptionPage />} />
-        <Route path="messages" element={<MessagePage />} />
-        <Route path="login" element={<LoginPage />} />
-        <Route path="login/legacy" element={<LegacyLoginPage />} />
-        <Route path="login/link" element={<AccountLinkPage />} />
+  const location = useLocation();
+  const state = location.state as { backgroundLocation?: Location } | null;
+  const backgroundLocation = state?.backgroundLocation;
 
-        {/* Helper redirect for legacy mypage route */}
-        <Route path="mypage" element={<MyPage />} />
-      </Route>
-    </Routes>
+  return (
+    <>
+      {/* Render background page when a modal is open; otherwise render current location */}
+      <Routes location={backgroundLocation ?? location}>
+        <Route element={<Layout />}>
+          <Route index element={<FeedPage />} />
+          <Route path="post/:seq" element={<PostDetailPage />} />
+          <Route path="ad/:maSeq" element={<Navigate to="/" replace />} />
+          <Route path="alumni" element={<AlumniPage />} />
+          <Route path="donation" element={<DonationPage />} />
+          <Route path="donation/result" element={<DonationResultPage />} />
+          <Route path="me" element={<MyPage />} />
+          <Route path="me/donation" element={<MyDonationPage />} />
+          <Route path="me/subscription" element={<SubscriptionPage />} />
+          <Route path="messages" element={<MessagePage />} />
+          <Route path="login" element={<LoginPage />} />
+          <Route path="login/legacy" element={<LegacyLoginPage />} />
+          <Route path="login/link" element={<AccountLinkPage />} />
+          <Route path="mypage" element={<MyPage />} />
+        </Route>
+      </Routes>
+
+      <ModalRoutes />
+    </>
   );
 }

@@ -28,6 +28,7 @@ export function useAddComment(seq: number, options?: UseAddCommentOptions) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed', 'comments', seq] });
       queryClient.invalidateQueries({ queryKey: ['feed', 'detail', String(seq)] });
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
 
     onError: (error: Error) => {
@@ -52,6 +53,7 @@ export function useDeleteComment(seq: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed', 'comments', seq] });
       queryClient.invalidateQueries({ queryKey: ['feed', 'detail', String(seq)] });
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
   });
 }

@@ -43,9 +43,7 @@ export default function TopNav() {
               >
                 {item.label}
                 {item.hasBadge && unreadCount > 0 && (
-                  <span className="absolute -top-2 -right-4 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-error text-white text-[10px] font-bold px-1">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
+                  <span className="absolute -top-1 -right-1.5 h-2 w-2 rounded-full bg-error" />
                 )}
               </Link>
             );

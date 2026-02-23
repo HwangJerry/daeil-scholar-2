@@ -124,7 +124,7 @@ function AlumniContent() {
             <TableColumnHeader />
             {allItems.map((item, i) => (
               <div
-                key={item.fmSeq}
+                key={item.fmSeq || `u${item.usrSeq}`}
                 className={`animate-fade-in-up ${STAGGER_CLASSES[i % 5]}`}
               >
                 <AlumniCard

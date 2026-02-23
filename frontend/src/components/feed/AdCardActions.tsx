@@ -1,12 +1,10 @@
 // AdCardActions — Controlled action buttons row for ad cards: like, comment count
 import { MessageCircle } from 'lucide-react';
-import { cn } from '../../lib/utils';
 import { HeartButton } from './HeartButton';
 
 interface AdCardActionsProps {
   liked: boolean;
   likeCnt: number;
-  showComments: boolean;
   commentCnt: number;
   onLikeToggle: () => void;
   onCommentToggle: () => void;
@@ -15,7 +13,6 @@ interface AdCardActionsProps {
 export function AdCardActions({
   liked,
   likeCnt,
-  showComments,
   commentCnt,
   onLikeToggle,
   onCommentToggle,
@@ -26,12 +23,9 @@ export function AdCardActions({
       <button
         type="button"
         onClick={onCommentToggle}
-        className={cn(
-          'inline-flex items-center gap-1 ml-4 transition-colors',
-          showComments ? 'text-primary' : 'hover:text-text-secondary',
-        )}
+        className="inline-flex items-center gap-1 ml-4 transition-colors hover:text-text-secondary"
       >
-        <MessageCircle size={13} className={cn(showComments && 'fill-current')} />
+        <MessageCircle size={13} />
         {commentCnt}
       </button>
     </div>

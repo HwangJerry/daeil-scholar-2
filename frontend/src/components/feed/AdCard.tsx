@@ -1,24 +1,31 @@
 // AdCard — Sponsored feed card with unified layout matching NoticeCard
 import { useState } from 'react';
 import { X, ArrowRight } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { formatAbsoluteDate } from '../../utils/date';
 import { api } from '../../api/client';
 import { useAdImpression } from '../../hooks/useAdImpression';
 import { useAdLikeToggle } from '../../hooks/useAdLikeToggle';
 import { AdCardActions } from './AdCardActions';
-import { AdCommentSection } from './AdCommentSection';
 import type { AdItem } from '../../types/api';
 
 export function AdCard({ item }: { item: AdItem }) {
   const { ref } = useAdImpression(item.maSeq);
   const [dismissed, setDismissed] = useState(false);
-  const [showComments, setShowComments] = useState(false);
   const { liked, likeCnt, toggle: toggleLike } = useAdLikeToggle(item.maSeq, item.likeCnt ?? 0);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const handleClick = () => {
     api.post(`/api/ad/${item.maSeq}/click`).catch(() => {
       // fire-and-forget
+    });
+  };
+
+  const handleCommentOpen = () => {
+    navigate(`/ad/${item.maSeq}`, {
+      state: { backgroundLocation: location, adItem: item },
     });
   };
 
@@ -109,13 +116,10 @@ export function AdCard({ item }: { item: AdItem }) {
       <AdCardActions
         liked={liked}
         likeCnt={likeCnt}
-        showComments={showComments}
         commentCnt={item.commentCnt ?? 0}
         onLikeToggle={toggleLike}
-        onCommentToggle={() => setShowComments((v) => !v)}
+        onCommentToggle={handleCommentOpen}
       />
-
-      {showComments && <AdCommentSection maSeq={item.maSeq} />}
     </article>
   );
 }

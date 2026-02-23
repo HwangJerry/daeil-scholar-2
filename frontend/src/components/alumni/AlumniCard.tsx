@@ -21,7 +21,9 @@ export function AlumniCard({ item, currentUsrSeq, isLast }: AlumniCardProps) {
   const [showMessageDialog, setShowMessageDialog] = useState(false);
   const isSelf = item.usrSeq === currentUsrSeq;
   // Dynamic calculation — inline style exception per design doc
-  const avatarColor = AVATAR_COLORS[item.fmSeq % AVATAR_COLORS.length];
+  // fmSeq is 0 for WEO_MEMBER-only rows, fall back to usrSeq for stable coloring
+  const avatarSeed = item.fmSeq || item.usrSeq;
+  const avatarColor = AVATAR_COLORS[avatarSeed % AVATAR_COLORS.length];
   const bizDisplay = item.bizName || item.company || '—';
   const hasJobCat = !!item.jobCatName && item.jobCatName !== '미분류';
 

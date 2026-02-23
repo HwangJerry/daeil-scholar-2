@@ -1,10 +1,33 @@
 package model
 
+import "encoding/json"
+
 // FeedItem represents a single item in the feed (notice or ad).
 type FeedItem struct {
 	Type        string `json:"type"`
 	*NoticeItem `json:",omitempty"`
 	*AdItem     `json:",omitempty"`
+}
+
+// MarshalJSON dispatches to a single-embedding struct to avoid JSON field
+// collisions between NoticeItem and AdItem (both declare likeCnt, commentCnt,
+// hit), which would otherwise cause encoding/json to silently drop all three.
+func (f FeedItem) MarshalJSON() ([]byte, error) {
+	if f.NoticeItem != nil {
+		return json.Marshal(struct {
+			Type string `json:"type"`
+			*NoticeItem
+		}{Type: f.Type, NoticeItem: f.NoticeItem})
+	}
+	if f.AdItem != nil {
+		return json.Marshal(struct {
+			Type string `json:"type"`
+			*AdItem
+		}{Type: f.Type, AdItem: f.AdItem})
+	}
+	return json.Marshal(struct {
+		Type string `json:"type"`
+	}{Type: f.Type})
 }
 
 // NoticeItem represents a notice post from WEO_BOARDBBS.
@@ -16,9 +39,10 @@ type NoticeItem struct {
 	RegDate      string `db:"REG_DATE" json:"regDate"`
 	RegName      string `db:"REG_NAME" json:"regName"`
 	Hit          int    `db:"HIT" json:"hit"`
-	LikeCnt      int    `json:"likeCnt"`
-	CommentCnt   int    `json:"commentCnt"`
+	LikeCnt      int    `db:"like_cnt" json:"likeCnt"`
+	CommentCnt   int    `db:"comment_cnt" json:"commentCnt"`
 	IsPinned     string `db:"IS_PINNED" json:"isPinned,omitempty"`
+	UserLiked    bool   `db:"user_liked" json:"userLiked"`
 }
 
 // NoticeDetail is the full detail of a notice post (DB scan target).
@@ -44,7 +68,7 @@ type NoticeDetail struct {
 
 // Comment represents a row in WEO_BOARDCOMAND table.
 type Comment struct {
-	BCSeq    int    `db:"SEQ" json:"bcSeq"`
+	BCSeq    int    `db:"BC_SEQ" json:"bcSeq"`
 	JoinSeq  int    `db:"JOIN_SEQ" json:"joinSeq"`
 	USRSeq   int    `db:"USR_SEQ" json:"usrSeq"`
 	RegName  string `db:"NICKNAME" json:"regName"`

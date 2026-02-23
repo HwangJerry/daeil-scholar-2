@@ -1,4 +1,4 @@
-// alumni_repo.go — Alumni search repository (FUNDAMENTAL_MEMBER-based queries)
+// alumni_repo.go — Alumni search repository (UNION ALL: FUNDAMENTAL_MEMBER + WEO_MEMBER-only)
 package repository
 
 import (
@@ -16,15 +16,37 @@ func NewAlumniRepository(db *sqlx.DB) *AlumniRepository {
 	return &AlumniRepository{DB: db}
 }
 
+// alumniFilterClauses holds separate WHERE/AND clauses for Part A and Part B of the UNION ALL query.
+type alumniFilterClauses struct {
+	fundWhere string
+	fundArgs  []interface{}
+	weoWhere  string
+	weoArgs   []interface{}
+}
+
 func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.AlumniRecord, int, error) {
-	where, args := buildAlumniFilters(params)
-	countQuery := `SELECT COUNT(*) FROM FUNDAMENTAL_MEMBER f
-		LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = f.FM_SEQ AND m.USR_STATUS != 'AAA'
-		` + where
+	filters := buildAlumniFilters(params)
+
+	countQuery := `
+		SELECT COUNT(*) FROM (
+			SELECT f.FM_SEQ
+			FROM FUNDAMENTAL_MEMBER f
+			LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = f.FM_SEQ AND m.USR_STATUS != 'AAA'
+			` + filters.fundWhere + `
+			UNION ALL
+			SELECT m.USR_SEQ
+			FROM WEO_MEMBER m
+			WHERE m.USR_STATUS != 'AAA'
+			  AND NOT EXISTS (SELECT 1 FROM FUNDAMENTAL_MEMBER f WHERE f.FM_SEQ = m.USR_SEQ)
+			` + filters.weoWhere + `
+		) AS combined
+	`
+	countArgs := append(filters.fundArgs, filters.weoArgs...)
 	var total int
-	if err := r.DB.Get(&total, countQuery, args...); err != nil {
+	if err := r.DB.Get(&total, countQuery, countArgs...); err != nil {
 		return nil, 0, err
 	}
+
 	limit := params.Size
 	if limit <= 0 {
 		limit = 20
@@ -33,33 +55,59 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 	if page <= 0 {
 		page = 1
 	}
-	argsWithPage := append([]interface{}{}, args...)
-	argsWithPage = append(argsWithPage, limit, (page-1)*limit)
+
 	query := `
-		SELECT
-			f.FM_SEQ,
-			IFNULL(f.FM_NAME, m.USR_NAME)          AS FM_NAME,
-			IFNULL(m.USR_FN,  f.FM_FN)             AS FM_FN,
-			f.FM_DEPT,
-			f.FM_COMPANY,
-			f.FM_POSITION,
-			IFNULL(m.USR_PHONE, f.FM_PHONE)        AS FM_PHONE,
-			IFNULL(m.USR_EMAIL, f.FM_EMAIL)        AS FM_EMAIL,
-			f.FM_SMS, f.FM_SPAM,
-			m.USR_BIZ_NAME, m.USR_BIZ_DESC, m.USR_BIZ_ADDR,
-			jc.AJC_NAME, jc.AJC_COLOR,
-			m.USR_PHOTO, m.USR_SEQ,
-			(SELECT GROUP_CONCAT(t.AUT_TAG ORDER BY t.AUT_INDX SEPARATOR ',')
-			 FROM ALUMNI_USER_TAG t WHERE t.USR_SEQ = m.USR_SEQ) AS TAGS
-		FROM FUNDAMENTAL_MEMBER f
-		LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = f.FM_SEQ AND m.USR_STATUS != 'AAA'
-		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
-	` + where + `
-		ORDER BY IFNULL(f.FM_NAME, m.USR_NAME) ASC
+		SELECT * FROM (
+			SELECT
+				f.FM_SEQ                                    AS FM_SEQ,
+				IFNULL(f.FM_NAME, m.USR_NAME)               AS FM_NAME,
+				IFNULL(m.USR_FN,  f.FM_FN)                  AS FM_FN,
+				IFNULL(m.USR_DEPT, f.FM_DEPT)               AS FM_DEPT,
+				f.FM_COMPANY,
+				f.FM_POSITION,
+				IFNULL(m.USR_PHONE, f.FM_PHONE)             AS FM_PHONE,
+				IFNULL(m.USR_EMAIL, f.FM_EMAIL)             AS FM_EMAIL,
+				f.FM_SMS, f.FM_SPAM,
+				m.USR_BIZ_NAME, m.USR_BIZ_DESC, m.USR_BIZ_ADDR,
+				jc.AJC_NAME, jc.AJC_COLOR,
+				m.USR_PHOTO, m.USR_SEQ,
+				(SELECT GROUP_CONCAT(t.AUT_TAG ORDER BY t.AUT_INDX SEPARATOR ',')
+				 FROM ALUMNI_USER_TAG t WHERE t.USR_SEQ = m.USR_SEQ) AS TAGS
+			FROM FUNDAMENTAL_MEMBER f
+			LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = f.FM_SEQ AND m.USR_STATUS != 'AAA'
+			LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
+			` + filters.fundWhere + `
+			UNION ALL
+			SELECT
+				NULL                AS FM_SEQ,
+				m.USR_NAME          AS FM_NAME,
+				m.USR_FN            AS FM_FN,
+				m.USR_DEPT          AS FM_DEPT,
+				m.USR_BIZ_NAME      AS FM_COMPANY,
+				NULL                AS FM_POSITION,
+				m.USR_PHONE         AS FM_PHONE,
+				m.USR_EMAIL         AS FM_EMAIL,
+				'N'                 AS FM_SMS,
+				'N'                 AS FM_SPAM,
+				m.USR_BIZ_NAME, m.USR_BIZ_DESC, m.USR_BIZ_ADDR,
+				jc.AJC_NAME, jc.AJC_COLOR,
+				m.USR_PHOTO, m.USR_SEQ,
+				(SELECT GROUP_CONCAT(t.AUT_TAG ORDER BY t.AUT_INDX SEPARATOR ',')
+				 FROM ALUMNI_USER_TAG t WHERE t.USR_SEQ = m.USR_SEQ) AS TAGS
+			FROM WEO_MEMBER m
+			LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
+			WHERE m.USR_STATUS != 'AAA'
+			  AND NOT EXISTS (SELECT 1 FROM FUNDAMENTAL_MEMBER f WHERE f.FM_SEQ = m.USR_SEQ)
+			` + filters.weoWhere + `
+		) AS combined
+		ORDER BY FM_NAME ASC
 		LIMIT ? OFFSET ?
 	`
+	queryArgs := append(filters.fundArgs, filters.weoArgs...)
+	queryArgs = append(queryArgs, limit, (page-1)*limit)
+
 	var records []model.AlumniRecord
-	if err := r.DB.Select(&records, query, argsWithPage...); err != nil {
+	if err := r.DB.Select(&records, query, queryArgs...); err != nil {
 		return nil, 0, err
 	}
 	return records, total, nil
@@ -68,21 +116,34 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
 	fnList := make([]string, 0)
 	if err := r.DB.Select(&fnList, `
-		SELECT DISTINCT IFNULL(m.USR_FN, f.FM_FN) AS FM_FN
-		FROM FUNDAMENTAL_MEMBER f
-		LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = f.FM_SEQ AND m.USR_STATUS != 'AAA'
-		WHERE IFNULL(m.USR_FN, f.FM_FN) IS NOT NULL
-		  AND IFNULL(m.USR_FN, f.FM_FN) != ''
-		ORDER BY FM_FN + 0, FM_FN
+		SELECT DISTINCT fn FROM (
+			SELECT IFNULL(m.USR_FN, f.FM_FN) AS fn
+			FROM FUNDAMENTAL_MEMBER f
+			LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = f.FM_SEQ AND m.USR_STATUS != 'AAA'
+			WHERE IFNULL(m.USR_FN, f.FM_FN) IS NOT NULL
+			  AND IFNULL(m.USR_FN, f.FM_FN) != ''
+			UNION
+			SELECT m.USR_FN AS fn
+			FROM WEO_MEMBER m
+			WHERE m.USR_STATUS != 'AAA'
+			  AND m.USR_FN IS NOT NULL AND m.USR_FN != ''
+			  AND NOT EXISTS (SELECT 1 FROM FUNDAMENTAL_MEMBER f WHERE f.FM_SEQ = m.USR_SEQ)
+		) AS all_fn ORDER BY fn + 0, fn
 	`); err != nil {
 		return nil, err
 	}
 	deptList := make([]string, 0)
 	if err := r.DB.Select(&deptList, `
-		SELECT DISTINCT f.FM_DEPT
-		FROM FUNDAMENTAL_MEMBER f
-		WHERE f.FM_DEPT IS NOT NULL AND f.FM_DEPT != ''
-		ORDER BY f.FM_DEPT
+		SELECT DISTINCT dept FROM (
+			SELECT f.FM_DEPT AS dept
+			FROM FUNDAMENTAL_MEMBER f
+			WHERE f.FM_DEPT IS NOT NULL AND f.FM_DEPT != ''
+			UNION
+			SELECT m.USR_DEPT AS dept
+			FROM WEO_MEMBER m
+			WHERE m.USR_STATUS != 'AAA' AND m.USR_DEPT IS NOT NULL AND m.USR_DEPT != ''
+			  AND NOT EXISTS (SELECT 1 FROM FUNDAMENTAL_MEMBER f WHERE f.FM_SEQ = m.USR_SEQ)
+		) AS all_depts ORDER BY dept
 	`); err != nil {
 		return nil, err
 	}
@@ -138,35 +199,58 @@ func (r *AlumniRepository) GetWidgetPreview() ([]string, int, error) {
 	return names, total, nil
 }
 
-func buildAlumniFilters(params model.AlumniSearchParams) (string, []interface{}) {
-	clauses := []string{}
-	args := []interface{}{}
+// buildAlumniFilters constructs separate filter clauses for Part A (FUNDAMENTAL_MEMBER-based)
+// and Part B (WEO_MEMBER-only) of the UNION ALL search query.
+func buildAlumniFilters(params model.AlumniSearchParams) alumniFilterClauses {
+	var fundClauses, weoClauses []string
+	var fundArgs, weoArgs []interface{}
+
 	if params.FN != "" {
-		clauses = append(clauses, "IFNULL(m.USR_FN, f.FM_FN) = ?")
-		args = append(args, params.FN)
+		fundClauses = append(fundClauses, "IFNULL(m.USR_FN, f.FM_FN) = ?")
+		fundArgs = append(fundArgs, params.FN)
+		weoClauses = append(weoClauses, "AND m.USR_FN = ?")
+		weoArgs = append(weoArgs, params.FN)
 	}
 	if params.Dept != "" {
-		clauses = append(clauses, "f.FM_DEPT = ?")
-		args = append(args, params.Dept)
+		fundClauses = append(fundClauses, "IFNULL(m.USR_DEPT, f.FM_DEPT) = ?")
+		fundArgs = append(fundArgs, params.Dept)
+		weoClauses = append(weoClauses, "AND m.USR_DEPT = ?")
+		weoArgs = append(weoArgs, params.Dept)
 	}
 	if params.Name != "" {
-		clauses = append(clauses, "(IFNULL(f.FM_NAME, m.USR_NAME) LIKE ?)")
-		args = append(args, params.Name+"%")
+		fundClauses = append(fundClauses, "IFNULL(f.FM_NAME, m.USR_NAME) LIKE ?")
+		fundArgs = append(fundArgs, params.Name+"%")
+		weoClauses = append(weoClauses, "AND m.USR_NAME LIKE ?")
+		weoArgs = append(weoArgs, params.Name+"%")
 	}
 	if params.Company != "" {
-		clauses = append(clauses, "f.FM_COMPANY LIKE ?")
-		args = append(args, params.Company+"%")
+		fundClauses = append(fundClauses, "f.FM_COMPANY LIKE ?")
+		fundArgs = append(fundArgs, params.Company+"%")
+		weoClauses = append(weoClauses, "AND m.USR_BIZ_NAME LIKE ?")
+		weoArgs = append(weoArgs, params.Company+"%")
 	}
 	if params.Position != "" {
-		clauses = append(clauses, "f.FM_POSITION LIKE ?")
-		args = append(args, params.Position+"%")
+		fundClauses = append(fundClauses, "f.FM_POSITION LIKE ?")
+		fundArgs = append(fundArgs, params.Position+"%")
+		// Part B has no position field — omit
 	}
 	if params.JobCat > 0 {
-		clauses = append(clauses, "m.USR_JOB_CAT = ?")
-		args = append(args, params.JobCat)
+		fundClauses = append(fundClauses, "m.USR_JOB_CAT = ?")
+		fundArgs = append(fundArgs, params.JobCat)
+		weoClauses = append(weoClauses, "AND m.USR_JOB_CAT = ?")
+		weoArgs = append(weoArgs, params.JobCat)
 	}
-	if len(clauses) == 0 {
-		return "", args
+
+	fundWhere := ""
+	if len(fundClauses) > 0 {
+		fundWhere = "WHERE " + strings.Join(fundClauses, " AND ")
 	}
-	return "WHERE " + strings.Join(clauses, " AND "), args
+	weoWhere := strings.Join(weoClauses, " ")
+
+	return alumniFilterClauses{
+		fundWhere: fundWhere,
+		fundArgs:  fundArgs,
+		weoWhere:  weoWhere,
+		weoArgs:   weoArgs,
+	}
 }

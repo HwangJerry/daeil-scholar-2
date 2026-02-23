@@ -18,15 +18,15 @@ func NewCommentRepository(db *sqlx.DB) *CommentRepository {
 	return &CommentRepository{DB: db}
 }
 
-// GetComments returns all visible comments for a post, ordered by SEQ ascending.
+// GetComments returns all visible comments for a post, ordered by SEQ descending (newest first).
 func (r *CommentRepository) GetComments(joinSeq int) ([]model.Comment, error) {
 	comments := make([]model.Comment, 0)
 	err := r.DB.Select(&comments, `
-		SELECT IFNULL(SEQ, 0) AS SEQ, JOIN_SEQ, USR_SEQ, IFNULL(NICKNAME,'') AS NICKNAME,
+		SELECT SEQ AS BC_SEQ, JOIN_SEQ, USR_SEQ, IFNULL(NICKNAME,'') AS NICKNAME,
 		       IFNULL(CONTENTS,'') AS CONTENTS, REG_DATE
 		FROM WEO_BOARDCOMAND
 		WHERE JOIN_SEQ = ? AND BC_TYPE = 'B' AND OPEN_YN = 'Y'
-		ORDER BY SEQ ASC
+		ORDER BY SEQ DESC
 	`, joinSeq)
 	if err != nil {
 		return nil, err

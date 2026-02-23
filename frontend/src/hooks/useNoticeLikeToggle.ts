@@ -1,17 +1,32 @@
 // useNoticeLikeToggle — Local optimistic like toggle for notice cards in feed list
-import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import type { LikeToggleResponse } from '../types/api';
 
-export function useNoticeLikeToggle(seq: number, initialLikeCnt: number) {
-  const [liked, setLiked] = useState(false);
+export function useNoticeLikeToggle(seq: number, initialLikeCnt: number, initialLiked: boolean) {
+  const queryClient = useQueryClient();
+  const [liked, setLiked] = useState(initialLiked);
   const [likeCnt, setLikeCnt] = useState(initialLikeCnt);
+  const isMutating = useRef(false);
+
+  useEffect(() => {
+    if (!isMutating.current) {
+      setLiked(initialLiked);
+    }
+  }, [initialLiked]);
+
+  useEffect(() => {
+    if (!isMutating.current) {
+      setLikeCnt(initialLikeCnt);
+    }
+  }, [initialLikeCnt]);
 
   const mutation = useMutation({
     mutationFn: () => api.post<LikeToggleResponse>(`/api/feed/${seq}/like`),
 
     onMutate: () => {
+      isMutating.current = true;
       const prevLiked = liked;
       const prevLikeCnt = likeCnt;
       setLiked(!prevLiked);
@@ -22,6 +37,7 @@ export function useNoticeLikeToggle(seq: number, initialLikeCnt: number) {
     onSuccess: (data) => {
       setLiked(data.liked);
       setLikeCnt(data.likeCnt);
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
 
     onError: (_err, _vars, context) => {
@@ -29,6 +45,10 @@ export function useNoticeLikeToggle(seq: number, initialLikeCnt: number) {
         setLiked(context.prevLiked);
         setLikeCnt(context.prevLikeCnt);
       }
+    },
+
+    onSettled: () => {
+      isMutating.current = false;
     },
   });
 

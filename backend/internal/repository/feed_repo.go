@@ -16,24 +16,32 @@ func NewFeedRepository(db *sqlx.DB) *FeedRepository {
 	return &FeedRepository{DB: db}
 }
 
-func (r *FeedRepository) GetNotices(cursor int, size int, heroSeq int) ([]model.NoticeItem, error) {
+func (r *FeedRepository) GetNotices(cursor int, size int, heroSeq int, userSeq int) ([]model.NoticeItem, error) {
 	args := []interface{}{}
 	query := strings.Builder{}
 	query.WriteString(`
-		SELECT SEQ, SUBJECT, IFNULL(SUMMARY,'') AS SUMMARY, IFNULL(THUMBNAIL_URL,'') AS THUMBNAIL_URL,
-		       REG_DATE, REG_NAME, HIT, IS_PINNED
-		FROM WEO_BOARDBBS
-		WHERE GATE = 'NOTICE' AND OPEN_YN = 'Y'
+		SELECT b.SEQ, b.SUBJECT, IFNULL(b.SUMMARY,'') AS SUMMARY, IFNULL(b.THUMBNAIL_URL,'') AS THUMBNAIL_URL,
+		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED,
+		       (SELECT COUNT(*) FROM WEO_BOARDLIKE
+		        WHERE BBS_SEQ = b.SEQ AND OPEN_YN = 'Y') AS like_cnt,
+		       (SELECT COUNT(*) FROM WEO_BOARDCOMAND
+		        WHERE JOIN_SEQ = b.SEQ AND BC_TYPE = 'B' AND OPEN_YN = 'Y') AS comment_cnt,
+		       IFNULL((SELECT 1 FROM WEO_BOARDLIKE
+		               WHERE BBS_SEQ = b.SEQ AND USR_SEQ = ? AND OPEN_YN = 'Y'
+		               LIMIT 1), 0) AS user_liked
+		FROM WEO_BOARDBBS b
+		WHERE b.GATE = 'NOTICE' AND b.OPEN_YN = 'Y'
 	`)
+	args = append(args, userSeq)
 	if heroSeq > 0 {
-		query.WriteString(" AND SEQ <> ?")
+		query.WriteString(" AND b.SEQ <> ?")
 		args = append(args, heroSeq)
 	}
 	if cursor > 0 {
-		query.WriteString(" AND SEQ < ?")
+		query.WriteString(" AND b.SEQ < ?")
 		args = append(args, cursor)
 	}
-	query.WriteString(" ORDER BY (IS_PINNED = 'Y') DESC, SEQ DESC LIMIT ?")
+	query.WriteString(" ORDER BY (b.IS_PINNED = 'Y') DESC, b.SEQ DESC LIMIT ?")
 	args = append(args, size+1)
 
 	var notices []model.NoticeItem

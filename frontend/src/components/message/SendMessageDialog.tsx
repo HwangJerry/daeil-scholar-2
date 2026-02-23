@@ -1,5 +1,6 @@
 // SendMessageDialog — Modal overlay for composing and sending a message to an alumni member
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Send, CheckCircle } from 'lucide-react';
 import { api } from '../../api/client';
@@ -52,7 +53,7 @@ export function SendMessageDialog({
 
   const isContentEmpty = content.trim().length === 0;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       onClick={handleBackdropClick}
@@ -147,6 +148,7 @@ export function SendMessageDialog({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

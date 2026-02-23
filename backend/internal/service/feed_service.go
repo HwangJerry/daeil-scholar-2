@@ -1,11 +1,20 @@
+// feed_service.go — Service layer for news feed: assembly, interleaving, hero notice, and ad retrieval with caching
 package service
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/patrickmn/go-cache"
+)
+
+const (
+	feedHeroCacheTTL = 2 * time.Minute
+	feedAdsCacheTTL  = 5 * time.Minute
+	feedHeroCacheKey = "feed:hero"
+	feedAdsCacheKey  = "feed:ads"
 )
 
 type FeedService struct {
@@ -18,14 +27,14 @@ func NewFeedService(repo *repository.FeedRepository, adRepo *repository.AdReposi
 	return &FeedService{repo: repo, adRepo: adRepo, cache: cacheStore}
 }
 
-func (s *FeedService) GetFeed(cursor int, size int, excludeAdIDs []int, excludeSeq int) (*model.FeedResponse, error) {
+func (s *FeedService) GetFeed(cursor int, size int, excludeAdIDs []int, excludeSeq int, userSeq int) (*model.FeedResponse, error) {
 	if size <= 0 {
 		size = 10
 	}
 	if size > 20 {
 		size = 20
 	}
-	notices, err := s.repo.GetNotices(cursor, size, excludeSeq)
+	notices, err := s.repo.GetNotices(cursor, size, excludeSeq, userSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +42,7 @@ func (s *FeedService) GetFeed(cursor int, size int, excludeAdIDs []int, excludeS
 	if hasMore {
 		notices = notices[:size]
 	}
-	ads, err := s.adRepo.GetActiveAds(excludeAdIDs)
+	ads, err := s.getActiveAds(excludeAdIDs)
 	if err != nil {
 		ads = []model.AdItem{} // Non-fatal: render feed without ads
 	}
@@ -46,7 +55,41 @@ func (s *FeedService) GetFeed(cursor int, size int, excludeAdIDs []int, excludeS
 	return response, nil
 }
 
+// getActiveAds returns the cached full ad list, filtering excludeIDs in-memory.
+func (s *FeedService) getActiveAds(excludeIDs []int) ([]model.AdItem, error) {
+	if v, ok := s.cache.Get(feedAdsCacheKey); ok {
+		return filterAds(v.([]model.AdItem), excludeIDs), nil
+	}
+	all, err := s.adRepo.GetActiveAds(nil)
+	if err != nil {
+		return nil, err
+	}
+	s.cache.Set(feedAdsCacheKey, all, feedAdsCacheTTL)
+	return filterAds(all, excludeIDs), nil
+}
+
+// filterAds returns ads excluding those whose MASeq is in excludeIDs.
+func filterAds(ads []model.AdItem, excludeIDs []int) []model.AdItem {
+	if len(excludeIDs) == 0 {
+		return ads
+	}
+	excludeSet := make(map[int]struct{}, len(excludeIDs))
+	for _, id := range excludeIDs {
+		excludeSet[id] = struct{}{}
+	}
+	result := make([]model.AdItem, 0, len(ads))
+	for _, ad := range ads {
+		if _, skip := excludeSet[ad.MASeq]; !skip {
+			result = append(result, ad)
+		}
+	}
+	return result
+}
+
 func (s *FeedService) GetHero() (*model.NoticeItem, error) {
+	if v, ok := s.cache.Get(feedHeroCacheKey); ok {
+		return v.(*model.NoticeItem), nil
+	}
 	hero, err := s.repo.GetHeroNotice()
 	if err != nil || hero == nil {
 		return hero, err
@@ -58,6 +101,7 @@ func (s *FeedService) GetHero() (*model.NoticeItem, error) {
 	if commentCnt, err := s.repo.GetCommentCount(hero.SEQ); err == nil {
 		hero.CommentCnt = commentCnt
 	}
+	s.cache.Set(feedHeroCacheKey, hero, feedHeroCacheTTL)
 	return hero, nil
 }
 

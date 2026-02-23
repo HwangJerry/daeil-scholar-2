@@ -1,27 +1,16 @@
 // NoticeCard — Feed card with category, body-first layout, and expandable summary
-import { useState } from 'react';
 import { Pin } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { formatAbsoluteDate } from '../../utils/date';
 import type { NoticeItem } from '../../types/api';
 import { NoticeCardEngagement } from './NoticeCardEngagement';
-
-const CATEGORY_LABELS: Record<string, string> = {
-  notice: '공지',
-  event: '이벤트',
-  scholarship: '장학',
-  career: '커리어',
-};
-
-const SUMMARY_COLLAPSE_THRESHOLD = 120;
+import { NoticeCardLink } from './NoticeCardLink';
+import { NoticeCardSummary } from './NoticeCardSummary';
+import { NOTICE_CATEGORY_LABELS } from './noticeCard.constants';
 
 export function NoticeCard({ item }: { item: NoticeItem }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
   const category = item.category ?? 'notice';
-  const categoryLabel = CATEGORY_LABELS[category] ?? '공지';
-  const hasLongSummary = item.summary.length > SUMMARY_COLLAPSE_THRESHOLD;
+  const categoryLabel = NOTICE_CATEGORY_LABELS[category] ?? '공지';
 
   return (
     <article className="rounded-2xl bg-surface border border-border-subtle shadow-card transition-all duration-200 hover:shadow-card-hover hover:border-border-hover overflow-hidden">
@@ -37,43 +26,24 @@ export function NoticeCard({ item }: { item: NoticeItem }) {
           )}
         </div>
 
-        <Link to={`/post/${item.seq}`} className="group block mb-2">
+        <NoticeCardLink seq={item.seq} className="group block mb-2">
           <h3 className="line-clamp-2 text-body-md font-semibold font-serif text-text-primary group-hover:text-primary transition-colors duration-150">
             {item.subject}
           </h3>
-        </Link>
+        </NoticeCardLink>
 
-        {item.summary && (
-          <div className="mb-1">
-            <p
-              className={cn(
-                'text-body-sm text-text-tertiary leading-relaxed whitespace-pre-line',
-                !isExpanded && 'line-clamp-3'
-              )}
-            >
-              {item.summary}
-            </p>
-            {hasLongSummary && (
-              <button
-                onClick={() => setIsExpanded((prev) => !prev)}
-                className="mt-1 text-body-sm text-text-placeholder hover:text-text-secondary transition-colors"
-              >
-                {isExpanded ? '접기' : '더 보기'}
-              </button>
-            )}
-          </div>
-        )}
+        {item.summary && <NoticeCardSummary summary={item.summary} />}
       </div>
 
       {item.thumbnailUrl && (
-        <Link to={`/post/${item.seq}`} className="block">
+        <NoticeCardLink seq={item.seq} className="block">
           <img
             src={item.thumbnailUrl}
             alt={item.subject}
             className="w-full aspect-video object-cover"
             loading="lazy"
           />
-        </Link>
+        </NoticeCardLink>
       )}
 
       <div className="border-t border-border-subtle mx-5" />
@@ -83,6 +53,7 @@ export function NoticeCard({ item }: { item: NoticeItem }) {
         likeCnt={item.likeCnt ?? 0}
         commentCnt={item.commentCnt ?? 0}
         hit={item.hit ?? 0}
+        userLiked={item.userLiked ?? false}
       />
     </article>
   );

@@ -4,9 +4,9 @@ import (
 	"database/sql"
 )
 
-// AlumniRecord represents a member from FUNDAMENTAL_MEMBER table joined with WEO_MEMBER.
+// AlumniRecord represents a member from FUNDAMENTAL_MEMBER or WEO_MEMBER (UNION ALL result).
 type AlumniRecord struct {
-	FMSEQ      int            `db:"FM_SEQ" json:"fmSeq"`
+	FMSEQ      sql.NullInt64  `db:"FM_SEQ" json:"fmSeq"`
 	FMName     string         `db:"FM_NAME" json:"fmName"`
 	FMFN       sql.NullString `db:"FM_FN" json:"fmFn"`
 	FMDept     sql.NullString `db:"FM_DEPT" json:"fmDept"`

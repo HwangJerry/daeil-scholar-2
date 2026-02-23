@@ -73,7 +73,6 @@ func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthS
 // registerPublicRoutes registers unauthenticated public endpoints.
 func registerPublicRoutes(r chi.Router, h handlers) {
 	r.Get("/api/health", h.health.Check)
-	r.Get("/api/feed", h.feed.GetFeed)
 	r.Get("/api/feed/hero", h.feed.GetHero)
 	r.Get("/api/donation/summary", h.donation.GetSummary)
 	r.Get("/api/auth/kakao", h.auth.KakaoLogin)
@@ -118,6 +117,7 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 func registerOptionalAuthRoutes(r chi.Router, h handlers, authService *service.AuthService) {
 	r.Group(func(r chi.Router) {
 		r.Use(mw.OptionalAuthMiddleware(authService))
+		r.Get("/api/feed", h.feed.GetFeed)
 		r.Get("/api/feed/{seq}", h.feed.GetDetail)
 		r.Get("/api/feed/{seq}/siblings", h.feed.GetSiblings)
 		r.Get("/api/feed/{seq}/comments", h.comment.ListComments)

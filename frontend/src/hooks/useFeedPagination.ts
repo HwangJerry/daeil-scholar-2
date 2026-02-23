@@ -34,7 +34,7 @@ export function useFeedPagination() {
     getNextPageParam: (lastPage) =>
       lastPage.hasMore ? lastPage.nextCursor : undefined,
     enabled: isHeroLoaded,
-    staleTime: 30_000,
+    staleTime: 0,   // always refetch on mount for fresh counts
   });
 
   const items: FeedItem[] = data?.pages.flatMap((p) => p.items) ?? [];
@@ -42,7 +42,7 @@ export function useFeedPagination() {
   return {
     items,
     hasMore: hasNextPage ?? false,
-    isFetching: isFetching || isFetchingNextPage,
+    isFetching: isFetching || isFetchingNextPage || !isHeroLoaded,
     loadMore: fetchNextPage,
   };
 }

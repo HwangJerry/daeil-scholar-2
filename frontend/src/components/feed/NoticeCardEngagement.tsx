@@ -9,6 +9,7 @@ interface NoticeCardEngagementProps {
   likeCnt: number;
   commentCnt: number;
   hit: number;
+  userLiked: boolean;
 }
 
 export function NoticeCardEngagement({
@@ -16,9 +17,10 @@ export function NoticeCardEngagement({
   likeCnt,
   commentCnt,
   hit,
+  userLiked,
 }: NoticeCardEngagementProps) {
   const [isCommentOpen, setIsCommentOpen] = useState(false);
-  const { liked, likeCnt: currentLikeCnt, toggle } = useNoticeLikeToggle(seq, likeCnt);
+  const { liked, likeCnt: currentLikeCnt, toggle } = useNoticeLikeToggle(seq, likeCnt, userLiked);
 
   return (
     <>

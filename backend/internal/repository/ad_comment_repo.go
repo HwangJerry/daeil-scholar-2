@@ -19,14 +19,14 @@ func NewAdCommentRepository(db *sqlx.DB) *AdCommentRepository {
 	return &AdCommentRepository{DB: db}
 }
 
-// ListAdComments returns all active comments for an ad, ordered oldest-first.
+// ListAdComments returns all active comments for an ad, ordered newest-first.
 func (r *AdCommentRepository) ListAdComments(maSeq int) ([]model.AdComment, error) {
 	var comments []model.AdComment
 	err := r.DB.Select(&comments, `
 		SELECT AC_SEQ, MA_SEQ, USR_SEQ, NICKNAME, CONTENTS, REG_DATE
 		FROM WEO_AD_COMMENT
 		WHERE MA_SEQ = ? AND OPEN_YN = 'Y'
-		ORDER BY AC_SEQ ASC
+		ORDER BY AC_SEQ DESC
 	`, maSeq)
 	if err != nil {
 		return nil, err

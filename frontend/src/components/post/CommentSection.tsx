@@ -11,7 +11,7 @@ interface CommentSectionProps {
 
 export function CommentSection({ seq }: CommentSectionProps) {
   const { user, isLoggedIn } = useAuth();
-  const { data: comments, isLoading } = useComments(seq);
+  const { data: comments, isLoading, isError } = useComments(seq);
 
   return (
     <section className="mt-6 border-t border-border-subtle pt-5">
@@ -34,7 +34,13 @@ export function CommentSection({ seq }: CommentSectionProps) {
         </div>
       )}
 
-      {!isLoading && comments?.length === 0 && (
+      {isError && (
+        <p className="py-4 text-center text-xs text-text-tertiary">
+          댓글을 불러올 수 없습니다.
+        </p>
+      )}
+
+      {!isLoading && !isError && comments?.length === 0 && (
         <p className="py-4 text-center text-xs text-text-tertiary">
           아직 댓글이 없습니다.
         </p>
