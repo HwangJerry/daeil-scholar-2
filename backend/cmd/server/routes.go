@@ -2,6 +2,9 @@
 package main
 
 import (
+	"net/http"
+
+	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/handler"
 	mw "github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/service"
@@ -36,12 +39,16 @@ type handlers struct {
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
-func registerRoutes(h handlers, authService *service.AuthService, allowedOrigins []string, logger zerolog.Logger) chi.Router {
+func registerRoutes(h handlers, authService *service.AuthService, allowedOrigins []string, uploadCfg config.UploadConfig, logger zerolog.Logger) chi.Router {
 	router := chi.NewRouter()
 	router.Use(chimw.Recoverer)
 	router.Use(mw.RequestLogger(logger))
 	router.Use(mw.CORSMiddleware(allowedOrigins))
 	router.Use(mw.MaxBodySize(1 << 20))
+
+	// Static file servers (dev: proxied from Vite/Nginx; prod: handled by Nginx alias)
+	router.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadCfg.BasePath))))
+	router.Handle("/files/*", http.StripPrefix("/files/", http.FileServer(http.Dir(uploadCfg.LegacyPath))))
 
 	registerPGRoutes(router, h)
 	registerAPIRoutes(router, h, authService, allowedOrigins)

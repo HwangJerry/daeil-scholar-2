@@ -32,7 +32,7 @@ func main() {
 	defer d.pgAuditLog.Close()
 
 	allowedOrigins := []string{cfg.Server.AllowedOrigin, "http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "http://localhost:8000"}
-	router := registerRoutes(d.handlers, d.authService, allowedOrigins, logger)
+	router := registerRoutes(d.handlers, d.authService, allowedOrigins, cfg.Upload, logger)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Server.Port,

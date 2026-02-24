@@ -140,16 +140,18 @@ export function SearchFilter({ onSearch }: SearchFilterProps) {
           ))}
         </select>
 
-        {/* 초기화 — shown when any filter is active */}
-        {hasActiveFilter && (
-          <button
-            onClick={resetAll}
-            className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-[12px] text-text-tertiary hover:border-border-hover hover:text-text-primary transition-colors duration-150 whitespace-nowrap bg-surface"
-          >
-            <RotateCcw size={11} />
-            초기화
-          </button>
-        )}
+        {/* 초기화 — always in DOM to preserve flex layout; invisible when no filter is active */}
+        <button
+          onClick={resetAll}
+          disabled={!hasActiveFilter}
+          className={cn(
+            "flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-[12px] text-text-tertiary hover:border-border-hover hover:text-text-primary transition-colors duration-150 whitespace-nowrap bg-surface",
+            !hasActiveFilter && "invisible pointer-events-none"
+          )}
+        >
+          <RotateCcw size={11} />
+          초기화
+        </button>
       </div>
 
       {/* Row 2: Active filter pills — shown when any dropdown filter is active */}
