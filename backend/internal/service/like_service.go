@@ -8,19 +8,24 @@ import (
 
 // LikeService handles like-related business logic.
 type LikeService struct {
-	likeRepo *repository.LikeRepository
-	feedRepo *repository.FeedRepository
+	likeRepo repository.LikeQuerier
+	feedRepo repository.FeedQuerier
+	notifier *LikeNotifier
 }
 
 // NewLikeService creates a new LikeService.
-func NewLikeService(likeRepo *repository.LikeRepository, feedRepo *repository.FeedRepository) *LikeService {
-	return &LikeService{likeRepo: likeRepo, feedRepo: feedRepo}
+func NewLikeService(likeRepo repository.LikeQuerier, feedRepo repository.FeedQuerier, notifSvc *NotificationService) *LikeService {
+	return &LikeService{
+		likeRepo: likeRepo,
+		feedRepo: feedRepo,
+		notifier: NewLikeNotifier(feedRepo, notifSvc),
+	}
 }
 
 // ToggleLike toggles a like for a post.
 // Uses HasUserLiked (COUNT-based) as source of truth and SetLikeOpenByUser
 // for bulk updates to handle duplicate rows in WEO_BOARDLIKE.
-func (s *LikeService) ToggleLike(bbsSeq int, usrSeq int) (*model.LikeToggleResponse, error) {
+func (s *LikeService) ToggleLike(bbsSeq int, usrSeq int, usrName string) (*model.LikeToggleResponse, error) {
 	alreadyLiked, err := s.likeRepo.HasUserLiked(bbsSeq, usrSeq)
 	if err != nil {
 		return nil, err
@@ -57,6 +62,10 @@ func (s *LikeService) ToggleLike(bbsSeq int, usrSeq int) (*model.LikeToggleRespo
 	likeCnt, err := s.feedRepo.GetLikeCount(bbsSeq)
 	if err != nil {
 		return nil, err
+	}
+
+	if liked && s.notifier != nil {
+		s.notifier.OnLiked(bbsSeq, usrSeq, usrName)
 	}
 
 	return &model.LikeToggleResponse{Liked: liked, LikeCnt: likeCnt}, nil

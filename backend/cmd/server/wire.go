@@ -6,6 +6,7 @@ import (
 
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/handler"
+	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/presenter"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
@@ -16,11 +17,15 @@ import (
 
 // deps holds all wired dependencies needed by the application lifecycle.
 type deps struct {
-	authService  *service.AuthService
-	handlers     handlers
-	donationRepo *repository.DonationRepository
-	sessionRepo  *repository.SessionRepository
-	pgAuditLog   *service.PGAuditLogger
+	authService       *service.AuthService
+	handlers          handlers
+	donationRepo      *repository.DonationRepository
+	sessionRepo       *repository.SessionRepository
+	passwordResetRepo *repository.PasswordResetRepository
+	notificationRepo  *repository.NotificationRepository
+	pgAuditLog        *service.PGAuditLogger
+	emailQueue        chan model.EmailMessage
+	emailService      *service.EmailService
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
@@ -44,12 +49,20 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	likeRepo := repository.NewLikeRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	messageRepo := repository.NewMessageRepository(db)
+	passwordResetRepo := repository.NewPasswordResetRepository(db)
+	notificationRepo := repository.NewNotificationRepository(db)
 
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
+
+	// Email infrastructure
+	emailQueue := make(chan model.EmailMessage, 100)
+	emailService := service.NewEmailService(cfg.SMTP, logger)
 
 	authService := service.NewAuthService(authRepo, sessionRepo, cfg, cacheStore, logger)
 	memberService := service.NewMemberService(authRepo)
 	feedService := service.NewFeedService(feedRepo, adRepo, cacheStore)
+	ogService := service.NewOGService(feedRepo)
+	sitemapService := service.NewSitemapService(feedRepo, cacheStore)
 	donationService := service.NewDonationService(donationRepo, cacheStore)
 	alumniService := service.NewAlumniService(alumniRepo, cacheStore)
 	profileService := service.NewProfileService(profileRepo)
@@ -65,18 +78,28 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	imageResizer := service.NewImageResizeService(1200)
 	fileRecordSvc := service.NewFileRecordService(fileRepo)
 	uploadOrchestrator := service.NewUploadOrchestrator(fileStorage, imageResizer, fileRecordSvc)
+	profileUploadService := service.NewProfileUploadService(profileRepo, uploadOrchestrator)
 	easypayService := service.NewEasyPayService(cfg.EasyPay)
 	pgAuditLogger, err := service.NewPGAuditLogger(cfg.PGAuditLogPath)
 	if err != nil {
 		return nil, err
 	}
-	likeService := service.NewLikeService(likeRepo, feedRepo)
-	commentService := service.NewCommentService(commentRepo)
+
+	// Notification service (needed by message, comment, like, admin member services)
+	notificationService := service.NewNotificationService(notificationRepo, authRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
+
+	likeService := service.NewLikeService(likeRepo, feedRepo, notificationService)
+	commentService := service.NewCommentService(commentRepo, feedRepo, notificationService)
 	myDonationService := service.NewMyDonationService(myDonationRepo)
-	messageService := service.NewMessageService(messageRepo, profileRepo)
+	messageService := service.NewMessageService(messageRepo, profileRepo, notificationService)
+	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
 	donateService := service.NewDonateService(donateRepo, easypayService, cacheStore, logger, pgAuditLogger)
 	subscriptionRepo := repository.NewSubscriptionRepository(db)
 	subscriptionService := service.NewSubscriptionService(subscriptionRepo, donateService, cacheStore, logger)
+
+	// Wire approval notifier into admin member service
+	approvalNotifier := service.NewMemberApprovalNotifier(notificationService)
+	adminMemberSvc.SetApprovalNotifier(approvalNotifier)
 
 	feedPresenter := presenter.NewFeedPresenter()
 
@@ -89,6 +112,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		donation:       handler.NewDonationHandler(donationService),
 		alumni:         handler.NewAlumniHandler(alumniService),
 		profile:        handler.NewProfileHandler(profileService),
+		profileUpload:  handler.NewProfileUploadHandler(profileUploadService),
 		ad:             handler.NewAdHandler(adService),
 		adLike:         handler.NewAdLikeHandler(adLikeService),
 		adComment:      handler.NewAdCommentHandler(adCommentService),
@@ -102,13 +126,22 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		message:        handler.NewMessageHandler(messageService),
 		payment:        handler.NewPaymentHandler(donateService, cfg.EasyPay),
 		subscription:   handler.NewSubscriptionHandler(subscriptionService, cfg.EasyPay),
+		og:             handler.NewOGHandler(ogService, cfg.Server.SiteBaseURL),
+		sitemap:        handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
+		passwordReset:  handler.NewPasswordResetHandler(passwordResetService, logger),
+		notification:   handler.NewNotificationHandler(notificationService, logger),
+		badge:          handler.NewBadgeHandler(notificationService, messageService, logger),
 	}
 
 	return &deps{
-		authService:  authService,
-		handlers:     h,
-		donationRepo: donationRepo,
-		sessionRepo:  sessionRepo,
-		pgAuditLog:   pgAuditLogger,
+		authService:       authService,
+		handlers:          h,
+		donationRepo:      donationRepo,
+		sessionRepo:       sessionRepo,
+		passwordResetRepo: passwordResetRepo,
+		notificationRepo:  notificationRepo,
+		pgAuditLog:        pgAuditLogger,
+		emailQueue:        emailQueue,
+		emailService:      emailService,
 	}, nil
 }

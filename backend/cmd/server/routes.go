@@ -15,27 +15,33 @@ import (
 
 // handlers holds all HTTP handler instances for route registration.
 type handlers struct {
-	health         *handler.HealthHandler
-	auth           *handler.AuthHandler
-	feed           *handler.FeedHandler
-	like           *handler.LikeHandler
-	comment        *handler.CommentHandler
-	donation       *handler.DonationHandler
-	alumni         *handler.AlumniHandler
-	profile        *handler.ProfileHandler
-	ad             *handler.AdHandler
-	adLike         *handler.AdLikeHandler
-	adComment      *handler.AdCommentHandler
-	adminNotice    *handler.AdminNoticeHandler
-	adminAd        *handler.AdminAdHandler
-	adminDonation  *handler.AdminDonationHandler
-	adminMember    *handler.AdminMemberHandler
-	adminDashboard *handler.AdminDashboardHandler
-	adminUpload    *handler.AdminUploadHandler
-	myDonation     *handler.MyDonationHandler
-	message        *handler.MessageHandler
-	payment        *handler.PaymentHandler
-	subscription   *handler.SubscriptionHandler
+	health          *handler.HealthHandler
+	auth            *handler.AuthHandler
+	feed            *handler.FeedHandler
+	like            *handler.LikeHandler
+	comment         *handler.CommentHandler
+	donation        *handler.DonationHandler
+	alumni          *handler.AlumniHandler
+	profile         *handler.ProfileHandler
+	profileUpload   *handler.ProfileUploadHandler
+	ad              *handler.AdHandler
+	adLike          *handler.AdLikeHandler
+	adComment       *handler.AdCommentHandler
+	adminNotice     *handler.AdminNoticeHandler
+	adminAd         *handler.AdminAdHandler
+	adminDonation   *handler.AdminDonationHandler
+	adminMember     *handler.AdminMemberHandler
+	adminDashboard  *handler.AdminDashboardHandler
+	adminUpload     *handler.AdminUploadHandler
+	myDonation      *handler.MyDonationHandler
+	message         *handler.MessageHandler
+	payment         *handler.PaymentHandler
+	subscription    *handler.SubscriptionHandler
+	og              *handler.OGHandler
+	sitemap         *handler.SitemapHandler
+	passwordReset   *handler.PasswordResetHandler
+	notification    *handler.NotificationHandler
+	badge           *handler.BadgeHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
@@ -49,6 +55,10 @@ func registerRoutes(h handlers, authService *service.AuthService, allowedOrigins
 	// Static file servers (dev: proxied from Vite/Nginx; prod: handled by Nginx alias)
 	router.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadCfg.BasePath))))
 	router.Handle("/files/*", http.StripPrefix("/files/", http.FileServer(http.Dir(uploadCfg.LegacyPath))))
+
+	// Bot-facing OG and sitemap endpoints (no CSRF, read-only)
+	router.Get("/og/post/{seq}", h.og.GetPostOG)
+	router.Get("/sitemap.xml", h.sitemap.GetSitemap)
 
 	registerPGRoutes(router, h)
 	registerAPIRoutes(router, h, authService, allowedOrigins)
@@ -85,8 +95,14 @@ func registerPublicRoutes(r chi.Router, h handlers) {
 	r.Get("/api/auth/kakao", h.auth.KakaoLogin)
 	r.Get("/api/auth/kakao/callback", h.auth.KakaoCallback)
 	r.Post("/api/auth/login", h.auth.Login)
+	r.Post("/api/auth/register", h.auth.Register)
+	r.Post("/api/auth/social/link", h.auth.SocialLink)
 	r.Post("/api/auth/kakao/link", h.auth.KakaoLink)
 	r.Get("/api/alumni/widget", h.alumni.GetWidgetPreview)
+	r.Get("/api/public/job-categories", h.alumni.GetJobCategories)
+	r.Post("/api/auth/password/reset-request", h.passwordReset.RequestReset)
+	r.Post("/api/auth/password/reset-confirm", h.passwordReset.ConfirmReset)
+	r.Get("/api/auth/password/validate-token", h.passwordReset.ValidateToken)
 }
 
 // registerAuthRoutes registers endpoints that require authentication.
@@ -99,6 +115,8 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Get("/api/alumni/filters", h.alumni.GetFilters)
 		r.Get("/api/profile", h.profile.GetProfile)
 		r.Put("/api/profile", h.profile.UpdateProfile)
+		r.Post("/api/profile/photo", h.profileUpload.UploadPhoto)
+		r.Post("/api/profile/bizcard", h.profileUpload.UploadBizCard)
 		r.Post("/api/donation/orders", h.payment.CreateOrder)
 		r.Get("/api/donation/orders/{seq}", h.payment.GetOrder)
 		r.Get("/api/donation/my", h.myDonation.GetMyDonations)
@@ -117,6 +135,11 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Put("/api/messages/{seq}/read", h.message.MarkAsRead)
 		r.Delete("/api/messages/{seq}", h.message.Delete)
 		r.Get("/api/messages/unread-count", h.message.GetUnreadCount)
+		r.Get("/api/notifications", h.notification.GetNotifications)
+		r.Get("/api/notifications/unread-count", h.notification.GetUnreadCount)
+		r.Put("/api/notifications/{seq}/read", h.notification.MarkAsRead)
+		r.Put("/api/notifications/read-all", h.notification.MarkAllAsRead)
+		r.Get("/api/badges", h.badge.GetBadges)
 	})
 }
 

@@ -45,6 +45,7 @@ func (s *AdminDashboardService) GetStats() (*model.DashboardStats, error) {
 		TotalMembers:       memberStats.TotalMembers,
 		KakaoLinkedMembers: memberStats.KakaoLinkedMembers,
 		RecentLoginCount:   memberStats.RecentLoginCount,
+		PendingApprovals:   memberStats.PendingApprovals,
 		TotalNotices:       totalNotices,
 		Donation:           *donation,
 		AdStats:            *adStats,

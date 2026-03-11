@@ -26,7 +26,10 @@ func (r *ProfileRepository) GetProfile(usrSeq int) (*model.UserProfile, error) {
 			IFNULL(jc.AJC_NAME, '') AS AJC_NAME,
 			IFNULL(jc.AJC_COLOR, '') AS AJC_COLOR,
 			IFNULL(f.FM_DEPT, '') AS FM_DEPT,
-			IFNULL(DATE_FORMAT(m.REG_DATE, '%Y. %m'), '') AS REG_DATE_FMT
+			IFNULL(DATE_FORMAT(m.REG_DATE, '%Y. %m'), '') AS REG_DATE_FMT,
+			IFNULL(m.USR_PHONE_PUBLIC, 'Y') AS USR_PHONE_PUBLIC,
+			IFNULL(m.USR_EMAIL_PUBLIC, 'Y') AS USR_EMAIL_PUBLIC,
+			IFNULL(m.USR_BIZ_CARD, '') AS USR_BIZ_CARD
 		FROM WEO_MEMBER m
 		LEFT JOIN FUNDAMENTAL_MEMBER f ON m.USR_SEQ = f.FM_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
@@ -38,6 +41,7 @@ func (r *ProfileRepository) GetProfile(usrSeq int) (*model.UserProfile, error) {
 		&profile.BizName, &profile.BizDesc, &profile.BizAddr,
 		&profile.JobCat, &profile.JobCatName, &profile.JobCatColor,
 		&profile.FmDept, &profile.RegDate,
+		&profile.USRPhonePublic, &profile.USREmailPublic, &profile.USRBizCard,
 	)
 	if err != nil {
 		return nil, err
@@ -75,15 +79,36 @@ func (r *ProfileRepository) UpdateProfile(usrSeq int, req model.ProfileUpdateReq
 	if req.JobCat != nil {
 		jobCat = *req.JobCat
 	}
+	phonePublic := req.USRPhonePublic
+	if phonePublic == "" {
+		phonePublic = "Y"
+	}
+	emailPublic := req.USREmailPublic
+	if emailPublic == "" {
+		emailPublic = "Y"
+	}
 	_, err := r.DB.Exec(`
 		UPDATE WEO_MEMBER
 		SET USR_NICK = ?, USR_PHONE = ?, USR_EMAIL = ?,
 			USR_BIZ_NAME = ?, USR_BIZ_DESC = ?, USR_BIZ_ADDR = ?,
-			USR_JOB_CAT = NULLIF(?, 0)
+			USR_JOB_CAT = NULLIF(?, 0),
+			USR_PHONE_PUBLIC = ?, USR_EMAIL_PUBLIC = ?
 		WHERE USR_SEQ = ?
 	`, req.USRNick, req.USRPhone, req.USREmail,
 		req.BizName, req.BizDesc, req.BizAddr,
-		jobCat, usrSeq)
+		jobCat, phonePublic, emailPublic, usrSeq)
+	return err
+}
+
+// UpdateProfilePhoto updates only the USR_PHOTO column for a user.
+func (r *ProfileRepository) UpdateProfilePhoto(usrSeq int, url string) error {
+	_, err := r.DB.Exec(`UPDATE WEO_MEMBER SET USR_PHOTO = ? WHERE USR_SEQ = ?`, url, usrSeq)
+	return err
+}
+
+// UpdateBizCard updates only the USR_BIZ_CARD column for a user.
+func (r *ProfileRepository) UpdateBizCard(usrSeq int, url string) error {
+	_, err := r.DB.Exec(`UPDATE WEO_MEMBER SET USR_BIZ_CARD = ? WHERE USR_SEQ = ?`, url, usrSeq)
 	return err
 }
 

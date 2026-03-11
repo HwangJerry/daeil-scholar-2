@@ -59,3 +59,13 @@ func (h *AlumniHandler) GetFilters(w http.ResponseWriter, r *http.Request) {
 	}
 	respondJSON(w, http.StatusOK, filters)
 }
+
+// GetJobCategories handles GET /api/public/job-categories — public endpoint, no auth required.
+func (h *AlumniHandler) GetJobCategories(w http.ResponseWriter, r *http.Request) {
+	cats, err := h.service.GetJobCategories()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "JOB_CATEGORY_FAILED", "Failed to load job categories")
+		return
+	}
+	respondJSON(w, http.StatusOK, cats)
+}

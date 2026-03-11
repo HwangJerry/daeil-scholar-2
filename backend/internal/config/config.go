@@ -16,12 +16,23 @@ type Config struct {
 	JWT            JWTConfig
 	Upload         UploadConfig
 	EasyPay        EasyPayConfig
+	SMTP           SMTPConfig
 	PGAuditLogPath string
+}
+
+// SMTPConfig holds SMTP server settings for transactional email delivery.
+type SMTPConfig struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+	From     string
 }
 
 type ServerConfig struct {
 	Port            string
 	AllowedOrigin   string
+	SiteBaseURL     string
 	ShutdownTimeout time.Duration
 }
 
@@ -80,6 +91,7 @@ func Load() *Config {
 		Server: ServerConfig{
 			Port:            getEnv("SERVER_PORT", "8080"),
 			AllowedOrigin:   getEnv("ALLOWED_ORIGIN", "http://localhost:8000"),
+			SiteBaseURL:     getEnv("SITE_BASE_URL", "http://localhost:8000"),
 			ShutdownTimeout: getDurationEnv("SHUTDOWN_TIMEOUT", 10*time.Second),
 		},
 		DB: DBConfig{
@@ -114,6 +126,13 @@ func Load() *Config {
 			GatewayPort:       getEnv("EASYPAY_GW_PORT", "80"),
 			BinBase:           getEnv("EASYPAY_BIN_BASE", "/var/www/html/_sys/payment"),
 			ReturnBaseURL:     getEnv("EASYPAY_RETURN_BASE_URL", "http://localhost:8080"),
+		},
+		SMTP: SMTPConfig{
+			Host:     getEnv("SMTP_HOST", ""),
+			Port:     getEnv("SMTP_PORT", "587"),
+			User:     getEnv("SMTP_USER", ""),
+			Password: getEnv("SMTP_PASSWORD", ""),
+			From:     getEnv("SMTP_FROM", "noreply@dflh.kr"),
 		},
 		PGAuditLogPath: getEnv("PG_AUDIT_LOG_PATH", "/var/logs/pg/pg-audit.log"),
 	}

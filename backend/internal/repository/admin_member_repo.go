@@ -109,3 +109,9 @@ func (r *AdminMemberRepository) CountRecentLogins(days int) (int, error) {
 	err := r.DB.Get(&c, `SELECT COUNT(DISTINCT USR_SEQ) FROM WEO_MEMBER_LOG WHERE LOG_DATE > DATE_SUB(NOW(), INTERVAL ? DAY)`, days)
 	return c, err
 }
+
+func (r *AdminMemberRepository) CountPendingMembers() (int, error) {
+	var c int
+	err := r.DB.Get(&c, `SELECT COUNT(*) FROM WEO_MEMBER WHERE USR_STATUS = 'BBB'`)
+	return c, err
+}

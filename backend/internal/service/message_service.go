@@ -12,17 +12,18 @@ const maxMessageLength = 1000
 
 // MessageService handles direct messaging business logic.
 type MessageService struct {
-	repo        *repository.MessageRepository
-	profileRepo *repository.ProfileRepository
+	repo        repository.MessageQuerier
+	profileRepo repository.ProfileQuerier
+	notifSvc    *NotificationService
 }
 
 // NewMessageService creates a new MessageService.
-func NewMessageService(repo *repository.MessageRepository, profileRepo *repository.ProfileRepository) *MessageService {
-	return &MessageService{repo: repo, profileRepo: profileRepo}
+func NewMessageService(repo repository.MessageQuerier, profileRepo repository.ProfileQuerier, notifSvc *NotificationService) *MessageService {
+	return &MessageService{repo: repo, profileRepo: profileRepo, notifSvc: notifSvc}
 }
 
-// SendMessage validates and sends a message.
-func (s *MessageService) SendMessage(senderSeq int, req model.SendMessageRequest) error {
+// SendMessage validates and sends a message, then triggers a notification.
+func (s *MessageService) SendMessage(senderSeq int, senderName string, req model.SendMessageRequest) error {
 	if req.Content == "" {
 		return errors.New("메시지 내용을 입력해주세요")
 	}
@@ -44,7 +45,15 @@ func (s *MessageService) SendMessage(senderSeq int, req model.SendMessageRequest
 		return errors.New("존재하지 않는 회원입니다")
 	}
 
-	return s.repo.InsertMessage(senderSeq, req.RecvrSeq, req.Content)
+	if err := s.repo.InsertMessage(senderSeq, req.RecvrSeq, req.Content); err != nil {
+		return err
+	}
+
+	if s.notifSvc != nil {
+		go s.notifSvc.NotifyNewMessage(req.RecvrSeq, senderName, 0)
+	}
+
+	return nil
 }
 
 // GetInbox returns paginated inbox messages.

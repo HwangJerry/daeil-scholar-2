@@ -1,3 +1,4 @@
+// profile_service.go — Business logic for user profile management
 package service
 
 import (

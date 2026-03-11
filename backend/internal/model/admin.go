@@ -85,11 +85,12 @@ type AdminMemberDetail struct {
 // --- Dashboard ---
 
 type DashboardStats struct {
-	TotalMembers       int     `json:"totalMembers"`
-	KakaoLinkedMembers int     `json:"kakaoLinkedMembers"`
-	RecentLoginCount   int     `json:"recentLoginCount"`
-	TotalNotices       int     `json:"totalNotices"`
-	Donation           DonationSummary `json:"donation"`
+	TotalMembers       int              `json:"totalMembers"`
+	KakaoLinkedMembers int              `json:"kakaoLinkedMembers"`
+	RecentLoginCount   int              `json:"recentLoginCount"`
+	PendingApprovals   int              `json:"pendingApprovals"`
+	TotalNotices       int              `json:"totalNotices"`
+	Donation           DonationSummary  `json:"donation"`
 	AdStats            DashboardAdStats `json:"adStats"`
 }
 

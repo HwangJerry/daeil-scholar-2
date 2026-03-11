@@ -18,12 +18,12 @@ const (
 )
 
 type FeedService struct {
-	repo   *repository.FeedRepository
+	repo   repository.FeedQuerier
 	adRepo *repository.AdRepository
 	cache  *cache.Cache
 }
 
-func NewFeedService(repo *repository.FeedRepository, adRepo *repository.AdRepository, cacheStore *cache.Cache) *FeedService {
+func NewFeedService(repo repository.FeedQuerier, adRepo *repository.AdRepository, cacheStore *cache.Cache) *FeedService {
 	return &FeedService{repo: repo, adRepo: adRepo, cache: cacheStore}
 }
 
@@ -46,6 +46,28 @@ func (s *FeedService) GetFeed(cursor int, size int, excludeAdIDs []int, excludeS
 	if err != nil {
 		ads = []model.AdItem{} // Non-fatal: render feed without ads
 	}
+	// userLiked enrichment: only for logged-in users with ads present
+	if userSeq > 0 && len(ads) > 0 {
+		// Copy to avoid mutating the cached slice
+		enriched := make([]model.AdItem, len(ads))
+		copy(enriched, ads)
+		ads = enriched
+
+		maSeqs := make([]int, len(ads))
+		for i, ad := range ads {
+			maSeqs[i] = ad.MASeq
+		}
+		if likedSeqs, err := s.adRepo.GetUserLikedAdSeqs(userSeq, maSeqs); err == nil {
+			likedSet := make(map[int]bool, len(likedSeqs))
+			for _, seq := range likedSeqs {
+				likedSet[seq] = true
+			}
+			for i := range ads {
+				ads[i].UserLiked = likedSet[ads[i].MASeq]
+			}
+		}
+		// err is non-fatal: userLiked stays false, feed still renders
+	}
 	items := interleaveFeed(notices, ads)
 	response := &model.FeedResponse{Items: items, HasMore: hasMore}
 	if len(notices) > 0 {
@@ -58,7 +80,10 @@ func (s *FeedService) GetFeed(cursor int, size int, excludeAdIDs []int, excludeS
 // getActiveAds returns the cached full ad list, filtering excludeIDs in-memory.
 func (s *FeedService) getActiveAds(excludeIDs []int) ([]model.AdItem, error) {
 	if v, ok := s.cache.Get(feedAdsCacheKey); ok {
-		return filterAds(v.([]model.AdItem), excludeIDs), nil
+		if ads, ok := v.([]model.AdItem); ok {
+			return filterAds(ads, excludeIDs), nil
+		}
+		s.cache.Delete(feedAdsCacheKey)
 	}
 	all, err := s.adRepo.GetActiveAds(nil)
 	if err != nil {
@@ -88,7 +113,10 @@ func filterAds(ads []model.AdItem, excludeIDs []int) []model.AdItem {
 
 func (s *FeedService) GetHero() (*model.NoticeItem, error) {
 	if v, ok := s.cache.Get(feedHeroCacheKey); ok {
-		return v.(*model.NoticeItem), nil
+		if hero, ok := v.(*model.NoticeItem); ok {
+			return hero, nil
+		}
+		s.cache.Delete(feedHeroCacheKey)
 	}
 	hero, err := s.repo.GetHeroNotice()
 	if err != nil || hero == nil {

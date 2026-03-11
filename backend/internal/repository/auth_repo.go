@@ -35,15 +35,15 @@ func (r *AuthRepository) LookupLegacySession(sessionID string) (*model.AuthUser,
 	return &user, nil
 }
 
-func (r *AuthRepository) FindMemberByKakaoID(kakaoID string) (*model.User, error) {
+func (r *AuthRepository) FindMemberBySocialID(gate string, socialID string) (*model.User, error) {
 	var user model.User
 	err := r.DB.Get(&user, `
 		SELECT m.USR_SEQ, m.USR_ID, m.USR_NAME, m.USR_STATUS, m.USR_PHONE, m.USR_FN, m.USR_EMAIL, m.USR_NICK, m.USR_PHOTO
 		FROM WEO_MEMBER_SOCIAL s
 		JOIN WEO_MEMBER m ON s.USR_SEQ = m.USR_SEQ
-		WHERE s.NMS_GATE = 'KT' AND s.NMS_ID = ?
+		WHERE s.NMS_GATE = ? AND s.NMS_ID = ?
 		LIMIT 1
-	`, kakaoID)
+	`, gate, socialID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -51,6 +51,10 @@ func (r *AuthRepository) FindMemberByKakaoID(kakaoID string) (*model.User, error
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *AuthRepository) FindMemberByKakaoID(kakaoID string) (*model.User, error) {
+	return r.FindMemberBySocialID("KT", kakaoID)
 }
 
 func (r *AuthRepository) FindMemberByNamePhone(name string, phone string) (*model.User, error) {
@@ -87,11 +91,11 @@ func (r *AuthRepository) FindMemberByFNName(fn string, name string) (*model.User
 	return &user, nil
 }
 
-func (r *AuthRepository) InsertSocialLink(usrSeq int, gate string, socialID string, name string) error {
+func (r *AuthRepository) InsertSocialLink(usrSeq int, gate string, socialID string, email string) error {
 	_, err := r.DB.Exec(`
-		INSERT INTO WEO_MEMBER_SOCIAL (USR_SEQ, NMS_GATE, NMS_ID, NMS_NAME, REG_DATE)
+		INSERT INTO WEO_MEMBER_SOCIAL (USR_SEQ, NMS_GATE, NMS_ID, NMS_EMAIL, REG_DATE)
 		VALUES (?, ?, ?, ?, NOW())
-	`, usrSeq, gate, socialID, name)
+	`, usrSeq, gate, socialID, email)
 	return err
 }
 
@@ -147,11 +151,12 @@ func (r *AuthRepository) FindMemberByPhone(phone string) (*model.User, error) {
 	return &user, nil
 }
 
-func (r *AuthRepository) InsertMember(usrID, name, phone, fn, email string) (int, error) {
+func (r *AuthRepository) InsertMember(usrID, name, phone, fn, email, nick, dept string, jobCat *int, bizName, bizDesc, bizAddr string) (int, error) {
 	result, err := r.DB.Exec(`
-		INSERT INTO WEO_MEMBER (USR_ID, USR_NAME, USR_PHONE, USR_FN, USR_EMAIL, USR_STATUS, USR_PWD, REG_DATE, TOTAL_LOG_CNT)
-		VALUES (?, ?, ?, ?, ?, 'BBB', '', NOW(), 0)
-	`, usrID, name, phone, fn, email)
+		INSERT INTO WEO_MEMBER (USR_ID, USR_NAME, USR_PHONE, USR_FN, USR_EMAIL, USR_STATUS, USR_PWD, REG_DATE, TOTAL_LOG_CNT,
+			USR_NICK, USR_DEPT, USR_JOB_CAT, USR_BIZ_NAME, USR_BIZ_DESC, USR_BIZ_ADDR)
+		VALUES (?, ?, ?, ?, ?, 'BBB', '', NOW(), 0, ?, ?, ?, ?, ?, ?)
+	`, usrID, name, phone, fn, email, nick, dept, jobCat, bizName, bizDesc, bizAddr)
 	if err != nil {
 		return 0, err
 	}
@@ -170,6 +175,52 @@ func (r *AuthRepository) GetMemberBySeq(usrSeq int) (*model.User, error) {
 		WHERE USR_SEQ = ?
 		LIMIT 1
 	`, usrSeq)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *AuthRepository) CheckIDExists(usrID string) (bool, error) {
+	var count int
+	err := r.DB.Get(&count, `SELECT COUNT(*) FROM WEO_MEMBER WHERE USR_ID = ?`, usrID)
+	return count > 0, err
+}
+
+func (r *AuthRepository) CheckPhoneExists(phone string) (bool, error) {
+	var count int
+	err := r.DB.Get(&count, `SELECT COUNT(*) FROM WEO_MEMBER WHERE USR_PHONE = ?`, phone)
+	return count > 0, err
+}
+
+func (r *AuthRepository) InsertMemberWithPwd(req model.RegisterRequest, hashedPwd string) (int, error) {
+	result, err := r.DB.Exec(`
+		INSERT INTO WEO_MEMBER (USR_ID, USR_NAME, USR_PHONE, USR_FN, USR_EMAIL, USR_STATUS, USR_PWD, REG_DATE, TOTAL_LOG_CNT,
+			USR_NICK, USR_DEPT, USR_JOB_CAT, USR_BIZ_NAME, USR_BIZ_DESC, USR_BIZ_ADDR)
+		VALUES (?, ?, ?, ?, ?, 'BBB', ?, NOW(), 0, ?, ?, ?, ?, ?, ?)
+	`, req.UsrID, req.Name, req.Phone, req.FN, req.Email, hashedPwd,
+		req.Nick, req.Dept, req.JobCat, req.BizName, req.BizDesc, req.BizAddr)
+	if err != nil {
+		return 0, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return int(id), nil
+}
+
+func (r *AuthRepository) FindMemberByIDAndPwdAny(usrID, hashedPwd string) (*model.User, error) {
+	var user model.User
+	err := r.DB.Get(&user, `
+		SELECT USR_SEQ, USR_ID, USR_NAME, USR_STATUS, USR_PHONE, USR_FN, USR_EMAIL, USR_NICK, USR_PHOTO
+		FROM WEO_MEMBER
+		WHERE USR_ID = ? AND USR_PWD = ?
+		LIMIT 1
+	`, usrID, hashedPwd)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil

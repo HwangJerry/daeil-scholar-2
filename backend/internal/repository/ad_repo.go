@@ -50,6 +50,27 @@ func (r *AdRepository) GetActiveAds(excludeIDs []int) ([]model.AdItem, error) {
 	return ads, nil
 }
 
+// GetUserLikedAdSeqs returns the maSeq values the user has liked from the given list.
+func (r *AdRepository) GetUserLikedAdSeqs(userSeq int, maSeqs []int) ([]int, error) {
+	if len(maSeqs) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(maSeqs))
+	args := make([]interface{}, 0, len(maSeqs)+1)
+	args = append(args, userSeq)
+	for i, seq := range maSeqs {
+		placeholders[i] = "?"
+		args = append(args, seq)
+	}
+	query := "SELECT MA_SEQ FROM WEO_AD_LIKE WHERE USR_SEQ = ? AND MA_SEQ IN (" +
+		strings.Join(placeholders, ",") + ") AND OPEN_YN = 'Y'"
+	var result []int
+	if err := r.DB.Select(&result, query, args...); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // LogAdEvent records a view or click event for an ad.
 func (r *AdRepository) LogAdEvent(maSeq int, usrSeq int, eventType string, ipAddr string) error {
 	_, err := r.DB.Exec(`

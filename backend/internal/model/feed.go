@@ -98,6 +98,7 @@ type AdItem struct {
 	LikeCnt    int    `db:"like_cnt" json:"likeCnt"`
 	CommentCnt int    `db:"comment_cnt" json:"commentCnt"`
 	Hit        int    `db:"hit" json:"hit"`
+	UserLiked  bool   `db:"user_liked" json:"userLiked"`
 }
 
 // AdComment represents a row in WEO_AD_COMMENT table.
@@ -140,4 +141,17 @@ type FeedResponse struct {
 	Items      []FeedItem `json:"items"`
 	NextCursor string     `json:"nextCursor"`
 	HasMore    bool       `json:"hasMore"`
+}
+
+// OGData holds the minimum fields needed for bot OG rendering.
+type OGData struct {
+	Subject      string `db:"SUBJECT"`
+	Summary      string `db:"SUMMARY"`
+	ThumbnailURL string `db:"THUMBNAIL_URL"`
+}
+
+// SitemapPost holds fields needed for sitemap entry generation.
+type SitemapPost struct {
+	SEQ        int    `db:"SEQ"`
+	RegDateISO string `db:"REG_DATE"`
 }

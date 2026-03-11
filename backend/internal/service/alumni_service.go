@@ -141,6 +141,21 @@ func (s *AlumniService) GetWidgetPreview() (*model.AlumniWidgetResponse, error) 
 	return result, nil
 }
 
+// GetJobCategories returns all active job categories for public consumption (e.g., registration form).
+func (s *AlumniService) GetJobCategories() ([]model.JobCategory, error) {
+	if cached, found := s.cache.Get("alumni_job_categories"); found {
+		if cats, ok := cached.([]model.JobCategory); ok {
+			return cats, nil
+		}
+	}
+	cats, err := s.repo.GetJobCategories()
+	if err != nil {
+		return nil, err
+	}
+	s.cache.Set("alumni_job_categories", cats, time.Hour)
+	return cats, nil
+}
+
 func (s *AlumniService) GetFilters() (*model.AlumniFilters, error) {
 	if cached, found := s.cache.Get("alumni_filters"); found {
 		if filters, ok := cached.(*model.AlumniFilters); ok {

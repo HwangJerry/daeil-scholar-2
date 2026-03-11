@@ -23,34 +23,39 @@ type User struct {
 
 // UserProfile is the public-facing profile for the current user (MyPage).
 type UserProfile struct {
-	USRSeq      int      `json:"usrSeq"`
-	USRName     string   `json:"usrName"`
-	USRNick     string   `json:"usrNick"`
-	USRPhone    string   `json:"usrPhone"`
-	USREmail    string   `json:"usrEmail"`
-	USRFN       string   `json:"usrFn"`
-	USRPhoto    string   `json:"usrPhoto"`
-	BizName     string   `json:"bizName"`
-	BizDesc     string   `json:"bizDesc"`
-	BizAddr     string   `json:"bizAddr"`
-	JobCat      int      `json:"jobCat"`
-	JobCatName  string   `json:"jobCatName"`
-	JobCatColor string   `json:"jobCatColor"`
-	Tags        []string `json:"tags"`
-	FmDept      string   `json:"fmDept"`  // FUNDAMENTAL_MEMBER.FM_DEPT (예: "영어과")
-	RegDate     string   `json:"regDate"` // 가입일 포맷 "YYYY. MM" (예: "2024. 03")
+	USRSeq         int      `json:"usrSeq"`
+	USRName        string   `json:"usrName"`
+	USRNick        string   `json:"usrNick"`
+	USRPhone       string   `json:"usrPhone"`
+	USREmail       string   `json:"usrEmail"`
+	USRFN          string   `json:"usrFn"`
+	USRPhoto       string   `json:"usrPhoto"`
+	BizName        string   `json:"bizName"`
+	BizDesc        string   `json:"bizDesc"`
+	BizAddr        string   `json:"bizAddr"`
+	JobCat         int      `json:"jobCat"`
+	JobCatName     string   `json:"jobCatName"`
+	JobCatColor    string   `json:"jobCatColor"`
+	Tags           []string `json:"tags"`
+	FmDept         string   `json:"fmDept"`         // FUNDAMENTAL_MEMBER.FM_DEPT (예: "영어과")
+	RegDate        string   `json:"regDate"`        // 가입일 포맷 "YYYY. MM" (예: "2024. 03")
+	USRPhonePublic string   `json:"usrPhonePublic"` // 'Y' | 'N'
+	USREmailPublic string   `json:"usrEmailPublic"` // 'Y' | 'N'
+	USRBizCard     string   `json:"usrBizCard"`     // 명함 이미지 URL
 }
 
 // ProfileUpdateRequest is the request body for PUT /api/profile.
 type ProfileUpdateRequest struct {
-	USRNick string   `json:"usrNick"`
-	USRPhone string  `json:"usrPhone"`
-	USREmail string  `json:"usrEmail"`
-	BizName  string  `json:"bizName"`
-	BizDesc  string  `json:"bizDesc"`
-	BizAddr  string  `json:"bizAddr"`
-	JobCat   *int    `json:"jobCat"`
-	Tags     []string `json:"tags"`
+	USRNick        string   `json:"usrNick"`
+	USRPhone       string   `json:"usrPhone"`
+	USREmail       string   `json:"usrEmail"`
+	BizName        string   `json:"bizName"`
+	BizDesc        string   `json:"bizDesc"`
+	BizAddr        string   `json:"bizAddr"`
+	JobCat         *int     `json:"jobCat"`
+	Tags           []string `json:"tags"`
+	USRPhonePublic string   `json:"usrPhonePublic"` // 'Y' | 'N'
+	USREmailPublic string   `json:"usrEmailPublic"` // 'Y' | 'N'
 }
 
 // AuthUser is the minimal user info stored in context after authentication.

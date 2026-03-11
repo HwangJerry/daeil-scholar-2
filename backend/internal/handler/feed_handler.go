@@ -28,6 +28,7 @@ func (h *FeedHandler) GetFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	feed, err := h.service.GetFeed(parseCursor(q.Get("cursor")), parseIntParam(q.Get("size")), parseExcludeAds(q.Get("exclude_ads")), parseIntParam(q.Get("exclude_seq")), userSeq)
 	if err != nil {
+		log.Error().Err(err).Msg("feed list failed")
 		respondError(w, http.StatusInternalServerError, "FEED_FAILED", "Failed to load feed")
 		return
 	}
@@ -37,6 +38,7 @@ func (h *FeedHandler) GetFeed(w http.ResponseWriter, r *http.Request) {
 func (h *FeedHandler) GetHero(w http.ResponseWriter, r *http.Request) {
 	hero, err := h.service.GetHero()
 	if err != nil {
+		log.Error().Err(err).Msg("feed hero failed")
 		respondError(w, http.StatusInternalServerError, "HERO_FAILED", "Failed to load hero")
 		return
 	}

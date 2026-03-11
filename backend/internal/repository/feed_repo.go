@@ -77,7 +77,7 @@ func (r *FeedRepository) GetNoticeDetail(seq int) (*model.NoticeDetail, error) {
 		       IFNULL(CONTENTS_MD,'') AS CONTENTS_MD,
 		       IFNULL(CONTENT_FORMAT,'LEGACY') AS CONTENT_FORMAT,
 		       IFNULL(SUMMARY,'') AS SUMMARY, IFNULL(THUMBNAIL_URL,'') AS THUMBNAIL_URL,
-		       REG_DATE, REG_NAME, HIT
+		       REG_DATE, REG_NAME, HIT, IS_PINNED
 		FROM WEO_BOARDBBS
 		WHERE SEQ = ? AND GATE = 'NOTICE' AND OPEN_YN = 'Y'
 		LIMIT 1
@@ -152,6 +152,36 @@ func (r *FeedRepository) GetNextPost(seq int) (*model.PostSibling, error) {
 	return &sibling, nil
 }
 
+func (r *FeedRepository) GetOGFields(seq int) (*model.OGData, error) {
+	var og model.OGData
+	err := r.DB.Get(&og, `
+		SELECT SUBJECT, IFNULL(SUMMARY,'') AS SUMMARY, IFNULL(THUMBNAIL_URL,'') AS THUMBNAIL_URL
+		FROM WEO_BOARDBBS
+		WHERE SEQ = ? AND GATE = 'NOTICE' AND OPEN_YN = 'Y' LIMIT 1
+	`, seq)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &og, nil
+}
+
+func (r *FeedRepository) GetAllPublicPostSeqs() ([]model.SitemapPost, error) {
+	var posts []model.SitemapPost
+	err := r.DB.Select(&posts, `
+		SELECT SEQ, DATE_FORMAT(REG_DATE, '%Y-%m-%d') AS REG_DATE
+		FROM WEO_BOARDBBS
+		WHERE GATE = 'NOTICE' AND OPEN_YN = 'Y'
+		ORDER BY SEQ DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return posts, nil
+}
+
 func (r *FeedRepository) GetFilesByPost(seq int) ([]model.FileRecord, error) {
 	files := make([]model.FileRecord, 0)
 	err := r.DB.Select(&files, `
@@ -166,4 +196,17 @@ func (r *FeedRepository) GetFilesByPost(seq int) ([]model.FileRecord, error) {
 		return nil, err
 	}
 	return files, nil
+}
+
+// GetPostOwnerSeq returns the USR_SEQ of the post author.
+// Returns 0 if the post is not found or has no associated user.
+func (r *FeedRepository) GetPostOwnerSeq(seq int) (int, error) {
+	var usrSeq int
+	err := r.DB.Get(&usrSeq, `
+		SELECT IFNULL(USR_SEQ, 0) FROM WEO_BOARDBBS WHERE SEQ = ?
+	`, seq)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return usrSeq, err
 }

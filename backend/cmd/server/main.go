@@ -53,8 +53,10 @@ func main() {
 
 	donationJob := job.NewDonationSnapshotJob(d.donationRepo, logger)
 	donationJob.Start()
-	sessionJob := job.NewSessionCleanupJob(d.sessionRepo, logger)
+	sessionJob := job.NewSessionCleanupJob(d.sessionRepo, d.passwordResetRepo, d.notificationRepo, logger)
 	sessionJob.Start()
+	emailWorker := job.NewEmailWorker(d.emailQueue, d.emailService, logger)
+	emailWorker.Start()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -62,6 +64,7 @@ func main() {
 
 	donationJob.Stop()
 	sessionJob.Stop()
+	emailWorker.Stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()

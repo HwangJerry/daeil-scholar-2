@@ -34,7 +34,7 @@ func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
-	if err := h.service.SendMessage(user.USRSeq, req); err != nil {
+	if err := h.service.SendMessage(user.USRSeq, user.USRName, req); err != nil {
 		respondError(w, http.StatusBadRequest, "SEND_FAILED", err.Error())
 		return
 	}

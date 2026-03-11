@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"time"
@@ -79,107 +80,12 @@ func (h *AuthHandler) KakaoCallback(w http.ResponseWriter, r *http.Request) {
 		Str("email", email).
 		Str("nickname", nickname).
 		Msg("kakao: token exchanged")
-	user, err := h.service.FindMemberByKakaoID(kakaoID)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "LOOKUP_FAILED", "Failed to lookup member")
-		return
-	}
-	if user != nil {
-		if err := h.service.LoginWithBridge(user, w, r); err != nil {
-			respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "Failed to login")
-			return
-		}
-		h.service.CacheKakaoToken(user.USRSeq, accessToken)
-		http.Redirect(w, r, h.cfg.Server.AllowedOrigin+"/", http.StatusFound)
-		return
-	}
-	// Store Kakao info server-side with a temporary token (not in URL)
-	linkToken := h.service.GenerateSessionID()
-	h.cache.Set("kakao_link:"+linkToken, model.KakaoLinkData{
-		KakaoID:     kakaoID,
-		Email:       email,
-		Nickname:    nickname,
-		AccessToken: accessToken,
-	}, 5*time.Minute)
-	http.Redirect(w, r, h.cfg.Server.AllowedOrigin+"/login/link?token="+linkToken, http.StatusFound)
+	h.handleSocialCallback(w, r, "KT", kakaoID, email, nickname, accessToken)
 }
 
-type kakaoLinkRequest struct {
-	Token string `json:"token"`
-	Name  string `json:"name"`
-	Phone string `json:"phone"`
-	FN    string `json:"fn"`
-}
-
+// KakaoLink delegates to SocialLink for backward compatibility.
 func (h *AuthHandler) KakaoLink(w http.ResponseWriter, r *http.Request) {
-	var req kakaoLinkRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
-		return
-	}
-	if req.Token == "" || req.Name == "" {
-		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "Missing required fields")
-		return
-	}
-	// Retrieve Kakao info from server-side cache using the link token
-	cached, found := h.cache.Get("kakao_link:" + req.Token)
-	if !found {
-		respondError(w, http.StatusBadRequest, "INVALID_TOKEN", "Link token expired or invalid")
-		return
-	}
-	linkData, ok := cached.(model.KakaoLinkData)
-	if !ok {
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Invalid cached data")
-		return
-	}
-	h.cache.Delete("kakao_link:" + req.Token)
-
-	if req.Phone == "" {
-		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "전화번호를 입력하세요")
-		return
-	}
-
-	// Look up existing member by phone number
-	existing, err := h.memberSvc.FindMemberByPhone(req.Phone)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "LOOKUP_FAILED", "회원 조회 중 오류가 발생했습니다")
-		return
-	}
-
-	var user *model.User
-	if existing != nil {
-		// Phone matched — verify name matches for merge
-		if existing.USRName != req.Name {
-			respondError(w, http.StatusConflict, "NAME_MISMATCH", "전화번호는 등록되어 있으나 이름이 일치하지 않습니다")
-			return
-		}
-		// Merge: link Kakao account to existing member
-		if err := h.service.InsertSocialLink(existing.USRSeq, "KT", linkData.KakaoID, req.Name); err != nil {
-			respondError(w, http.StatusInternalServerError, "LINK_FAILED", "계정 연동에 실패했습니다")
-			return
-		}
-		user = existing
-	} else {
-		// No existing member — create new member and link Kakao
-		newUser, err := h.memberSvc.CreateMember(linkData.KakaoID, req.Name, req.Phone, req.FN, linkData.Email)
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, "CREATE_FAILED", "회원 가입에 실패했습니다")
-			return
-		}
-		if err := h.service.InsertSocialLink(newUser.USRSeq, "KT", linkData.KakaoID, req.Name); err != nil {
-			respondError(w, http.StatusInternalServerError, "LINK_FAILED", "계정 연동에 실패했습니다")
-			return
-		}
-		user = newUser
-	}
-
-	if err := h.service.LoginWithBridge(user, w, r); err != nil {
-		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 처리 중 오류가 발생했습니다")
-		return
-	}
-	h.service.CacheKakaoToken(user.USRSeq, linkData.AccessToken)
-	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
-	respondJSON(w, http.StatusOK, authUser)
+	h.SocialLink(w, r)
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -194,6 +100,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.memberSvc.LoginWithPassword(req.USRID, req.Password)
 	if err != nil {
+		if errors.Is(err, service.ErrPendingApproval) {
+			respondError(w, http.StatusForbidden, "PENDING_APPROVAL", "가입 신청이 접수된 계정입니다. 관리자 승인 후 로그인 가능합니다.")
+			return
+		}
 		h.logger.Error().Err(err).Str("usrId", req.USRID).Msg("login: password verification failed")
 		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 처리 중 오류가 발생했습니다")
 		return
@@ -209,6 +119,37 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
 	respondJSON(w, http.StatusOK, authUser)
+}
+
+func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	var req model.RegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
+		return
+	}
+	if req.UsrID == "" || req.Password == "" || req.Name == "" || req.Phone == "" || req.Email == "" {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "필수 입력값이 누락되었습니다")
+		return
+	}
+	if len(req.UsrID) < 4 || len(req.UsrID) > 20 {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "아이디는 4~20자여야 합니다")
+		return
+	}
+	user, err := h.memberSvc.RegisterMember(req)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrIDTaken):
+			respondError(w, http.StatusConflict, "ID_TAKEN", "이미 사용 중인 아이디입니다")
+		case errors.Is(err, service.ErrPhoneTaken):
+			respondError(w, http.StatusConflict, "PHONE_TAKEN", "이미 등록된 전화번호입니다")
+		default:
+			h.logger.Error().Err(err).Msg("register: failed to create member")
+			respondError(w, http.StatusInternalServerError, "REGISTER_FAILED", "회원가입 처리 중 오류가 발생했습니다")
+		}
+		return
+	}
+	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
+	respondJSON(w, http.StatusCreated, authUser)
 }
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {

@@ -34,7 +34,7 @@ func (h *LikeHandler) ToggleLike(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.service.ToggleLike(seq, user.USRSeq)
+	result, err := h.service.ToggleLike(seq, user.USRSeq, user.USRName)
 	if err != nil {
 		log.Error().Err(err).Int("seq", seq).Msg("like toggle failed")
 		respondError(w, http.StatusInternalServerError, "LIKE_FAILED", "좋아요 처리에 실패했습니다")

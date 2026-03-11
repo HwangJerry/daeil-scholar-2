@@ -1,3 +1,4 @@
+// profile_handler.go — HTTP handlers for user profile retrieval and update
 package handler
 
 import (
@@ -13,8 +14,8 @@ type ProfileHandler struct {
 	service *service.ProfileService
 }
 
-func NewProfileHandler(service *service.ProfileService) *ProfileHandler {
-	return &ProfileHandler{service: service}
+func NewProfileHandler(svc *service.ProfileService) *ProfileHandler {
+	return &ProfileHandler{service: svc}
 }
 
 func (h *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
