@@ -4,6 +4,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { AuthGuard } from '../components/auth/AuthGuard';
+import { PageMeta } from '../components/seo/PageMeta';
 import { SearchFilter, type AlumniSearchParams } from '../components/alumni/SearchFilter';
 import { AlumniCard } from '../components/alumni/AlumniCard';
 import { Bone } from '../components/ui/Skeleton';
@@ -170,6 +171,7 @@ function AlumniContent() {
 export function AlumniPage() {
   return (
     <AuthGuard>
+      <PageMeta title="동문 검색" noIndex />
       <AlumniContent />
     </AuthGuard>
   );

@@ -1,4 +1,5 @@
-// Root composition — wires providers, auth init, and routes together
+// App — Root composition wiring providers, auth init, and routes together
+import { HelmetProvider } from 'react-helmet-async';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './queryClient';
@@ -7,12 +8,14 @@ import AppRoutes from './routes';
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthInitializer>
-          <AppRoutes />
-        </AuthInitializer>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthInitializer>
+            <AppRoutes />
+          </AuthInitializer>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </HelmetProvider>
   );
 }

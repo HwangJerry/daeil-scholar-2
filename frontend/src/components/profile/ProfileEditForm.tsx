@@ -1,13 +1,37 @@
-// ProfileEditForm — Edit form for profile info including business fields and keyword tags
+// ProfileEditForm — Edit form for profile info including privacy toggles and image uploads
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { api } from '../../api/client';
 import { Button } from '../ui/Button';
+import { ImageUploadSection } from './ImageUploadSection';
 import type { UserProfile, ProfileUpdateRequest, AlumniFilters } from '../../types/api';
 
 const MAX_TAGS = 5;
+
+function PrivacyToggle({
+  isPublic,
+  onToggle,
+}: {
+  isPublic: boolean;
+  onToggle: (v: boolean) => void;
+}) {
+  return (
+    <label className="group inline-flex items-center gap-1.5 cursor-pointer">
+      <input
+        type="checkbox"
+        className="sr-only"
+        checked={isPublic}
+        onChange={(e) => onToggle(e.target.checked)}
+      />
+      <div className="relative w-9 h-5 rounded-full bg-border group-has-[:checked]:bg-primary transition-colors">
+        <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-surface shadow-sm transition-transform group-has-[:checked]:translate-x-4" />
+      </div>
+      <span className="text-xs text-text-tertiary">{isPublic ? '공개' : '비공개'}</span>
+    </label>
+  );
+}
 
 export function ProfileEditForm() {
   const queryClient = useQueryClient();
@@ -36,6 +60,8 @@ export function ProfileEditForm() {
     bizAddr: profile?.bizAddr ?? '',
     jobCat: profile?.jobCat ?? null,
     tags: profile?.tags ?? [],
+    usrPhonePublic: profile?.usrPhonePublic ?? 'Y',
+    usrEmailPublic: profile?.usrEmailPublic ?? 'Y',
   };
 
   const mutation = useMutation({
@@ -90,11 +116,20 @@ export function ProfileEditForm() {
 
   const inputClass =
     'w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/30 transition-shadow duration-150';
-  const labelClass = 'mb-1 block text-[13px] font-medium text-text-tertiary';
+  const labelClass = 'text-[13px] font-medium text-text-tertiary';
 
   return (
     <form onSubmit={handleSubmit} className="rounded-[20px] bg-surface p-6 shadow-card border border-border">
       <h2 className="mb-4 text-lg font-semibold text-text-primary font-serif">프로필 수정</h2>
+
+      {/* Profile photo upload */}
+      <ImageUploadSection
+        label="프로필 사진"
+        currentUrl={profile.usrPhoto}
+        uploadUrl="/api/profile/photo"
+        onUploaded={() => queryClient.invalidateQueries({ queryKey: ['profile'] })}
+        shape="square"
+      />
 
       {/* Name (read-only) */}
       <div className="mb-4">
@@ -104,7 +139,7 @@ export function ProfileEditForm() {
 
       {/* Nickname */}
       <div className="mb-4">
-        <label className={labelClass}>닉네임</label>
+        <label className={`mb-1 block ${labelClass}`}>닉네임</label>
         <input
           type="text"
           value={displayForm.usrNick}
@@ -113,9 +148,15 @@ export function ProfileEditForm() {
         />
       </div>
 
-      {/* Phone */}
+      {/* Phone with privacy toggle */}
       <div className="mb-4">
-        <label className={labelClass}>연락처</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className={labelClass}>연락처</label>
+          <PrivacyToggle
+            isPublic={displayForm.usrPhonePublic === 'Y'}
+            onToggle={(v) => handleChange('usrPhonePublic', v ? 'Y' : 'N')}
+          />
+        </div>
         <input
           type="tel"
           value={displayForm.usrPhone}
@@ -124,9 +165,15 @@ export function ProfileEditForm() {
         />
       </div>
 
-      {/* Email */}
+      {/* Email with privacy toggle */}
       <div className="mb-4">
-        <label className={labelClass}>이메일</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className={labelClass}>이메일</label>
+          <PrivacyToggle
+            isPublic={displayForm.usrEmailPublic === 'Y'}
+            onToggle={(v) => handleChange('usrEmailPublic', v ? 'Y' : 'N')}
+          />
+        </div>
         <input
           type="email"
           value={displayForm.usrEmail}
@@ -139,9 +186,18 @@ export function ProfileEditForm() {
       <hr className="my-5 border-border" />
       <h3 className="mb-3 text-base font-semibold text-text-primary font-serif">사업장 정보</h3>
 
+      {/* Biz card upload */}
+      <ImageUploadSection
+        label="명함 이미지"
+        currentUrl={profile.usrBizCard}
+        uploadUrl="/api/profile/bizcard"
+        onUploaded={() => queryClient.invalidateQueries({ queryKey: ['profile'] })}
+        shape="card"
+      />
+
       {/* Job Category */}
       <div className="mb-4">
-        <label className={labelClass}>업종</label>
+        <label className={`mb-1 block ${labelClass}`}>업종</label>
         <select
           value={displayForm.jobCat ?? ''}
           onChange={(e) => {
@@ -161,7 +217,7 @@ export function ProfileEditForm() {
 
       {/* Business Name */}
       <div className="mb-4">
-        <label className={labelClass}>사업장명</label>
+        <label className={`mb-1 block ${labelClass}`}>사업장명</label>
         <input
           type="text"
           value={displayForm.bizName}
@@ -173,7 +229,7 @@ export function ProfileEditForm() {
 
       {/* Business Description */}
       <div className="mb-4">
-        <label className={labelClass}>사업 설명</label>
+        <label className={`mb-1 block ${labelClass}`}>사업 설명</label>
         <textarea
           value={displayForm.bizDesc}
           onChange={(e) => handleChange('bizDesc', e.target.value)}
@@ -186,7 +242,7 @@ export function ProfileEditForm() {
 
       {/* Business Address */}
       <div className="mb-4">
-        <label className={labelClass}>위치</label>
+        <label className={`mb-1 block ${labelClass}`}>위치</label>
         <input
           type="text"
           value={displayForm.bizAddr}
@@ -198,7 +254,7 @@ export function ProfileEditForm() {
 
       {/* Tags */}
       <div className="mb-6">
-        <label className={labelClass}>태그 (최대 {MAX_TAGS}개)</label>
+        <label className={`mb-1 block ${labelClass}`}>태그 (최대 {MAX_TAGS}개)</label>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {displayForm.tags.map((tag) => (
             <span

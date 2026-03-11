@@ -61,6 +61,19 @@ export const api = {
       body: body ? JSON.stringify(body) : undefined,
     });
   },
+  // Content-Type is intentionally omitted so the browser sets multipart boundary automatically
+  upload<T>(url: string, formData: FormData): Promise<T> {
+    return fetch(url, { method: 'POST', credentials: 'include', body: formData }).then(
+      async (res) => {
+        if (!res.ok) {
+          let apiError: { code: string; message: string } = { code: 'UNKNOWN', message: res.statusText };
+          try { apiError = await res.json(); } catch { /* non-JSON body */ }
+          throw new ApiClientError(res.status, apiError.code, apiError.message);
+        }
+        return res.json() as Promise<T>;
+      }
+    );
+  },
 };
 
 export { ApiClientError };

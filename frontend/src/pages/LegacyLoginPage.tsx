@@ -1,6 +1,6 @@
 // LegacyLoginPage — ID/password login form for legacy accounts.
 import { useState } from 'react';
-import { Navigate, Link, useNavigate } from 'react-router-dom';
+import { Navigate, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { legacyLogin } from '../api/auth';
 import { useAuth } from '../hooks/useAuth';
 import { ApiClientError } from '../api/client';
@@ -14,6 +14,8 @@ export function LegacyLoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [searchParams] = useSearchParams();
+  const registeredSuccess = searchParams.get('registered') === 'true';
 
   if (isLoading) return null;
   if (isLoggedIn) return <Navigate to="/" replace />;
@@ -29,7 +31,11 @@ export function LegacyLoginPage() {
       navigate('/', { replace: true });
     } catch (err) {
       if (err instanceof ApiClientError) {
-        setError(err.message);
+        if (err.code === 'PENDING_APPROVAL') {
+          setError('가입 신청이 접수된 계정입니다. 관리자 승인 후 로그인 가능합니다.');
+        } else {
+          setError(err.message);
+        }
       } else {
         setError('로그인에 실패했습니다. 다시 시도해주세요.');
       }
@@ -45,6 +51,12 @@ export function LegacyLoginPage() {
     <div className="flex min-h-[60vh] items-center justify-center animate-fade-in-up">
       <div className="w-full max-w-sm">
         <h1 className="mb-6 text-center text-xl font-bold text-text-primary">기존 계정 로그인</h1>
+
+        {registeredSuccess && (
+          <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
+            가입 신청이 완료되었습니다. 승인 후 로그인하세요.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -91,13 +103,31 @@ export function LegacyLoginPage() {
           </Button>
         </form>
 
-        <div className="mt-4 text-center">
-          <Link
-            to="/login"
-            className="text-xs text-text-muted hover:text-text-secondary transition-colors"
-          >
-            카카오 로그인으로 돌아가기
-          </Link>
+        <div className="mt-4 text-center space-y-2">
+          <div>
+            <Link
+              to="/forgot-password"
+              className="text-xs text-primary hover:text-primary/80 transition-colors"
+            >
+              비밀번호를 잊으셨나요?
+            </Link>
+          </div>
+          <div>
+            <Link
+              to="/login"
+              className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+            >
+              카카오 로그인으로 돌아가기
+            </Link>
+          </div>
+          <div>
+            <Link
+              to="/register"
+              className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+            >
+              회원가입 신청
+            </Link>
+          </div>
         </div>
       </div>
     </div>

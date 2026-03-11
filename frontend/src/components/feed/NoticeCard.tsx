@@ -1,8 +1,8 @@
 // NoticeCard — Feed card with category, body-first layout, and expandable summary
 import { Pin } from 'lucide-react';
-import { cn } from '../../lib/utils';
 import { formatAbsoluteDate } from '../../utils/date';
 import type { NoticeItem } from '../../types/api';
+import { FeedCard } from './FeedCard';
 import { NoticeCardEngagement } from './NoticeCardEngagement';
 import { NoticeCardLink } from './NoticeCardLink';
 import { NoticeCardSummary } from './NoticeCardSummary';
@@ -13,40 +13,34 @@ export function NoticeCard({ item }: { item: NoticeItem }) {
   const categoryLabel = NOTICE_CATEGORY_LABELS[category] ?? '공지';
 
   return (
-    <article className="rounded-2xl bg-surface border border-border-subtle shadow-card transition-all duration-200 hover:shadow-card-hover hover:border-border-hover overflow-hidden">
-      <div className={cn('px-5 pt-5', item.thumbnailUrl ? 'pb-4' : 'pb-5')}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-1.5 text-caption text-text-placeholder">
-            <span>{categoryLabel}</span>
-            <span className="opacity-40">·</span>
-            <span>{formatAbsoluteDate(item.regDate)}</span>
-          </div>
-          {item.isPinned === 'Y' && (
-            <Pin size={13} className="text-text-placeholder flex-shrink-0" />
-          )}
-        </div>
+    <FeedCard>
+      <FeedCard.Body hasImage={!!item.thumbnailUrl}>
+        <FeedCard.Meta
+          action={
+            item.isPinned === 'Y' && (
+              <Pin size={13} className="text-text-placeholder flex-shrink-0" />
+            )
+          }
+        >
+          <span>{categoryLabel}</span>
+          <FeedCard.MetaDot />
+          <span>{formatAbsoluteDate(item.regDate)}</span>
+        </FeedCard.Meta>
 
         <NoticeCardLink seq={item.seq} className="group block mb-2">
-          <h3 className="line-clamp-2 text-body-md font-semibold font-serif text-text-primary group-hover:text-primary transition-colors duration-150">
-            {item.subject}
-          </h3>
+          <FeedCard.Title>{item.subject}</FeedCard.Title>
         </NoticeCardLink>
 
         {item.summary && <NoticeCardSummary summary={item.summary} />}
-      </div>
+      </FeedCard.Body>
 
       {item.thumbnailUrl && (
         <NoticeCardLink seq={item.seq} className="block">
-          <img
-            src={item.thumbnailUrl}
-            alt={item.subject}
-            className="w-full aspect-video object-cover"
-            loading="lazy"
-          />
+          <FeedCard.Image src={item.thumbnailUrl} alt={item.subject} />
         </NoticeCardLink>
       )}
 
-      <div className="border-t border-border-subtle mx-5" />
+      <FeedCard.Divider />
 
       <NoticeCardEngagement
         seq={item.seq}
@@ -55,6 +49,6 @@ export function NoticeCard({ item }: { item: NoticeItem }) {
         hit={item.hit ?? 0}
         userLiked={item.userLiked ?? false}
       />
-    </article>
+    </FeedCard>
   );
 }

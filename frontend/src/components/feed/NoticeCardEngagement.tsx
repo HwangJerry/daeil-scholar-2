@@ -1,7 +1,11 @@
-// NoticeCardEngagement — Like toggle and comment panel for NoticeCard
+// NoticeCardEngagement — Like toggle, comment panel, and view count for NoticeCard
 import { useState } from 'react';
+import { Eye, MessageCircle } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import { useNoticeLikeToggle } from '../../hooks/useNoticeLikeToggle';
-import { FeedEngagementBar } from './FeedEngagementBar';
+import { useAuthRedirect } from '../../hooks/useAuthRedirect';
+import { FeedCard } from './FeedCard';
+import { HeartButton } from './HeartButton';
 import { InlineFeedComments } from './InlineFeedComments';
 
 interface NoticeCardEngagementProps {
@@ -20,19 +24,37 @@ export function NoticeCardEngagement({
   userLiked,
 }: NoticeCardEngagementProps) {
   const [isCommentOpen, setIsCommentOpen] = useState(false);
-  const { liked, likeCnt: currentLikeCnt, toggle } = useNoticeLikeToggle(seq, likeCnt, userLiked);
+  const onAuthError = useAuthRedirect();
+  const { liked, likeCnt: currentLikeCnt, toggle } = useNoticeLikeToggle(seq, likeCnt, userLiked, { onAuthError });
 
   return (
     <>
-      <FeedEngagementBar
-        liked={liked}
-        onLikeToggle={toggle}
-        likeCnt={currentLikeCnt}
-        commentCnt={commentCnt}
-        hit={hit}
-        isCommentOpen={isCommentOpen}
-        onCommentToggle={() => setIsCommentOpen((prev) => !prev)}
-      />
+      <FeedCard.Footer>
+        <HeartButton liked={liked} onToggle={toggle} count={currentLikeCnt} />
+
+        <button
+          type="button"
+          onClick={() => setIsCommentOpen((prev) => !prev)}
+          aria-expanded={isCommentOpen}
+          aria-label="댓글 펼치기"
+          className={cn(
+            'inline-flex items-center gap-1 ml-4 transition-colors',
+            isCommentOpen ? 'text-primary' : 'hover:text-text-secondary',
+          )}
+        >
+          <MessageCircle
+            size={13}
+            className={cn(isCommentOpen && 'fill-current')}
+          />
+          {commentCnt}
+        </button>
+
+        <span className="inline-flex items-center gap-1 ml-auto">
+          <Eye size={13} />
+          {hit}
+        </span>
+      </FeedCard.Footer>
+
       {isCommentOpen && (
         <InlineFeedComments seq={seq} commentCnt={commentCnt} />
       )}

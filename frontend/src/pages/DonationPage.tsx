@@ -1,13 +1,16 @@
 // DonationPage — Composes donation summary, form, and bank account info
 import { Copy } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { PageMeta } from '../components/seo/PageMeta';
 import { DonationForm } from '../components/donation/DonationForm';
 import { DonationSummaryCard } from '../components/donation/DonationSummaryCard';
 import { BANK_NAME, BANK_ACCOUNT } from '../constants/donation';
 
 export function DonationPage() {
   return (
-    <div className="space-y-8 px-4 py-6 animate-fade-in-up">
+    <>
+      <PageMeta title="후원하기" canonicalPath="/donation" />
+      <div className="space-y-8 px-4 py-6 animate-fade-in-up">
       <div className="text-center space-y-2">
         <h1 className="text-xl font-bold text-text-primary font-serif">기부 안내</h1>
         <p className="text-text-tertiary">대일외고의 미래를 함께 만들어 주세요.</p>
@@ -36,5 +39,6 @@ export function DonationPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

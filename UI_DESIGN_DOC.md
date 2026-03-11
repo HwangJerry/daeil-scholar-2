@@ -230,31 +230,47 @@ const STAGGER_CLASSES = ['stagger-1', 'stagger-2', 'stagger-3', 'stagger-4', 'st
 - 통계 그리드 (전체 동문, 이번 주 가입)
 - "동문 찾기 →" 버튼
 
-### 6.4 피드 카드 (NoticeCard / AdCard)
+### 6.4 피드 카드 (FeedCard Compound Component)
 
-두 카드 유형 모두 동일한 컨테이너 스타일을 공유하여 seamless 피드를 구성한다.
+`FeedCard` compound component가 공유 디자인 토큰을 강제하며, NoticeCard와 AdCard가 orchestrator로서 비즈니스 로직을 담당한다.
 
-#### 공통 컨테이너
+#### FeedCard Sub-components
 
- `rounded-2xl bg-surface border border-border-subtle shadow-card`
- hover: `shadow-card-hover border-border-hover`
+| Sub-component | 역할 | 핵심 클래스 |
+|---|---|---|
+| `FeedCard` (Root) | `<article>` 컨테이너 | `rounded-2xl bg-surface border border-border-subtle shadow-card` + hover |
+| `FeedCard.Body` | 패딩된 콘텐츠 영역 | `px-5 pt-5`, `hasImage ? 'pb-4' : 'pb-5'` |
+| `FeedCard.Meta` | 메타 행 (children=좌측, action=우측) | `flex items-center justify-between mb-3` + `text-caption text-text-placeholder` |
+| `FeedCard.MetaDot` | 메타 구분점 | `opacity-40` · |
+| `FeedCard.Title` | 제목 `<h3>` | `line-clamp-2 text-body-md font-semibold font-serif` + `group-hover:text-primary` |
+| `FeedCard.Description` | 본문/설명 텍스트 | `text-body-sm text-text-tertiary leading-relaxed line-clamp-3` |
+| `FeedCard.Image` | `<img>` | `w-full aspect-video object-cover` |
+| `FeedCard.Divider` | 구분선 | `border-t border-border-subtle mx-5` |
+| `FeedCard.Footer` | Engagement 행 컨테이너 | `flex items-center px-5 py-2.5 text-xs text-text-placeholder` |
 
-#### NoticeCard (게시글)
+Root는 `ref` prop (impression 트래킹용)과 `className` prop (orchestrator 추가 스타일)을 지원한다.
+`FeedCard.Title`의 `group-hover:text-primary`는 orchestrator가 링크에 `group` 클래스를 붙여야 동작한다.
 
- 메타 행: `{카테고리} · {날짜}` — `text-caption text-text-placeholder` (plain text, 배지 없음)
- 제목: `text-body-md font-semibold font-serif text-text-primary`
- 본문: `text-body-sm text-text-tertiary leading-relaxed line-clamp-3`
- 이미지: full-bleed `aspect-video object-cover`
- 구분선: `border-t border-border-subtle mx-5`
- 하단 인게이지먼트: 좋아요 + 댓글 (좌측) · 조회수 (`ml-auto`, 우측)
+#### NoticeCard (게시글 orchestrator)
 
-#### AdCard (광고)
+ 메타 행: `{카테고리} · {날짜}`, action=Pin 아이콘
+ 제목: `NoticeCardLink` + `FeedCard.Title`
+ 본문: `NoticeCardSummary` (expand/collapse 로직 보유, FeedCard.Description 미사용)
+ 하단: `FeedCard.Footer` 내 좋아요 + 댓글 (좌측) · 조회수 (`ml-auto`, 우측)
 
- 메타 행: `{스폰서} · SPONSORED · {날짜}` — SPONSORED는 `uppercase tracking-wider text-2xs font-medium`
- 닫기 버튼: `X` 아이콘 (우측)
- 제목/본문: NoticeCard와 동일 스타일
- 이미지: full-bleed `aspect-video object-cover`
- CTA 버튼: `rounded-lg border border-border-hover px-4 py-2 text-body-sm font-medium` + `ArrowRight` 아이콘
+#### AdCard (광고 orchestrator)
+
+ 메타 행: `{스폰서명} · 광고 · {날짜}`, action=X(dismiss) 버튼
+   "광고" 텍스트: `text-[10px] uppercase tracking-wider font-medium`
+ 제목/이미지: 외부 URL `<a>` 링크 (모달 대신)
+ 하단: `FeedCard.Footer` 내 좋아요 + 댓글 (좌측) · CTA 텍스트 링크 (`ml-auto`, 우측)
+   CTA 링크: `text-body-sm font-medium text-text-tertiary hover:text-primary` + `ArrowRight` 아이콘(14px)
+
+#### AdDetailModal (광고 상세 모달)
+
+ 스크롤 영역: `flex-1 overflow-y-auto` (이미지, 본문, 댓글 등)
+ Sticky CTA 바: `border-t border-border-subtle p-4` (모달 최하단 고정)
+   CTA 버튼: `w-full rounded-lg bg-primary text-white py-3 font-semibold` + `ArrowRight` 아이콘
 
 ### 6.5 AlumniCard (동문 카드)
 

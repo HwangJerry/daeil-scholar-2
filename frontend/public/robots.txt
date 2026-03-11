@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Allow: /post/
+Allow: /donation
+
+Disallow: /alumni
+Disallow: /me/
+Disallow: /messages
+Disallow: /donation/result
+Disallow: /login/link
+Disallow: /login/legacy
+Disallow: /admin/
+
+Sitemap: https://daeilfoundation.or.kr/sitemap.xml

@@ -14,6 +14,9 @@ import { DonationResultPage } from './pages/DonationResultPage';
 import { MyDonationPage } from './pages/MyDonationPage';
 import { SubscriptionPage } from './pages/SubscriptionPage';
 import { MessagePage } from './pages/MessagePage';
+import { RegisterPage } from './pages/RegisterPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { ModalRoutes } from './ModalRoutes';
 
 export default function AppRoutes() {
@@ -39,6 +42,9 @@ export default function AppRoutes() {
           <Route path="login" element={<LoginPage />} />
           <Route path="login/legacy" element={<LegacyLoginPage />} />
           <Route path="login/link" element={<AccountLinkPage />} />
+          <Route path="register" element={<RegisterPage />} />
+          <Route path="forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="reset-password" element={<ResetPasswordPage />} />
           <Route path="mypage" element={<MyPage />} />
         </Route>
       </Routes>

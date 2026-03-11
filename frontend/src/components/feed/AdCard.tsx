@@ -1,26 +1,24 @@
-// AdCard — Sponsored feed card with unified layout matching NoticeCard
+// AdCard — Sponsored feed card using FeedCard compound component
 import { useState } from 'react';
-import { X, ArrowRight } from 'lucide-react';
+import { X, MessageCircle, ArrowRight } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { cn } from '../../lib/utils';
-import { formatAbsoluteDate } from '../../utils/date';
 import { api } from '../../api/client';
+import { formatAbsoluteDate } from '../../utils/date';
 import { useAdImpression } from '../../hooks/useAdImpression';
 import { useAdLikeToggle } from '../../hooks/useAdLikeToggle';
-import { AdCardActions } from './AdCardActions';
+import { FeedCard } from './FeedCard';
+import { HeartButton } from './HeartButton';
 import type { AdItem } from '../../types/api';
 
 export function AdCard({ item }: { item: AdItem }) {
   const { ref } = useAdImpression(item.maSeq);
   const [dismissed, setDismissed] = useState(false);
-  const { liked, likeCnt, toggle: toggleLike } = useAdLikeToggle(item.maSeq, item.likeCnt ?? 0);
+  const { liked, likeCnt, toggle: toggleLike } = useAdLikeToggle(item.maSeq, item.likeCnt ?? 0, item.userLiked);
   const navigate = useNavigate();
   const location = useLocation();
 
   const handleClick = () => {
-    api.post(`/api/ad/${item.maSeq}/click`).catch(() => {
-      // fire-and-forget
-    });
+    api.post(`/api/ad/${item.maSeq}/click`).catch(() => {});
   };
 
   const handleCommentOpen = () => {
@@ -32,51 +30,47 @@ export function AdCard({ item }: { item: AdItem }) {
   if (dismissed) return null;
 
   const ctaLabel = item.cta ?? '자세히 보기';
+  const sponsorLabel = item.sponsor ?? '';
 
   return (
-    <article
-      ref={ref}
-      className="rounded-2xl bg-surface border border-border-subtle shadow-card transition-all duration-200 hover:shadow-card-hover hover:border-border-hover overflow-hidden"
-    >
-      <div className={cn('px-5 pt-5', item.imageUrl ? 'pb-4' : 'pb-0')}>
-        <div className="flex items-start justify-between mb-1">
-          <a
-            href={item.maUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={handleClick}
-            className="group flex items-baseline gap-2 flex-1 min-w-0"
-          >
-            <h3 className="line-clamp-2 text-body-md font-semibold font-serif text-text-primary group-hover:text-primary transition-colors duration-150">
-              {item.maName}
-            </h3>
-            <span className="shrink-0 text-[10px] font-normal text-text-placeholder/50 tracking-wide uppercase leading-none">
-              sponsored
-            </span>
-          </a>
-          <button
-            onClick={() => setDismissed(true)}
-            className="ml-2 shrink-0 text-text-placeholder hover:text-text-secondary transition-colors p-0.5 -mr-1"
-            aria-label="광고 닫기"
-          >
-            <X size={14} />
-          </button>
-        </div>
+    <FeedCard ref={ref}>
+      <FeedCard.Body hasImage={!!item.imageUrl}>
+        <FeedCard.Meta
+          action={
+            <button
+              onClick={() => setDismissed(true)}
+              className="ml-2 shrink-0 text-text-placeholder hover:text-text-secondary transition-colors p-0.5 -mr-1"
+              aria-label="광고 닫기"
+            >
+              <X size={14} />
+            </button>
+          }
+        >
+          {sponsorLabel && <span>{sponsorLabel}</span>}
+          {sponsorLabel && <FeedCard.MetaDot />}
+          <span className="text-[10px] uppercase tracking-wider font-medium">광고</span>
+          {item.regDate && (
+            <>
+              <FeedCard.MetaDot />
+              <span>{formatAbsoluteDate(item.regDate)}</span>
+            </>
+          )}
+        </FeedCard.Meta>
 
-        <span className="text-caption text-text-placeholder mb-2 block">
-          {item.regDate ? formatAbsoluteDate(item.regDate) : ''}
-        </span>
+        <a
+          href={item.maUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleClick}
+          className="group block mb-2"
+        >
+          <FeedCard.Title>{item.maName}</FeedCard.Title>
+        </a>
 
-        {item.titleLabel && (
-          <div className="mb-1">
-            <p className="text-body-sm text-text-tertiary leading-relaxed line-clamp-3 whitespace-pre-line">
-              {item.titleLabel}
-            </p>
-          </div>
-        )}
-      </div>
+        {item.titleLabel && <FeedCard.Description>{item.titleLabel}</FeedCard.Description>}
+      </FeedCard.Body>
 
-      {item.imageUrl ? (
+      {item.imageUrl && (
         <a
           href={item.maUrl}
           target="_blank"
@@ -84,42 +78,40 @@ export function AdCard({ item }: { item: AdItem }) {
           onClick={handleClick}
           className="block"
         >
-          <img
-            src={item.imageUrl}
-            alt={item.maName}
-            className="w-full aspect-video object-cover"
-            loading="lazy"
-          />
+          <FeedCard.Image src={item.imageUrl} alt={item.maName} />
         </a>
-      ) : (
-        <div className="border-t border-border-subtle mx-5" />
       )}
 
-      <div className="px-5 py-3">
-        <a
-          href={item.maUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={handleClick}
-          className="group inline-flex items-center gap-1.5 rounded-lg border border-border-hover px-4 py-2 text-body-sm font-medium text-text-primary transition-all duration-150 hover:border-primary hover:text-primary"
+      <FeedCard.Divider />
+
+      <FeedCard.Footer>
+        <HeartButton liked={liked} onToggle={toggleLike} count={likeCnt} />
+
+        <button
+          type="button"
+          onClick={handleCommentOpen}
+          className="inline-flex items-center gap-1 ml-4 transition-colors hover:text-text-secondary"
         >
-          {ctaLabel}
-          <ArrowRight
-            size={14}
-            className="transition-transform duration-150 group-hover:translate-x-0.5"
-          />
-        </a>
-      </div>
+          <MessageCircle size={13} />
+          {item.commentCnt ?? 0}
+        </button>
 
-      <div className="border-t border-border-subtle mx-5" />
-
-      <AdCardActions
-        liked={liked}
-        likeCnt={likeCnt}
-        commentCnt={item.commentCnt ?? 0}
-        onLikeToggle={toggleLike}
-        onCommentToggle={handleCommentOpen}
-      />
-    </article>
+        {item.maUrl && (
+          <a
+            href={item.maUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={handleClick}
+            className="group inline-flex items-center gap-1 ml-auto text-body-sm font-medium text-text-tertiary hover:text-primary transition-colors"
+          >
+            {ctaLabel}
+            <ArrowRight
+              size={14}
+              className="transition-transform duration-150 group-hover:translate-x-0.5"
+            />
+          </a>
+        )}
+      </FeedCard.Footer>
+    </FeedCard>
   );
 }

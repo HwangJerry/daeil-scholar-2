@@ -25,8 +25,12 @@ export function InlineFeedComments({ seq, commentCnt }: InlineFeedCommentsProps)
         {isLoggedIn ? (
           <CommentInput seq={seq} autoFocus />
         ) : (
-          <p className="mb-3 text-xs text-text-tertiary">
-            로그인 후 댓글을 작성하세요.
+          <p className="mb-3 rounded-lg bg-background-secondary px-3 py-2.5 text-xs text-text-tertiary">
+            댓글을 작성하려면{' '}
+            <Link to="/login" className="text-primary underline-offset-2 hover:underline">
+              로그인
+            </Link>
+            이 필요합니다.
           </p>
         )}
 

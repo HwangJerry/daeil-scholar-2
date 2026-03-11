@@ -2,6 +2,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import { useUnreadMessages } from "../../hooks/useUnreadMessages";
+import { NotificationBell } from "../notification/NotificationBell";
 
 const NAV_ITEMS = [
   { label: "뉴스피드", href: "/" },
@@ -48,6 +49,7 @@ export default function TopNav() {
               </Link>
             );
           })}
+          <NotificationBell />
         </nav>
       </div>
     </header>

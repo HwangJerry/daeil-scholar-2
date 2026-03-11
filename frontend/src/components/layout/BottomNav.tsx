@@ -1,18 +1,21 @@
-// BottomNav — Mobile bottom navigation with message badge for unread count
-import { Home, Users, Heart, MessageCircle, User } from "lucide-react";
+// BottomNav — Mobile bottom navigation with message and notification badges
+import { Home, Users, Heart, MessageCircle, Bell, User } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import { useUnreadMessages } from "../../hooks/useUnreadMessages";
+import { useBadges } from "../../hooks/useBadges";
 
 export default function BottomNav() {
   const location = useLocation();
   const path = location.pathname;
   const { unreadCount } = useUnreadMessages();
+  const { unreadNotifications } = useBadges();
 
   const navItems = [
     { label: "홈", icon: Home, href: "/" },
     { label: "동문찾기", icon: Users, href: "/alumni" },
     { label: "기부", icon: Heart, href: "/donation" },
+    { label: "알림", icon: Bell, href: "/notifications", badge: unreadNotifications },
     { label: "쪽지", icon: MessageCircle, href: "/messages", badge: unreadCount },
     { label: "MY", icon: User, href: "/me" },
   ];

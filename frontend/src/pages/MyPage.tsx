@@ -1,6 +1,7 @@
 // MyPage — Profile overview with edit form toggle and account actions
 import { useState } from 'react';
 import { AuthGuard } from '../components/auth/AuthGuard';
+import { PageMeta } from '../components/seo/PageMeta';
 import { ProfileHeader } from '../components/profile/ProfileHeader';
 import { ProfileEditForm } from '../components/profile/ProfileEditForm';
 import { AccountActions } from '../components/profile/AccountActions';
@@ -33,6 +34,7 @@ function MyPageContent() {
 export function MyPage() {
   return (
     <AuthGuard>
+      <PageMeta noIndex />
       <MyPageContent />
     </AuthGuard>
   );

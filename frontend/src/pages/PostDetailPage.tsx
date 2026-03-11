@@ -1,6 +1,7 @@
 // PostDetailPage — 게시글 상세 페이지 오케스트레이터
 import { useParams, Link } from 'react-router-dom';
 import { usePostDetail } from '../hooks/usePostDetail';
+import { PageMeta } from '../components/seo/PageMeta';
 import { PostContent } from '../components/post/PostContent';
 import { PostNavigation } from '../components/post/PostNavigation';
 
@@ -38,9 +39,19 @@ export function PostDetailPage() {
   }
 
   return (
-    <article className="mx-auto max-w-2xl overflow-hidden rounded-xl bg-surface shadow-md border-transparent animate-fade-in-up">
-      <PostContent post={post} />
-      <PostNavigation currentSeq={post.seq} />
-    </article>
+    <>
+      <PageMeta
+        title={post.subject}
+        description={post.summary || undefined}
+        ogImage={post.thumbnailUrl || undefined}
+        canonicalPath={`/post/${post.seq}`}
+        ogType="article"
+        articleData={{ headline: post.subject, publishedAt: post.regDate }}
+      />
+      <article className="mx-auto max-w-2xl overflow-hidden rounded-xl bg-surface shadow-md border-transparent animate-fade-in-up">
+        <PostContent post={post} />
+        <PostNavigation currentSeq={post.seq} />
+      </article>
+    </>
   );
 }

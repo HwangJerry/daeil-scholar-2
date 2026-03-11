@@ -1,10 +1,19 @@
 // useNoticeLikeToggle — Local optimistic like toggle for notice cards in feed list
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { api, ApiClientError } from '../api/client';
 import type { LikeToggleResponse } from '../types/api';
 
-export function useNoticeLikeToggle(seq: number, initialLikeCnt: number, initialLiked: boolean) {
+interface UseNoticeLikeToggleOptions {
+  onAuthError?: () => void;
+}
+
+export function useNoticeLikeToggle(
+  seq: number,
+  initialLikeCnt: number,
+  initialLiked: boolean,
+  options?: UseNoticeLikeToggleOptions,
+) {
   const queryClient = useQueryClient();
   const [liked, setLiked] = useState(initialLiked);
   const [likeCnt, setLikeCnt] = useState(initialLikeCnt);
@@ -44,6 +53,9 @@ export function useNoticeLikeToggle(seq: number, initialLikeCnt: number, initial
       if (context) {
         setLiked(context.prevLiked);
         setLikeCnt(context.prevLikeCnt);
+      }
+      if (_err instanceof ApiClientError && _err.status === 401 && options?.onAuthError) {
+        options.onAuthError();
       }
     },
 

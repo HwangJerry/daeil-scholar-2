@@ -1,4 +1,5 @@
 // FeedPage — Main feed with 2-column desktop layout and infinite-scroll notice list
+import { PageMeta } from '../components/seo/PageMeta';
 import { HeroSection } from '../components/feed/HeroSection';
 import { DonationBanner } from '../components/feed/DonationBanner';
 import { FeedList } from '../components/feed/FeedList';
@@ -6,7 +7,9 @@ import { NetworkWidget } from '../components/feed/NetworkWidget';
 
 export function FeedPage() {
   return (
-    <div className="md:grid md:grid-cols-[1fr_360px] md:gap-6 px-4 py-5 md:px-0 md:py-0">
+    <>
+      <PageMeta canonicalPath="/" />
+      <div className="md:grid md:grid-cols-[1fr_360px] md:gap-6 px-4 py-5 md:px-0 md:py-0">
       {/* Left: Main content */}
       <div className="space-y-4 md:space-y-5 md:py-5">
         <HeroSection />
@@ -25,5 +28,6 @@ export function FeedPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

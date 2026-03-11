@@ -1,11 +1,15 @@
 // useAdLikeToggle — Local optimistic like toggle for ad cards
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { api, ApiClientError } from '../api/client';
 import type { LikeToggleResponse } from '../types/api';
 
-export function useAdLikeToggle(maSeq: number, initialLikeCnt: number) {
-  const [liked, setLiked] = useState(false);
+interface UseAdLikeToggleOptions {
+  onAuthError?: () => void;
+}
+
+export function useAdLikeToggle(maSeq: number, initialLikeCnt: number, initialLiked: boolean, options?: UseAdLikeToggleOptions) {
+  const [liked, setLiked] = useState(initialLiked);
   const [likeCnt, setLikeCnt] = useState(initialLikeCnt);
 
   const mutation = useMutation({
@@ -28,6 +32,9 @@ export function useAdLikeToggle(maSeq: number, initialLikeCnt: number) {
       if (context) {
         setLiked(context.prevLiked);
         setLikeCnt(context.prevLikeCnt);
+      }
+      if (_err instanceof ApiClientError && _err.status === 401 && options?.onAuthError) {
+        options.onAuthError();
       }
     },
   });

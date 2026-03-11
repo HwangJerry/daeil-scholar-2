@@ -41,6 +41,7 @@ export interface AdItem {
   likeCnt: number;
   commentCnt: number;
   hit: number;
+  userLiked: boolean;
 }
 
 export interface AdComment {
@@ -197,6 +198,9 @@ export interface UserProfile {
   tags: string[];
   fmDept: string;
   regDate: string;
+  usrPhonePublic: 'Y' | 'N';
+  usrEmailPublic: 'Y' | 'N';
+  usrBizCard: string | null;
 }
 
 export interface ProfileUpdateRequest {
@@ -208,14 +212,24 @@ export interface ProfileUpdateRequest {
   bizAddr: string;
   jobCat: number | null;
   tags: string[];
+  usrPhonePublic: 'Y' | 'N';
+  usrEmailPublic: 'Y' | 'N';
 }
 
-export interface KakaoLinkRequest {
+export interface SocialLinkRequest {
   token: string;
   name: string;
   phone: string;
   fn: string;
+  nick?: string;
+  dept?: string;
+  jobCat?: number | null;
+  bizName?: string;
+  bizDesc?: string;
+  bizAddr?: string;
 }
+
+export type KakaoLinkRequest = SocialLinkRequest;
 
 export interface LoginRequest {
   usrId: string;
@@ -249,4 +263,29 @@ export interface MessageListResponse {
   page: number;
   size: number;
   totalPages: number;
+}
+
+export interface NotificationItem {
+  anSeq: number;
+  usrSeq: number;
+  anType: string;
+  anTitle: string;
+  anBody: string;
+  anRefSeq: number | null;
+  readYn: string;
+  regDate: string;
+}
+
+export interface NotificationListResponse {
+  items: NotificationItem[];
+  totalCount: number;
+  unreadCount: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export interface BadgeResponse {
+  unreadMessages: number;
+  unreadNotifications: number;
 }
