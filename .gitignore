@@ -3,10 +3,11 @@ dist/
 *.log
 tmp/
 
-# Env / secrets
-**/.env
-.env.local
+# Env / secrets (모든 .env 변형 커버)
+.env
+.env.*
 .env.*.local
+!.env.example
 
 # OS
 .DS_Store
