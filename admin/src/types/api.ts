@@ -122,9 +122,9 @@ export interface DonationConfig {
 }
 
 export interface DonationConfigUpdateRequest {
-  dcGoal: number;
-  dcManualAdj: number;
-  dcNote: string;
+  goal: number;
+  manualAdj: number;
+  note: string;
 }
 
 export interface DonationSnapshot {
@@ -194,6 +194,7 @@ export interface DashboardStats {
   totalMembers: number;
   kakaoLinkedMembers: number;
   recentLoginCount: number;
+  pendingApprovals: number;
   totalNotices: number;
   donation: DonationSummary;
   adStats: DashboardAdStats;

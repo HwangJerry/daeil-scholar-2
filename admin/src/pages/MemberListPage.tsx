@@ -1,12 +1,15 @@
-// MemberListPage — searchable, paginated member table with sort, error handling, and a11y
+// MemberListPage — searchable, paginated member table with stats cards, sort, error handling, and a11y
 import { Link } from 'react-router-dom';
+import { Users, Link2, Clock, UserPlus } from 'lucide-react';
 import { Input } from '../components/ui/Input.tsx';
 import { Select } from '../components/ui/Select.tsx';
 import { Pagination } from '../components/ui/Pagination.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
 import { ErrorState } from '../components/ui/ErrorState.tsx';
 import { SortableHeader } from '../components/ui/SortableHeader.tsx';
+import { StatsCard } from '../components/ui/StatsCard.tsx';
 import { useMemberList } from '../hooks/useMemberList.ts';
+import { useMemberStats } from '../hooks/useMemberStats.ts';
 import { useTableSort } from '../hooks/useTableSort.ts';
 import type { AdminMemberListItem } from '../types/api.ts';
 

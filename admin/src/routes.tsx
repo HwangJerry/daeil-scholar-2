@@ -10,6 +10,7 @@ import { AdEditPage } from './pages/AdEditPage.tsx';
 import { DonationMonitorPage } from './pages/DonationMonitorPage.tsx';
 import { MemberListPage } from './pages/MemberListPage.tsx';
 import { MemberDetailPage } from './pages/MemberDetailPage.tsx';
+import { PendingMembersPage } from './pages/PendingMembersPage.tsx';
 import { AdminLoginPage } from './pages/AdminLoginPage.tsx';
 
 export function AppRoutes() {
@@ -32,6 +33,7 @@ export function AppRoutes() {
         <Route path="ad/:maSeq/edit" element={<AdEditPage />} />
         <Route path="donation" element={<DonationMonitorPage />} />
         <Route path="member" element={<MemberListPage />} />
+        <Route path="member/pending" element={<PendingMembersPage />} />
         <Route path="member/:seq" element={<MemberDetailPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -9,6 +9,7 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 3001,
     strictPort: true,
+    allowedHosts: ['client-macbook.tail04b57d.ts.net'],
     proxy: {
       '/api': 'http://localhost:8080',
       '/files': 'http://localhost:8080',
