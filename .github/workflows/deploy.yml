@@ -1,0 +1,73 @@
+name: Deploy to K8s Test
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/hwangjerry/daeil-backend
+  NGINX_IMAGE: ghcr.io/hwangjerry/daeil-nginx
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ env.BACKEND_IMAGE }}:latest
+
+      - name: Build & push nginx image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./nginx/Dockerfile
+          push: true
+          tags: |
+            ${{ env.NGINX_IMAGE }}:${{ github.sha }}
+            ${{ env.NGINX_IMAGE }}:latest
+
+      - name: Apply K8s manifests
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/backend/pvc.yaml
+          kubectl apply -f k8s/backend/service.yaml
+          kubectl apply -f k8s/frontend/configmap.yaml
+          kubectl apply -f k8s/frontend/service.yaml
+          kubectl apply -f k8s/tailscale/ingress.yaml
+
+      - name: Deploy backend
+        run: |
+          kubectl apply -f k8s/backend/deployment.yaml -n daeil
+          kubectl set image deployment/backend \
+            backend=${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
+            -n daeil
+
+      - name: Deploy frontend
+        run: |
+          kubectl apply -f k8s/frontend/deployment.yaml -n daeil
+          kubectl set image deployment/frontend \
+            frontend=${{ env.NGINX_IMAGE }}:${{ github.sha }} \
+            -n daeil
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/backend -n daeil --timeout=120s
+          kubectl rollout status deployment/frontend -n daeil --timeout=120s
