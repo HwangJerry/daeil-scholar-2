@@ -31,14 +31,6 @@ type CreateOrderResponse struct {
 	PaymentParams *PaymentParams `json:"paymentParams"`
 }
 
-// OrderDetail is the response for GET /api/donation/orders/{seq}.
-type OrderDetail struct {
-	OrderSeq int    `json:"orderSeq" db:"OrderSeq"`
-	Amount   int    `json:"amount" db:"Amount"`
-	Status   string `json:"status" db:"Status"`
-	PaidAt   string `json:"paidAt" db:"PaidAt"`
-}
-
 // ApproveRequest holds parameters for calling the ep_cli binary.
 type ApproveRequest struct {
 	OrderNo     string

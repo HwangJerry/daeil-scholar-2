@@ -14,7 +14,6 @@ import (
 	mw "github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/service"
-	"github.com/go-chi/chi/v5"
 )
 
 //go:embed templates/easypay_relay.html
@@ -115,25 +114,4 @@ func (h *PaymentHandler) EasyPayReturn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/donation/result?status=success&order=%s", orderNo), http.StatusFound)
-}
-
-func (h *PaymentHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
-	user := mw.GetAuthUser(r.Context())
-	if user == nil {
-		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
-		return
-	}
-
-	seq := parseIntParam(chi.URLParam(r, "seq"))
-	if seq == 0 {
-		respondError(w, http.StatusBadRequest, "INVALID_PARAM", "주문 번호가 필요합니다")
-		return
-	}
-
-	order, err := h.donateService.GetOrder(seq, user.USRSeq)
-	if err != nil {
-		respondError(w, http.StatusNotFound, "NOT_FOUND", "주문을 찾을 수 없습니다")
-		return
-	}
-	respondJSON(w, http.StatusOK, order)
 }

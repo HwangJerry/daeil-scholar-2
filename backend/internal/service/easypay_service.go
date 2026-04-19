@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -25,8 +26,8 @@ func NewEasyPayService(cfg config.EasyPayConfig) *EasyPayService {
 
 func (s *EasyPayService) Approve(req model.ApproveRequest, gate string) (*model.ApproveResult, error) {
 	binPath := filepath.Join(s.cfg.BinBase, gate, "bin", "linux_64", "ep_cli")
-	certFile := filepath.Join(s.cfg.BinBase, gate, "mobile", "cert", "pg_cert.pem")
-	logDir := filepath.Join(s.cfg.BinBase, gate, "mobile", "log")
+	certFile := filepath.Join(s.cfg.BinBase, gate, "cert", "pg_cert.pem")
+	logDir := filepath.Join(s.cfg.BinBase, gate, "log")
 
 	mallID := s.cfg.ImmediatelyMallID
 	if gate == "profile" {
@@ -46,7 +47,12 @@ func (s *EasyPayService) Approve(req model.ApproveRequest, gate string) (*model.
 	cmd := exec.CommandContext(ctx, binPath, "-h", args)
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("ep_cli execution failed: %w", err)
+		var stderr string
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			stderr = string(exitErr.Stderr)
+		}
+		return nil, fmt.Errorf("ep_cli execution failed: %w (stderr: %s)", err, stderr)
 	}
 
 	// ep_cli outputs Korean text fields in EUC-KR; decode to UTF-8

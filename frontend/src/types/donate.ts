@@ -26,13 +26,6 @@ export interface CreateOrderResponse {
   paymentParams: PaymentParams | null;
 }
 
-export interface OrderDetail {
-  orderSeq: number;
-  amount: number;
-  status: 'Y' | 'N';
-  paidAt: string;
-}
-
 export interface MyDonationItem {
   orderSeq: number;
   amount: number;

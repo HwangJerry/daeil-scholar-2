@@ -2,9 +2,19 @@
 set -euo pipefail
 
 # Deploy script — cross-compile, upload, and restart services
-# Usage: ./deploy.sh [user@host]
+# Usage: ./deploy.sh [user@host] [ssh_port]
+#   ssh_port is optional; omit to use ~/.ssh/config or the default 22.
 
-TARGET=${1:-"root@211.169.249.240"}
+TARGET=${1:-"daeil-prod"}
+SSH_PORT=${2:-}
+
+if [[ -n "${SSH_PORT}" ]]; then
+  SSH_OPTS=(-p "${SSH_PORT}")
+  SCP_OPTS=(-P "${SSH_PORT}")
+else
+  SSH_OPTS=()
+  SCP_OPTS=()
+fi
 
 # =============================================================================
 # DATABASE MIGRATIONS — MANUAL STEP REQUIRED
@@ -38,29 +48,31 @@ cd ..
 
 echo "=== Building User SPA ==="
 cd frontend
+npm ci
 npm run build
 cd ..
 
 echo "=== Building Admin SPA ==="
 cd admin
+npm ci
 npm run build
 cd ..
 
 echo "=== Uploading Go binary ==="
-scp dist/server "${TARGET}:/app/backend/server.new"
-scp dist/backfill "${TARGET}:/app/backend/backfill"
-ssh "${TARGET}" 'mv /app/backend/server.new /app/backend/server'
+scp "${SCP_OPTS[@]}" dist/server "${TARGET}:/app/backend/server.new"
+scp "${SCP_OPTS[@]}" dist/backfill "${TARGET}:/app/backend/backfill"
+ssh "${SSH_OPTS[@]}" "${TARGET}" 'mv /app/backend/server.new /app/backend/server'
 
 echo "=== Uploading User SPA ==="
-rsync -avz --delete frontend/dist/ "${TARGET}:/var/www/app/"
+rsync -avz --delete -e "ssh ${SSH_OPTS[*]}" frontend/dist/ "${TARGET}:/var/www/app/"
 
 echo "=== Uploading Admin SPA ==="
-rsync -avz --delete admin/dist/ "${TARGET}:/var/www/admin/"
+rsync -avz --delete -e "ssh ${SSH_OPTS[*]}" admin/dist/ "${TARGET}:/var/www/admin/"
 
 echo "=== Restarting backend ==="
-ssh "${TARGET}" 'sudo systemctl restart alumni-backend'
+ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl restart alumni-backend'
 
-echo "=== Reloading Apache ==="
-ssh "${TARGET}" 'sudo systemctl reload httpd'
+echo "=== Reloading Apache httpd ==="
+ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl reload httpd'
 
 echo "=== Deploy complete ==="

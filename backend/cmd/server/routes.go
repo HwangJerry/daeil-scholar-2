@@ -124,7 +124,6 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Post("/api/profile/bizcard", h.profileUpload.UploadBizCard)
 		r.Post("/api/profile/password", h.passwordChange.ChangePassword)
 		r.Post("/api/donation/orders", h.payment.CreateOrder)
-		r.Get("/api/donation/orders/{seq}", h.payment.GetOrder)
 		r.Get("/api/donation/my", h.myDonation.GetMyDonations)
 		r.Post("/api/feed/{seq}/like", h.like.ToggleLike)
 		r.Post("/api/feed/{seq}/comments", h.comment.CreateComment)

@@ -86,20 +86,6 @@ func (r *DonateRepository) UpdateOrderPaymentTx(tx *sqlx.Tx, orderSeq int, amoun
 	return result.RowsAffected()
 }
 
-func (r *DonateRepository) GetOrder(orderSeq int, usrSeq int) (*model.OrderDetail, error) {
-	var order model.OrderDetail
-	err := r.DB.Get(&order, `
-		SELECT O_SEQ AS OrderSeq, O_PRICE AS Amount, O_PAYMENT AS Status,
-		       IFNULL(DATE_FORMAT(O_PAYDATE, '%Y-%m-%d %H:%i:%s'), '') AS PaidAt
-		FROM WEO_ORDER
-		WHERE O_SEQ = ? AND USR_SEQ = ? AND O_TYPE = 'A'
-	`, orderSeq, usrSeq)
-	if err != nil {
-		return nil, err
-	}
-	return &order, nil
-}
-
 func (r *DonateRepository) GetOrderGate(orderSeq int) (string, error) {
 	var gate string
 	err := r.DB.Get(&gate, `SELECT O_GATE FROM WEO_ORDER WHERE O_SEQ = ?`, orderSeq)

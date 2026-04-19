@@ -199,10 +199,6 @@ func (s *DonateService) ConfirmPayment(orderNo string, encData string, sessionKe
 	return nil
 }
 
-func (s *DonateService) GetOrder(orderSeq int, usrSeq int) (*model.OrderDetail, error) {
-	return s.repo.GetOrder(orderSeq, usrSeq)
-}
-
 func formatComma(n int) string {
 	s := strconv.Itoa(n)
 	if len(s) <= 3 {

@@ -68,7 +68,7 @@ nginx -c "$(pwd)/nginx/dev.conf" -p "$(pwd)/nginx/"
 ./deploy.sh [user@host]   # Cross-compile Go (linux/amd64), build SPAs, SCP to Gabia, restart
 ```
 
-Steps: `GOOS=linux GOARCH=amd64 go build` → `npm run build` (both SPAs) → `scp` binaries + dist → `systemctl restart alumni-backend` → `systemctl reload nginx`.
+Steps: `GOOS=linux GOARCH=amd64 go build` → `npm run build` (both SPAs) → `scp` binaries + dist → `systemctl restart alumni-backend` → `systemctl reload httpd` (production web server is Apache httpd, not Nginx — `nginx/` configs are dev-only).
 
 ## Architecture
 
@@ -90,7 +90,7 @@ backend/            # Go API server
     middleware/     # Auth, CORS, CSRF, AdminAuth, Logger, BodyLimit
     job/            # Background jobs (donation snapshot, session cleanup)
   migrations/       # SQL migration files (numbered, manual apply)
-nginx/              # Dev + prod Nginx configs
+nginx/              # Dev-only Nginx proxy config (production serves via Apache httpd)
 deploy/             # systemd service + logrotate configs
 ```
 
@@ -110,7 +110,7 @@ Handler → Service → Repository
 
 ### Infrastructure
 
-Single Gabia cloud server (1-core, 1GB RAM, 50GB HDD). Nginx reverse proxy → Go `:8080`. MariaDB `:3306` on the same box. Very resource-constrained: `GOMEMLIMIT=80MiB`, `GOMAXPROCS=1`.
+Single Gabia cloud server (1-core, 1GB RAM, 50GB HDD). **Apache httpd** reverse proxy → Go `:8080` (CentOS-based server inherited from PHP-era infra; Nginx is dev-only). MariaDB `:3306` on the same box. Very resource-constrained: `GOMEMLIMIT=80MiB`, `GOMAXPROCS=1`.
 
 ## MariaDB 10.1.38 Constraints
 
