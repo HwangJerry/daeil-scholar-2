@@ -99,6 +99,11 @@ func (r *AuthRepository) InsertSocialLink(usrSeq int, gate string, socialID stri
 	return err
 }
 
+func (r *AuthRepository) DeleteLegacySessionsByUser(usrSeq int) error {
+	_, err := r.DB.Exec(`DELETE FROM WEO_MEMBER_LOG WHERE USR_SEQ = ?`, usrSeq)
+	return err
+}
+
 func (r *AuthRepository) InsertLoginLog(usrSeq int, sessionID string, ipAddr string, userAgent string) error {
 	_, err := r.DB.Exec(`
 		INSERT INTO WEO_MEMBER_LOG
@@ -122,7 +127,7 @@ func (r *AuthRepository) FindMemberByLogin(usrID string, hashedPwd string) (*mod
 	err := r.DB.Get(&user, `
 		SELECT USR_SEQ, USR_ID, USR_NAME, USR_STATUS, USR_PHONE, USR_FN, USR_EMAIL, USR_NICK, USR_PHOTO
 		FROM WEO_MEMBER
-		WHERE USR_ID = ? AND USR_PWD = ? AND USR_STATUS >= 'CCC'
+		WHERE USR_ID = ? AND USR_PWD = ? AND USR_STATUS IN ('CCC', 'ZZZ')
 		LIMIT 1
 	`, usrID, hashedPwd)
 	if err != nil {
@@ -151,12 +156,21 @@ func (r *AuthRepository) FindMemberByPhone(phone string) (*model.User, error) {
 	return &user, nil
 }
 
-func (r *AuthRepository) InsertMember(usrID, name, phone, fn, email, nick, dept string, jobCat *int, bizName, bizDesc, bizAddr string) (int, error) {
+func (r *AuthRepository) InsertMember(usrID, name, phone, fn, email, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) (int, error) {
+	phonePublic := usrPhonePublic
+	if phonePublic == "" {
+		phonePublic = "Y"
+	}
+	emailPublic := usrEmailPublic
+	if emailPublic == "" {
+		emailPublic = "Y"
+	}
 	result, err := r.DB.Exec(`
 		INSERT INTO WEO_MEMBER (USR_ID, USR_NAME, USR_PHONE, USR_FN, USR_EMAIL, USR_STATUS, USR_PWD, REG_DATE, TOTAL_LOG_CNT,
-			USR_NICK, USR_DEPT, USR_JOB_CAT, USR_BIZ_NAME, USR_BIZ_DESC, USR_BIZ_ADDR)
-		VALUES (?, ?, ?, ?, ?, 'BBB', '', NOW(), 0, ?, ?, ?, ?, ?, ?)
-	`, usrID, name, phone, fn, email, nick, dept, jobCat, bizName, bizDesc, bizAddr)
+			USR_DEPT, USR_JOB_CAT, USR_BIZ_NAME, USR_BIZ_DESC, USR_BIZ_ADDR,
+			USR_POSITION, USR_PHONE_PUBLIC, USR_EMAIL_PUBLIC)
+		VALUES (?, ?, ?, ?, ?, 'BBB', '', NOW(), 0, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, usrID, name, phone, fn, email, fmDept, jobCat, bizName, bizDesc, bizAddr, position, phonePublic, emailPublic)
 	if err != nil {
 		return 0, err
 	}
@@ -196,13 +210,29 @@ func (r *AuthRepository) CheckPhoneExists(phone string) (bool, error) {
 	return count > 0, err
 }
 
+func (r *AuthRepository) CheckEmailExists(email string) (bool, error) {
+	var count int
+	err := r.DB.Get(&count, `SELECT COUNT(*) FROM WEO_MEMBER WHERE USR_EMAIL = ?`, email)
+	return count > 0, err
+}
+
 func (r *AuthRepository) InsertMemberWithPwd(req model.RegisterRequest, hashedPwd string) (int, error) {
+	phonePublic := req.USRPhonePublic
+	if phonePublic == "" {
+		phonePublic = "Y"
+	}
+	emailPublic := req.USREmailPublic
+	if emailPublic == "" {
+		emailPublic = "Y"
+	}
 	result, err := r.DB.Exec(`
 		INSERT INTO WEO_MEMBER (USR_ID, USR_NAME, USR_PHONE, USR_FN, USR_EMAIL, USR_STATUS, USR_PWD, REG_DATE, TOTAL_LOG_CNT,
-			USR_NICK, USR_DEPT, USR_JOB_CAT, USR_BIZ_NAME, USR_BIZ_DESC, USR_BIZ_ADDR)
-		VALUES (?, ?, ?, ?, ?, 'BBB', ?, NOW(), 0, ?, ?, ?, ?, ?, ?)
+			USR_NICK, USR_DEPT, USR_JOB_CAT, USR_BIZ_NAME, USR_BIZ_DESC, USR_BIZ_ADDR,
+			USR_POSITION, USR_PHONE_PUBLIC, USR_EMAIL_PUBLIC)
+		VALUES (?, ?, ?, ?, ?, 'BBB', ?, NOW(), 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, req.UsrID, req.Name, req.Phone, req.FN, req.Email, hashedPwd,
-		req.Nick, req.Dept, req.JobCat, req.BizName, req.BizDesc, req.BizAddr)
+		req.Nick, req.FmDept, req.JobCat, req.BizName, req.BizDesc, req.BizAddr,
+		req.Position, phonePublic, emailPublic)
 	if err != nil {
 		return 0, err
 	}

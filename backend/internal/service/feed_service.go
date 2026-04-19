@@ -78,10 +78,15 @@ func (s *FeedService) GetFeed(cursor int, size int, excludeAdIDs []int, excludeS
 }
 
 // getActiveAds returns the cached full ad list, filtering excludeIDs in-memory.
+// When all ads have been excluded (cycle exhausted), returns all ads to restart the cycle.
 func (s *FeedService) getActiveAds(excludeIDs []int) ([]model.AdItem, error) {
 	if v, ok := s.cache.Get(feedAdsCacheKey); ok {
 		if ads, ok := v.([]model.AdItem); ok {
-			return filterAds(ads, excludeIDs), nil
+			filtered := filterAds(ads, excludeIDs)
+			if len(filtered) == 0 && len(ads) > 0 {
+				return ads, nil // cycle reset: all ads shown, restart
+			}
+			return filtered, nil
 		}
 		s.cache.Delete(feedAdsCacheKey)
 	}
@@ -90,7 +95,11 @@ func (s *FeedService) getActiveAds(excludeIDs []int) ([]model.AdItem, error) {
 		return nil, err
 	}
 	s.cache.Set(feedAdsCacheKey, all, feedAdsCacheTTL)
-	return filterAds(all, excludeIDs), nil
+	filtered := filterAds(all, excludeIDs)
+	if len(filtered) == 0 && len(all) > 0 {
+		return all, nil // cycle reset
+	}
+	return filtered, nil
 }
 
 // filterAds returns ads excluding those whose MASeq is in excludeIDs.

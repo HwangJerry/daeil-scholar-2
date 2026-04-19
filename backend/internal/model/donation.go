@@ -8,6 +8,7 @@ type DonationSnapshot struct {
 	ManualAdj int64  `db:"DS_MANUAL_ADJ" json:"dsManualAdj"`
 	DonorCnt  int    `db:"DS_DONOR_CNT"  json:"dsDonorCnt"`
 	Goal      int64  `db:"DS_GOAL"       json:"dsGoal"`
+	Overwrite string `db:"DS_OVERWRITE"  json:"dsOverwrite"`
 	RegDate   string `db:"REG_DATE"      json:"regDate"`
 }
 
@@ -17,6 +18,7 @@ type DonationConfig struct {
 	Goal      int64  `db:"DC_GOAL"       json:"dcGoal"`
 	ManualAdj int64  `db:"DC_MANUAL_ADJ" json:"dcManualAdj"`
 	Note      string `db:"DC_NOTE"       json:"dcNote"`
+	Overwrite string `db:"DC_OVERWRITE"  json:"dcOverwrite"`
 	IsActive  string `db:"IS_ACTIVE"     json:"isActive"`
 	RegDate   string `db:"REG_DATE"      json:"regDate"`
 	RegOper   int    `db:"REG_OPER"      json:"regOper"`

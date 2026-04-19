@@ -39,7 +39,6 @@ describe('useBadges', () => {
         http.get(`${BASE}/api/badges`, () => {
           return HttpResponse.json({
             unreadMessages: 3,
-            unreadNotifications: 7,
           })
         }),
       )
@@ -48,13 +47,11 @@ describe('useBadges', () => {
         wrapper: createWrapper(),
       })
 
-      // Initially returns defaults (0, 0) before the query resolves
+      // Initially returns default (0) before the query resolves
       expect(result.current.unreadMessages).toBe(0)
-      expect(result.current.unreadNotifications).toBe(0)
 
       await waitFor(() => {
         expect(result.current.unreadMessages).toBe(3)
-        expect(result.current.unreadNotifications).toBe(7)
       })
     })
   })
@@ -68,7 +65,7 @@ describe('useBadges', () => {
       server.use(
         http.get(`${BASE}/api/badges`, () => {
           apiCalled = true
-          return HttpResponse.json({ unreadMessages: 5, unreadNotifications: 5 })
+          return HttpResponse.json({ unreadMessages: 5 })
         }),
       )
 
@@ -80,7 +77,6 @@ describe('useBadges', () => {
       await new Promise((r) => setTimeout(r, 50))
 
       expect(result.current.unreadMessages).toBe(0)
-      expect(result.current.unreadNotifications).toBe(0)
       expect(apiCalled).toBe(false)
     })
   })
@@ -107,7 +103,6 @@ describe('useBadges', () => {
       // Wait for the query to settle (it will error, hook returns defaults)
       await waitFor(() => {
         expect(result.current.unreadMessages).toBe(0)
-        expect(result.current.unreadNotifications).toBe(0)
       })
     })
   })

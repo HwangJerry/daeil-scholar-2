@@ -18,11 +18,10 @@ func NewAlumniHandler(service *service.AlumniService) *AlumniHandler {
 
 func (h *AlumniHandler) Search(w http.ResponseWriter, r *http.Request) {
 	params := model.AlumniSearchParams{
-		FN:       r.URL.Query().Get("fn"),
-		Dept:     r.URL.Query().Get("dept"),
-		Name:     r.URL.Query().Get("name"),
-		Company:  r.URL.Query().Get("company"),
-		Position: r.URL.Query().Get("position"),
+		FN:      r.URL.Query().Get("fn"),
+		Dept:    r.URL.Query().Get("dept"),
+		Name:    r.URL.Query().Get("name"),
+		Company: r.URL.Query().Get("company"),
 	}
 	if page, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil {
 		params.Page = page

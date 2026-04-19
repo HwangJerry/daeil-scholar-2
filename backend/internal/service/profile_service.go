@@ -27,3 +27,4 @@ func (s *ProfileService) UpdateProfile(usrSeq int, req model.ProfileUpdateReques
 	}
 	return nil
 }
+

@@ -12,16 +12,20 @@ import (
 )
 
 type socialLinkRequest struct {
-	Token   string `json:"token"`
-	Name    string `json:"name"`
-	Phone   string `json:"phone"`
-	FN      string `json:"fn"`
-	Nick    string `json:"nick"`
-	Dept    string `json:"dept"`
-	JobCat  *int   `json:"jobCat"`
-	BizName string `json:"bizName"`
-	BizDesc string `json:"bizDesc"`
-	BizAddr string `json:"bizAddr"`
+	Token          string   `json:"token"`
+	Name           string   `json:"name"`
+	Phone          string   `json:"phone"`
+	Email          string   `json:"email"`
+	FN             string   `json:"fn"`
+	FmDept         string   `json:"fmDept"`
+	JobCat         *int     `json:"jobCat"`
+	BizName        string   `json:"bizName"`
+	BizDesc        string   `json:"bizDesc"`
+	BizAddr        string   `json:"bizAddr"`
+	Position       string   `json:"position"`
+	Tags           []string `json:"tags"`
+	USRPhonePublic string   `json:"usrPhonePublic"`
+	USREmailPublic string   `json:"usrEmailPublic"`
 }
 
 // SocialLink handles the account linking HTTP flow for all social providers.
@@ -48,20 +52,28 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 	}
 	h.cache.Delete("social_link:" + req.Token)
 
-	user, err := h.service.LinkSocialAccount(service.SocialLinkParams{
-		Provider: linkData.Provider,
-		SocialID: linkData.SocialID,
-		Email:    linkData.Email,
-		Name:     req.Name,
-		Phone:    req.Phone,
-		FN:       req.FN,
-		Nick:     req.Nick,
-		Dept:     req.Dept,
-		JobCat:   req.JobCat,
-		BizName:  req.BizName,
-		BizDesc:  req.BizDesc,
-		BizAddr:  req.BizAddr,
+	user, isNew, err := h.service.LinkSocialAccount(service.SocialLinkParams{
+		Provider:       linkData.Provider,
+		SocialID:       linkData.SocialID,
+		Email:          req.Email,
+		Name:           req.Name,
+		Phone:          req.Phone,
+		FN:             req.FN,
+		FmDept:         req.FmDept,
+		JobCat:         req.JobCat,
+		BizName:        req.BizName,
+		BizDesc:        req.BizDesc,
+		BizAddr:        req.BizAddr,
+		Position:       req.Position,
+		Tags:           req.Tags,
+		USRPhonePublic: req.USRPhonePublic,
+		USREmailPublic: req.USREmailPublic,
 	}, h.memberSvc)
+	if isNew && len(req.Tags) > 0 {
+		if saveErr := h.registerSvc.SaveInitialTags(user.USRSeq, req.Tags); saveErr != nil {
+			log.Warn().Err(saveErr).Int("usrSeq", user.USRSeq).Msg("social link: failed to save initial tags")
+		}
+	}
 	if err != nil {
 		log.Error().Err(err).Str("provider", linkData.Provider).Str("socialID", linkData.SocialID).Msg("social link failed")
 		if errors.Is(err, service.ErrNameMismatch) {

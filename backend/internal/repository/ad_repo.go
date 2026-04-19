@@ -31,6 +31,8 @@ func (r *AdRepository) GetActiveAds(excludeIDs []int) ([]model.AdItem, error) {
 		       (SELECT COUNT(*) FROM WEO_AD_LOG     WHERE MA_SEQ = a.MA_SEQ AND AL_TYPE='VIEW') AS hit
 		FROM MAIN_AD a
 		WHERE a.OPEN_YN = 'Y'
+		AND (a.AD_START_DATE IS NULL OR a.AD_START_DATE <= UTC_TIMESTAMP())
+		AND (a.AD_END_DATE IS NULL OR a.AD_END_DATE >= UTC_TIMESTAMP())
 	`)
 	if len(excludeIDs) > 0 {
 		placeholders := make([]string, len(excludeIDs))

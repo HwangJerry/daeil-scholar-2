@@ -20,8 +20,7 @@ var allowedMemberStatuses = map[string]bool{
 
 // AdminMemberService handles member management operations for administrators.
 type AdminMemberService struct {
-	repo              *repository.AdminMemberRepository
-	approvalNotifier  *MemberApprovalNotifier
+	repo *repository.AdminMemberRepository
 }
 
 // NewAdminMemberService creates an AdminMemberService.
@@ -29,21 +28,15 @@ func NewAdminMemberService(repo *repository.AdminMemberRepository) *AdminMemberS
 	return &AdminMemberService{repo: repo}
 }
 
-// SetApprovalNotifier injects the notification dependency after construction
-// to avoid circular initialization in wire.go.
-func (s *AdminMemberService) SetApprovalNotifier(n *MemberApprovalNotifier) {
-	s.approvalNotifier = n
-}
-
 // List returns paginated member rows.
-func (s *AdminMemberService) List(page, size int, name, fn, status string) ([]model.AdminMemberRow, int, error) {
+func (s *AdminMemberService) List(page, size int, q, fn, status string) ([]model.AdminMemberRow, int, error) {
 	if page < 1 {
 		page = 1
 	}
 	if size <= 0 || size > 50 {
 		size = 20
 	}
-	return s.repo.GetMembers(page, size, name, fn, status)
+	return s.repo.GetMembers(page, size, q, fn, status)
 }
 
 // GetDetail returns the full detail for a single member.
@@ -52,27 +45,12 @@ func (s *AdminMemberService) GetDetail(seq int) (*model.AdminMemberDetail, error
 }
 
 // UpdateStatus validates and applies a member status change.
-// Returns the previous detail when an approval transition (BBB→CCC) occurred,
-// so the caller or notifier can act on it.
 func (s *AdminMemberService) UpdateStatus(seq int, status string) error {
 	if !allowedMemberStatuses[status] {
 		return fmt.Errorf("invalid member status: %s", status)
 	}
 
-	var prevDetail *model.AdminMemberDetail
-	if status == "CCC" && s.approvalNotifier != nil {
-		prevDetail, _ = s.repo.GetMemberDetail(seq)
-	}
-
-	if err := s.repo.UpdateMemberStatus(seq, status); err != nil {
-		return err
-	}
-
-	if prevDetail != nil && prevDetail.USRStatus == "BBB" && s.approvalNotifier != nil {
-		s.approvalNotifier.OnApproved(seq, prevDetail.USREmail, prevDetail.USRName)
-	}
-
-	return nil
+	return s.repo.UpdateMemberStatus(seq, status)
 }
 
 // HasKakaoLink checks whether a member has a linked Kakao social account.

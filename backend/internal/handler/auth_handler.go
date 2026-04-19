@@ -16,15 +16,16 @@ import (
 )
 
 type AuthHandler struct {
-	service   *service.AuthService
-	memberSvc *service.MemberService
-	cache     *cache.Cache
-	cfg       *config.Config
-	logger    zerolog.Logger
+	service     *service.AuthService
+	memberSvc   *service.MemberService
+	registerSvc *service.RegistrationService
+	cache       *cache.Cache
+	cfg         *config.Config
+	logger      zerolog.Logger
 }
 
-func NewAuthHandler(service *service.AuthService, memberSvc *service.MemberService, cacheStore *cache.Cache, cfg *config.Config, logger zerolog.Logger) *AuthHandler {
-	return &AuthHandler{service: service, memberSvc: memberSvc, cache: cacheStore, cfg: cfg, logger: logger}
+func NewAuthHandler(svc *service.AuthService, memberSvc *service.MemberService, registerSvc *service.RegistrationService, cacheStore *cache.Cache, cfg *config.Config, logger zerolog.Logger) *AuthHandler {
+	return &AuthHandler{service: svc, memberSvc: memberSvc, registerSvc: registerSvc, cache: cacheStore, cfg: cfg, logger: logger}
 }
 
 func (h *AuthHandler) KakaoLogin(w http.ResponseWriter, r *http.Request) {
@@ -135,13 +136,15 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "아이디는 4~20자여야 합니다")
 		return
 	}
-	user, err := h.memberSvc.RegisterMember(req)
+	user, err := h.registerSvc.Register(req)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrIDTaken):
 			respondError(w, http.StatusConflict, "ID_TAKEN", "이미 사용 중인 아이디입니다")
 		case errors.Is(err, service.ErrPhoneTaken):
 			respondError(w, http.StatusConflict, "PHONE_TAKEN", "이미 등록된 전화번호입니다")
+		case errors.Is(err, service.ErrEmailTaken):
+			respondError(w, http.StatusConflict, "EMAIL_TAKEN", "이미 등록된 이메일입니다")
 		default:
 			h.logger.Error().Err(err).Msg("register: failed to create member")
 			respondError(w, http.StatusInternalServerError, "REGISTER_FAILED", "회원가입 처리 중 오류가 발생했습니다")
@@ -150,6 +153,51 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
 	respondJSON(w, http.StatusCreated, authUser)
+}
+
+func (h *AuthHandler) CheckID(w http.ResponseWriter, r *http.Request) {
+	usrID := r.URL.Query().Get("usrId")
+	if usrID == "" {
+		respondError(w, http.StatusBadRequest, "MISSING_PARAM", "usrId 파라미터가 필요합니다")
+		return
+	}
+	available, err := h.registerSvc.IsIDAvailable(usrID)
+	if err != nil {
+		h.logger.Error().Err(err).Str("usrId", usrID).Msg("check-id: db error")
+		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "아이디 중복 확인에 실패했습니다")
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]bool{"available": available})
+}
+
+func (h *AuthHandler) CheckPhone(w http.ResponseWriter, r *http.Request) {
+	phone := r.URL.Query().Get("phone")
+	if phone == "" {
+		respondJSON(w, http.StatusOK, map[string]bool{"available": false})
+		return
+	}
+	available, err := h.registerSvc.IsPhoneAvailable(phone)
+	if err != nil {
+		h.logger.Error().Err(err).Str("phone", phone).Msg("check-phone: db error")
+		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "전화번호 중복 확인에 실패했습니다")
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]bool{"available": available})
+}
+
+func (h *AuthHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
+	email := r.URL.Query().Get("email")
+	if email == "" {
+		respondJSON(w, http.StatusOK, map[string]bool{"available": false})
+		return
+	}
+	available, err := h.registerSvc.IsEmailAvailable(email)
+	if err != nil {
+		h.logger.Error().Err(err).Str("email", email).Msg("check-email: db error")
+		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "이메일 중복 확인에 실패했습니다")
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]bool{"available": available})
 }
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {

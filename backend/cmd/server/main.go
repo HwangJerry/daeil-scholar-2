@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -31,8 +32,21 @@ func main() {
 	}
 	defer d.pgAuditLog.Close()
 
-	allowedOrigins := []string{cfg.Server.AllowedOrigin, "http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "http://localhost:8000"}
-	router := registerRoutes(d.handlers, d.authService, allowedOrigins, cfg.Upload, logger)
+	rawOrigins := strings.Split(cfg.Server.AllowedOrigin, ",")
+	for i := range rawOrigins {
+		rawOrigins[i] = strings.TrimSpace(rawOrigins[i])
+	}
+	allowedOrigins := append(rawOrigins,
+		"http://localhost:3000",
+		"http://localhost:3001",
+		"http://localhost:5173",
+		"http://localhost:8000",
+		"http://127.0.0.1:3001",
+		"http://127.0.0.1:5173",
+		"http://127.0.0.1:8000",
+		"https://client-macbook.tail04b57d.ts.net",
+	)
+	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg.Upload, logger)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Server.Port,
@@ -51,9 +65,9 @@ func main() {
 		}
 	}()
 
-	donationJob := job.NewDonationSnapshotJob(d.donationRepo, logger)
+	donationJob := d.donationJob
 	donationJob.Start()
-	sessionJob := job.NewSessionCleanupJob(d.sessionRepo, d.passwordResetRepo, d.notificationRepo, logger)
+	sessionJob := job.NewSessionCleanupJob(d.sessionRepo, d.passwordResetRepo, logger)
 	sessionJob.Start()
 	emailWorker := job.NewEmailWorker(d.emailQueue, d.emailService, logger)
 	emailWorker.Start()

@@ -1,4 +1,4 @@
-// useNoticeMutations — create and update mutations for notice CRUD with toast feedback
+// useNoticeMutations — create, update, and delete mutations for notice CRUD with toast feedback
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client.ts';
@@ -10,8 +10,10 @@ export function useNoticeMutations(seq: string | undefined) {
   const queryClient = useQueryClient();
   const addToast = useToast((s) => s.addToast);
 
+  const invalidateNotices = () => void queryClient.invalidateQueries({ queryKey: ['admin', 'notices'] });
+
   const onSaveSuccess = () => {
-    void queryClient.invalidateQueries({ queryKey: ['admin', 'notices'] });
+    invalidateNotices();
     addToast({ variant: 'success', title: '공지가 저장되었습니다.' });
     navigate('/notice');
   };
@@ -32,6 +34,18 @@ export function useNoticeMutations(seq: string | undefined) {
     onError: onSaveError,
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (seqToDelete: number) => api.del(`/api/admin/feed/${seqToDelete}`),
+    onSuccess: () => {
+      invalidateNotices();
+      addToast({ variant: 'success', title: '공지가 삭제되었습니다.' });
+      navigate('/notice');
+    },
+    onError: () => {
+      addToast({ variant: 'error', title: '삭제 실패', description: '다시 시도해 주세요.' });
+    },
+  });
+
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   const save = (subject: string, contentMd: string, isPinned: boolean) => {
@@ -43,5 +57,7 @@ export function useNoticeMutations(seq: string | undefined) {
     }
   };
 
-  return { save, isSaving };
+  const deleteNotice = (seqToDelete: number) => deleteMutation.mutate(seqToDelete);
+
+  return { save, isSaving, deleteNotice };
 }

@@ -21,8 +21,6 @@ export function PostContent({ post }: PostContentProps) {
       />
 
       <PostBody
-        thumbnailUrl={post.thumbnailUrl}
-        subject={post.subject}
         contentHtml={post.contentHtml}
         files={post.files}
       />

@@ -17,12 +17,12 @@ func NewAdminMemberRepository(db *sqlx.DB) *AdminMemberRepository {
 	return &AdminMemberRepository{DB: db}
 }
 
-func (r *AdminMemberRepository) GetMembers(page, size int, name, fn, status string) ([]model.AdminMemberRow, int, error) {
+func (r *AdminMemberRepository) GetMembers(page, size int, q, fn, status string) ([]model.AdminMemberRow, int, error) {
 	args := []interface{}{}
 	conditions := []string{}
-	if name != "" {
-		conditions = append(conditions, "USR_NAME LIKE ?")
-		args = append(args, name+"%")
+	if q != "" {
+		conditions = append(conditions, "(USR_NAME LIKE ? OR USR_PHONE LIKE ?)")
+		args = append(args, q+"%", q+"%")
 	}
 	if fn != "" {
 		conditions = append(conditions, "USR_FN = ?")
@@ -49,6 +49,8 @@ func (r *AdminMemberRepository) GetMembers(page, size int, name, fn, status stri
 	query := `SELECT USR_SEQ, USR_ID, USR_NAME, USR_STATUS,
 		       IFNULL(USR_FN,'') AS USR_FN, IFNULL(USR_PHONE,'') AS USR_PHONE,
 		       IFNULL(USR_EMAIL,'') AS USR_EMAIL,
+		       IFNULL(USR_DEPT,'') AS USR_DEPT,
+		       IFNULL(DATE_FORMAT(REG_DATE,'%Y-%m-%d %H:%i:%s'),'') AS REG_DATE,
 		       IFNULL(DATE_FORMAT(LAST_LOG_DATE,'%Y-%m-%d %H:%i:%s'),'') AS VISIT_DATE
 		FROM WEO_MEMBER ` + where + ` ORDER BY USR_SEQ DESC LIMIT ? OFFSET ?`
 	args = append(args, size, offset)

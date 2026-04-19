@@ -15,7 +15,7 @@ func NewMyDonationRepository(db *sqlx.DB) *MyDonationRepository {
 }
 
 func (r *MyDonationRepository) GetMyDonations(usrSeq int, sort string, page int, size int) ([]model.MyDonationItem, int, error) {
-	baseWhere := `WHERE USR_SEQ = ? AND O_TYPE = 'A' AND O_PAYMENT = 'Y'`
+	baseWhere := `WHERE USR_SEQ = ? AND O_PAYMENT = 'Y'`
 
 	var total int
 	if err := r.DB.Get(&total, "SELECT COUNT(*) FROM WEO_ORDER "+baseWhere, usrSeq); err != nil {
@@ -41,6 +41,6 @@ func (r *MyDonationRepository) GetMyDonations(usrSeq int, sort string, page int,
 
 func (r *MyDonationRepository) GetMyTotalDonation(usrSeq int) (int64, error) {
 	var total int64
-	err := r.DB.Get(&total, `SELECT IFNULL(SUM(O_PRICE), 0) FROM WEO_ORDER WHERE USR_SEQ = ? AND O_TYPE = 'A' AND O_PAYMENT = 'Y'`, usrSeq)
+	err := r.DB.Get(&total, `SELECT IFNULL(SUM(O_PRICE), 0) FROM WEO_ORDER WHERE USR_SEQ = ? AND O_PAYMENT = 'Y'`, usrSeq)
 	return total, err
 }

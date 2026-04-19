@@ -37,25 +37,14 @@ type MessageQuerier interface {
 	MarkAsRead(amSeq int, usrSeq int) error
 	DeleteMessage(amSeq int, usrSeq int) error
 	GetUnreadCount(usrSeq int) (int, error)
+	GetConversations(usrSeq int) ([]model.ConversationSummary, error)
+	GetConversationMessages(usrSeq, otherSeq, page, size int) ([]model.Message, int, error)
+	MarkConversationRead(usrSeq, senderSeq int) error
 }
 
 // ProfileQuerier defines the profile methods used by MessageService for user existence checks.
 type ProfileQuerier interface {
 	CheckUserExists(usrSeq int) (bool, error)
-}
-
-// NotificationQuerier defines the methods used by NotificationService for notification operations.
-type NotificationQuerier interface {
-	Insert(usrSeq int, notiType, title, body string, refSeq *int) error
-	GetByUser(usrSeq, page, size int) ([]model.Notification, int, error)
-	GetUnreadCount(usrSeq int) (int, error)
-	MarkAsRead(anSeq, usrSeq int) error
-	MarkAllAsRead(usrSeq int) error
-}
-
-// AuthQuerier defines the auth repository methods used by NotificationService.
-type AuthQuerier interface {
-	GetMemberBySeq(usrSeq int) (*model.User, error)
 }
 
 // PasswordResetQuerier defines the methods used by PasswordResetService for password reset operations.

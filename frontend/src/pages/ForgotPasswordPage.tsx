@@ -1,14 +1,16 @@
 // ForgotPasswordPage — Email form to request a password reset link
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { requestPasswordReset } from '../api/passwordReset';
 import { ApiClientError } from '../api/client';
 import { Button } from '../components/ui/Button';
+import { AlertDialog } from '../components/ui/AlertDialog';
 
 const INPUT_CLASS =
   'w-full rounded-lg border border-border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20';
 
 export function ForgotPasswordPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -43,22 +45,14 @@ export function ForgotPasswordPage() {
           가입 시 등록한 이메일을 입력해주세요.
         </p>
 
-        {success ? (
-          <div className="space-y-4">
-            <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
-              입력하신 이메일로 비밀번호 재설정 링크를 보냈습니다. 메일함을
-              확인해주세요.
-            </div>
-            <div className="text-center">
-              <Link
-                to="/login/legacy"
-                className="text-xs text-primary hover:text-primary/80 transition-colors"
-              >
-                로그인 페이지로 돌아가기
-              </Link>
-            </div>
-          </div>
-        ) : (
+        <AlertDialog
+          open={success}
+          title="이메일 발송 완료"
+          message="입력하신 이메일로 비밀번호 재설정 링크를 보냈습니다. 메일함을 확인해주세요."
+          onConfirm={() => navigate('/login/legacy', { replace: true })}
+        />
+
+        {!success && (
           <>
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>

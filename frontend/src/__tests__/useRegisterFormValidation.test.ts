@@ -11,8 +11,8 @@ function makeFields(overrides: Partial<{
 }> = {}) {
   return {
     usrId: 'validUser1',
-    password: 'secret123',
-    passwordConfirm: 'secret123',
+    password: 'Secret123!',
+    passwordConfirm: 'Secret123!',
     email: 'test@example.com',
     ...overrides,
   }
@@ -60,16 +60,37 @@ describe('useRegisterFormValidation', () => {
   })
 
   describe('password validation', () => {
-    it('rejects passwords shorter than 6 characters', () => {
+    it('rejects passwords shorter than 8 characters', () => {
       const { result } = renderHook(() => useRegisterFormValidation())
-      const error = result.current.validate(makeFields({ password: '12345', passwordConfirm: '12345' }))
+      const error = result.current.validate(makeFields({ password: 'Ab1!', passwordConfirm: 'Ab1!' }))
       expect(error).not.toBeNull()
-      expect(error).toContain('6')
+      expect(error).toContain('8')
     })
 
-    it('accepts passwords of exactly 6 characters', () => {
+    it('rejects passwords without a letter', () => {
       const { result } = renderHook(() => useRegisterFormValidation())
-      const error = result.current.validate(makeFields({ password: '123456', passwordConfirm: '123456' }))
+      const error = result.current.validate(makeFields({ password: '12345678!', passwordConfirm: '12345678!' }))
+      expect(error).not.toBeNull()
+      expect(error).toContain('영문')
+    })
+
+    it('rejects passwords without a number', () => {
+      const { result } = renderHook(() => useRegisterFormValidation())
+      const error = result.current.validate(makeFields({ password: 'Abcdefgh!', passwordConfirm: 'Abcdefgh!' }))
+      expect(error).not.toBeNull()
+      expect(error).toContain('숫자')
+    })
+
+    it('rejects passwords without a special character', () => {
+      const { result } = renderHook(() => useRegisterFormValidation())
+      const error = result.current.validate(makeFields({ password: 'Abcdef12', passwordConfirm: 'Abcdef12' }))
+      expect(error).not.toBeNull()
+      expect(error).toContain('특수문자')
+    })
+
+    it('accepts passwords with 8+ chars containing letter, number, and special char', () => {
+      const { result } = renderHook(() => useRegisterFormValidation())
+      const error = result.current.validate(makeFields({ password: 'Secret1!', passwordConfirm: 'Secret1!' }))
       expect(error).toBeNull()
     })
   })
@@ -77,7 +98,7 @@ describe('useRegisterFormValidation', () => {
   describe('password confirmation', () => {
     it('rejects mismatched passwords', () => {
       const { result } = renderHook(() => useRegisterFormValidation())
-      const error = result.current.validate(makeFields({ password: 'abcdef', passwordConfirm: 'ghijkl' }))
+      const error = result.current.validate(makeFields({ password: 'Secret1!', passwordConfirm: 'Secret2!' }))
       expect(error).not.toBeNull()
       expect(error).toContain('일치')
     })

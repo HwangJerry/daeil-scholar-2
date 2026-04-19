@@ -1,15 +1,18 @@
 // ResetPasswordPage — Token-validated password reset form with confirmation
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { validateResetToken, confirmPasswordReset } from '../api/passwordReset';
 import { ApiClientError } from '../api/client';
 import { Button } from '../components/ui/Button';
+import { AlertDialog } from '../components/ui/AlertDialog';
+import { checkPasswordStrength } from '../hooks/usePasswordValidation';
 
 const INPUT_CLASS =
   'w-full rounded-lg border border-border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20';
 
-const MIN_PASSWORD_LENGTH = 4;
+const MIN_PASSWORD_LENGTH = 8;
 const REDIRECT_DELAY_MS = 3_000;
+const DEBOUNCE_MS = 500;
 
 type TokenStatus = 'loading' | 'valid' | 'invalid';
 
@@ -22,9 +25,12 @@ export function ResetPasswordPage() {
   const [userName, setUserName] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const pwDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -56,12 +62,28 @@ export function ResetPasswordPage() {
     return () => clearTimeout(timer);
   }, [success, navigate]);
 
+  const validatePw = (value: string) => {
+    setPasswordError(checkPasswordStrength(value) ?? '');
+  };
+
+  const handlePasswordChange = (value: string) => {
+    setNewPassword(value);
+    if (pwDebounceRef.current) clearTimeout(pwDebounceRef.current);
+    pwDebounceRef.current = setTimeout(() => validatePw(value), DEBOUNCE_MS);
+  };
+
+  const handlePasswordBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (pwDebounceRef.current) clearTimeout(pwDebounceRef.current);
+    validatePw(e.target.value);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (newPassword.length < MIN_PASSWORD_LENGTH) {
-      setError(`비밀번호는 최소 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`);
+    const strengthError = checkPasswordStrength(newPassword);
+    if (strengthError) {
+      setError(strengthError);
       return;
     }
 
@@ -130,12 +152,16 @@ export function ResetPasswordPage() {
                 <input
                   type="password"
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  onChange={(e) => handlePasswordChange(e.target.value)}
+                  onBlur={handlePasswordBlur}
                   required
                   className={INPUT_CLASS}
-                  placeholder="새 비밀번호를 입력하세요"
+                  placeholder={`${MIN_PASSWORD_LENGTH}자 이상, 영문+숫자+특수문자 포함`}
                   autoComplete="new-password"
                 />
+                {passwordError && (
+                  <p className="mt-1 text-xs text-error-text">{passwordError}</p>
+                )}
               </div>
 
               <div>
@@ -168,22 +194,13 @@ export function ResetPasswordPage() {
           </>
         )}
 
-        {tokenStatus === 'valid' && success && (
-          <div className="space-y-4">
-            <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
-              비밀번호가 성공적으로 변경되었습니다. 잠시 후 로그인 페이지로
-              이동합니다.
-            </div>
-            <div className="text-center">
-              <Link
-                to="/login/legacy"
-                className="text-xs text-primary hover:text-primary/80 transition-colors"
-              >
-                지금 로그인하기
-              </Link>
-            </div>
-          </div>
-        )}
+        <AlertDialog
+          open={tokenStatus === 'valid' && success}
+          title="비밀번호 변경 완료"
+          message="비밀번호가 성공적으로 변경되었습니다."
+          confirmLabel="로그인하기"
+          onConfirm={() => navigate('/login/legacy', { replace: true })}
+        />
       </div>
     </div>
   );

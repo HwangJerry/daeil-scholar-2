@@ -39,38 +39,6 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 	}
 	items := make([]model.AlumniCard, 0, len(records))
 	for _, record := range records {
-		phone := ""
-		if record.FMPhone.Valid {
-			phone = record.FMPhone.String
-		}
-		email := ""
-		if record.FMEmail.Valid {
-			email = record.FMEmail.String
-		}
-		if record.FMSMS.Valid && strings.EqualFold(record.FMSMS.String, "N") {
-			phone = maskPhone(phone)
-		}
-		if record.FMSpam.Valid && strings.EqualFold(record.FMSpam.String, "N") {
-			email = maskEmail(email)
-		}
-
-		bizName := nullString(record.USRBizName)
-		company := nullString(record.FMCompany)
-		position := nullString(record.FMPos)
-
-		// Fallback: if bizName is empty, use company name
-		displayBizName := bizName
-		if displayBizName == "" {
-			displayBizName = company
-		}
-
-		// Fallback: if bizDesc is empty and position exists, show position
-		bizDesc := nullString(record.USRBizDesc)
-		if bizDesc == "" && position != "" {
-			bizDesc = position
-		}
-
-		// Parse tags from GROUP_CONCAT result
 		var tags []string
 		if record.Tags.Valid && record.Tags.String != "" {
 			tags = strings.Split(record.Tags.String, ",")
@@ -79,32 +47,37 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 			tags = []string{}
 		}
 
-		fmSeq := 0
-		if record.FMSEQ.Valid {
-			fmSeq = int(record.FMSEQ.Int64)
-		}
 		usrSeq := 0
 		if record.USRSeq.Valid {
 			usrSeq = int(record.USRSeq.Int64)
 		}
 
+		phone := nullString(record.USRPhone)
+		if record.USRPhonePublic.Valid && record.USRPhonePublic.String == "N" {
+			phone = ""
+		}
+		email := nullString(record.USREmail)
+		if record.USREmailPublic.Valid && record.USREmailPublic.String == "N" {
+			email = ""
+		}
+
 		items = append(items, model.AlumniCard{
-			FMSeq:       fmSeq,
-			FMName:      record.FMName,
-			FMFN:        nullString(record.FMFN),
-			FMDept:      nullString(record.FMDept),
-			Company:     company,
-			Position:    position,
+			FMSeq:       usrSeq,
+			FMName:      record.USRName,
+			FMFN:        nullString(record.USRFN),
+			FMDept:      nullString(record.USRDept),
+			BizName:     nullString(record.USRBizName),
+			BizDesc:     nullString(record.USRBizDesc),
+			BizAddr:     nullString(record.USRBizAddr),
+			Position:    nullString(record.USRPosition),
 			Phone:       phone,
 			Email:       email,
-			BizName:     displayBizName,
-			BizDesc:     bizDesc,
-			BizAddr:     nullString(record.USRBizAddr),
 			JobCatName:  nullString(record.AJCName),
-			JobCatColor: nullString(record.AJCColor),
 			Tags:        tags,
 			Photo:       nullString(record.USRPhoto),
 			UsrSeq:      usrSeq,
+			Nick:        nullString(record.USRNick),
+			BizCard:     nullString(record.USRBizCard),
 		})
 	}
 	totalPages := 0
@@ -177,45 +150,3 @@ func nullString(value sql.NullString) string {
 	return value.String
 }
 
-func maskPhone(value string) string {
-	if value == "" {
-		return ""
-	}
-	if strings.Contains(value, "-") {
-		parts := strings.Split(value, "-")
-		if len(parts) >= 3 {
-			parts[1] = "****"
-			return strings.Join(parts, "-")
-		}
-	}
-	runes := []rune(value)
-	if len(runes) <= 4 {
-		return strings.Repeat("*", len(runes))
-	}
-	prefix := string(runes[:2])
-	suffix := string(runes[len(runes)-2:])
-	return prefix + strings.Repeat("*", len(runes)-4) + suffix
-}
-
-func maskEmail(value string) string {
-	if value == "" {
-		return ""
-	}
-	parts := strings.SplitN(value, "@", 2)
-	if len(parts) != 2 {
-		return "***"
-	}
-	local := parts[0]
-	if local == "" {
-		return "***@" + parts[1]
-	}
-	masked := local[:1] + strings.Repeat("*", maxInt(1, len(local)-1))
-	return masked + "@" + parts[1]
-}
-
-func maxInt(a int, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

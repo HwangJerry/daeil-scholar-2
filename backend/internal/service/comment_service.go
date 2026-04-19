@@ -14,14 +14,12 @@ const maxCommentLength = 500
 // CommentService handles comment-related business logic.
 type CommentService struct {
 	commentRepo *repository.CommentRepository
-	notifier    *CommentNotifier
 }
 
 // NewCommentService creates a new CommentService.
-func NewCommentService(commentRepo *repository.CommentRepository, feedRepo *repository.FeedRepository, notifSvc *NotificationService) *CommentService {
+func NewCommentService(commentRepo *repository.CommentRepository) *CommentService {
 	return &CommentService{
 		commentRepo: commentRepo,
-		notifier:    NewCommentNotifier(feedRepo, notifSvc),
 	}
 }
 
@@ -43,8 +41,6 @@ func (s *CommentService) AddComment(joinSeq int, usrSeq int, regName string, con
 	if err != nil {
 		return nil, err
 	}
-
-	s.notifier.OnCommentCreated(joinSeq, usrSeq, regName)
 
 	return &model.Comment{
 		BCSeq:    int(lastID),

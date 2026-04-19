@@ -10,6 +10,7 @@ import (
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
 )
 
@@ -40,12 +41,13 @@ type handlers struct {
 	og              *handler.OGHandler
 	sitemap         *handler.SitemapHandler
 	passwordReset   *handler.PasswordResetHandler
-	notification    *handler.NotificationHandler
+	passwordChange  *handler.PasswordChangeHandler
 	badge           *handler.BadgeHandler
+	adminJobCat     *handler.AdminJobCategoryHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
-func registerRoutes(h handlers, authService *service.AuthService, allowedOrigins []string, uploadCfg config.UploadConfig, logger zerolog.Logger) chi.Router {
+func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, uploadCfg config.UploadConfig, logger zerolog.Logger) chi.Router {
 	router := chi.NewRouter()
 	router.Use(chimw.Recoverer)
 	router.Use(mw.RequestLogger(logger))
@@ -61,7 +63,7 @@ func registerRoutes(h handlers, authService *service.AuthService, allowedOrigins
 	router.Get("/sitemap.xml", h.sitemap.GetSitemap)
 
 	registerPGRoutes(router, h)
-	registerAPIRoutes(router, h, authService, allowedOrigins)
+	registerAPIRoutes(router, h, authService, cacheStore, allowedOrigins)
 
 	return router
 }
@@ -76,11 +78,11 @@ func registerPGRoutes(router chi.Router, h handlers) {
 }
 
 // registerAPIRoutes registers all /api/* routes with CSRF protection.
-func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthService, allowedOrigins []string) {
+func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string) {
 	router.Group(func(r chi.Router) {
 		r.Use(mw.CSRFMiddleware(allowedOrigins))
 
-		registerPublicRoutes(r, h)
+		registerPublicRoutes(r, h, cacheStore)
 		registerAuthRoutes(r, h, authService)
 		registerOptionalAuthRoutes(r, h, authService)
 		registerAdminRoutes(r, h, authService)
@@ -88,19 +90,22 @@ func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthS
 }
 
 // registerPublicRoutes registers unauthenticated public endpoints.
-func registerPublicRoutes(r chi.Router, h handlers) {
+func registerPublicRoutes(r chi.Router, h handlers, cacheStore *cache.Cache) {
 	r.Get("/api/health", h.health.Check)
 	r.Get("/api/feed/hero", h.feed.GetHero)
 	r.Get("/api/donation/summary", h.donation.GetSummary)
 	r.Get("/api/auth/kakao", h.auth.KakaoLogin)
 	r.Get("/api/auth/kakao/callback", h.auth.KakaoCallback)
-	r.Post("/api/auth/login", h.auth.Login)
-	r.Post("/api/auth/register", h.auth.Register)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/login", h.auth.Login)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/register", h.auth.Register)
+	r.Get("/api/auth/check-id", h.auth.CheckID)
+	r.Get("/api/auth/check-phone", h.auth.CheckPhone)
+	r.Get("/api/auth/check-email", h.auth.CheckEmail)
 	r.Post("/api/auth/social/link", h.auth.SocialLink)
 	r.Post("/api/auth/kakao/link", h.auth.KakaoLink)
 	r.Get("/api/alumni/widget", h.alumni.GetWidgetPreview)
 	r.Get("/api/public/job-categories", h.alumni.GetJobCategories)
-	r.Post("/api/auth/password/reset-request", h.passwordReset.RequestReset)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/password/reset-request", h.passwordReset.RequestReset)
 	r.Post("/api/auth/password/reset-confirm", h.passwordReset.ConfirmReset)
 	r.Get("/api/auth/password/validate-token", h.passwordReset.ValidateToken)
 }
@@ -117,6 +122,7 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Put("/api/profile", h.profile.UpdateProfile)
 		r.Post("/api/profile/photo", h.profileUpload.UploadPhoto)
 		r.Post("/api/profile/bizcard", h.profileUpload.UploadBizCard)
+		r.Post("/api/profile/password", h.passwordChange.ChangePassword)
 		r.Post("/api/donation/orders", h.payment.CreateOrder)
 		r.Get("/api/donation/orders/{seq}", h.payment.GetOrder)
 		r.Get("/api/donation/my", h.myDonation.GetMyDonations)
@@ -134,11 +140,9 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Get("/api/messages/outbox", h.message.GetOutbox)
 		r.Put("/api/messages/{seq}/read", h.message.MarkAsRead)
 		r.Delete("/api/messages/{seq}", h.message.Delete)
-		r.Get("/api/messages/unread-count", h.message.GetUnreadCount)
-		r.Get("/api/notifications", h.notification.GetNotifications)
-		r.Get("/api/notifications/unread-count", h.notification.GetUnreadCount)
-		r.Put("/api/notifications/{seq}/read", h.notification.MarkAsRead)
-		r.Put("/api/notifications/read-all", h.notification.MarkAllAsRead)
+		r.Get("/api/messages/conversations", h.message.GetConversations)
+		r.Get("/api/messages/conversations/{userSeq}", h.message.GetConversationMessages)
+		r.Put("/api/messages/conversations/{userSeq}/read", h.message.MarkConversationRead)
 		r.Get("/api/badges", h.badge.GetBadges)
 	})
 }
@@ -184,5 +188,9 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Get("/member/{seq}", h.adminMember.Detail)
 		r.Put("/member/{seq}", h.adminMember.Update)
 		r.Get("/member/stats", h.adminMember.Stats)
+		r.Get("/job-category", h.adminJobCat.List)
+		r.Post("/job-category", h.adminJobCat.Create)
+		r.Put("/job-category/{seq}", h.adminJobCat.Update)
+		r.Delete("/job-category/{seq}", h.adminJobCat.Delete)
 	})
 }

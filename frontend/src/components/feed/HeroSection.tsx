@@ -1,6 +1,6 @@
 // HeroSection — Pinned notice hero card with dark navy editorial gradient
-import { Link } from 'react-router-dom';
-import { Megaphone } from 'lucide-react';
+import { Bell, Pin } from 'lucide-react';
+import { NoticeCardLink } from './NoticeCardLink';
 import { cn } from '../../lib/utils';
 import { formatRelativeDate } from '../../utils/date';
 import { useHeroNotice } from '../../hooks/useHeroNotice';
@@ -17,8 +17,8 @@ export function HeroSection() {
   const isPinned = hero.isPinned === 'Y';
 
   return (
-    <Link
-      to={`/post/${hero.seq}`}
+    <NoticeCardLink
+      seq={hero.seq}
       className={cn(
         'group relative block overflow-hidden rounded-[20px] animate-fade-in-up',
         'bg-gradient-to-br from-hero-from via-hero-via to-hero-to',
@@ -46,13 +46,13 @@ export function HeroSection() {
         <div className="flex items-center gap-2 mb-auto pt-1">
           {isPinned ? (
             <span className="flex items-center gap-1.5 text-white/60 text-xs font-medium">
-              <Megaphone size={12} className="text-white/50" />
-              중요한 소식
+              <Pin size={12} className="text-white/50" />
+              고정 공지
             </span>
           ) : (
             <span className="flex items-center gap-1.5 text-white/60 text-xs font-medium">
-              <Megaphone size={12} className="text-white/50" />
-              중요한 소식
+              <Bell size={12} className="text-white/50" />
+              최신 소식
             </span>
           )}
         </div>
@@ -71,6 +71,6 @@ export function HeroSection() {
           </div>
         </div>
       </div>
-    </Link>
+    </NoticeCardLink>
   );
 }

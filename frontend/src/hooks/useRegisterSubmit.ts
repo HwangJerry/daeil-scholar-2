@@ -26,6 +26,7 @@ export function useRegisterSubmit() {
         if (!(err instanceof ApiClientError)) return '회원가입에 실패했습니다. 다시 시도해주세요.';
         if (err.code === 'ID_TAKEN') return '이미 사용 중인 아이디입니다.';
         if (err.code === 'PHONE_TAKEN') return '이미 등록된 전화번호입니다.';
+        if (err.code === 'EMAIL_TAKEN') return '이미 등록된 이메일입니다.';
         return err.message;
       })();
       setState({ error: message, submitting: false });

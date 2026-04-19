@@ -60,6 +60,7 @@ func (s *AuthService) LoginWithBridge(user *model.User, w http.ResponseWriter, r
 			Path:     "/",
 			HttpOnly: true,
 			Secure:   secure,
+			SameSite: http.SameSiteLaxMode,
 			MaxAge:   0,
 		})
 	}
@@ -69,10 +70,13 @@ func (s *AuthService) LoginWithBridge(user *model.User, w http.ResponseWriter, r
 	return s.repo.UpdateLastLogin(user.USRSeq)
 }
 
-// Logout invalidates the Kakao access token (if cached) then clears all session cookies.
+// Logout invalidates the Kakao access token (if cached), clears all legacy DB sessions, then clears all session cookies.
 func (s *AuthService) Logout(w http.ResponseWriter, usrSeq int) {
 	if err := s.LogoutKakao(usrSeq); err != nil {
 		s.logger.Warn().Err(err).Int("usrSeq", usrSeq).Msg("kakao logout failed, proceeding with app logout")
+	}
+	if err := s.repo.DeleteLegacySessionsByUser(usrSeq); err != nil {
+		s.logger.Warn().Err(err).Int("usrSeq", usrSeq).Msg("failed to delete legacy sessions on logout")
 	}
 	secure := s.cfg.Server.IsSecure()
 	expire := func(name string) {

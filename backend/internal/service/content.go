@@ -19,7 +19,10 @@ var (
 			extension.GFM, // tables, strikethrough, autolinks
 			highlighting.NewHighlighting(highlighting.WithStyle("monokai")),
 		),
-		goldmark.WithRendererOptions(html.WithUnsafe()),
+		goldmark.WithRendererOptions(
+			html.WithUnsafe(),
+			html.WithHardWraps(), // single \n → <br> (matches admin editor preview)
+		),
 	)
 
 	sanitizer = func() *bluemonday.Policy {
@@ -27,12 +30,16 @@ var (
 		p.AllowImages()
 		p.AllowAttrs("loading").Matching(regexp.MustCompile(`^lazy$`)).OnElements("img")
 		p.AllowAttrs("class").Matching(regexp.MustCompile(`^(chroma|language-\w+|highlight).*$`)).Globally()
+		p.AllowAttrs("start").Matching(regexp.MustCompile(`^\d+$`)).OnElements("ol")
 		return p
 	}()
 
-	imgTagRe  = regexp.MustCompile(`<img([^>]*)>`)
-	imgSrcRe  = regexp.MustCompile(`<img[^>]+src="([^"]+)"`)
-	htmlTagRe = regexp.MustCompile(`<[^>]*>`)
+	imgTagRe    = regexp.MustCompile(`<img([^>]*)>`)
+	imgSrcRe    = regexp.MustCompile(`<img[^>]+src="([^"]+)"`)
+	htmlTagRe   = regexp.MustCompile(`<[^>]*>`)
+	blockTagRe  = regexp.MustCompile(`(?i)</?(?:p|br|h[1-6]|li|div|blockquote|tr|pre)[^>]*>`)
+	multiSpaceRe = regexp.MustCompile(`[ \t]+`)
+	multiNewlineRe = regexp.MustCompile(`\n{3,}`)
 )
 
 // ConvertAndEncode converts Markdown to sanitized HTML, then Base64-encodes it.
@@ -88,14 +95,17 @@ func extractFirstImageURL(h string) string {
 }
 
 // StripHTMLTags removes all HTML tags and decodes common HTML entities.
+// Block-level tags are replaced with newlines to preserve paragraph/line boundaries.
 func StripHTMLTags(h string) string {
-	text := htmlTagRe.ReplaceAllString(h, "")
+	text := blockTagRe.ReplaceAllString(h, "\n")
+	text = htmlTagRe.ReplaceAllString(text, "")
 	text = strings.ReplaceAll(text, "&amp;", "&")
 	text = strings.ReplaceAll(text, "&lt;", "<")
 	text = strings.ReplaceAll(text, "&gt;", ">")
 	text = strings.ReplaceAll(text, "&quot;", `"`)
 	text = strings.ReplaceAll(text, "&#39;", "'")
-	text = strings.ReplaceAll(text, "\n", " ")
+	text = multiSpaceRe.ReplaceAllString(text, " ")
+	text = multiNewlineRe.ReplaceAllString(text, "\n\n")
 	text = strings.TrimSpace(text)
 	return text
 }

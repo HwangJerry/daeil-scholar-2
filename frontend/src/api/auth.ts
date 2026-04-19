@@ -9,12 +9,15 @@ export interface RegisterRequest {
   phone: string;
   fn: string;
   email: string;
-  nick?: string;
-  dept?: string;
+  fmDept?: string;
   jobCat?: number | null;
   bizName?: string;
   bizDesc?: string;
   bizAddr?: string;
+  position?: string;
+  tags?: string[];
+  usrPhonePublic?: 'Y' | 'N';
+  usrEmailPublic?: 'Y' | 'N';
 }
 
 /** Legacy ID/PW login. */

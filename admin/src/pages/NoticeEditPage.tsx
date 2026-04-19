@@ -1,13 +1,15 @@
 // NoticeEditPage — composes notice form hooks with editor or legacy HTML viewer
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button.tsx';
 import { Input } from '../components/ui/Input.tsx';
 import { MarkdownEditor } from '../components/editor/MarkdownEditor.tsx';
 import { HtmlContent } from '../components/common/HtmlContent.tsx';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog.tsx';
 import { useNoticeDetail } from '../hooks/useNoticeDetail.ts';
 import { useNoticeForm } from '../hooks/useNoticeForm.ts';
 import { useNoticeMutations } from '../hooks/useNoticeMutations.ts';
+import { useNoticeDelete } from '../hooks/useNoticeDelete.ts';
 import type { NoticeDetail } from '../types/api.ts';
 
 export function NoticeEditPage() {
@@ -28,7 +30,8 @@ function NoticeEditForm({
 }) {
   const navigate = useNavigate();
   const form = useNoticeForm(notice);
-  const { save, isSaving } = useNoticeMutations(seq);
+  const { save, isSaving, deleteNotice } = useNoticeMutations(seq);
+  const del = useNoticeDelete(deleteNotice);
 
   const isLegacy = notice?.contentFormat === 'LEGACY';
 
@@ -50,6 +53,14 @@ function NoticeEditForm({
             Markdown 에디터로 수정하려면 기존 내용을 복사하여 새 글로 작성해주세요.
           </div>
           <HtmlContent html={notice?.contentHtml ?? ''} />
+          {seq && (
+            <div className="mt-4 flex justify-start">
+              <Button variant="ghost" className="text-error-text" onClick={() => del.openDialog(Number(seq))}>
+                <Trash2 className="mr-1 h-4 w-4" />
+                삭제
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
@@ -73,17 +84,35 @@ function NoticeEditForm({
             상단 고정
           </label>
 
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => navigate('/notice')}>취소</Button>
-            <Button
-              onClick={() => save(form.subject, form.contentMd, form.isPinned)}
-              disabled={isSaving || !form.isValid}
-            >
-              {isSaving ? '저장 중...' : '저장'}
-            </Button>
+          <div className="flex justify-between gap-3">
+            {seq && (
+              <Button variant="ghost" className="text-error-text" onClick={() => del.openDialog(Number(seq))}>
+                <Trash2 className="mr-1 h-4 w-4" />
+                삭제
+              </Button>
+            )}
+            <div className="flex gap-3 ml-auto">
+              <Button variant="outline" onClick={() => navigate('/notice')}>취소</Button>
+              <Button
+                onClick={() => save(form.subject, form.contentMd, form.isPinned)}
+                disabled={isSaving || !form.isValid}
+              >
+                {isSaving ? '저장 중...' : '저장'}
+              </Button>
+            </div>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={del.dialogOpen}
+        onOpenChange={(open) => { if (!open) del.closeDialog(); }}
+        title="공지 삭제"
+        description="정말 삭제하시겠습니까?"
+        confirmLabel="삭제"
+        variant="destructive"
+        onConfirm={del.handleConfirm}
+      />
     </div>
   );
 }

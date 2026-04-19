@@ -1,15 +1,11 @@
-// MemberListPage — searchable, paginated member table with stats cards, sort, error handling, and a11y
+// MemberListPage — searchable, paginated member table with unified toolbar, sort, error handling, and a11y
 import { Link } from 'react-router-dom';
-import { Users, Link2, Clock, UserPlus } from 'lucide-react';
-import { Input } from '../components/ui/Input.tsx';
-import { Select } from '../components/ui/Select.tsx';
 import { Pagination } from '../components/ui/Pagination.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
 import { ErrorState } from '../components/ui/ErrorState.tsx';
 import { SortableHeader } from '../components/ui/SortableHeader.tsx';
-import { StatsCard } from '../components/ui/StatsCard.tsx';
+import { MemberFilterToolbar } from '../components/member/MemberFilterToolbar.tsx';
 import { useMemberList } from '../hooks/useMemberList.ts';
-import { useMemberStats } from '../hooks/useMemberStats.ts';
 import { useTableSort } from '../hooks/useTableSort.ts';
 import type { AdminMemberListItem } from '../types/api.ts';
 
@@ -40,7 +36,7 @@ const SORT_ACCESSORS: Record<string, (item: AdminMemberListItem) => string | num
 };
 
 export function MemberListPage() {
-  const { data, isLoading, isError, refetch, page, pageSize, search, statusFilter, setPage, handleSearchChange, handleStatusChange, handlePageSizeChange } = useMemberList();
+  const { data, isLoading, isError, refetch, page, pageSize, inputValue, statusFilter, setPage, handleSearchChange, handleStatusChange, handlePageSizeChange } = useMemberList();
   const { sort, toggleSort, getSortedItems } = useTableSort();
 
   const items = data?.items ? getSortedItems(data.items, SORT_ACCESSORS) : [];
@@ -49,37 +45,21 @@ export function MemberListPage() {
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-dark-slate">회원 관리</h2>
 
-      <div className="flex gap-2">
-        <Input
-          aria-label="이름 검색"
-          placeholder="이름 검색..."
-          value={search}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          className="max-w-xs"
-        />
-        <Select
-          value={statusFilter}
-          onChange={(e) => handleStatusChange(e.target.value)}
-          className="w-32"
-        >
-          <option value="">전체 상태</option>
-          <option value="AAA">탈퇴</option>
-          <option value="ABA">휴면</option>
-          <option value="ACA">정지</option>
-          <option value="BAA">승인거절</option>
-          <option value="BBB">승인대기</option>
-          <option value="CCC">승인회원</option>
-          <option value="ZZZ">운영자</option>
-        </Select>
-      </div>
+      <MemberFilterToolbar
+        statusFilter={statusFilter}
+        search={inputValue}
+        total={data?.total ?? null}
+        onStatusChange={handleStatusChange}
+        onSearchChange={handleSearchChange}
+      />
 
       <div className="overflow-x-auto rounded-2xl border border-border-light bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border-light text-left text-cool-gray">
-              <SortableHeader label="이름" column="usrName" sort={sort} onToggle={toggleSort} className="px-4 py-3" />
-              <SortableHeader label="기수" column="usrFn" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-16" />
-              <th className="px-4 py-3 font-medium w-20 text-center">상태</th>
+              <SortableHeader label="이름" column="usrName" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-32" />
+              <SortableHeader label="기수" column="usrFn" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-20" />
+              <th className="px-4 py-3 font-medium w-28 text-center">상태</th>
               <th className="px-4 py-3 font-medium w-36">연락처</th>
               <SortableHeader label="최근 접속" column="visitDate" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-28" />
             </tr>

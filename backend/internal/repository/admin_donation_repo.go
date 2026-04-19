@@ -16,12 +16,12 @@ func NewAdminDonationRepository(db *sqlx.DB) *AdminDonationRepository {
 	return &AdminDonationRepository{DB: db}
 }
 
-func (r *AdminDonationRepository) UpdateConfig(goal int64, manualAdj int64, note string, operSeq int) error {
+func (r *AdminDonationRepository) UpdateConfig(goal int64, manualAdj int64, note string, overwrite string, operSeq int) error {
 	_, err := r.DB.Exec(`
 		UPDATE DONATION_CONFIG
-		SET DC_GOAL = ?, DC_MANUAL_ADJ = ?, DC_NOTE = ?, REG_OPER = ?, REG_DATE = NOW()
+		SET DC_GOAL = ?, DC_MANUAL_ADJ = ?, DC_NOTE = ?, DC_OVERWRITE = ?, REG_OPER = ?, REG_DATE = NOW()
 		WHERE IS_ACTIVE = 'Y'
-	`, goal, manualAdj, note, operSeq)
+	`, goal, manualAdj, note, overwrite, operSeq)
 	return err
 }
 
@@ -29,6 +29,7 @@ func (r *AdminDonationRepository) GetSnapshotHistory(days int) ([]model.Donation
 	var snapshots []model.DonationSnapshot
 	err := r.DB.Select(&snapshots, `
 		SELECT DS_SEQ, DS_DATE, DS_TOTAL, DS_MANUAL_ADJ, DS_DONOR_CNT, DS_GOAL,
+		       IFNULL(DS_OVERWRITE,'N') AS DS_OVERWRITE,
 		       IFNULL(DATE_FORMAT(REG_DATE,'%Y-%m-%d %H:%i:%s'),'') AS REG_DATE
 		FROM DONATION_SNAPSHOT
 		ORDER BY DS_DATE DESC
@@ -39,7 +40,7 @@ func (r *AdminDonationRepository) GetSnapshotHistory(days int) ([]model.Donation
 
 func (r *AdminDonationRepository) GetDonationOrders(page, size int, search, status, payType string) ([]model.AdminDonationOrderRow, int, error) {
 	args := []interface{}{}
-	conditions := []string{"o.O_TYPE = 'A'"}
+	conditions := []string{"1=1"}
 	if search != "" {
 		conditions = append(conditions, "m.USR_NAME LIKE ?")
 		args = append(args, search+"%")
@@ -78,7 +79,7 @@ func (r *AdminDonationRepository) GetDonationOrders(page, size int, search, stat
 }
 
 func (r *AdminDonationRepository) UpdateDonationOrder(seq int, payment string, amount int) error {
-	_, err := r.DB.Exec(`UPDATE WEO_ORDER SET O_PAYMENT = ?, O_PAY = ?, EDT_DATE = NOW() WHERE O_SEQ = ? AND O_TYPE = 'A'`,
-		payment, amount, seq)
+	_, err := r.DB.Exec(`UPDATE WEO_ORDER SET O_PAYMENT = ?, O_PAY = ?, O_PRICE = ?, EDT_DATE = NOW() WHERE O_SEQ = ? AND O_TYPE = 'A'`,
+		payment, amount, amount, seq)
 	return err
 }

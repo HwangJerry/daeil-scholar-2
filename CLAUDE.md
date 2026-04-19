@@ -209,9 +209,9 @@ The `content.go` service handles conversion. The `FeedPresenter` calls `DecodeCo
 | `ALLOWED_ORIGIN` | `http://localhost:3000` | CORS origin |
 | `DB_HOST` | `127.0.0.1` | MariaDB host |
 | `DB_PORT` | `3306` | MariaDB port |
-| `DB_USER` | `root` | DB user |
-| `DB_PASSWORD` | (empty) | DB password |
-| `DB_NAME` | `alumni` | DB name |
+| `DB_USER` | `daeilUSER` | DB user |
+| `DB_PASSWORD` | `daeilPWD` | DB password |
+| `DB_NAME` | `daeilDB` | DB name |
 | `KAKAO_CLIENT_ID` | (empty) | Kakao OAuth app key |
 | `KAKAO_CLIENT_SECRET` | (empty) | Kakao OAuth secret |
 | `KAKAO_REDIRECT_URI` | `http://localhost:8080/api/auth/kakao/callback` | OAuth callback |

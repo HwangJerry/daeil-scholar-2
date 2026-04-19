@@ -27,11 +27,10 @@ export function NoticeCard({ item }: { item: NoticeItem }) {
           <span>{formatAbsoluteDate(item.regDate)}</span>
         </FeedCard.Meta>
 
-        <NoticeCardLink seq={item.seq} className="group block mb-2">
-          <FeedCard.Title>{item.subject}</FeedCard.Title>
+        <NoticeCardLink seq={item.seq} className="group block">
+          <FeedCard.Title className="mb-2">{item.subject}</FeedCard.Title>
+          {item.summary && <NoticeCardSummary summary={item.summary} />}
         </NoticeCardLink>
-
-        {item.summary && <NoticeCardSummary summary={item.summary} />}
       </FeedCard.Body>
 
       {item.thumbnailUrl && (

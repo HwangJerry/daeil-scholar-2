@@ -66,7 +66,7 @@ func (r *PasswordResetRepository) UpdatePassword(usrSeq int, hashedPwd string) e
 func (r *PasswordResetRepository) FindMemberByEmail(email string) (*model.User, error) {
 	var u model.User
 	err := r.DB.Get(&u, `
-		SELECT USR_SEQ, USR_ID, USR_NAME, USR_STATUS, USR_PHONE, USR_FN, USR_EMAIL, USR_NICK, USR_PHOTO, REG_DATE, VISIT_CNT, VISIT_DATE
+		SELECT USR_SEQ, USR_ID, USR_NAME, USR_STATUS, USR_PHONE, USR_FN, USR_EMAIL, USR_NICK, USR_PHOTO, REG_DATE
 		FROM WEO_MEMBER
 		WHERE USR_EMAIL = ? AND USR_STATUS >= 'CCC'
 		LIMIT 1`,

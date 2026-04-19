@@ -1,9 +1,10 @@
 // SendMessageDialog — Modal overlay for composing and sending a message to an alumni member
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Send, CheckCircle } from 'lucide-react';
-import { api } from '../../api/client';
+import { sendMessage } from '../../api/messages';
+import { ApiClientError } from '../../api/client';
 import { Button } from '../ui/Button';
 
 interface SendMessageDialogProps {
@@ -23,19 +24,20 @@ export function SendMessageDialog({
   const [content, setContent] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const queryClient = useQueryClient();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const sendMutation = useMutation({
-    mutationFn: () =>
-      api.post('/api/messages', {
-        recvrSeq: recipientSeq,
-        content,
-      }),
+    mutationFn: () => sendMessage(recipientSeq, content),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['messages'] });
       setShowSuccess(true);
-      setTimeout(() => {
-        onClose();
-      }, SUCCESS_DISPLAY_DURATION_MS);
+      timerRef.current = setTimeout(onClose, SUCCESS_DISPLAY_DURATION_MS);
     },
   });
 
@@ -116,7 +118,9 @@ export function SendMessageDialog({
             {/* Error message */}
             {sendMutation.isError && (
               <p className="mb-3 text-xs text-error">
-                전송에 실패했습니다. 다시 시도해주세요.
+                {sendMutation.error instanceof ApiClientError
+                  ? sendMutation.error.message
+                  : '전송에 실패했습니다. 다시 시도해주세요.'}
               </p>
             )}
 

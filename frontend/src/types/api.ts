@@ -154,10 +154,10 @@ export interface AlumniItem {
   bizDesc: string;
   bizAddr: string;
   jobCatName: string;
-  jobCatColor: string;
   tags: string[];
   photo: string;
   usrSeq: number;
+  bizCard?: string;
 }
 
 export interface AlumniSearchResponse {
@@ -172,7 +172,6 @@ export interface AlumniSearchResponse {
 export interface JobCategory {
   seq: number;
   name: string;
-  color: string;
 }
 
 export interface AlumniFilters {
@@ -192,24 +191,29 @@ export interface UserProfile {
   bizName: string;
   bizDesc: string;
   bizAddr: string;
+  position: string;
   jobCat: number;
   jobCatName: string;
-  jobCatColor: string;
   tags: string[];
   fmDept: string;
   regDate: string;
   usrPhonePublic: 'Y' | 'N';
   usrEmailPublic: 'Y' | 'N';
   usrBizCard: string | null;
+  hasPassword: boolean;
+  hasSocialLogin: boolean;
 }
 
 export interface ProfileUpdateRequest {
-  usrNick: string;
+  usrName: string;
+  usrFn: string;
   usrPhone: string;
   usrEmail: string;
   bizName: string;
   bizDesc: string;
   bizAddr: string;
+  position: string;
+  fmDept: string;
   jobCat: number | null;
   tags: string[];
   usrPhonePublic: 'Y' | 'N';
@@ -220,13 +224,17 @@ export interface SocialLinkRequest {
   token: string;
   name: string;
   phone: string;
+  email: string;
   fn: string;
-  nick?: string;
-  dept?: string;
+  fmDept?: string;
   jobCat?: number | null;
   bizName?: string;
   bizDesc?: string;
   bizAddr?: string;
+  position?: string;
+  tags?: string[];
+  usrPhonePublic?: 'Y' | 'N';
+  usrEmailPublic?: 'Y' | 'N';
 }
 
 export type KakaoLinkRequest = SocialLinkRequest;
@@ -263,6 +271,18 @@ export interface MessageListResponse {
   page: number;
   size: number;
   totalPages: number;
+}
+
+export interface ConversationSummary {
+  otherSeq: number;
+  otherName: string;
+  lastMessage: string;
+  lastDate: string;
+  unreadCount: number;
+}
+
+export interface ConversationListResponse {
+  items: ConversationSummary[];
 }
 
 export interface NotificationItem {

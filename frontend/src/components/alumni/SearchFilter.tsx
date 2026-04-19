@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, RotateCcw, X } from 'lucide-react';
+import { Badge } from '../ui/Badge';
 import { cn } from '../../lib/utils';
 import { api } from '../../api/client';
 import type { AlumniFilters } from '../../types/api';
@@ -17,11 +18,11 @@ interface SearchFilterProps {
   onSearch: (params: AlumniSearchParams) => void;
 }
 
-const DROPDOWN_FILTER_KEYS = ['fn', 'jobCat', 'dept'] as const;
+const DROPDOWN_FILTER_KEYS = ['fn', 'dept', 'jobCat'] as const;
 type DropdownFilterKey = typeof DROPDOWN_FILTER_KEYS[number];
 
 const BASE_SELECT_CLASS =
-  'h-9 rounded-lg border border-border px-3 text-sm outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/30 transition-all duration-150 cursor-pointer';
+  'h-10 rounded-lg border border-border pl-3 pr-8 text-sm outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/30 transition-all duration-150 cursor-pointer';
 const ACTIVE_SELECT_CLASS =
   'bg-primary text-white border-primary font-semibold';
 const INACTIVE_SELECT_CLASS = 'bg-surface text-text-secondary';
@@ -79,79 +80,77 @@ export function SearchFilter({ onSearch }: SearchFilterProps) {
 
   return (
     <div className="rounded-xl bg-surface p-3.5 shadow-card border border-border flex flex-col gap-3">
-      {/* Row 1: Search input + dropdowns + reset */}
-      <div className="flex gap-2 items-center flex-wrap">
-        {/* Name search input */}
-        <div className="flex-1 min-w-[160px] flex items-center gap-2 bg-background border border-border rounded-lg px-3 h-9">
-          <Search size={13} className="text-text-placeholder flex-shrink-0" />
-          <input
-            type="text"
-            placeholder="이름 검색"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onBlur={() => commitName(inputValue)}
-            onKeyDown={(e) => { if (e.key === 'Enter') commitName(inputValue); }}
-            className="flex-1 border-none bg-transparent outline-none text-sm text-text-primary placeholder:text-text-placeholder"
-          />
-          {inputValue && (
+      {/* Search + filters: 모바일=2행, sm+=단일 행 */}
+      <div className="flex flex-col min-[600px]:flex-row gap-2">
+
+        {/* Unit 1 — 검색창 + 초기화 버튼 */}
+        <div className="flex gap-2 items-center min-[600px]:flex-1">
+          <div className="flex-1 h-10 flex items-center gap-2 bg-background border border-border rounded-lg px-3">
+            <Search size={13} className="text-text-placeholder flex-shrink-0" />
+            <input
+              type="text"
+              placeholder="이름 검색"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onBlur={() => commitName(inputValue)}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitName(inputValue); }}
+              className="flex-1 border-none bg-transparent outline-none text-sm text-text-primary placeholder:text-text-placeholder"
+            />
+            {inputValue && (
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { setInputValue(''); clearFilter('name'); }}
+                className="text-text-placeholder hover:text-text-secondary transition-colors"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {hasActiveFilter && (
             <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { setInputValue(''); clearFilter('name'); }}
-              className="text-text-placeholder hover:text-text-secondary transition-colors"
+              onClick={resetAll}
+              className="flex-shrink-0 flex items-center gap-1.5 h-10 px-3 rounded-lg border border-border text-[12px] text-text-tertiary hover:border-border-hover hover:text-text-primary transition-colors duration-150 whitespace-nowrap bg-surface"
             >
-              <X size={14} />
+              <RotateCcw size={11} />
+              초기화
             </button>
           )}
         </div>
 
-        {/* 기수 */}
-        <select
-          value={params.fn}
-          onChange={(e) => handleSelectChange('fn', e.target.value)}
-          className={cn(BASE_SELECT_CLASS, params.fn ? ACTIVE_SELECT_CLASS : INACTIVE_SELECT_CLASS)}
-        >
-          <option value="">기수</option>
-          {filters?.fnList?.map((fn) => (
-            <option key={fn} value={fn}>{fn}기</option>
-          ))}
-        </select>
+        {/* Unit 2 — 드롭다운 3개: 모바일 grid, 데스크탑 flex */}
+        <div className="grid grid-cols-3 min-[600px]:flex gap-2 min-[600px]:items-center">
+          <select
+            value={params.fn}
+            onChange={(e) => handleSelectChange('fn', e.target.value)}
+            className={cn(BASE_SELECT_CLASS, 'w-full min-[600px]:w-auto min-[600px]:flex-none', params.fn ? ACTIVE_SELECT_CLASS : INACTIVE_SELECT_CLASS)}
+          >
+            <option value="">기수</option>
+            {filters?.fnList?.map((fn) => (
+              <option key={fn} value={fn}>{fn}기</option>
+            ))}
+          </select>
+          <select
+            value={params.dept}
+            onChange={(e) => handleSelectChange('dept', e.target.value)}
+            className={cn(BASE_SELECT_CLASS, 'w-full min-[600px]:w-auto min-[600px]:flex-none', params.dept ? ACTIVE_SELECT_CLASS : INACTIVE_SELECT_CLASS)}
+          >
+            <option value="">학과</option>
+            {filters?.deptList?.map((dept) => (
+              <option key={dept} value={dept}>{dept}</option>
+            ))}
+          </select>
+          <select
+            value={params.jobCat}
+            onChange={(e) => handleSelectChange('jobCat', e.target.value)}
+            className={cn(BASE_SELECT_CLASS, 'w-full min-[600px]:w-auto min-[600px]:flex-none', params.jobCat ? ACTIVE_SELECT_CLASS : INACTIVE_SELECT_CLASS)}
+          >
+            <option value="">업종</option>
+            {filters?.jobCategories?.map((cat) => (
+              <option key={cat.seq} value={String(cat.seq)}>{cat.name}</option>
+            ))}
+          </select>
+        </div>
 
-        {/* 업종 */}
-        <select
-          value={params.jobCat}
-          onChange={(e) => handleSelectChange('jobCat', e.target.value)}
-          className={cn(BASE_SELECT_CLASS, params.jobCat ? ACTIVE_SELECT_CLASS : INACTIVE_SELECT_CLASS)}
-        >
-          <option value="">업종</option>
-          {filters?.jobCategories?.map((cat) => (
-            <option key={cat.seq} value={String(cat.seq)}>{cat.name}</option>
-          ))}
-        </select>
-
-        {/* 학과 */}
-        <select
-          value={params.dept}
-          onChange={(e) => handleSelectChange('dept', e.target.value)}
-          className={cn(BASE_SELECT_CLASS, params.dept ? ACTIVE_SELECT_CLASS : INACTIVE_SELECT_CLASS)}
-        >
-          <option value="">학과</option>
-          {filters?.deptList?.map((dept) => (
-            <option key={dept} value={dept}>{dept}</option>
-          ))}
-        </select>
-
-        {/* 초기화 — always in DOM to preserve flex layout; invisible when no filter is active */}
-        <button
-          onClick={resetAll}
-          disabled={!hasActiveFilter}
-          className={cn(
-            "flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-[12px] text-text-tertiary hover:border-border-hover hover:text-text-primary transition-colors duration-150 whitespace-nowrap bg-surface",
-            !hasActiveFilter && "invisible pointer-events-none"
-          )}
-        >
-          <RotateCcw size={11} />
-          초기화
-        </button>
       </div>
 
       {/* Row 2: Active filter pills — shown when any dropdown filter is active */}
@@ -161,10 +160,7 @@ export function SearchFilter({ onSearch }: SearchFilterProps) {
             const label = getDropdownLabel(field);
             if (!label) return null;
             return (
-              <span
-                key={field}
-                className="flex items-center gap-1 bg-cat-notice-bg text-cat-notice-text border border-cat-notice-border rounded-full px-2.5 py-0.5 text-[12px] font-medium"
-              >
+              <Badge key={field} variant="category" className="gap-1">
                 {label}
                 <button
                   onClick={() => clearFilter(field)}
@@ -172,7 +168,7 @@ export function SearchFilter({ onSearch }: SearchFilterProps) {
                 >
                   <X size={12} />
                 </button>
-              </span>
+              </Badge>
             );
           })}
         </div>

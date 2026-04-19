@@ -11,6 +11,18 @@ import { useAdMutations } from '../hooks/useAdMutations.ts';
 import { uploadImage } from '../components/editor/uploadImage.ts';
 import type { AdminAdListItem } from '../types/api.ts';
 
+const TIER_OPTIONS = [
+  { value: 'PREMIUM', label: '1-tier (가장 핫한 동문 소식)' },
+  { value: 'GOLD',    label: '2-tier (추천 동문 소식)' },
+  { value: 'NORMAL',  label: '3-tier (동문 소식)' },
+] as const;
+
+// datetimeLocalToUTC: "2026-03-17T09:00" (KST local input) → UTC ISO string
+function datetimeLocalToUTC(kst: string): string | undefined {
+  if (!kst) return undefined;
+  return new Date(kst).toISOString();
+}
+
 export function AdEditPage() {
   const { maSeq } = useParams<{ maSeq: string }>();
   const { data: ads } = useAdList();
@@ -32,6 +44,8 @@ function AdEditForm({
   const form = useAdForm(ad);
   const { save, isSaving } = useAdMutations(maSeq);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isLimitedTier = form.adTier === 'PREMIUM' || form.adTier === 'GOLD';
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -113,11 +127,14 @@ function AdEditForm({
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-dark-slate">등급</label>
-            <Select value={form.adTier} onChange={(e) => form.setAdTier(e.target.value)}>
-              <option value="PREMIUM">PREMIUM</option>
-              <option value="GOLD">GOLD</option>
-              <option value="NORMAL">NORMAL</option>
+            <Select value={form.adTier} onChange={(e) => form.setAdTierAndLabel(e.target.value)}>
+              {TIER_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
             </Select>
+            {isLimitedTier && (
+              <p className="text-xs text-amber-600">이 등급은 1개만 활성화 가능합니다.</p>
+            )}
           </div>
         </div>
 
@@ -128,6 +145,28 @@ function AdEditForm({
             value={form.adTitleLabel}
             onChange={(e) => form.setAdTitleLabel(e.target.value)}
           />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-dark-slate">게시 기간 (KST, 비워두면 기간 제한 없음)</label>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-cool-gray">시작일시</label>
+              <Input
+                type="datetime-local"
+                value={form.adStartDate}
+                onChange={(e) => form.setAdStartDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-cool-gray">종료일시</label>
+              <Input
+                type="datetime-local"
+                value={form.adEndDate}
+                onChange={(e) => form.setAdEndDate(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -150,6 +189,8 @@ function AdEditForm({
               adTier: form.adTier,
               adTitleLabel: form.adTitleLabel,
               maIndx: form.maIndx,
+              adStartDate: datetimeLocalToUTC(form.adStartDate),
+              adEndDate: datetimeLocalToUTC(form.adEndDate),
             })}
             disabled={isSaving || !form.isValid}
           >

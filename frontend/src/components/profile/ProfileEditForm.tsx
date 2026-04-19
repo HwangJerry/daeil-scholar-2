@@ -33,7 +33,11 @@ function PrivacyToggle({
   );
 }
 
-export function ProfileEditForm() {
+interface ProfileEditFormProps {
+  onSuccess?: () => void;
+}
+
+export function ProfileEditForm({ onSuccess }: ProfileEditFormProps) {
   const queryClient = useQueryClient();
 
   const { data: profile, isLoading } = useQuery({
@@ -49,15 +53,17 @@ export function ProfileEditForm() {
 
   const [form, setForm] = useState<ProfileUpdateRequest | null>(null);
   const [tagInput, setTagInput] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
 
   const displayForm: ProfileUpdateRequest = form ?? {
-    usrNick: profile?.usrNick ?? '',
+    usrName: profile?.usrName ?? '',
+    usrFn: profile?.usrFn ?? '',
     usrPhone: profile?.usrPhone ?? '',
     usrEmail: profile?.usrEmail ?? '',
     bizName: profile?.bizName ?? '',
     bizDesc: profile?.bizDesc ?? '',
     bizAddr: profile?.bizAddr ?? '',
+    position: profile?.position ?? '',
+    fmDept: profile?.fmDept ?? '',
     jobCat: profile?.jobCat ?? null,
     tags: profile?.tags ?? [],
     usrPhonePublic: profile?.usrPhonePublic ?? 'Y',
@@ -68,8 +74,7 @@ export function ProfileEditForm() {
     mutationFn: (data: ProfileUpdateRequest) => api.put('/api/profile', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
-      setSuccessMsg('저장되었습니다.');
-      setTimeout(() => setSuccessMsg(''), 2000);
+      onSuccess?.();
     },
   });
 
@@ -79,6 +84,7 @@ export function ProfileEditForm() {
 
   const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
+    if (e.nativeEvent.isComposing) return;
     e.preventDefault();
     const tag = tagInput.trim();
     if (!tag || displayForm.tags.length >= MAX_TAGS) return;
@@ -131,19 +137,37 @@ export function ProfileEditForm() {
         shape="square"
       />
 
-      {/* Name (read-only) */}
+      {/* Name */}
       <div className="mb-4">
-        <label className={labelClass}>이름</label>
-        <p className="py-2 text-sm text-text-primary">{profile.usrName} ({profile.usrFn}기)</p>
-      </div>
-
-      {/* Nickname */}
-      <div className="mb-4">
-        <label className={`mb-1 block ${labelClass}`}>닉네임</label>
+        <label className={`mb-1 block ${labelClass}`}>이름</label>
         <input
           type="text"
-          value={displayForm.usrNick}
-          onChange={(e) => handleChange('usrNick', e.target.value)}
+          value={displayForm.usrName}
+          onChange={(e) => handleChange('usrName', e.target.value)}
+          className={inputClass}
+        />
+      </div>
+
+      {/* Class year */}
+      <div className="mb-4">
+        <label className={`mb-1 block ${labelClass}`}>대일외고 기수</label>
+        <input
+          type="text"
+          value={displayForm.usrFn}
+          onChange={(e) => handleChange('usrFn', e.target.value.replace(/\D/g, ''))}
+          placeholder="예: 10"
+          className={inputClass}
+        />
+      </div>
+
+      {/* Department */}
+      <div className="mb-4">
+        <label className={`mb-1 block ${labelClass}`}>대일외고 학과</label>
+        <input
+          type="text"
+          value={displayForm.fmDept}
+          onChange={(e) => handleChange('fmDept', e.target.value)}
+          placeholder="예: 독일어과"
           className={inputClass}
         />
       </div>
@@ -217,7 +241,7 @@ export function ProfileEditForm() {
 
       {/* Business Name */}
       <div className="mb-4">
-        <label className={`mb-1 block ${labelClass}`}>사업장명</label>
+        <label className={`mb-1 block ${labelClass}`}>소속</label>
         <input
           type="text"
           value={displayForm.bizName}
@@ -227,28 +251,40 @@ export function ProfileEditForm() {
         />
       </div>
 
-      {/* Business Description */}
-      <div className="mb-4">
-        <label className={`mb-1 block ${labelClass}`}>사업 설명</label>
-        <textarea
-          value={displayForm.bizDesc}
-          onChange={(e) => handleChange('bizDesc', e.target.value)}
-          placeholder="간단한 사업 설명 (200자 이내)"
-          maxLength={200}
-          rows={3}
-          className={cn(inputClass, 'resize-none')}
-        />
-      </div>
-
       {/* Business Address */}
       <div className="mb-4">
-        <label className={`mb-1 block ${labelClass}`}>위치</label>
+        <label className={`mb-1 block ${labelClass}`}>근무지</label>
         <input
           type="text"
           value={displayForm.bizAddr}
           onChange={(e) => handleChange('bizAddr', e.target.value)}
           placeholder="예: 서울시 강남구 삼성동"
           className={inputClass}
+        />
+      </div>
+
+      {/* Position / 직책 */}
+      <div className="mb-4">
+        <label className={`mb-1 block ${labelClass}`}>직책</label>
+        <input
+          type="text"
+          value={displayForm.position}
+          onChange={(e) => handleChange('position', e.target.value)}
+          placeholder="예: 대표, 이사, 팀장"
+          className={inputClass}
+        />
+      </div>
+
+      {/* Business Description */}
+      <div className="mb-4">
+        <label className={`mb-1 block ${labelClass}`}>소개글</label>
+        <textarea
+          value={displayForm.bizDesc}
+          onChange={(e) => handleChange('bizDesc', e.target.value)}
+          placeholder="간단한 소개글 (200자 이내)"
+          maxLength={200}
+          rows={3}
+          className={cn(inputClass, 'resize-none')}
         />
       </div>
 
@@ -287,7 +323,6 @@ export function ProfileEditForm() {
       <Button type="submit" disabled={mutation.isPending} className="w-full">
         {mutation.isPending ? '저장 중...' : '저장'}
       </Button>
-      {successMsg && <p className="mt-2 text-center text-sm text-success">{successMsg}</p>}
       {mutation.isError && (
         <p className="mt-2 text-center text-sm text-error">저장에 실패했습니다. 다시 시도해주세요.</p>
       )}

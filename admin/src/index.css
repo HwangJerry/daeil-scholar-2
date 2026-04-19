@@ -61,4 +61,11 @@
   body {
     @apply bg-background text-text-main font-sans antialiased;
   }
+
+  /* Prevent iOS Safari auto-zoom on input focus (triggers when font-size < 16px) */
+  @media (hover: none) and (pointer: coarse) {
+    input, textarea, select {
+      font-size: 16px;
+    }
+  }
 }

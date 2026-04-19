@@ -17,6 +17,9 @@ var ErrIDTaken = errors.New("user ID already taken")
 // ErrPhoneTaken is returned when the phone number is already registered.
 var ErrPhoneTaken = errors.New("phone number already taken")
 
+// ErrEmailTaken is returned when the email address is already registered.
+var ErrEmailTaken = errors.New("email already taken")
+
 // MemberService handles member lookup and creation, used by auth handlers.
 type MemberService struct {
 	repo *repository.AuthRepository
@@ -55,35 +58,9 @@ func (s *MemberService) FindMemberByPhone(phone string) (*model.User, error) {
 }
 
 // CreateMember inserts a new member with USR_ID = "K" + kakaoID and returns the created user.
-func (s *MemberService) CreateMember(kakaoID, name, phone, fn, email, nick, dept string, jobCat *int, bizName, bizDesc, bizAddr string) (*model.User, error) {
+func (s *MemberService) CreateMember(kakaoID, name, phone, fn, email, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) (*model.User, error) {
 	usrID := "K" + kakaoID
-	usrSeq, err := s.repo.InsertMember(usrID, name, phone, fn, email, nick, dept, jobCat, bizName, bizDesc, bizAddr)
-	if err != nil {
-		return nil, err
-	}
-	return s.repo.GetMemberBySeq(usrSeq)
-}
-
-// RegisterMember validates uniqueness, hashes password, and inserts a new BBB-status member.
-func (s *MemberService) RegisterMember(req model.RegisterRequest) (*model.User, error) {
-	idExists, err := s.repo.CheckIDExists(req.UsrID)
-	if err != nil {
-		return nil, err
-	}
-	if idExists {
-		return nil, ErrIDTaken
-	}
-
-	phoneExists, err := s.repo.CheckPhoneExists(req.Phone)
-	if err != nil {
-		return nil, err
-	}
-	if phoneExists {
-		return nil, ErrPhoneTaken
-	}
-
-	hashed := MysqlNativePassword(req.Password)
-	usrSeq, err := s.repo.InsertMemberWithPwd(req, hashed)
+	usrSeq, err := s.repo.InsertMember(usrID, name, phone, fn, email, fmDept, jobCat, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic)
 	if err != nil {
 		return nil, err
 	}

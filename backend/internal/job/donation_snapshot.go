@@ -58,6 +58,12 @@ func (j *DonationSnapshotJob) Stop() {
 	}
 }
 
+// CreateSnapshotNow immediately recomputes and upserts today's snapshot.
+// Used by admin config updates to reflect changes without waiting for the nightly job.
+func (j *DonationSnapshotJob) CreateSnapshotNow() error {
+	return j.createSnapshot()
+}
+
 func (j *DonationSnapshotJob) createSnapshot() error {
 	total, err := j.repo.SumDonations()
 	if err != nil {
@@ -73,9 +79,11 @@ func (j *DonationSnapshotJob) createSnapshot() error {
 	}
 	manualAdj := int64(0)
 	goal := int64(0)
+	overwrite := "N"
 	if config != nil {
 		manualAdj = config.ManualAdj
 		goal = config.Goal
+		overwrite = config.Overwrite
 	}
-	return j.repo.UpsertSnapshot(time.Now(), total, manualAdj, donorCount, goal)
+	return j.repo.UpsertSnapshot(time.Now(), total, manualAdj, donorCount, goal, overwrite)
 }

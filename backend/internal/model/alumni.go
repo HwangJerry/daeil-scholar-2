@@ -4,26 +4,25 @@ import (
 	"database/sql"
 )
 
-// AlumniRecord represents a member from FUNDAMENTAL_MEMBER or WEO_MEMBER (UNION ALL result).
+// AlumniRecord represents a member from WEO_MEMBER.
 type AlumniRecord struct {
-	FMSEQ      sql.NullInt64  `db:"FM_SEQ" json:"fmSeq"`
-	FMName     string         `db:"FM_NAME" json:"fmName"`
-	FMFN       sql.NullString `db:"FM_FN" json:"fmFn"`
-	FMDept     sql.NullString `db:"FM_DEPT" json:"fmDept"`
-	FMCompany  sql.NullString `db:"FM_COMPANY" json:"fmCompany"`
-	FMPos      sql.NullString `db:"FM_POSITION" json:"fmPosition"`
-	FMPhone    sql.NullString `db:"FM_PHONE" json:"-"`
-	FMEmail    sql.NullString `db:"FM_EMAIL" json:"-"`
-	FMSMS      sql.NullString `db:"FM_SMS" json:"-"`
-	FMSpam     sql.NullString `db:"FM_SPAM" json:"-"`
-	USRBizName sql.NullString `db:"USR_BIZ_NAME" json:"-"`
-	USRBizDesc sql.NullString `db:"USR_BIZ_DESC" json:"-"`
-	USRBizAddr sql.NullString `db:"USR_BIZ_ADDR" json:"-"`
-	AJCName    sql.NullString `db:"AJC_NAME" json:"-"`
-	AJCColor   sql.NullString `db:"AJC_COLOR" json:"-"`
-	USRPhoto   sql.NullString `db:"USR_PHOTO" json:"-"`
-	USRSeq     sql.NullInt64  `db:"USR_SEQ" json:"-"`
-	Tags       sql.NullString `db:"TAGS" json:"-"`
+	USRSeq        sql.NullInt64  `db:"USR_SEQ"`
+	USRName       string         `db:"USR_NAME"`
+	USRFN         sql.NullString `db:"USR_FN"`
+	USRDept       sql.NullString `db:"USR_DEPT"`
+	USRBizName    sql.NullString `db:"USR_BIZ_NAME"`
+	USRBizDesc    sql.NullString `db:"USR_BIZ_DESC"`
+	USRBizAddr    sql.NullString `db:"USR_BIZ_ADDR"`
+	USRPhone      sql.NullString `db:"USR_PHONE"`
+	USREmail      sql.NullString `db:"USR_EMAIL"`
+	USRPhoto      sql.NullString `db:"USR_PHOTO"`
+	USRNick       sql.NullString `db:"USR_NICK"`
+	USRPosition   sql.NullString `db:"USR_POSITION"`
+	USRBizCard    sql.NullString `db:"USR_BIZ_CARD"`
+	USRPhonePublic sql.NullString `db:"USR_PHONE_PUBLIC"`
+	USREmailPublic sql.NullString `db:"USR_EMAIL_PUBLIC"`
+	AJCName       sql.NullString `db:"AJC_NAME"`
+	Tags          sql.NullString `db:"TAGS"`
 }
 
 // AlumniCard is the API response for a single alumni in the search results.
@@ -40,22 +39,22 @@ type AlumniCard struct {
 	BizDesc     string   `json:"bizDesc"`
 	BizAddr     string   `json:"bizAddr"`
 	JobCatName  string   `json:"jobCatName"`
-	JobCatColor string   `json:"jobCatColor"`
 	Tags        []string `json:"tags"`
 	Photo       string   `json:"photo"`
 	UsrSeq      int      `json:"usrSeq"`
+	Nick        string   `json:"nick"`
+	BizCard     string   `json:"bizCard"`
 }
 
 // AlumniSearchParams holds the query parameters for alumni search.
 type AlumniSearchParams struct {
-	FN       string
-	Dept     string
-	Name     string
-	Company  string
-	Position string
-	JobCat   int
-	Page     int
-	Size     int
+	FN      string
+	Dept    string
+	Name    string
+	Company string
+	JobCat  int
+	Page    int
+	Size    int
 }
 
 // AlumniSearchResponse is the API response for GET /api/alumni.
@@ -77,9 +76,8 @@ type AlumniFilters struct {
 
 // JobCategory represents a row in ALUMNI_JOB_CATEGORY table.
 type JobCategory struct {
-	Seq   int    `db:"AJC_SEQ" json:"seq"`
-	Name  string `db:"AJC_NAME" json:"name"`
-	Color string `db:"AJC_COLOR" json:"color"`
+	Seq  int    `db:"AJC_SEQ" json:"seq"`
+	Name string `db:"AJC_NAME" json:"name"`
 }
 
 // UserTag represents a row in ALUMNI_USER_TAG table.

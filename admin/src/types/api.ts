@@ -82,6 +82,8 @@ export interface AdminAdListItem {
   adTier: 'PREMIUM' | 'GOLD' | 'NORMAL';
   adTitleLabel: string;
   maIndx: number;
+  adStartDate: string | null;
+  adEndDate: string | null;
 }
 
 export interface AdminAdCreateRequest {
@@ -92,6 +94,8 @@ export interface AdminAdCreateRequest {
   adTier: string;
   adTitleLabel: string;
   maIndx: number;
+  adStartDate?: string;
+  adEndDate?: string;
 }
 
 export interface AdminAdUpdateRequest {
@@ -102,6 +106,8 @@ export interface AdminAdUpdateRequest {
   adTier: string;     // 'PREMIUM' | 'GOLD' | 'NORMAL'
   adTitleLabel: string;
   maIndx: number;
+  adStartDate?: string;
+  adEndDate?: string;
 }
 
 export interface AdminAdStatsItem {
@@ -117,6 +123,7 @@ export interface DonationConfig {
   dcGoal: number;
   dcManualAdj: number;
   dcNote: string;
+  dcOverwrite: string; // "Y" | "N"
   isActive: string;
   regDate: string;
 }
@@ -125,6 +132,7 @@ export interface DonationConfigUpdateRequest {
   goal: number;
   manualAdj: number;
   note: string;
+  overwrite: boolean;
 }
 
 export interface DonationSnapshot {
@@ -145,6 +153,8 @@ export interface AdminMemberListItem {
   usrFn: string | null;
   usrPhone: string | null;
   usrEmail: string | null;
+  usrDept: string | null;
+  regDate: string | null;
   visitDate: string | null;
 }
 
@@ -238,4 +248,19 @@ export interface AdminDonationOrderListResponse {
 export interface AdminDonationOrderUpdateRequest {
   payment: string;
   amount: number;
+}
+
+// --- Job Category ---
+
+export interface AdminJobCategory {
+  seq: number;
+  name: string;
+  index: number;
+  openYn: 'Y' | 'N';
+}
+
+export interface AdminJobCategoryUpsert {
+  name: string;
+  index: number;
+  openYn: 'Y' | 'N';
 }

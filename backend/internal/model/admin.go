@@ -28,14 +28,16 @@ type AdminNoticeInsert struct {
 // --- Ad ---
 
 type AdminAdRow struct {
-	MASeq        int    `db:"MA_SEQ" json:"maSeq"`
-	MAName       string `db:"MA_NAME" json:"maName"`
-	MAURL        string `db:"MA_URL" json:"maUrl"`
-	MAImg        string `db:"MA_IMG" json:"maImg"`
-	MAStatus     string `db:"OPEN_YN" json:"maStatus"`
-	ADTier       string `db:"AD_TIER" json:"adTier"`
-	ADTitleLabel string `db:"AD_TITLE_LABEL" json:"adTitleLabel"`
-	MAIndx       int    `db:"INDX" json:"maIndx"`
+	MASeq        int     `db:"MA_SEQ" json:"maSeq"`
+	MAName       string  `db:"MA_NAME" json:"maName"`
+	MAURL        string  `db:"MA_URL" json:"maUrl"`
+	MAImg        string  `db:"MA_IMG" json:"maImg"`
+	MAStatus     string  `db:"OPEN_YN" json:"maStatus"`
+	ADTier       string  `db:"AD_TIER" json:"adTier"`
+	ADTitleLabel string  `db:"AD_TITLE_LABEL" json:"adTitleLabel"`
+	MAIndx       int     `db:"INDX" json:"maIndx"`
+	ADStartDate  *string `db:"AD_START_DATE" json:"adStartDate"`
+	ADEndDate    *string `db:"AD_END_DATE" json:"adEndDate"`
 }
 
 type AdminAdInsert struct {
@@ -46,6 +48,8 @@ type AdminAdInsert struct {
 	ADTier       string
 	ADTitleLabel string
 	MAIndx       int
+	ADStartDate  *string `json:"adStartDate"`
+	ADEndDate    *string `json:"adEndDate"`
 }
 
 type AdminAdStats struct {
@@ -64,6 +68,8 @@ type AdminMemberRow struct {
 	USRFN     string `db:"USR_FN" json:"usrFn"`
 	USRPhone  string `db:"USR_PHONE" json:"usrPhone"`
 	USREmail  string `db:"USR_EMAIL" json:"usrEmail"`
+	USRDept   string `db:"USR_DEPT" json:"usrDept"`
+	RegDate   string `db:"REG_DATE" json:"regDate"`
 	VisitDate string `db:"VISIT_DATE" json:"visitDate"`
 }
 
@@ -98,6 +104,21 @@ type DashboardAdStats struct {
 	TotalImpressions int     `json:"totalImpressions"`
 	TotalClicks      int     `json:"totalClicks"`
 	CTR              float64 `json:"ctr"`
+}
+
+// --- Job Category ---
+
+type AdminJobCategory struct {
+	Seq    int    `db:"AJC_SEQ"  json:"seq"`
+	Name   string `db:"AJC_NAME" json:"name"`
+	Index  int    `db:"AJC_INDX"  json:"index"`
+	OpenYN string `db:"OPEN_YN"   json:"openYn"`
+}
+
+type AdminJobCategoryUpsert struct {
+	Name   string `json:"name"`
+	Index  int    `json:"index"`
+	OpenYN string `json:"openYn"`
 }
 
 // --- Donation Order ---

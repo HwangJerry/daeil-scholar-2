@@ -5,6 +5,7 @@ import { PageMeta } from '../components/seo/PageMeta';
 import { ProfileHeader } from '../components/profile/ProfileHeader';
 import { ProfileEditForm } from '../components/profile/ProfileEditForm';
 import { AccountActions } from '../components/profile/AccountActions';
+import Footer from '../components/layout/Footer';
 
 function MyPageContent() {
   const [showEdit, setShowEdit] = useState(false);
@@ -18,7 +19,7 @@ function MyPageContent() {
         >
           &larr; 돌아가기
         </button>
-        <ProfileEditForm />
+        <ProfileEditForm onSuccess={() => setShowEdit(false)} />
       </div>
     );
   }
@@ -27,6 +28,7 @@ function MyPageContent() {
     <div className="space-y-6 pb-20">
       <ProfileHeader onEditClick={() => setShowEdit(true)} />
       <AccountActions />
+      <Footer />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/handler"
+	"github.com/dflh-saf/backend/internal/job"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/presenter"
 	"github.com/dflh-saf/backend/internal/repository"
@@ -19,10 +20,11 @@ import (
 type deps struct {
 	authService       *service.AuthService
 	handlers          handlers
+	cacheStore        *cache.Cache
 	donationRepo      *repository.DonationRepository
+	donationJob       *job.DonationSnapshotJob
 	sessionRepo       *repository.SessionRepository
 	passwordResetRepo *repository.PasswordResetRepository
-	notificationRepo  *repository.NotificationRepository
 	pgAuditLog        *service.PGAuditLogger
 	emailQueue        chan model.EmailMessage
 	emailService      *service.EmailService
@@ -50,7 +52,6 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	commentRepo := repository.NewCommentRepository(db)
 	messageRepo := repository.NewMessageRepository(db)
 	passwordResetRepo := repository.NewPasswordResetRepository(db)
-	notificationRepo := repository.NewNotificationRepository(db)
 
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
 
@@ -60,6 +61,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 
 	authService := service.NewAuthService(authRepo, sessionRepo, cfg, cacheStore, logger)
 	memberService := service.NewMemberService(authRepo)
+	registrationService := service.NewRegistrationService(authRepo, profileRepo)
 	feedService := service.NewFeedService(feedRepo, adRepo, cacheStore)
 	ogService := service.NewOGService(feedRepo)
 	sitemapService := service.NewSitemapService(feedRepo, cacheStore)
@@ -72,6 +74,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	adminNoticeSvc := service.NewAdminNoticeService(adminNoticeRepo)
 	adminAdSvc := service.NewAdminAdService(adminAdRepo)
 	adminDonationSvc := service.NewAdminDonationService(adminDonationRepo, donationRepo)
+	donationJob := job.NewDonationSnapshotJob(donationRepo, logger)
+	adminDonationOrchestrator := service.NewDonationConfigOrchestrator(adminDonationSvc, donationService, donationJob)
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
 	adminDashboardSvc := service.NewAdminDashboardService(adminMemberSvc, adminNoticeSvc, adminAdSvc, donationService)
 	fileStorage := service.NewFileStorageService(cfg.Upload.BasePath)
@@ -85,27 +89,24 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		return nil, err
 	}
 
-	// Notification service (needed by message, comment, like, admin member services)
-	notificationService := service.NewNotificationService(notificationRepo, authRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
-
-	likeService := service.NewLikeService(likeRepo, feedRepo, notificationService)
-	commentService := service.NewCommentService(commentRepo, feedRepo, notificationService)
+	likeService := service.NewLikeService(likeRepo, feedRepo)
+	commentService := service.NewCommentService(commentRepo)
 	myDonationService := service.NewMyDonationService(myDonationRepo)
-	messageService := service.NewMessageService(messageRepo, profileRepo, notificationService)
+	messageService := service.NewMessageService(messageRepo, profileRepo)
 	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
+	passwordChangeSvc := service.NewPasswordChangeService(profileRepo)
 	donateService := service.NewDonateService(donateRepo, easypayService, cacheStore, logger, pgAuditLogger)
+	adminJobCatRepo := repository.NewAdminJobCategoryRepository(db)
+	adminJobCatSvc := service.NewAdminJobCategoryService(adminJobCatRepo, cacheStore)
+
 	subscriptionRepo := repository.NewSubscriptionRepository(db)
 	subscriptionService := service.NewSubscriptionService(subscriptionRepo, donateService, cacheStore, logger)
-
-	// Wire approval notifier into admin member service
-	approvalNotifier := service.NewMemberApprovalNotifier(notificationService)
-	adminMemberSvc.SetApprovalNotifier(approvalNotifier)
 
 	feedPresenter := presenter.NewFeedPresenter()
 
 	h := handlers{
 		health:         handler.NewHealthHandler(db),
-		auth:           handler.NewAuthHandler(authService, memberService, cacheStore, cfg, logger),
+		auth:           handler.NewAuthHandler(authService, memberService, registrationService, cacheStore, cfg, logger),
 		feed:           handler.NewFeedHandler(feedService, likeService, feedPresenter),
 		like:           handler.NewLikeHandler(likeService),
 		comment:        handler.NewCommentHandler(commentService),
@@ -118,7 +119,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		adComment:      handler.NewAdCommentHandler(adCommentService),
 		adminNotice:    handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
 		adminAd:        handler.NewAdminAdHandler(adminAdSvc),
-		adminDonation:  handler.NewAdminDonationHandler(adminDonationSvc),
+		adminDonation:  handler.NewAdminDonationHandler(adminDonationOrchestrator),
 		adminMember:    handler.NewAdminMemberHandler(adminMemberSvc),
 		adminDashboard: handler.NewAdminDashboardHandler(adminDashboardSvc),
 		adminUpload:    handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
@@ -129,17 +130,19 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		og:             handler.NewOGHandler(ogService, cfg.Server.SiteBaseURL),
 		sitemap:        handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
 		passwordReset:  handler.NewPasswordResetHandler(passwordResetService, logger),
-		notification:   handler.NewNotificationHandler(notificationService, logger),
-		badge:          handler.NewBadgeHandler(notificationService, messageService, logger),
+		passwordChange: handler.NewPasswordChangeHandler(passwordChangeSvc),
+		badge:          handler.NewBadgeHandler(messageService, logger),
+		adminJobCat:    handler.NewAdminJobCategoryHandler(adminJobCatSvc),
 	}
 
 	return &deps{
 		authService:       authService,
 		handlers:          h,
+		cacheStore:        cacheStore,
 		donationRepo:      donationRepo,
+		donationJob:       donationJob,
 		sessionRepo:       sessionRepo,
 		passwordResetRepo: passwordResetRepo,
-		notificationRepo:  notificationRepo,
 		pgAuditLog:        pgAuditLogger,
 		emailQueue:        emailQueue,
 		emailService:      emailService,

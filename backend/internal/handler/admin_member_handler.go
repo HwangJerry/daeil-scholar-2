@@ -22,7 +22,7 @@ func (h *AdminMemberHandler) List(w http.ResponseWriter, r *http.Request) {
 	rows, total, err := h.service.List(
 		parseIntParam(q.Get("page")),
 		parseIntParam(q.Get("size")),
-		q.Get("name"), q.Get("fn"), q.Get("status"),
+		q.Get("q"), q.Get("fn"), q.Get("status"),
 	)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "LIST_FAILED", "Failed to list members")

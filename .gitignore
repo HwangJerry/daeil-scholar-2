@@ -27,3 +27,4 @@ __debug_bin*
 
 # Design prototypes / scratch files
 daeil-redesign-v2.jsx
+.gstack/

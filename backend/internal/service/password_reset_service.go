@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"regexp"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
@@ -14,8 +15,14 @@ import (
 
 const (
 	resetTokenBytes   = 32
-	resetTokenExpiry  = 30 * time.Minute
-	minPasswordLength = 4
+	resetTokenExpiry  = 15 * time.Minute
+	minPasswordLength = 8
+)
+
+var (
+	pwHasLetter  = regexp.MustCompile(`[a-zA-Z]`)
+	pwHasNumber  = regexp.MustCompile(`[0-9]`)
+	pwHasSpecial = regexp.MustCompile(`[^a-zA-Z0-9]`)
 )
 
 // PasswordResetService handles the password reset request and confirmation flow.
@@ -102,7 +109,10 @@ func (s *PasswordResetService) ConfirmReset(req model.PasswordResetConfirm) erro
 		return errors.New("토큰이 없습니다")
 	}
 	if len(req.NewPassword) < minPasswordLength {
-		return errors.New("비밀번호는 최소 4자 이상이어야 합니다")
+		return errors.New("비밀번호는 최소 8자 이상이어야 합니다")
+	}
+	if !pwHasLetter.MatchString(req.NewPassword) || !pwHasNumber.MatchString(req.NewPassword) || !pwHasSpecial.MatchString(req.NewPassword) {
+		return errors.New("비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다")
 	}
 
 	tokenRow, err := s.repo.FindValidToken(req.Token)

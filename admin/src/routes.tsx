@@ -12,6 +12,7 @@ import { MemberListPage } from './pages/MemberListPage.tsx';
 import { MemberDetailPage } from './pages/MemberDetailPage.tsx';
 import { PendingMembersPage } from './pages/PendingMembersPage.tsx';
 import { AdminLoginPage } from './pages/AdminLoginPage.tsx';
+import { JobCategoryPage } from './pages/JobCategoryPage.tsx';
 
 export function AppRoutes() {
   return (
@@ -35,6 +36,7 @@ export function AppRoutes() {
         <Route path="member" element={<MemberListPage />} />
         <Route path="member/pending" element={<PendingMembersPage />} />
         <Route path="member/:seq" element={<MemberDetailPage />} />
+        <Route path="job-categories" element={<JobCategoryPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -1,30 +1,27 @@
-// BottomNav — Mobile bottom navigation with message and notification badges
-import { Home, Users, Heart, MessageCircle, Bell, User } from "lucide-react";
+// BottomNav — Mobile bottom navigation with message badge
+import { Home, Users, Heart, MessageCircle, User } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import { useUnreadMessages } from "../../hooks/useUnreadMessages";
-import { useBadges } from "../../hooks/useBadges";
 
 export default function BottomNav() {
   const location = useLocation();
   const path = location.pathname;
   const { unreadCount } = useUnreadMessages();
-  const { unreadNotifications } = useBadges();
 
   const navItems = [
     { label: "홈", icon: Home, href: "/" },
     { label: "동문찾기", icon: Users, href: "/alumni" },
     { label: "기부", icon: Heart, href: "/donation" },
-    { label: "알림", icon: Bell, href: "/notifications", badge: unreadNotifications },
     { label: "쪽지", icon: MessageCircle, href: "/messages", badge: unreadCount },
     { label: "MY", icon: User, href: "/me" },
   ];
 
   return (
-    <nav className="fixed bottom-4 left-4 right-4 rounded-2xl bg-surface/95 backdrop-blur-xl shadow-nav pb-safe z-50 md:hidden">
+    <nav className="fixed bottom-4 left-4 right-4 rounded-2xl bg-surface/70 backdrop-blur-2xl border border-white/60 shadow-[0_8px_32px_rgb(26,26,46,0.14),inset_0_1px_0_rgb(255,255,255,0.8)] pb-safe z-50 md:hidden">
       <div className="flex items-center justify-around h-14">
         {navItems.map((item) => {
-          const isActive = path === item.href;
+          const isActive = item.href === '/' ? path === '/' : path === item.href || path.startsWith(item.href + '/');
           const Icon = item.icon;
 
           return (

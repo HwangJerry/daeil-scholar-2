@@ -30,3 +30,22 @@ type MessageListResponse struct {
 	Size       int       `json:"size"`
 	TotalPages int       `json:"totalPages"`
 }
+
+// ConversationSummary represents a conversation thread summary with another user.
+type ConversationSummary struct {
+	OtherSeq    int    `db:"other_seq"    json:"otherSeq"`
+	OtherName   string `db:"other_name"   json:"otherName"`
+	LastMessage string `db:"last_message" json:"lastMessage"`
+	LastDate    string `db:"last_date"    json:"lastDate"`
+	UnreadCount int    `db:"unread_count" json:"unreadCount"`
+}
+
+// ConversationListResponse is the API response for GET /api/messages/conversations.
+type ConversationListResponse struct {
+	Items []ConversationSummary `json:"items"`
+}
+
+// BadgeResponse is the API response for GET /api/badges.
+type BadgeResponse struct {
+	UnreadMessages int `json:"unreadMessages"`
+}

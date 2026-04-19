@@ -59,14 +59,9 @@ function SuccessResult({ orderSeq }: { orderSeq: string }) {
           기부금은 연말정산 시 소득공제 혜택을 받을 수 있습니다.
         </p>
 
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" asChild>
-            <Link to="/">홈으로</Link>
-          </Button>
-          <Button className="flex-1" asChild>
-            <Link to="/donation">기부 현황 보기</Link>
-          </Button>
-        </div>
+        <Button className="w-full" asChild>
+          <Link to="/">홈으로</Link>
+        </Button>
       </div>
     </div>
   );

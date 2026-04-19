@@ -13,9 +13,8 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center animate-fade-in-up">
-      <div className="w-full max-w-sm">
-        <h1 className="mb-2 text-center text-xl font-bold text-text-primary">대일외국어고등학교 장학회</h1>
-        <p className="mb-6 text-center text-[13px] text-text-tertiary">동문 커뮤니티</p>
+      <div className="w-full max-w-sm px-4">
+        <h1 className="mb-6 text-center text-xl font-bold text-text-primary">대일외국어고등학교 장학회</h1>
 
         {errorParam === 'pending_approval' && (
           <div className="mb-4 rounded-lg bg-warning-subtle px-4 py-3 text-sm text-warning-text">
@@ -27,32 +26,13 @@ export function LoginPage() {
           <KakaoLoginButton />
         </div>
 
-        <div className="mt-6 text-center space-y-2">
-          <div className="flex items-center justify-center gap-1 text-sm">
-            <Link
-              to="/login/legacy"
-              className="text-text-muted hover:text-text-secondary transition-colors"
-            >
-              아이디로 로그인
-            </Link>
-            <span className="text-text-placeholder">·</span>
-            <Link
-              to="/register"
-              className="text-text-muted hover:text-text-secondary transition-colors"
-            >
-              아이디로 가입
-            </Link>
-            <span className="text-text-placeholder">·</span>
-            <Link
-              to="/forgot-password"
-              className="text-text-muted hover:text-text-secondary transition-colors"
-            >
-              비밀번호 찾기
-            </Link>
-          </div>
-          <p className="text-xs text-text-placeholder">
-            소셜 로그인 시 기존 회원은 자동 연동됩니다.
-          </p>
+        <div className="mt-6 text-center">
+          <Link
+            to="/login/legacy"
+            className="text-sm text-text-muted hover:text-text-secondary transition-colors"
+          >
+            아이디로 계속하기
+          </Link>
         </div>
       </div>
     </div>

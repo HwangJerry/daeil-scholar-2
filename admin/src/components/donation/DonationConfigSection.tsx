@@ -14,6 +14,7 @@ export function DonationConfigSection() {
   const [goal, setGoal] = useState('');
   const [manualAdj, setManualAdj] = useState('');
   const [note, setNote] = useState('');
+  const [overwrite, setOverwrite] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
@@ -21,12 +22,13 @@ export function DonationConfigSection() {
       setGoal(String(data.dcGoal));
       setManualAdj(String(data.dcManualAdj));
       setNote(data.dcNote ?? '');
+      setOverwrite(data.dcOverwrite === 'Y');
     }
   }, [data]);
 
   const handleSave = () => {
     update(
-      { goal: Number(goal), manualAdj: Number(manualAdj), note },
+      { goal: Number(goal), manualAdj: Number(manualAdj), note, overwrite },
       { onSuccess: () => setIsEditing(false) },
     );
   };
@@ -36,6 +38,7 @@ export function DonationConfigSection() {
       setGoal(String(data.dcGoal));
       setManualAdj(String(data.dcManualAdj));
       setNote(data.dcNote ?? '');
+      setOverwrite(data.dcOverwrite === 'Y');
     }
     setIsEditing(false);
   };
@@ -82,6 +85,15 @@ export function DonationConfigSection() {
               value={manualAdj}
               onChange={(e) => setManualAdj(e.target.value)}
             />
+            <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-dark-slate">
+              <input
+                type="checkbox"
+                checked={overwrite}
+                onChange={(e) => setOverwrite(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 accent-indigo-600"
+              />
+              덮어쓰기 — 체크 시 온라인 합산을 무시하고 수동 조정액을 누적 기부액으로 표시
+            </label>
           </div>
           <div>
             <label htmlFor="cfg-note" className="mb-1 block text-sm font-medium text-dark-slate">
@@ -105,7 +117,7 @@ export function DonationConfigSection() {
           </div>
         </div>
       ) : (
-        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div>
             <dt className="text-xs text-cool-gray">목표금액</dt>
             <dd className="text-sm font-medium text-dark-slate">₩{formatAmount(data?.dcGoal ?? 0)}</dd>
@@ -113,6 +125,10 @@ export function DonationConfigSection() {
           <div>
             <dt className="text-xs text-cool-gray">수동 조정액</dt>
             <dd className="text-sm font-medium text-dark-slate">₩{formatAmount(data?.dcManualAdj ?? 0)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-cool-gray">덮어쓰기</dt>
+            <dd className="text-sm font-medium text-dark-slate">{data?.dcOverwrite === 'Y' ? '✓ 적용 중' : '—'}</dd>
           </div>
           <div>
             <dt className="text-xs text-cool-gray">메모</dt>

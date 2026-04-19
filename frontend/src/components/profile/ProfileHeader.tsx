@@ -39,8 +39,8 @@ export function ProfileHeader({ onEditClick }: ProfileHeaderProps) {
   const displayName = profile?.usrName ?? user?.usrName ?? '';
   const displayFn = profile?.usrFn ?? '';
   const photoUrl = profile?.usrPhoto;
-  const jobLine = [profile?.bizName, profile?.jobCatName].filter(Boolean).join(' · ');
-  const deptLine = [profile?.fmDept, profile?.bizAddr].filter(Boolean).join(' · ');
+  const jobLine = [profile?.bizName, profile?.position].filter(Boolean).join(' · ');
+  const deptLine = [profile?.jobCatName, profile?.bizAddr].filter(Boolean).join(' · ');
   const hasBio = !!profile?.bizDesc;
   const hasTags = (profile?.tags?.length ?? 0) > 0;
 
@@ -65,12 +65,12 @@ export function ProfileHeader({ onEditClick }: ProfileHeaderProps) {
 
         {/* Info block */}
         <div className="flex-1 space-y-1 pt-1">
-          {/* Name + generation badge */}
-          <div className="flex items-center gap-2">
+          {/* Name + generation + dept */}
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold text-text-primary font-serif">{displayName}</h1>
-            {displayFn && (
-              <span className="text-xs text-text-tertiary bg-background border border-border rounded-full px-2.5 py-0.5">
-                {displayFn}기
+            {(displayFn || profile?.fmDept) && (
+              <span className="text-sm text-text-tertiary">
+                {[displayFn && `${displayFn}기`, profile?.fmDept].filter(Boolean).join(' ')}
               </span>
             )}
           </div>
@@ -94,7 +94,7 @@ export function ProfileHeader({ onEditClick }: ProfileHeaderProps) {
                   key={tag}
                   className="rounded-full bg-background border border-border text-text-tertiary text-xs px-2.5 py-0.5"
                 >
-                  {tag}
+                  #{tag}
                 </span>
               ))}
             </div>

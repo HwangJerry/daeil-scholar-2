@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api, ApiClientError } from '../api/client';
+import { queryClient } from '../queryClient';
 import type { AuthUser } from '../types/api';
 
 interface AuthState {
@@ -32,6 +33,7 @@ export const useAuth = create<AuthState>((set) => ({
     try {
       await api.post('/api/auth/logout');
     } finally {
+      queryClient.clear();
       set({ user: null, isLoggedIn: false });
     }
   },

@@ -2,7 +2,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import { useUnreadMessages } from "../../hooks/useUnreadMessages";
-import { NotificationBell } from "../notification/NotificationBell";
 
 const NAV_ITEMS = [
   { label: "뉴스피드", href: "/" },
@@ -20,9 +19,11 @@ export default function TopNav() {
     <header className="hidden md:flex sticky top-0 z-40 w-full bg-surface/95 backdrop-blur-md shadow-xs border-b border-border-subtle">
       <div className="container mx-auto flex h-14 items-center justify-between px-6 max-w-[1080px]">
         <Link to="/" className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-sm font-serif">D</span>
-          </div>
+          <img
+            src="/logo.png"
+            alt="대일외국어고등학교 장학회 로고"
+            className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+          />
           <span className="text-base font-bold text-text-primary font-serif tracking-tight">
             대일외국어고등학교 장학회
           </span>
@@ -30,7 +31,10 @@ export default function TopNav() {
 
         <nav className="flex items-center gap-6">
           {NAV_ITEMS.map((item) => {
-            const isActive = location.pathname === item.href;
+            const isActive =
+              item.href === "/"
+                ? location.pathname === "/"
+                : location.pathname === item.href || location.pathname.startsWith(item.href + "/");
             return (
               <Link
                 key={item.href}
@@ -49,7 +53,6 @@ export default function TopNav() {
               </Link>
             );
           })}
-          <NotificationBell />
         </nav>
       </div>
     </header>

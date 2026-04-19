@@ -1,34 +1,21 @@
-// NoticeCardSummary — Expandable summary text with collapse/expand toggle
-import { useState } from 'react';
-import { cn } from '../../lib/utils';
+// NoticeCardSummary — Summary text truncated to 3 lines with fade gradient indicator
 
-const SUMMARY_COLLAPSE_THRESHOLD = 120;
+const SUMMARY_TRUNCATE_THRESHOLD = 120;
 
 interface NoticeCardSummaryProps {
   summary: string;
 }
 
 export function NoticeCardSummary({ summary }: NoticeCardSummaryProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const hasLongSummary = summary.length > SUMMARY_COLLAPSE_THRESHOLD;
+  const isTruncated = summary.length > SUMMARY_TRUNCATE_THRESHOLD;
 
   return (
-    <div className="mb-1">
-      <p
-        className={cn(
-          'text-body-sm text-text-tertiary leading-relaxed whitespace-pre-line',
-          !isExpanded && 'line-clamp-3'
-        )}
-      >
+    <div className="mb-1 relative">
+      <p className="text-body-sm text-text-tertiary leading-relaxed whitespace-pre-line line-clamp-3">
         {summary}
       </p>
-      {hasLongSummary && (
-        <button
-          onClick={() => setIsExpanded((prev) => !prev)}
-          className="mt-1 text-body-sm text-text-placeholder hover:text-text-secondary transition-colors"
-        >
-          {isExpanded ? '접기' : '더 보기'}
-        </button>
+      {isTruncated && (
+        <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
       )}
     </div>
   );

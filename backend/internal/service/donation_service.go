@@ -44,6 +44,9 @@ func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
 	}
 
 	displayAmount := snapshot.DSTotal + snapshot.ManualAdj
+	if snapshot.Overwrite == "Y" {
+		displayAmount = snapshot.ManualAdj
+	}
 	rate := float64(0)
 	if snapshot.Goal > 0 {
 		rate = float64(displayAmount) / float64(snapshot.Goal) * 100
@@ -59,6 +62,11 @@ func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
 	}
 	s.cache.Set("donation_summary", summary, 5*time.Minute)
 	return summary, nil
+}
+
+// InvalidateCache evicts the cached donation summary so the next call recomputes from the snapshot.
+func (s *DonationService) InvalidateCache() {
+	s.cache.Delete("donation_summary")
 }
 
 func (s *DonationService) computeLiveSummary() (*model.DonationSummary, error) {
@@ -83,6 +91,9 @@ func (s *DonationService) computeLiveSummary() (*model.DonationSummary, error) {
 	}
 
 	displayAmount := total + manualAdj
+	if config != nil && config.Overwrite == "Y" {
+		displayAmount = manualAdj
+	}
 	rate := float64(0)
 	if goal > 0 {
 		rate = float64(displayAmount) / float64(goal) * 100

@@ -11,10 +11,10 @@ import (
 )
 
 type AdminDonationHandler struct {
-	service *service.AdminDonationService
+	service *service.DonationConfigOrchestrator
 }
 
-func NewAdminDonationHandler(svc *service.AdminDonationService) *AdminDonationHandler {
+func NewAdminDonationHandler(svc *service.DonationConfigOrchestrator) *AdminDonationHandler {
 	return &AdminDonationHandler{service: svc}
 }
 
@@ -31,6 +31,7 @@ type updateDonationConfigRequest struct {
 	Goal      int64  `json:"goal"`
 	ManualAdj int64  `json:"manualAdj"`
 	Note      string `json:"note"`
+	Overwrite bool   `json:"overwrite"`
 }
 
 func (h *AdminDonationHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +45,7 @@ func (h *AdminDonationHandler) UpdateConfig(w http.ResponseWriter, r *http.Reque
 		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
 		return
 	}
-	if err := h.service.UpdateConfig(req.Goal, req.ManualAdj, req.Note, user.USRSeq); err != nil {
+	if err := h.service.UpdateConfig(req.Goal, req.ManualAdj, req.Note, req.Overwrite, user.USRSeq); err != nil {
 		respondError(w, http.StatusInternalServerError, "UPDATE_FAILED", "Failed to update config")
 		return
 	}

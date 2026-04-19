@@ -42,18 +42,9 @@
   --color-border-light: #F0EDE8;
 
   /* 카테고리 배지 */
-  --color-cat-notice-bg: #EFF2FF;
-  --color-cat-notice-text: #3B5BDB;
-  --color-cat-notice-border: #C5D0FA;
-  --color-cat-event-bg: #FFF9DB;
-  --color-cat-event-text: #E67700;
-  --color-cat-event-border: #FFE066;
-  --color-cat-scholarship-bg: #EBFBEE;
-  --color-cat-scholarship-text: #2B8A3E;
-  --color-cat-scholarship-border: #8CE99A;
-  --color-cat-career-bg: #F3F0FF;
-  --color-cat-career-text: #6741D9;
-  --color-cat-career-border: #D0BFFF;
+  --color-cat-notice-bg: #E8E5DF;
+  --color-cat-notice-text: #1a1a2e;
+  --color-cat-notice-border: #C8C5BF;
 
 
   /* 동문 네트워크 아바타 */
@@ -101,6 +92,13 @@
   h1, h2, h3, h4, h5, h6 {
     color: var(--color-text-primary);
     letter-spacing: -0.015em;
+  }
+
+  /* Prevent iOS Safari auto-zoom on input focus (triggers when font-size < 16px) */
+  @media (hover: none) and (pointer: coarse) {
+    input, textarea, select {
+      font-size: 16px;
+    }
   }
 }
 
@@ -151,7 +149,7 @@
 }
 
 @utility container-app {
-  @apply mx-auto min-h-screen bg-surface overflow-x-clip relative;
+  @apply mx-auto min-h-screen bg-background overflow-x-clip relative;
 }
 
 @utility animate-fade-in-up {
@@ -187,3 +185,12 @@
 @utility animate-heart-unset { animation: heart-unset 0.25s ease forwards; }
 @utility animate-heart-ring  { animation: heart-ring  0.5s ease-out forwards; }
 @utility animate-heart-dot   { animation: heart-dot   0.55s ease-out forwards; }
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@utility animate-slide-up {
+  animation: slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}

@@ -33,25 +33,30 @@ type UserProfile struct {
 	BizName        string   `json:"bizName"`
 	BizDesc        string   `json:"bizDesc"`
 	BizAddr        string   `json:"bizAddr"`
+	Position       string   `json:"position"`
 	JobCat         int      `json:"jobCat"`
 	JobCatName     string   `json:"jobCatName"`
-	JobCatColor    string   `json:"jobCatColor"`
 	Tags           []string `json:"tags"`
-	FmDept         string   `json:"fmDept"`         // FUNDAMENTAL_MEMBER.FM_DEPT (예: "영어과")
+	FmDept         string   `json:"fmDept"`         // WEO_MEMBER.USR_DEPT (예: "영어과")
 	RegDate        string   `json:"regDate"`        // 가입일 포맷 "YYYY. MM" (예: "2024. 03")
 	USRPhonePublic string   `json:"usrPhonePublic"` // 'Y' | 'N'
 	USREmailPublic string   `json:"usrEmailPublic"` // 'Y' | 'N'
 	USRBizCard     string   `json:"usrBizCard"`     // 명함 이미지 URL
+	HasPassword    bool     `json:"hasPassword"`    // false for Kakao-only users (USR_PWD = '')
+	HasSocialLogin bool     `json:"hasSocialLogin"` // true if WEO_MEMBER_SOCIAL record exists
 }
 
 // ProfileUpdateRequest is the request body for PUT /api/profile.
 type ProfileUpdateRequest struct {
-	USRNick        string   `json:"usrNick"`
+	USRName        string   `json:"usrName"`
+	USRFN          string   `json:"usrFn"`
 	USRPhone       string   `json:"usrPhone"`
 	USREmail       string   `json:"usrEmail"`
 	BizName        string   `json:"bizName"`
 	BizDesc        string   `json:"bizDesc"`
 	BizAddr        string   `json:"bizAddr"`
+	Position       string   `json:"position"`
+	FmDept         string   `json:"fmDept"`
 	JobCat         *int     `json:"jobCat"`
 	Tags           []string `json:"tags"`
 	USRPhonePublic string   `json:"usrPhonePublic"` // 'Y' | 'N'

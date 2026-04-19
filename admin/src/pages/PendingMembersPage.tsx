@@ -45,11 +45,11 @@ export function PendingMembersPage() {
             <tr className="border-b border-border-light text-left text-cool-gray">
               <th className="px-4 py-3 font-medium">아이디</th>
               <th className="px-4 py-3 font-medium">이름</th>
-              <th className="px-4 py-3 font-medium w-16">기수</th>
+              <th className="px-4 py-3 font-medium w-28">기수 / 학과</th>
               <th className="px-4 py-3 font-medium">연락처</th>
               <th className="px-4 py-3 font-medium">이메일</th>
               <th className="px-4 py-3 font-medium w-28">가입일</th>
-              <th className="px-4 py-3 font-medium w-32 text-center">작업</th>
+              <th className="px-4 py-3 font-medium w-48 text-center">작업</th>
             </tr>
           </thead>
           <tbody aria-live="polite">
@@ -72,24 +72,27 @@ export function PendingMembersPage() {
                 <tr key={m.usrSeq} className="border-b border-border-light hover:bg-background">
                   <td className="px-4 py-3 font-mono text-dark-slate">{m.usrId}</td>
                   <td className="px-4 py-3 text-dark-slate">{m.usrName}</td>
-                  <td className="px-4 py-3 text-cool-gray">{m.usrFn ?? '—'}</td>
+                  <td className="px-4 py-3 text-cool-gray">
+                    {m.usrFn ?? '—'}
+                    {m.usrDept ? <span className="ml-1 text-xs text-cool-gray/70">/ {m.usrDept}</span> : null}
+                  </td>
                   <td className="px-4 py-3 text-cool-gray">{m.usrPhone ?? '—'}</td>
                   <td className="px-4 py-3 text-cool-gray">{m.usrEmail ?? '—'}</td>
-                  <td className="px-4 py-3 text-cool-gray">{m.visitDate?.slice(0, 10) ?? '—'}</td>
+                  <td className="px-4 py-3 text-cool-gray">{m.regDate?.slice(0, 10) ?? '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-2">
                       <Button
-                        size="sm"
                         onClick={() => setPendingAction({ member: m, type: 'approve' })}
                         disabled={isActioning}
+                        className="px-4"
                       >
                         승인
                       </Button>
                       <Button
-                        size="sm"
                         variant="destructive"
                         onClick={() => setPendingAction({ member: m, type: 'reject' })}
                         disabled={isActioning}
+                        className="px-4"
                       >
                         거절
                       </Button>

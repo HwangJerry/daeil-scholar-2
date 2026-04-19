@@ -4,7 +4,7 @@ set -euo pipefail
 # Deploy script — cross-compile, upload, and restart services
 # Usage: ./deploy.sh [user@host]
 
-TARGET=${1:-"user@gabia"}
+TARGET=${1:-"root@211.169.249.240"}
 
 # =============================================================================
 # DATABASE MIGRATIONS — MANUAL STEP REQUIRED
@@ -14,7 +14,7 @@ TARGET=${1:-"user@gabia"}
 #
 #   mysql -u USER -p DB_NAME < backend/migrations/NNN_name.sql
 #
-# Current migration range: 001 through 010
+# Current migration range: 001 through 018
 #   001_alter_existing_tables.sql
 #   002_create_new_tables.sql
 #   003_seed_donation_config.sql
@@ -25,6 +25,7 @@ TARGET=${1:-"user@gabia"}
 #   008_alumni_profile_extensions.sql
 #   009_create_message_table.sql
 #   010_create_subscription_table.sql
+#   011 through 018 — see backend/migrations/ for details
 #
 # Migrations MUST be applied sequentially (in numbered order).
 # =============================================================================
@@ -51,15 +52,15 @@ scp dist/backfill "${TARGET}:/app/backend/backfill"
 ssh "${TARGET}" 'mv /app/backend/server.new /app/backend/server'
 
 echo "=== Uploading User SPA ==="
-scp -r frontend/dist/ "${TARGET}:/var/www/app/"
+rsync -avz --delete frontend/dist/ "${TARGET}:/var/www/app/"
 
 echo "=== Uploading Admin SPA ==="
-scp -r admin/dist/ "${TARGET}:/var/www/admin/"
+rsync -avz --delete admin/dist/ "${TARGET}:/var/www/admin/"
 
 echo "=== Restarting backend ==="
 ssh "${TARGET}" 'sudo systemctl restart alumni-backend'
 
-echo "=== Reloading Nginx ==="
-ssh "${TARGET}" 'sudo systemctl reload nginx'
+echo "=== Reloading Apache ==="
+ssh "${TARGET}" 'sudo systemctl reload httpd'
 
 echo "=== Deploy complete ==="

@@ -1,4 +1,4 @@
-// session_cleanup.go — Hourly background job for expired session, token, and notification cleanup
+// session_cleanup.go — Hourly background job for expired session and token cleanup
 package job
 
 import (
@@ -9,14 +9,10 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const oldNotificationDays = 90
-
-// SessionCleanupJob periodically removes expired sessions, password reset tokens,
-// and old notifications.
+// SessionCleanupJob periodically removes expired sessions and password reset tokens.
 type SessionCleanupJob struct {
 	sessionRepo       *repository.SessionRepository
 	passwordResetRepo *repository.PasswordResetRepository
-	notificationRepo  *repository.NotificationRepository
 	logger            zerolog.Logger
 	cancel            context.CancelFunc
 }
@@ -25,13 +21,11 @@ type SessionCleanupJob struct {
 func NewSessionCleanupJob(
 	sessionRepo *repository.SessionRepository,
 	passwordResetRepo *repository.PasswordResetRepository,
-	notificationRepo *repository.NotificationRepository,
 	logger zerolog.Logger,
 ) *SessionCleanupJob {
 	return &SessionCleanupJob{
 		sessionRepo:       sessionRepo,
 		passwordResetRepo: passwordResetRepo,
-		notificationRepo:  notificationRepo,
 		logger:            logger,
 	}
 }
@@ -56,7 +50,6 @@ func (j *SessionCleanupJob) Start() {
 			case <-ticker.C:
 				j.cleanSessions()
 				j.cleanExpiredTokens()
-				j.cleanOldNotifications()
 			}
 		}
 	}()
@@ -89,19 +82,5 @@ func (j *SessionCleanupJob) cleanExpiredTokens() {
 	}
 	if deleted > 0 {
 		j.logger.Info().Int64("count", deleted).Msg("expired password reset tokens cleaned")
-	}
-}
-
-func (j *SessionCleanupJob) cleanOldNotifications() {
-	if j.notificationRepo == nil {
-		return
-	}
-	deleted, err := j.notificationRepo.DeleteOld(oldNotificationDays)
-	if err != nil {
-		j.logger.Error().Err(err).Msg("old notification cleanup failed")
-		return
-	}
-	if deleted > 0 {
-		j.logger.Info().Int64("count", deleted).Msg("old notifications cleaned")
 	}
 }

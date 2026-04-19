@@ -20,7 +20,7 @@ var passwordResetTmpl = template.Must(template.New("passwordReset").Parse(`<!DOC
         <tr><td style="color:#374151;font-size:14px;line-height:1.6;padding-bottom:24px;">
           <p style="margin:0 0 12px;">안녕하세요, <strong>{{.Name}}</strong>님.</p>
           <p style="margin:0 0 12px;">비밀번호 재설정이 요청되었습니다. 아래 버튼을 클릭하여 새 비밀번호를 설정해 주세요.</p>
-          <p style="margin:0;color:#6b7280;font-size:12px;">이 링크는 1시간 동안 유효합니다.</p>
+          <p style="margin:0;color:#6b7280;font-size:12px;">이 링크는 15분 동안 유효합니다.</p>
         </td></tr>
         <tr><td align="center" style="padding-bottom:24px;">
           <a href="{{.ResetURL}}" style="display:inline-block;background:#4F46E5;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;">비밀번호 재설정</a>

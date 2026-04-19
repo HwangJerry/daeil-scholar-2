@@ -1,5 +1,5 @@
 // Application route definitions — page routes with background-location awareness
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import { FeedPage } from './pages/FeedPage';
@@ -10,10 +10,11 @@ import { LoginPage } from './pages/LoginPage';
 import { LegacyLoginPage } from './pages/LegacyLoginPage';
 import { AccountLinkPage } from './pages/AccountLinkPage';
 import { PostDetailPage } from './pages/PostDetailPage';
+import { AdDetailPage } from './pages/AdDetailPage';
 import { DonationResultPage } from './pages/DonationResultPage';
-import { MyDonationPage } from './pages/MyDonationPage';
 import { SubscriptionPage } from './pages/SubscriptionPage';
 import { MessagePage } from './pages/MessagePage';
+import { MessageComposePage } from './pages/MessageComposePage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -31,14 +32,15 @@ export default function AppRoutes() {
         <Route element={<Layout />}>
           <Route index element={<FeedPage />} />
           <Route path="post/:seq" element={<PostDetailPage />} />
-          <Route path="ad/:maSeq" element={<Navigate to="/" replace />} />
+          <Route path="ad/:maSeq" element={<AdDetailPage />} />
           <Route path="alumni" element={<AlumniPage />} />
           <Route path="donation" element={<DonationPage />} />
           <Route path="donation/result" element={<DonationResultPage />} />
           <Route path="me" element={<MyPage />} />
-          <Route path="me/donation" element={<MyDonationPage />} />
           <Route path="me/subscription" element={<SubscriptionPage />} />
           <Route path="messages" element={<MessagePage />} />
+          <Route path="messages/:otherSeq" element={<MessagePage />} />
+          <Route path="messages/new" element={<MessageComposePage />} />
           <Route path="login" element={<LoginPage />} />
           <Route path="login/legacy" element={<LegacyLoginPage />} />
           <Route path="login/link" element={<AccountLinkPage />} />

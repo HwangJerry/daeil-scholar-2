@@ -10,15 +10,13 @@ import (
 type LikeService struct {
 	likeRepo repository.LikeQuerier
 	feedRepo repository.FeedQuerier
-	notifier *LikeNotifier
 }
 
 // NewLikeService creates a new LikeService.
-func NewLikeService(likeRepo repository.LikeQuerier, feedRepo repository.FeedQuerier, notifSvc *NotificationService) *LikeService {
+func NewLikeService(likeRepo repository.LikeQuerier, feedRepo repository.FeedQuerier) *LikeService {
 	return &LikeService{
 		likeRepo: likeRepo,
 		feedRepo: feedRepo,
-		notifier: NewLikeNotifier(feedRepo, notifSvc),
 	}
 }
 
@@ -62,10 +60,6 @@ func (s *LikeService) ToggleLike(bbsSeq int, usrSeq int, usrName string) (*model
 	likeCnt, err := s.feedRepo.GetLikeCount(bbsSeq)
 	if err != nil {
 		return nil, err
-	}
-
-	if liked && s.notifier != nil {
-		s.notifier.OnLiked(bbsSeq, usrSeq, usrName)
 	}
 
 	return &model.LikeToggleResponse{Liked: liked, LikeCnt: likeCnt}, nil

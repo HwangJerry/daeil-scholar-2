@@ -6,6 +6,7 @@ import { api } from '../../api/client';
 import { formatAbsoluteDate } from '../../utils/date';
 import { useAdImpression } from '../../hooks/useAdImpression';
 import { useAdLikeToggle } from '../../hooks/useAdLikeToggle';
+import { useResponsive } from '../../hooks/useResponsive';
 import { FeedCard } from './FeedCard';
 import { HeartButton } from './HeartButton';
 import type { AdItem } from '../../types/api';
@@ -16,15 +17,18 @@ export function AdCard({ item }: { item: AdItem }) {
   const { liked, likeCnt, toggle: toggleLike } = useAdLikeToggle(item.maSeq, item.likeCnt ?? 0, item.userLiked);
   const navigate = useNavigate();
   const location = useLocation();
+  const { isMobile } = useResponsive();
 
   const handleClick = () => {
     api.post(`/api/ad/${item.maSeq}/click`).catch(() => {});
   };
 
   const handleCommentOpen = () => {
-    navigate(`/ad/${item.maSeq}`, {
-      state: { backgroundLocation: location, adItem: item },
-    });
+    if (isMobile) {
+      navigate(`/ad/${item.maSeq}`, { state: { adItem: item } });
+    } else {
+      navigate(`/ad/${item.maSeq}`, { state: { backgroundLocation: location, adItem: item } });
+    }
   };
 
   if (dismissed) return null;

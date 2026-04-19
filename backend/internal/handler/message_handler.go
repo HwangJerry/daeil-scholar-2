@@ -111,19 +111,60 @@ func (h *MessageHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// GetUnreadCount handles GET /api/messages/unread-count.
-func (h *MessageHandler) GetUnreadCount(w http.ResponseWriter, r *http.Request) {
+
+// GetConversations handles GET /api/messages/conversations.
+func (h *MessageHandler) GetConversations(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetAuthUser(r.Context())
 	if user == nil {
 		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
 		return
 	}
-	count, err := h.service.GetUnreadCount(user.USRSeq)
+	result, err := h.service.GetConversations(user.USRSeq)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "COUNT_FAILED", "Failed to get unread count")
+		respondError(w, http.StatusInternalServerError, "CONVERSATIONS_FAILED", "Failed to load conversations")
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]int{"count": count})
+	respondJSON(w, http.StatusOK, result)
+}
+
+// GetConversationMessages handles GET /api/messages/conversations/{userSeq}.
+func (h *MessageHandler) GetConversationMessages(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetAuthUser(r.Context())
+	if user == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
+		return
+	}
+	otherSeq, err := strconv.Atoi(chi.URLParam(r, "userSeq"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_SEQ", "Invalid user seq")
+		return
+	}
+	page, size := parsePagination(r)
+	result, err := h.service.GetConversationMessages(user.USRSeq, otherSeq, page, size)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "CONVERSATION_MESSAGES_FAILED", "Failed to load conversation messages")
+		return
+	}
+	respondJSON(w, http.StatusOK, result)
+}
+
+// MarkConversationRead handles PUT /api/messages/conversations/{userSeq}/read.
+func (h *MessageHandler) MarkConversationRead(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetAuthUser(r.Context())
+	if user == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
+		return
+	}
+	senderSeq, err := strconv.Atoi(chi.URLParam(r, "userSeq"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_SEQ", "Invalid user seq")
+		return
+	}
+	if err := h.service.MarkConversationRead(user.USRSeq, senderSeq); err != nil {
+		respondError(w, http.StatusInternalServerError, "MARK_READ_FAILED", "Failed to mark conversation as read")
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func parsePagination(r *http.Request) (int, int) {

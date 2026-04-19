@@ -16,7 +16,16 @@ export function BankTransferConfirm({ orderSeq, amount }: BankTransferConfirmPro
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(BANK_ACCOUNT);
+    try {
+      await navigator.clipboard.writeText(BANK_ACCOUNT);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = BANK_ACCOUNT;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
   };
@@ -32,23 +41,19 @@ export function BankTransferConfirm({ orderSeq, amount }: BankTransferConfirmPro
         </div>
 
         <div className="rounded-lg bg-background p-4 space-y-3">
-          <div className="flex justify-between text-sm">
-            <span className="text-text-tertiary">입금 은행</span>
-            <span className="text-text-primary font-medium">{BANK_NAME}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-text-tertiary">계좌번호</p>
-              <p className="font-mono text-lg font-medium text-text-primary">{BANK_ACCOUNT}</p>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-text-tertiary">입금 계좌</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-medium text-text-primary">{BANK_NAME} {BANK_ACCOUNT}</span>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="flex items-center gap-1 rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-secondary hover:bg-surface transition-colors duration-150"
+              >
+                {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+                {copied ? '복사됨' : '복사'}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="flex items-center gap-1 rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-secondary hover:bg-surface transition-colors duration-150"
-            >
-              {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
-              {copied ? '복사됨' : '복사'}
-            </button>
           </div>
           <div className="border-t border-border-subtle pt-3 flex justify-between text-sm">
             <span className="text-text-tertiary">입금 금액</span>
@@ -65,7 +70,7 @@ export function BankTransferConfirm({ orderSeq, amount }: BankTransferConfirmPro
         </p>
 
         <Button className="w-full" asChild>
-          <Link to="/me/donation">완료</Link>
+          <Link to="/">완료</Link>
         </Button>
       </Card>
     </div>

@@ -1,0 +1,5 @@
+-- 019_add_usr_position.sql
+-- Adds USR_POSITION column to WEO_MEMBER for alumni job title / 직책
+
+ALTER TABLE WEO_MEMBER
+  ADD COLUMN USR_POSITION VARCHAR(100) NULL DEFAULT NULL AFTER USR_BIZ_ADDR;

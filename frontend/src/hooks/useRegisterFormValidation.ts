@@ -1,6 +1,7 @@
 // useRegisterFormValidation.ts — Client-side validation rules for the registration form.
+import { checkPasswordStrength } from './usePasswordValidation';
+
 const USR_ID_REGEX = /^[a-zA-Z0-9]{4,20}$/;
-const MIN_PASSWORD_LENGTH = 6;
 
 interface RegisterValidationFields {
   usrId: string;
@@ -16,9 +17,8 @@ export function useRegisterFormValidation() {
     if (!USR_ID_REGEX.test(fields.usrId)) {
       return '아이디는 영문자와 숫자로 이루어진 4~20자여야 합니다.';
     }
-    if (fields.password.length < MIN_PASSWORD_LENGTH) {
-      return `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`;
-    }
+    const strengthError = checkPasswordStrength(fields.password);
+    if (strengthError) return strengthError;
     if (fields.password !== fields.passwordConfirm) {
       return '비밀번호가 일치하지 않습니다.';
     }

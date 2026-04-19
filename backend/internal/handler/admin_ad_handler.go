@@ -3,7 +3,9 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/service"
@@ -18,6 +20,55 @@ func NewAdminAdHandler(svc *service.AdminAdService) *AdminAdHandler {
 	return &AdminAdHandler{service: svc}
 }
 
+// parseUTCISOtoDB converts "2026-03-17T00:00:00.000Z" → "2026-03-17 00:00:00" for DB DATETIME.
+func parseUTCISOtoDB(iso string) (string, error) {
+	t, err := time.Parse(time.RFC3339, iso)
+	if err != nil {
+		return "", err
+	}
+	return t.UTC().Format("2006-01-02 15:04:05"), nil
+}
+
+// adRequest is the JSON shape received from the admin frontend.
+type adRequest struct {
+	MAName       string  `json:"maName"`
+	MAURL        string  `json:"maUrl"`
+	MAImg        string  `json:"maImg"`
+	MAStatus     string  `json:"maStatus"`
+	ADTier       string  `json:"adTier"`
+	ADTitleLabel string  `json:"adTitleLabel"`
+	MAIndx       int     `json:"maIndx"`
+	ADStartDate  *string `json:"adStartDate"`
+	ADEndDate    *string `json:"adEndDate"`
+}
+
+func (h *AdminAdHandler) toInsert(req *adRequest) (*model.AdminAdInsert, error) {
+	ins := &model.AdminAdInsert{
+		MAName:       req.MAName,
+		MAURL:        req.MAURL,
+		MAImg:        req.MAImg,
+		MAStatus:     req.MAStatus,
+		ADTier:       req.ADTier,
+		ADTitleLabel: req.ADTitleLabel,
+		MAIndx:       req.MAIndx,
+	}
+	if req.ADStartDate != nil && *req.ADStartDate != "" {
+		dbVal, err := parseUTCISOtoDB(*req.ADStartDate)
+		if err != nil {
+			return nil, err
+		}
+		ins.ADStartDate = &dbVal
+	}
+	if req.ADEndDate != nil && *req.ADEndDate != "" {
+		dbVal, err := parseUTCISOtoDB(*req.ADEndDate)
+		if err != nil {
+			return nil, err
+		}
+		ins.ADEndDate = &dbVal
+	}
+	return ins, nil
+}
+
 func (h *AdminAdHandler) List(w http.ResponseWriter, r *http.Request) {
 	ads, err := h.service.List()
 	if err != nil {
@@ -28,13 +79,22 @@ func (h *AdminAdHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AdminAdHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var req model.AdminAdInsert
+	var req adRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
-	seq, err := h.service.Create(&req)
+	ins, err := h.toInsert(&req)
 	if err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_DATE", "Invalid date format")
+		return
+	}
+	seq, err := h.service.Create(ins)
+	if err != nil {
+		if errors.Is(err, service.ErrTierConflict) {
+			respondError(w, http.StatusConflict, "TIER_CONFLICT", "이미 활성화된 동일 등급의 광고가 있습니다.")
+			return
+		}
 		respondError(w, http.StatusInternalServerError, "CREATE_FAILED", "Failed to create ad")
 		return
 	}
@@ -47,12 +107,21 @@ func (h *AdminAdHandler) Update(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_SEQ", "Invalid seq")
 		return
 	}
-	var req model.AdminAdInsert
+	var req adRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
-	if err := h.service.Update(seq, &req); err != nil {
+	ins, err := h.toInsert(&req)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_DATE", "Invalid date format")
+		return
+	}
+	if err := h.service.Update(seq, ins); err != nil {
+		if errors.Is(err, service.ErrTierConflict) {
+			respondError(w, http.StatusConflict, "TIER_CONFLICT", "이미 활성화된 동일 등급의 광고가 있습니다.")
+			return
+		}
 		respondError(w, http.StatusInternalServerError, "UPDATE_FAILED", "Failed to update ad")
 		return
 	}

@@ -18,7 +18,8 @@ func (r *AdminAdRepository) GetAds() ([]model.AdminAdRow, error) {
 	var ads []model.AdminAdRow
 	err := r.DB.Select(&ads, `
 		SELECT MA_SEQ, IFNULL(MA_NAME,'') AS MA_NAME, IFNULL(MA_URL,'') AS MA_URL,
-		       IFNULL(MA_IMG,'') AS MA_IMG, OPEN_YN, AD_TIER, AD_TITLE_LABEL, INDX
+		       IFNULL(MA_IMG,'') AS MA_IMG, OPEN_YN, AD_TIER, AD_TITLE_LABEL, INDX,
+		       IFNULL(AD_START_DATE,'') AS AD_START_DATE, IFNULL(AD_END_DATE,'') AS AD_END_DATE
 		FROM MAIN_AD ORDER BY INDX ASC
 	`)
 	return ads, err
@@ -26,9 +27,9 @@ func (r *AdminAdRepository) GetAds() ([]model.AdminAdRow, error) {
 
 func (r *AdminAdRepository) InsertAd(a *model.AdminAdInsert) (int, error) {
 	res, err := r.DB.Exec(`
-		INSERT INTO MAIN_AD (MA_NAME, MA_URL, MA_IMG, OPEN_YN, AD_TIER, AD_TITLE_LABEL, INDX, MA_TYPE)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 'FEED')
-	`, a.MAName, a.MAURL, a.MAImg, a.MAStatus, a.ADTier, a.ADTitleLabel, a.MAIndx)
+		INSERT INTO MAIN_AD (MA_NAME, MA_URL, MA_IMG, OPEN_YN, AD_TIER, AD_TITLE_LABEL, INDX, MA_TYPE, AD_START_DATE, AD_END_DATE)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 'FEED', ?, ?)
+	`, a.MAName, a.MAURL, a.MAImg, a.MAStatus, a.ADTier, a.ADTitleLabel, a.MAIndx, a.ADStartDate, a.ADEndDate)
 	if err != nil {
 		return 0, err
 	}
@@ -39,10 +40,20 @@ func (r *AdminAdRepository) InsertAd(a *model.AdminAdInsert) (int, error) {
 func (r *AdminAdRepository) UpdateAd(seq int, a *model.AdminAdInsert) error {
 	_, err := r.DB.Exec(`
 		UPDATE MAIN_AD
-		SET MA_NAME = ?, MA_URL = ?, MA_IMG = ?, OPEN_YN = ?, AD_TIER = ?, AD_TITLE_LABEL = ?, INDX = ?
+		SET MA_NAME = ?, MA_URL = ?, MA_IMG = ?, OPEN_YN = ?, AD_TIER = ?, AD_TITLE_LABEL = ?, INDX = ?,
+		    AD_START_DATE = ?, AD_END_DATE = ?
 		WHERE MA_SEQ = ?
-	`, a.MAName, a.MAURL, a.MAImg, a.MAStatus, a.ADTier, a.ADTitleLabel, a.MAIndx, seq)
+	`, a.MAName, a.MAURL, a.MAImg, a.MAStatus, a.ADTier, a.ADTitleLabel, a.MAIndx, a.ADStartDate, a.ADEndDate, seq)
 	return err
+}
+
+func (r *AdminAdRepository) CountActiveTierAds(tier string, excludeSeq int) (int, error) {
+	var count int
+	err := r.DB.Get(&count, `
+		SELECT COUNT(*) FROM MAIN_AD
+		WHERE AD_TIER = ? AND OPEN_YN = 'Y' AND MA_SEQ != ?
+	`, tier, excludeSeq)
+	return count, err
 }
 
 func (r *AdminAdRepository) DeleteAd(seq int) error {

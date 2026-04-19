@@ -1,6 +1,6 @@
-// useBadges.ts — Polls unified badge counts (messages + notifications) every 60 seconds
+// useBadges.ts — Polls unread message count every 60 seconds
 import { useQuery } from '@tanstack/react-query';
-import { getBadges } from '../api/notifications';
+import { getBadges } from '../api/badges';
 import { useAuth } from './useAuth';
 
 const POLL_INTERVAL_MS = 60_000;
@@ -18,6 +18,5 @@ export function useBadges() {
 
   return {
     unreadMessages: data?.unreadMessages ?? 0,
-    unreadNotifications: data?.unreadNotifications ?? 0,
   };
 }

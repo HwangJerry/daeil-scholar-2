@@ -57,11 +57,12 @@ function MetaDot() {
 
 interface TitleProps {
   children: React.ReactNode;
+  className?: string;
 }
 
-function Title({ children }: TitleProps) {
+function Title({ children, className }: TitleProps) {
   return (
-    <h3 className="line-clamp-2 text-body-md font-semibold font-serif text-text-primary group-hover:text-primary transition-colors duration-150">
+    <h3 className={cn('line-clamp-2 text-body-md font-semibold font-serif text-text-primary group-hover:text-primary transition-colors duration-150', className)}>
       {children}
     </h3>
   );

@@ -14,12 +14,11 @@ const maxMessageLength = 1000
 type MessageService struct {
 	repo        repository.MessageQuerier
 	profileRepo repository.ProfileQuerier
-	notifSvc    *NotificationService
 }
 
 // NewMessageService creates a new MessageService.
-func NewMessageService(repo repository.MessageQuerier, profileRepo repository.ProfileQuerier, notifSvc *NotificationService) *MessageService {
-	return &MessageService{repo: repo, profileRepo: profileRepo, notifSvc: notifSvc}
+func NewMessageService(repo repository.MessageQuerier, profileRepo repository.ProfileQuerier) *MessageService {
+	return &MessageService{repo: repo, profileRepo: profileRepo}
 }
 
 // SendMessage validates and sends a message, then triggers a notification.
@@ -47,10 +46,6 @@ func (s *MessageService) SendMessage(senderSeq int, senderName string, req model
 
 	if err := s.repo.InsertMessage(senderSeq, req.RecvrSeq, req.Content); err != nil {
 		return err
-	}
-
-	if s.notifSvc != nil {
-		go s.notifSvc.NotifyNewMessage(req.RecvrSeq, senderName, 0)
 	}
 
 	return nil
@@ -131,4 +126,52 @@ func (s *MessageService) DeleteMessage(amSeq int, usrSeq int) error {
 // GetUnreadCount returns the number of unread messages.
 func (s *MessageService) GetUnreadCount(usrSeq int) (int, error) {
 	return s.repo.GetUnreadCount(usrSeq)
+}
+
+// GetConversations returns conversation summaries for the authenticated user.
+func (s *MessageService) GetConversations(usrSeq int) (*model.ConversationListResponse, error) {
+	conversations, err := s.repo.GetConversations(usrSeq)
+	if err != nil {
+		return nil, err
+	}
+	if conversations == nil {
+		conversations = []model.ConversationSummary{}
+	}
+	return &model.ConversationListResponse{Items: conversations}, nil
+}
+
+// GetConversationMessages returns paginated messages in a conversation.
+func (s *MessageService) GetConversationMessages(usrSeq, otherSeq, page, size int) (*model.MessageListResponse, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if size <= 0 {
+		size = 30
+	}
+	if size > 50 {
+		size = 50
+	}
+	messages, total, err := s.repo.GetConversationMessages(usrSeq, otherSeq, page, size)
+	if err != nil {
+		return nil, err
+	}
+	if messages == nil {
+		messages = []model.Message{}
+	}
+	totalPages := 0
+	if size > 0 {
+		totalPages = (total + size - 1) / size
+	}
+	return &model.MessageListResponse{
+		Items:      messages,
+		TotalCount: total,
+		Page:       page,
+		Size:       size,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// MarkConversationRead marks all messages from senderSeq to usrSeq as read.
+func (s *MessageService) MarkConversationRead(usrSeq, senderSeq int) error {
+	return s.repo.MarkConversationRead(usrSeq, senderSeq)
 }

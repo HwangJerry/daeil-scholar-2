@@ -4,7 +4,7 @@ After=network.target mariadb.service
 
 [Service]
 Type=simple
-User=www-data
+User=nobody
 WorkingDirectory=/app/backend
 ExecStart=/app/backend/server
 Restart=on-failure
@@ -27,11 +27,19 @@ Environment="EASYPAY_RETURN_BASE_URL=https://www.daeilfoundation.or.kr"
 Environment="PG_AUDIT_LOG_PATH=/var/logs/pg/pg-audit.log"
 Environment="GOMEMLIMIT=80MiB"
 Environment="GOMAXPROCS=1"
-OOMScoreAdjust=0
-MemoryMax=120M
 
-StandardOutput=append:/var/logs/alumni/backend.log
-StandardError=append:/var/logs/alumni/backend-error.log
+Environment="SMTP_HOST=smtp.naver.com"
+Environment="SMTP_PORT=587"
+Environment="SMTP_USER=ghkdwp018@naver.com"
+Environment="SMTP_PASSWORD=9ZZSYSP3ZMPE"
+Environment="SMTP_FROM=ghkdwp018@naver.com"
+
+OOMScoreAdjust=0
+MemoryLimit=120M
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=alumni-backend
 
 [Install]
 WantedBy=multi-user.target

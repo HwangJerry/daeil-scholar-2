@@ -22,26 +22,31 @@ func (r *ProfileRepository) GetProfile(usrSeq int) (*model.UserProfile, error) {
 			IFNULL(m.USR_BIZ_NAME, '') AS USR_BIZ_NAME,
 			IFNULL(m.USR_BIZ_DESC, '') AS USR_BIZ_DESC,
 			IFNULL(m.USR_BIZ_ADDR, '') AS USR_BIZ_ADDR,
+			IFNULL(m.USR_POSITION, '') AS USR_POSITION,
 			IFNULL(m.USR_JOB_CAT, 0) AS USR_JOB_CAT,
 			IFNULL(jc.AJC_NAME, '') AS AJC_NAME,
-			IFNULL(jc.AJC_COLOR, '') AS AJC_COLOR,
-			IFNULL(f.FM_DEPT, '') AS FM_DEPT,
+			IFNULL(m.USR_DEPT, '') AS USR_DEPT,
 			IFNULL(DATE_FORMAT(m.REG_DATE, '%Y. %m'), '') AS REG_DATE_FMT,
 			IFNULL(m.USR_PHONE_PUBLIC, 'Y') AS USR_PHONE_PUBLIC,
 			IFNULL(m.USR_EMAIL_PUBLIC, 'Y') AS USR_EMAIL_PUBLIC,
-			IFNULL(m.USR_BIZ_CARD, '') AS USR_BIZ_CARD
+			IFNULL(m.USR_BIZ_CARD, '') AS USR_BIZ_CARD,
+			CASE WHEN IFNULL(m.USR_PWD, '') != '' THEN 1 ELSE 0 END AS HAS_PASSWORD,
+		CASE WHEN EXISTS (
+			SELECT 1 FROM WEO_MEMBER_SOCIAL s
+			WHERE s.USR_SEQ = m.USR_SEQ AND s.NMS_GATE = 'KT'
+		) THEN 1 ELSE 0 END AS HAS_SOCIAL_LOGIN
 		FROM WEO_MEMBER m
-		LEFT JOIN FUNDAMENTAL_MEMBER f ON m.USR_SEQ = f.FM_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
 		WHERE m.USR_SEQ = ?
 		LIMIT 1
 	`, usrSeq).Scan(
 		&profile.USRSeq, &profile.USRName, &profile.USRNick,
 		&profile.USRPhone, &profile.USREmail, &profile.USRFN, &profile.USRPhoto,
-		&profile.BizName, &profile.BizDesc, &profile.BizAddr,
-		&profile.JobCat, &profile.JobCatName, &profile.JobCatColor,
+		&profile.BizName, &profile.BizDesc, &profile.BizAddr, &profile.Position,
+		&profile.JobCat, &profile.JobCatName,
 		&profile.FmDept, &profile.RegDate,
 		&profile.USRPhonePublic, &profile.USREmailPublic, &profile.USRBizCard,
+		&profile.HasPassword, &profile.HasSocialLogin,
 	)
 	if err != nil {
 		return nil, err
@@ -89,14 +94,21 @@ func (r *ProfileRepository) UpdateProfile(usrSeq int, req model.ProfileUpdateReq
 	}
 	_, err := r.DB.Exec(`
 		UPDATE WEO_MEMBER
-		SET USR_NICK = ?, USR_PHONE = ?, USR_EMAIL = ?,
+		SET USR_NAME = ?, USR_FN = ?, USR_PHONE = ?, USR_EMAIL = ?,
 			USR_BIZ_NAME = ?, USR_BIZ_DESC = ?, USR_BIZ_ADDR = ?,
+			USR_POSITION = NULLIF(?, ''),
 			USR_JOB_CAT = NULLIF(?, 0),
 			USR_PHONE_PUBLIC = ?, USR_EMAIL_PUBLIC = ?
 		WHERE USR_SEQ = ?
-	`, req.USRNick, req.USRPhone, req.USREmail,
+	`, req.USRName, req.USRFN, req.USRPhone, req.USREmail,
 		req.BizName, req.BizDesc, req.BizAddr,
-		jobCat, phonePublic, emailPublic, usrSeq)
+		req.Position, jobCat, phonePublic, emailPublic, usrSeq)
+	if err != nil {
+		return err
+	}
+	_, err = r.DB.Exec(`
+		UPDATE WEO_MEMBER SET USR_DEPT = ? WHERE USR_SEQ = ?
+	`, req.FmDept, usrSeq)
 	return err
 }
 
@@ -140,10 +152,23 @@ func (r *ProfileRepository) SaveUserTags(usrSeq int, tags []string) error {
 	return tx.Commit()
 }
 
+// GetPasswordHash returns the stored USR_PWD hash for a user.
+func (r *ProfileRepository) GetPasswordHash(usrSeq int) (string, error) {
+	var pwd string
+	err := r.DB.QueryRow(`SELECT IFNULL(USR_PWD, '') FROM WEO_MEMBER WHERE USR_SEQ = ? LIMIT 1`, usrSeq).Scan(&pwd)
+	return pwd, err
+}
+
+// UpdatePassword sets a new USR_PWD hash for a user.
+func (r *ProfileRepository) UpdatePassword(usrSeq int, hashedPwd string) error {
+	_, err := r.DB.Exec(`UPDATE WEO_MEMBER SET USR_PWD = ? WHERE USR_SEQ = ?`, hashedPwd, usrSeq)
+	return err
+}
+
 // CheckUserExists returns true if a user with the given USR_SEQ exists.
 func (r *ProfileRepository) CheckUserExists(usrSeq int) (bool, error) {
 	var count int
-	err := r.DB.Get(&count, `SELECT COUNT(*) FROM WEO_MEMBER WHERE USR_SEQ = ?`, usrSeq)
+	err := r.DB.Get(&count, `SELECT COUNT(*) FROM WEO_MEMBER WHERE USR_SEQ = ? AND USR_STATUS != 'AAA'`, usrSeq)
 	if err != nil {
 		return false, err
 	}
