@@ -2,14 +2,16 @@
 import { useEffect, useRef } from 'react';
 import type { PaymentParams } from '../../types/donate';
 
+// SDK signature per EasypayCard_Web.js:342
+// easypay_card_webpay(formid, URL, popupName, iPopUpWinX, iPopUpWinY, window_type, opacity, cardCd, rgbPer)
 type SdkFunction = (
   form: HTMLFormElement,
   relayUrl: string,
-  target: string,
-  width: string,
-  height: string,
+  popupName: string,
+  popUpWinX: string,
+  popUpWinY: string,
   windowType: string,
-  timeout: number,
+  opacity: number,
 ) => void;
 
 declare global {
@@ -54,10 +56,13 @@ export function EasyPayBridge({ params, onError }: EasyPayBridgeProps) {
       }
 
       hasTriggeredRef.current = true;
+      // popupName must NOT be a reserved frame keyword (_self, _blank, _parent, _top).
+      // Using a reserved name makes form.target override the iframe targeting and submit in the current window,
+      // triggering full-window redirect and cross-site POST cookie loss (SameSite=Lax).
       window.easypay_card_webpay(
         formRef.current,
         params.relayUrl,
-        '_self',
+        'ep_payment_frame',
         '0',
         '0',
         params.windowType,
