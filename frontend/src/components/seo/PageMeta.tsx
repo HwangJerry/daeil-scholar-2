@@ -2,13 +2,20 @@
 import { Helmet } from 'react-helmet-async';
 
 const SITE_NAME = '대일외고 장학회';
+const SITE_TITLE_SUFFIX = '대일외고 장학회 | 대일외국어고등학교 장학재단';
 const SITE_BASE_URL = import.meta.env.VITE_SITE_BASE_URL ?? 'https://daeilfoundation.or.kr';
-const DEFAULT_DESC = '대일외고 동문 장학회 — 재학생 장학금 지원과 동문 네트워크를 운영합니다.';
+const DEFAULT_DESC =
+  '대일외고 장학회 — 대일외국어고등학교(대일외고) 재학생 장학금 지원과 동문 네트워크를 운영합니다.';
 const DEFAULT_OG_IMAGE = `${SITE_BASE_URL}/logo.png`;
 
 interface ArticleData {
   headline: string;
   publishedAt: string;
+}
+
+interface BreadcrumbItem {
+  name: string;
+  url: string;
 }
 
 interface PageMetaProps {
@@ -19,6 +26,7 @@ interface PageMetaProps {
   noIndex?: boolean;
   ogType?: 'website' | 'article';
   articleData?: ArticleData;
+  breadcrumbs?: BreadcrumbItem[];
 }
 
 export function PageMeta({
@@ -29,8 +37,9 @@ export function PageMeta({
   noIndex = false,
   ogType = 'website',
   articleData,
+  breadcrumbs,
 }: PageMetaProps) {
-  const pageTitle = title ? `${title} — ${SITE_NAME}` : SITE_NAME;
+  const pageTitle = title ? `${title} | ${SITE_TITLE_SUFFIX}` : SITE_TITLE_SUFFIX;
   const canonicalURL = canonicalPath ? `${SITE_BASE_URL}${canonicalPath}` : undefined;
   const ogImageURL = ogImage.startsWith('/') ? `${SITE_BASE_URL}${ogImage}` : ogImage;
 
@@ -45,6 +54,19 @@ export function PageMeta({
           name: SITE_NAME,
           logo: DEFAULT_OG_IMAGE,
         },
+      })
+    : null;
+
+  const breadcrumbJsonLd = breadcrumbs && breadcrumbs.length > 0
+    ? JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: breadcrumbs.map((crumb, idx) => ({
+          '@type': 'ListItem',
+          position: idx + 1,
+          name: crumb.name,
+          item: crumb.url.startsWith('http') ? crumb.url : `${SITE_BASE_URL}${crumb.url}`,
+        })),
       })
     : null;
 
@@ -67,6 +89,9 @@ export function PageMeta({
       <meta name="twitter:image" content={ogImageURL} />
       {articleJsonLd && (
         <script type="application/ld+json">{articleJsonLd}</script>
+      )}
+      {breadcrumbJsonLd && (
+        <script type="application/ld+json">{breadcrumbJsonLd}</script>
       )}
     </Helmet>
   );
