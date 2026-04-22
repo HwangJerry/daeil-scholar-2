@@ -40,6 +40,7 @@ type handlers struct {
 	subscription    *handler.SubscriptionHandler
 	og              *handler.OGHandler
 	sitemap         *handler.SitemapHandler
+	rss             *handler.RSSHandler
 	passwordReset   *handler.PasswordResetHandler
 	passwordChange  *handler.PasswordChangeHandler
 	badge           *handler.BadgeHandler
@@ -61,6 +62,7 @@ func registerRoutes(h handlers, authService *service.AuthService, cacheStore *ca
 	// Bot-facing OG and sitemap endpoints (no CSRF, read-only)
 	router.Get("/og/post/{seq}", h.og.GetPostOG)
 	router.Get("/sitemap.xml", h.sitemap.GetSitemap)
+	router.Get("/rss.xml", h.rss.GetRSS)
 
 	registerPGRoutes(router, h)
 	registerAPIRoutes(router, h, authService, cacheStore, allowedOrigins)

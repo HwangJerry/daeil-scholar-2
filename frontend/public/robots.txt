@@ -12,3 +12,4 @@ Disallow: /login/legacy
 Disallow: /admin/
 
 Sitemap: https://daeilfoundation.or.kr/sitemap.xml
+Sitemap: https://daeilfoundation.or.kr/rss.xml

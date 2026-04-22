@@ -65,6 +65,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	feedService := service.NewFeedService(feedRepo, adRepo, cacheStore)
 	ogService := service.NewOGService(feedRepo)
 	sitemapService := service.NewSitemapService(feedRepo, cacheStore)
+	rssService := service.NewRSSService(feedRepo, cacheStore)
 	donationService := service.NewDonationService(donationRepo, cacheStore)
 	alumniService := service.NewAlumniService(alumniRepo, cacheStore)
 	profileService := service.NewProfileService(profileRepo)
@@ -129,6 +130,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		subscription:   handler.NewSubscriptionHandler(subscriptionService, cfg.EasyPay),
 		og:             handler.NewOGHandler(ogService, cfg.Server.SiteBaseURL),
 		sitemap:        handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
+		rss:            handler.NewRSSHandler(rssService, cfg.Server.SiteBaseURL),
 		passwordReset:  handler.NewPasswordResetHandler(passwordResetService, logger),
 		passwordChange: handler.NewPasswordChangeHandler(passwordChangeSvc),
 		badge:          handler.NewBadgeHandler(messageService, logger),

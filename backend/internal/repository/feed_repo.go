@@ -171,7 +171,11 @@ func (r *FeedRepository) GetOGFields(seq int) (*model.OGData, error) {
 func (r *FeedRepository) GetAllPublicPostSeqs() ([]model.SitemapPost, error) {
 	var posts []model.SitemapPost
 	err := r.DB.Select(&posts, `
-		SELECT SEQ, DATE_FORMAT(REG_DATE, '%Y-%m-%d') AS REG_DATE
+		SELECT SEQ,
+		       DATE_FORMAT(REG_DATE, '%Y-%m-%d') AS REG_DATE,
+		       REG_DATE AS REG_DATE_RAW,
+		       SUBJECT,
+		       IFNULL(SUMMARY, '') AS SUMMARY
 		FROM WEO_BOARDBBS
 		WHERE GATE = 'NOTICE' AND OPEN_YN = 'Y'
 		ORDER BY SEQ DESC

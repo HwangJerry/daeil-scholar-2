@@ -1,6 +1,9 @@
 package model
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // FeedItem represents a single item in the feed (notice or ad).
 type FeedItem struct {
@@ -150,8 +153,12 @@ type OGData struct {
 	ThumbnailURL string `db:"THUMBNAIL_URL"`
 }
 
-// SitemapPost holds fields needed for sitemap entry generation.
+// SitemapPost holds fields needed for sitemap and RSS entry generation.
+// REG_DATE is selected twice so RSS gets the full timestamp while sitemap keeps YYYY-MM-DD.
 type SitemapPost struct {
-	SEQ        int    `db:"SEQ"`
-	RegDateISO string `db:"REG_DATE"`
+	SEQ        int       `db:"SEQ"`
+	RegDateISO string    `db:"REG_DATE"`
+	RegDate    time.Time `db:"REG_DATE_RAW"`
+	Subject    string    `db:"SUBJECT"`
+	Summary    string    `db:"SUMMARY"`
 }
