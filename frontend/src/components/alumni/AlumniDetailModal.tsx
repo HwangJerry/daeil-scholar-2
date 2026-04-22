@@ -5,6 +5,7 @@ import { X, Phone, Mail, Building2, MapPin, FileText, MessageCircle } from 'luci
 import { Modal } from '../ui/Modal';
 import { BottomSheet } from '../ui/BottomSheet';
 import { Button } from '../ui/Button';
+import { PhoneLink } from '../ui/PhoneLink';
 import { useResponsive } from '../../hooks/useResponsive';
 import type { AlumniItem } from '../../types/api';
 
@@ -101,7 +102,7 @@ export function AlumniDetailModal({ item, currentUsrSeq, onClose }: AlumniDetail
         {item.phone && (
           <div className="flex items-center gap-3">
             <Phone size={15} className="text-text-placeholder flex-shrink-0" />
-            <span className="text-sm text-text-secondary">{item.phone}</span>
+            <PhoneLink phone={item.phone} className="text-sm text-text-secondary" />
           </div>
         )}
         {item.email && (

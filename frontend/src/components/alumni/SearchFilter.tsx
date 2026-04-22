@@ -89,7 +89,7 @@ export function SearchFilter({ onSearch }: SearchFilterProps) {
             <Search size={13} className="text-text-placeholder flex-shrink-0" />
             <input
               type="text"
-              placeholder="이름 검색"
+              placeholder="이름 또는 태그로 검색"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onBlur={() => commitName(inputValue)}

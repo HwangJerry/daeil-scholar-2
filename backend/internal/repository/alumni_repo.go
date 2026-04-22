@@ -156,9 +156,10 @@ func buildAlumniFilters(params model.AlumniSearchParams) (string, []interface{})
 		clauses = append(clauses, "AND m.USR_DEPT = ?")
 		args = append(args, params.Dept)
 	}
-	if params.Name != "" {
-		clauses = append(clauses, "AND m.USR_NAME LIKE ?")
-		args = append(args, params.Name+"%")
+	for _, kw := range strings.Fields(params.Name) {
+		clause, kwArgs := buildKeywordClause(kw)
+		clauses = append(clauses, clause)
+		args = append(args, kwArgs...)
 	}
 	if params.Company != "" {
 		clauses = append(clauses, "AND m.USR_BIZ_NAME LIKE ?")
@@ -170,4 +171,16 @@ func buildAlumniFilters(params model.AlumniSearchParams) (string, []interface{})
 	}
 
 	return strings.Join(clauses, " "), args
+}
+
+// buildKeywordClause returns a single AND clause matching the keyword against
+// either USR_NAME or any of the user's tags (ALUMNI_USER_TAG). Uses EXISTS
+// subquery for MariaDB 10.1 compatibility (no CTE/window functions).
+func buildKeywordClause(keyword string) (string, []interface{}) {
+	like := "%" + keyword + "%"
+	clause := "AND (m.USR_NAME LIKE ? OR EXISTS (" +
+		"SELECT 1 FROM ALUMNI_USER_TAG t " +
+		"WHERE t.USR_SEQ = m.USR_SEQ AND t.AUT_TAG LIKE ?" +
+		"))"
+	return clause, []interface{}{like, like}
 }
