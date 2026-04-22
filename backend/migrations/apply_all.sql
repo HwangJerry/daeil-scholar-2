@@ -1,5 +1,5 @@
 -- =============================================================================
--- apply_all.sql — Consolidated migration script (001–017)
+-- apply_all.sql — Consolidated migration script (001–021)
 -- Target: MariaDB 10.1.38
 -- Safe to re-run: uses IF NOT EXISTS / procedure-based column checks
 -- =============================================================================
@@ -315,6 +315,17 @@ CREATE TABLE IF NOT EXISTS ALUMNI_NOTIFICATION (
 
 
 -- =============================================================================
+-- 021: Flip privacy default to private ('N') and backfill existing members
+-- =============================================================================
+UPDATE WEO_MEMBER SET USR_PHONE_PUBLIC = 'N' WHERE USR_PHONE_PUBLIC <> 'N';
+UPDATE WEO_MEMBER SET USR_EMAIL_PUBLIC = 'N' WHERE USR_EMAIL_PUBLIC <> 'N';
+ALTER TABLE WEO_MEMBER
+    MODIFY COLUMN USR_PHONE_PUBLIC ENUM('Y','N') NOT NULL DEFAULT 'N';
+ALTER TABLE WEO_MEMBER
+    MODIFY COLUMN USR_EMAIL_PUBLIC ENUM('Y','N') NOT NULL DEFAULT 'N';
+
+
+-- =============================================================================
 -- Cleanup: Drop helper procedures
 -- =============================================================================
 DROP PROCEDURE IF EXISTS _add_column_if_not_exists;
@@ -355,5 +366,9 @@ SELECT 'ALUMNI_PASSWORD_RESET' AS chk, COUNT(*) AS found FROM information_schema
 
 -- 017: Notification table
 SELECT 'ALUMNI_NOTIFICATION' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_NOTIFICATION';
+
+-- 021: Privacy default flipped to 'N'
+SELECT 'USR_PHONE_PUBLIC default=N' AS chk, COUNT(*) AS found FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER' AND COLUMN_NAME='USR_PHONE_PUBLIC' AND COLUMN_DEFAULT='N';
+SELECT 'USR_EMAIL_PUBLIC default=N' AS chk, COUNT(*) AS found FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER' AND COLUMN_NAME='USR_EMAIL_PUBLIC' AND COLUMN_DEFAULT='N';
 
 SELECT '=== ALL MIGRATIONS APPLIED ===' AS status;
