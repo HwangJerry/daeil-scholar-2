@@ -93,12 +93,14 @@
     color: var(--color-text-primary);
     letter-spacing: -0.015em;
   }
+}
 
-  /* Prevent iOS Safari auto-zoom on input focus (triggers when font-size < 16px) */
-  @media (hover: none) and (pointer: coarse) {
-    input, textarea, select {
-      font-size: 16px;
-    }
+/* Prevent iOS Safari auto-zoom on input focus (triggers when font-size < 16px).
+   Kept OUTSIDE @layer base so it wins over Tailwind utility classes like `text-sm`,
+   which live in the utilities layer (utilities > base in cascade-layer order). */
+@media (hover: none) and (pointer: coarse) {
+  input, textarea, select {
+    font-size: 16px;
   }
 }
 
