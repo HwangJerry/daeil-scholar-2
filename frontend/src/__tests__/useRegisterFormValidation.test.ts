@@ -8,12 +8,16 @@ function makeFields(overrides: Partial<{
   password: string
   passwordConfirm: string
   email: string
+  fn: string
+  fmDept: string
 }> = {}) {
   return {
     usrId: 'validUser1',
     password: 'Secret123!',
     passwordConfirm: 'Secret123!',
     email: 'test@example.com',
+    fn: '10',
+    fmDept: '독일어과',
     ...overrides,
   }
 }
@@ -116,6 +120,47 @@ describe('useRegisterFormValidation', () => {
       const { result } = renderHook(() => useRegisterFormValidation())
       const error = result.current.validate(makeFields({ email: 'a@b' }))
       expect(error).toBeNull()
+    })
+  })
+
+  describe('fn validation', () => {
+    it('rejects empty fn', () => {
+      const { result } = renderHook(() => useRegisterFormValidation())
+      const error = result.current.validate(makeFields({ fn: '' }))
+      expect(error).not.toBeNull()
+      expect(error).toContain('기수')
+    })
+
+    it('rejects non-numeric fn', () => {
+      const { result } = renderHook(() => useRegisterFormValidation())
+      const error = result.current.validate(makeFields({ fn: 'abc' }))
+      expect(error).toContain('숫자')
+    })
+
+    it('accepts numeric fn', () => {
+      const { result } = renderHook(() => useRegisterFormValidation())
+      expect(result.current.validate(makeFields({ fn: '1' }))).toBeNull()
+      expect(result.current.validate(makeFields({ fn: '30' }))).toBeNull()
+    })
+  })
+
+  describe('fmDept validation', () => {
+    it('rejects empty fmDept', () => {
+      const { result } = renderHook(() => useRegisterFormValidation())
+      const error = result.current.validate(makeFields({ fmDept: '' }))
+      expect(error).toContain('학과')
+    })
+
+    it('rejects unknown department', () => {
+      const { result } = renderHook(() => useRegisterFormValidation())
+      const error = result.current.validate(makeFields({ fmDept: '라틴어과' }))
+      expect(error).toContain('학과')
+    })
+
+    it('accepts known departments', () => {
+      const { result } = renderHook(() => useRegisterFormValidation())
+      expect(result.current.validate(makeFields({ fmDept: '영어과' }))).toBeNull()
+      expect(result.current.validate(makeFields({ fmDept: '중국어과' }))).toBeNull()
     })
   })
 

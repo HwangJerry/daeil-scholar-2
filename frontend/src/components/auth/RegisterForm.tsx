@@ -61,7 +61,14 @@ export function RegisterForm() {
       setValidationError('아이디 중복 확인을 완료해주세요.');
       return;
     }
-    const validErr = validate({ usrId, password, passwordConfirm, email: profile.email });
+    const validErr = validate({
+      usrId,
+      password,
+      passwordConfirm,
+      email: profile.email,
+      fn: profile.fn,
+      fmDept: profile.fmDept,
+    });
     if (validErr) {
       setValidationError(validErr);
       return;

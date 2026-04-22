@@ -6,7 +6,10 @@ import { cn } from '../../lib/utils';
 import { api } from '../../api/client';
 import { Button } from '../ui/Button';
 import { ImageUploadSection } from './ImageUploadSection';
+import { DEPARTMENTS, isValidDepartment } from '../../constants/departments';
 import type { UserProfile, ProfileUpdateRequest, AlumniFilters } from '../../types/api';
+
+const FN_REGEX = /^[0-9]+$/;
 
 const MAX_TAGS = 5;
 
@@ -53,6 +56,7 @@ export function ProfileEditForm({ onSuccess }: ProfileEditFormProps) {
 
   const [form, setForm] = useState<ProfileUpdateRequest | null>(null);
   const [tagInput, setTagInput] = useState('');
+  const [tagError, setTagError] = useState('');
 
   const displayForm: ProfileUpdateRequest = form ?? {
     usrName: profile?.usrName ?? '',
@@ -88,13 +92,19 @@ export function ProfileEditForm({ onSuccess }: ProfileEditFormProps) {
     e.preventDefault();
     const tag = tagInput.trim();
     if (!tag || displayForm.tags.length >= MAX_TAGS) return;
+    if (/\s/.test(tag)) {
+      setTagError('태그에는 공백을 포함할 수 없습니다');
+      return;
+    }
     if (displayForm.tags.includes(tag)) {
       setTagInput('');
+      setTagError('');
       return;
     }
     const newTags = [...displayForm.tags, tag];
     setForm((prev) => ({ ...displayForm, ...prev, tags: newTags }));
     setTagInput('');
+    setTagError('');
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
@@ -102,8 +112,19 @@ export function ProfileEditForm({ onSuccess }: ProfileEditFormProps) {
     setForm((prev) => ({ ...displayForm, ...prev, tags: newTags }));
   };
 
+  const [validationError, setValidationError] = useState('');
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!FN_REGEX.test(displayForm.usrFn)) {
+      setValidationError('기수는 숫자로 입력해주세요.');
+      return;
+    }
+    if (!isValidDepartment(displayForm.fmDept)) {
+      setValidationError('학과를 선택해주세요.');
+      return;
+    }
+    setValidationError('');
     mutation.mutate(displayForm);
   };
 
@@ -150,26 +171,34 @@ export function ProfileEditForm({ onSuccess }: ProfileEditFormProps) {
 
       {/* Class year */}
       <div className="mb-4">
-        <label className={`mb-1 block ${labelClass}`}>대일외고 기수</label>
+        <label className={`mb-1 block ${labelClass}`}>대일외고 기수 *</label>
         <input
           type="text"
+          inputMode="numeric"
           value={displayForm.usrFn}
           onChange={(e) => handleChange('usrFn', e.target.value.replace(/\D/g, ''))}
-          placeholder="예: 10"
+          required
+          placeholder="숫자만 입력 (예: 10)"
           className={inputClass}
         />
       </div>
 
       {/* Department */}
       <div className="mb-4">
-        <label className={`mb-1 block ${labelClass}`}>대일외고 학과</label>
-        <input
-          type="text"
+        <label className={`mb-1 block ${labelClass}`}>대일외고 학과 *</label>
+        <select
           value={displayForm.fmDept}
           onChange={(e) => handleChange('fmDept', e.target.value)}
-          placeholder="예: 독일어과"
-          className={inputClass}
-        />
+          required
+          className={cn(inputClass, 'bg-background')}
+        >
+          <option value="" disabled>학과를 선택하세요</option>
+          {DEPARTMENTS.map((dept) => (
+            <option key={dept} value={dept}>
+              {dept}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Phone with privacy toggle */}
@@ -309,21 +338,30 @@ export function ProfileEditForm({ onSuccess }: ProfileEditFormProps) {
           ))}
         </div>
         {displayForm.tags.length < MAX_TAGS && (
-          <input
-            type="text"
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={handleAddTag}
-            placeholder="태그 입력 후 Enter"
-            className={inputClass}
-          />
+          <>
+            <input
+              type="text"
+              value={tagInput}
+              onChange={(e) => {
+                setTagInput(e.target.value);
+                if (tagError) setTagError('');
+              }}
+              onKeyDown={handleAddTag}
+              placeholder="태그 입력 후 Enter (공백 불가)"
+              className={inputClass}
+            />
+            {tagError && <p className="mt-1 text-xs text-error-text">{tagError}</p>}
+          </>
         )}
       </div>
 
       <Button type="submit" disabled={mutation.isPending} className="w-full">
         {mutation.isPending ? '저장 중...' : '저장'}
       </Button>
-      {mutation.isError && (
+      {validationError && (
+        <p className="mt-2 text-center text-sm text-error">{validationError}</p>
+      )}
+      {mutation.isError && !validationError && (
         <p className="mt-2 text-center text-sm text-error">저장에 실패했습니다. 다시 시도해주세요.</p>
       )}
     </form>
