@@ -18,6 +18,11 @@ func (s *AuthService) FindMemberByNamePhone(name string, phone string) (*model.U
 	return s.repo.FindMemberByNamePhone(name, phone)
 }
 
+// FindMemberByEmail looks up an active member by email address.
+func (s *AuthService) FindMemberByEmail(email string) (*model.User, error) {
+	return s.repo.FindMemberByEmail(email)
+}
+
 // FindMemberByFNName looks up a member by alumni class identifier and name.
 func (s *AuthService) FindMemberByFNName(fn string, name string) (*model.User, error) {
 	return s.repo.FindMemberByFNName(fn, name)
@@ -26,4 +31,14 @@ func (s *AuthService) FindMemberByFNName(fn string, name string) (*model.User, e
 // InsertSocialLink creates a social login link record for a member.
 func (s *AuthService) InsertSocialLink(usrSeq int, gate string, socialID string, email string) error {
 	return s.repo.InsertSocialLink(usrSeq, gate, socialID, email)
+}
+
+// UpdateProfilePhotoIfEmpty sets USR_PHOTO only when empty, used by auto-link to seed avatars without overwriting.
+func (s *AuthService) UpdateProfilePhotoIfEmpty(usrSeq int, url string) error {
+	return s.repo.UpdateProfilePhotoIfEmpty(usrSeq, url)
+}
+
+// UpdateMemberOptionalFields updates the merge-editable optional fields on an existing member.
+func (s *AuthService) UpdateMemberOptionalFields(usrSeq int, fn, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) error {
+	return s.repo.UpdateMemberOptionalFields(usrSeq, fn, fmDept, jobCat, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic)
 }

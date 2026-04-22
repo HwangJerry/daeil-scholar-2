@@ -58,9 +58,11 @@ func (s *MemberService) FindMemberByPhone(phone string) (*model.User, error) {
 }
 
 // CreateMember inserts a new member with USR_ID = "K" + kakaoID and returns the created user.
-func (s *MemberService) CreateMember(kakaoID, name, phone, fn, email, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) (*model.User, error) {
+// profileImageURL seeds USR_PHOTO when provided by the social provider (Kakao profile_image_url);
+// pass an empty string when consent was declined.
+func (s *MemberService) CreateMember(kakaoID, name, phone, fn, email, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic, profileImageURL string) (*model.User, error) {
 	usrID := "K" + kakaoID
-	usrSeq, err := s.repo.InsertMember(usrID, name, phone, fn, email, fmDept, jobCat, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic)
+	usrSeq, err := s.repo.InsertMember(usrID, name, phone, fn, email, fmDept, jobCat, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic, profileImageURL)
 	if err != nil {
 		return nil, err
 	}

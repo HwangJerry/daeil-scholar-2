@@ -99,6 +99,18 @@ func (r *AuthRepository) InsertSocialLink(usrSeq int, gate string, socialID stri
 	return err
 }
 
+// UpdateProfilePhotoIfEmpty sets USR_PHOTO only when the column is currently NULL or empty.
+// Used by the social-login auto-link flow so incoming Kakao avatars don't overwrite
+// an existing member photo the user deliberately uploaded.
+func (r *AuthRepository) UpdateProfilePhotoIfEmpty(usrSeq int, url string) error {
+	_, err := r.DB.Exec(`
+		UPDATE WEO_MEMBER
+		SET USR_PHOTO = ?
+		WHERE USR_SEQ = ? AND (USR_PHOTO IS NULL OR USR_PHOTO = '')
+	`, url, usrSeq)
+	return err
+}
+
 func (r *AuthRepository) DeleteLegacySessionsByUser(usrSeq int) error {
 	_, err := r.DB.Exec(`DELETE FROM WEO_MEMBER_LOG WHERE USR_SEQ = ?`, usrSeq)
 	return err
@@ -156,21 +168,42 @@ func (r *AuthRepository) FindMemberByPhone(phone string) (*model.User, error) {
 	return &user, nil
 }
 
-func (r *AuthRepository) InsertMember(usrID, name, phone, fn, email, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) (int, error) {
+func (r *AuthRepository) FindMemberByEmail(email string) (*model.User, error) {
+	var user model.User
+	err := r.DB.Get(&user, `
+		SELECT USR_SEQ, USR_ID, USR_NAME, USR_STATUS, USR_PHONE, USR_FN, USR_EMAIL, USR_NICK, USR_PHOTO
+		FROM WEO_MEMBER
+		WHERE USR_EMAIL = ? AND USR_STATUS IN ('BBB','CCC','ZZZ')
+		LIMIT 1
+	`, email)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *AuthRepository) InsertMember(usrID, name, phone, fn, email, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic, profileImageURL string) (int, error) {
 	phonePublic := usrPhonePublic
 	if phonePublic == "" {
-		phonePublic = "Y"
+		phonePublic = "N"
 	}
 	emailPublic := usrEmailPublic
 	if emailPublic == "" {
-		emailPublic = "Y"
+		emailPublic = "N"
+	}
+	var photo sql.NullString
+	if profileImageURL != "" {
+		photo = sql.NullString{String: profileImageURL, Valid: true}
 	}
 	result, err := r.DB.Exec(`
 		INSERT INTO WEO_MEMBER (USR_ID, USR_NAME, USR_PHONE, USR_FN, USR_EMAIL, USR_STATUS, USR_PWD, REG_DATE, TOTAL_LOG_CNT,
-			USR_DEPT, USR_JOB_CAT, USR_BIZ_NAME, USR_BIZ_DESC, USR_BIZ_ADDR,
+			USR_PHOTO, USR_DEPT, USR_JOB_CAT, USR_BIZ_NAME, USR_BIZ_DESC, USR_BIZ_ADDR,
 			USR_POSITION, USR_PHONE_PUBLIC, USR_EMAIL_PUBLIC)
-		VALUES (?, ?, ?, ?, ?, 'BBB', '', NOW(), 0, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, usrID, name, phone, fn, email, fmDept, jobCat, bizName, bizDesc, bizAddr, position, phonePublic, emailPublic)
+		VALUES (?, ?, ?, ?, ?, 'BBB', '', NOW(), 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, usrID, name, phone, fn, email, photo, fmDept, jobCat, bizName, bizDesc, bizAddr, position, phonePublic, emailPublic)
 	if err != nil {
 		return 0, err
 	}
@@ -179,6 +212,26 @@ func (r *AuthRepository) InsertMember(usrID, name, phone, fn, email, fmDept stri
 		return 0, err
 	}
 	return int(id), nil
+}
+
+// UpdateMemberOptionalFields updates the merge-editable fields for an existing member.
+// Core identifiers (USR_NAME, USR_PHONE, USR_EMAIL) and USR_STATUS are intentionally untouched.
+func (r *AuthRepository) UpdateMemberOptionalFields(usrSeq int, fn, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) error {
+	phonePublic := usrPhonePublic
+	if phonePublic == "" {
+		phonePublic = "N"
+	}
+	emailPublic := usrEmailPublic
+	if emailPublic == "" {
+		emailPublic = "N"
+	}
+	_, err := r.DB.Exec(`
+		UPDATE WEO_MEMBER
+		SET USR_FN = ?, USR_DEPT = ?, USR_JOB_CAT = ?, USR_BIZ_NAME = ?, USR_BIZ_DESC = ?,
+		    USR_BIZ_ADDR = ?, USR_POSITION = ?, USR_PHONE_PUBLIC = ?, USR_EMAIL_PUBLIC = ?
+		WHERE USR_SEQ = ?
+	`, fn, fmDept, jobCat, bizName, bizDesc, bizAddr, position, phonePublic, emailPublic, usrSeq)
+	return err
 }
 
 func (r *AuthRepository) GetMemberBySeq(usrSeq int) (*model.User, error) {
@@ -219,11 +272,11 @@ func (r *AuthRepository) CheckEmailExists(email string) (bool, error) {
 func (r *AuthRepository) InsertMemberWithPwd(req model.RegisterRequest, hashedPwd string) (int, error) {
 	phonePublic := req.USRPhonePublic
 	if phonePublic == "" {
-		phonePublic = "Y"
+		phonePublic = "N"
 	}
 	emailPublic := req.USREmailPublic
 	if emailPublic == "" {
-		emailPublic = "Y"
+		emailPublic = "N"
 	}
 	result, err := r.DB.Exec(`
 		INSERT INTO WEO_MEMBER (USR_ID, USR_NAME, USR_PHONE, USR_FN, USR_EMAIL, USR_STATUS, USR_PWD, REG_DATE, TOTAL_LOG_CNT,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/config"
@@ -15,17 +16,20 @@ import (
 	"github.com/rs/zerolog"
 )
 
+var fnDigitRegex = regexp.MustCompile(`^[0-9]+$`)
+
 type AuthHandler struct {
 	service     *service.AuthService
 	memberSvc   *service.MemberService
 	registerSvc *service.RegistrationService
+	profileSvc  *service.ProfileService
 	cache       *cache.Cache
 	cfg         *config.Config
 	logger      zerolog.Logger
 }
 
-func NewAuthHandler(svc *service.AuthService, memberSvc *service.MemberService, registerSvc *service.RegistrationService, cacheStore *cache.Cache, cfg *config.Config, logger zerolog.Logger) *AuthHandler {
-	return &AuthHandler{service: svc, memberSvc: memberSvc, registerSvc: registerSvc, cache: cacheStore, cfg: cfg, logger: logger}
+func NewAuthHandler(svc *service.AuthService, memberSvc *service.MemberService, registerSvc *service.RegistrationService, profileSvc *service.ProfileService, cacheStore *cache.Cache, cfg *config.Config, logger zerolog.Logger) *AuthHandler {
+	return &AuthHandler{service: svc, memberSvc: memberSvc, registerSvc: registerSvc, profileSvc: profileSvc, cache: cacheStore, cfg: cfg, logger: logger}
 }
 
 func (h *AuthHandler) KakaoLogin(w http.ResponseWriter, r *http.Request) {
@@ -70,18 +74,19 @@ func (h *AuthHandler) KakaoCallback(w http.ResponseWriter, r *http.Request) {
 		Str("code", code[:min(len(code), 8)]+"...").
 		Str("state", state).
 		Msg("kakao: callback received")
-	kakaoID, email, nickname, accessToken, err := h.service.ExchangeKakaoToken(code)
+	info, err := h.service.ExchangeKakaoToken(code)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("kakao: token exchange failed")
 		respondError(w, http.StatusBadRequest, "KAKAO_EXCHANGE_FAILED", "Kakao token exchange failed")
 		return
 	}
 	h.logger.Debug().
-		Str("kakao_id", kakaoID).
-		Str("email", email).
-		Str("nickname", nickname).
+		Str("kakao_id", info.KakaoID).
+		Str("email", info.Email).
+		Str("nickname", info.Nickname).
+		Bool("has_profile_image", info.ProfileImageURL != "").
 		Msg("kakao: token exchanged")
-	h.handleSocialCallback(w, r, "KT", kakaoID, email, nickname, accessToken)
+	h.handleSocialCallback(w, r, "KT", info)
 }
 
 // KakaoLink delegates to SocialLink for backward compatibility.
@@ -128,12 +133,20 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
-	if req.UsrID == "" || req.Password == "" || req.Name == "" || req.Phone == "" || req.Email == "" {
+	if req.UsrID == "" || req.Password == "" || req.Name == "" || req.Phone == "" || req.Email == "" || req.FN == "" || req.FmDept == "" {
 		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "필수 입력값이 누락되었습니다")
 		return
 	}
 	if len(req.UsrID) < 4 || len(req.UsrID) > 20 {
 		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "아이디는 4~20자여야 합니다")
+		return
+	}
+	if !fnDigitRegex.MatchString(req.FN) {
+		respondError(w, http.StatusBadRequest, "INVALID_FN", "기수는 숫자로 입력해주세요")
+		return
+	}
+	if !model.IsValidDepartment(req.FmDept) {
+		respondError(w, http.StatusBadRequest, "INVALID_DEPARTMENT", "유효하지 않은 학과입니다")
 		return
 	}
 	user, err := h.registerSvc.Register(req)
@@ -145,6 +158,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusConflict, "PHONE_TAKEN", "이미 등록된 전화번호입니다")
 		case errors.Is(err, service.ErrEmailTaken):
 			respondError(w, http.StatusConflict, "EMAIL_TAKEN", "이미 등록된 이메일입니다")
+		case errors.Is(err, service.ErrTagContainsWhitespace):
+			respondError(w, http.StatusBadRequest, "INVALID_TAG", "태그에 공백을 포함할 수 없습니다")
 		default:
 			h.logger.Error().Err(err).Msg("register: failed to create member")
 			respondError(w, http.StatusInternalServerError, "REGISTER_FAILED", "회원가입 처리 중 오류가 발생했습니다")

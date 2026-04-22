@@ -104,6 +104,8 @@ func registerPublicRoutes(r chi.Router, h handlers, cacheStore *cache.Cache) {
 	r.Get("/api/auth/check-phone", h.auth.CheckPhone)
 	r.Get("/api/auth/check-email", h.auth.CheckEmail)
 	r.Post("/api/auth/social/link", h.auth.SocialLink)
+	r.Get("/api/auth/social/link/prefill", h.auth.SocialLinkPrefill)
+	r.Get("/api/auth/social/link/phone-match", h.auth.SocialLinkPhoneMatch)
 	r.Post("/api/auth/kakao/link", h.auth.KakaoLink)
 	r.Get("/api/alumni/widget", h.alumni.GetWidgetPreview)
 	r.Get("/api/public/job-categories", h.alumni.GetJobCategories)

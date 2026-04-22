@@ -12,9 +12,19 @@ import (
 	"strconv"
 )
 
-// ExchangeKakaoToken exchanges an OAuth authorization code for a Kakao access token,
-// fetches the Kakao user profile, and returns (kakaoID, email, nickname, accessToken, error).
-func (s *AuthService) ExchangeKakaoToken(code string) (string, string, string, string, error) {
+// KakaoUserInfo aggregates the fields fetched from Kakao OAuth token exchange + /v2/user/me.
+type KakaoUserInfo struct {
+	KakaoID         string
+	Email           string
+	Nickname        string
+	ProfileImageURL string
+	AccessToken     string
+}
+
+// ExchangeKakaoToken exchanges an OAuth authorization code for a Kakao access token
+// and fetches the Kakao user profile. ProfileImageURL is empty when the user declined
+// the optional profile_image consent or is using Kakao's default avatar.
+func (s *AuthService) ExchangeKakaoToken(code string) (KakaoUserInfo, error) {
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
 	form.Set("client_id", s.cfg.Kakao.ClientID)
@@ -23,51 +33,63 @@ func (s *AuthService) ExchangeKakaoToken(code string) (string, string, string, s
 	form.Set("code", code)
 	req, err := http.NewRequest(http.MethodPost, "https://kauth.kakao.com/oauth/token", bytes.NewBufferString(form.Encode()))
 	if err != nil {
-		return "", "", "", "", err
+		return KakaoUserInfo{}, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", "", "", "", err
+		return KakaoUserInfo{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		return "", "", "", "", fmt.Errorf("kakao token exchange failed (status %d): %s", resp.StatusCode, string(body))
+		return KakaoUserInfo{}, fmt.Errorf("kakao token exchange failed (status %d): %s", resp.StatusCode, string(body))
 	}
 	var tokenResp struct {
 		AccessToken string `json:"access_token"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", "", "", "", err
+		return KakaoUserInfo{}, err
 	}
 	userReq, err := http.NewRequest(http.MethodGet, "https://kapi.kakao.com/v2/user/me", nil)
 	if err != nil {
-		return "", "", "", "", err
+		return KakaoUserInfo{}, err
 	}
 	userReq.Header.Set("Authorization", "Bearer "+tokenResp.AccessToken)
 	userResp, err := s.httpClient.Do(userReq)
 	if err != nil {
-		return "", "", "", "", err
+		return KakaoUserInfo{}, err
 	}
 	defer userResp.Body.Close()
 	if userResp.StatusCode >= 400 {
 		body, _ := io.ReadAll(userResp.Body)
-		return "", "", "", "", errors.New(string(body))
+		return KakaoUserInfo{}, errors.New(string(body))
 	}
 	var userPayload struct {
 		ID      int64 `json:"id"`
 		Account struct {
 			Email   string `json:"email"`
 			Profile struct {
-				Nickname string `json:"nickname"`
+				Nickname        string `json:"nickname"`
+				ProfileImageURL string `json:"profile_image_url"`
+				IsDefaultImage  bool   `json:"is_default_image"`
 			} `json:"profile"`
 		} `json:"kakao_account"`
 	}
 	if err := json.NewDecoder(userResp.Body).Decode(&userPayload); err != nil {
-		return "", "", "", "", err
+		return KakaoUserInfo{}, err
 	}
-	return strconv.FormatInt(userPayload.ID, 10), userPayload.Account.Email, userPayload.Account.Profile.Nickname, tokenResp.AccessToken, nil
+	profileImageURL := userPayload.Account.Profile.ProfileImageURL
+	if userPayload.Account.Profile.IsDefaultImage {
+		profileImageURL = ""
+	}
+	return KakaoUserInfo{
+		KakaoID:         strconv.FormatInt(userPayload.ID, 10),
+		Email:           userPayload.Account.Email,
+		Nickname:        userPayload.Account.Profile.Nickname,
+		ProfileImageURL: profileImageURL,
+		AccessToken:     tokenResp.AccessToken,
+	}, nil
 }
 
 // CacheKakaoToken stores the Kakao access token in the in-memory cache, keyed by usrSeq.

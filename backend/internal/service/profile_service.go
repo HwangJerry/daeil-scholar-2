@@ -19,6 +19,11 @@ func (s *ProfileService) GetProfile(usrSeq int) (*model.UserProfile, error) {
 }
 
 func (s *ProfileService) UpdateProfile(usrSeq int, req model.ProfileUpdateRequest) error {
+	if req.Tags != nil {
+		if err := ValidateTags(req.Tags); err != nil {
+			return err
+		}
+	}
 	if err := s.repo.UpdateProfile(usrSeq, req); err != nil {
 		return err
 	}

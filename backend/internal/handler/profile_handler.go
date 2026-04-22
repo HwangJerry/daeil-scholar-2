@@ -3,6 +3,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/dflh-saf/backend/internal/middleware"
@@ -44,6 +45,10 @@ func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.UpdateProfile(user.USRSeq, req); err != nil {
+		if errors.Is(err, service.ErrTagContainsWhitespace) {
+			respondError(w, http.StatusBadRequest, "INVALID_TAG", "태그에 공백을 포함할 수 없습니다")
+			return
+		}
 		respondError(w, http.StatusInternalServerError, "UPDATE_FAILED", "Failed to update profile")
 		return
 	}

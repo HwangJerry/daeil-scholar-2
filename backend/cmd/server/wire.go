@@ -107,7 +107,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 
 	h := handlers{
 		health:         handler.NewHealthHandler(db),
-		auth:           handler.NewAuthHandler(authService, memberService, registrationService, cacheStore, cfg, logger),
+		auth:           handler.NewAuthHandler(authService, memberService, registrationService, profileService, cacheStore, cfg, logger),
 		feed:           handler.NewFeedHandler(feedService, likeService, feedPresenter),
 		like:           handler.NewLikeHandler(likeService),
 		comment:        handler.NewCommentHandler(commentService),

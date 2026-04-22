@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { usePublicJobCategories } from '../../hooks/usePublicJobCategories';
 import type { FieldCheckStatus } from '../../hooks/useFieldAvailabilityCheck';
 import { Input } from '../ui/Input';
+import { DEPARTMENTS } from '../../constants/departments';
 
 const MAX_TAGS = 5;
 
@@ -69,8 +70,8 @@ export const defaultProfileFieldValues: ProfileFieldValues = {
   bizAddr: '',
   position: '',
   tags: [],
-  usrPhonePublic: 'Y',
-  usrEmailPublic: 'Y',
+  usrPhonePublic: 'N',
+  usrEmailPublic: 'N',
 };
 
 interface FieldCheckProps {
@@ -83,10 +84,15 @@ interface ProfileFieldsSectionProps {
   onChange: <K extends keyof ProfileFieldValues>(key: K, value: ProfileFieldValues[K]) => void;
   phoneCheck?: FieldCheckProps;
   emailCheck?: FieldCheckProps;
+  /** Field keys that should render as disabled (e.g. merge-mode locks 'name', 'phone', 'email'). */
+  disabledFields?: Array<keyof ProfileFieldValues>;
 }
 
-export function ProfileFieldsSection({ values, onChange, phoneCheck, emailCheck }: ProfileFieldsSectionProps) {
+export function ProfileFieldsSection({ values, onChange, phoneCheck, emailCheck, disabledFields }: ProfileFieldsSectionProps) {
+  const disabledSet = new Set<keyof ProfileFieldValues>(disabledFields ?? []);
+  const isDisabled = (k: keyof ProfileFieldValues) => disabledSet.has(k);
   const [tagInput, setTagInput] = useState('');
+  const [tagError, setTagError] = useState('');
   const { data: jobCategories = [] } = usePublicJobCategories();
 
   const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -95,12 +101,18 @@ export function ProfileFieldsSection({ values, onChange, phoneCheck, emailCheck 
     e.preventDefault();
     const tag = tagInput.trim();
     if (!tag || values.tags.length >= MAX_TAGS) return;
+    if (/\s/.test(tag)) {
+      setTagError('태그에는 공백을 포함할 수 없습니다');
+      return;
+    }
     if (values.tags.includes(tag)) {
       setTagInput('');
+      setTagError('');
       return;
     }
     onChange('tags', [...values.tags, tag]);
     setTagInput('');
+    setTagError('');
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
@@ -118,6 +130,7 @@ export function ProfileFieldsSection({ values, onChange, phoneCheck, emailCheck 
           required
           placeholder="실명을 입력하세요"
           autoComplete="name"
+          disabled={isDisabled('name')}
         />
       </div>
       <div>
@@ -136,8 +149,9 @@ export function ProfileFieldsSection({ values, onChange, phoneCheck, emailCheck 
           required
           placeholder="010-0000-0000"
           autoComplete="tel"
+          disabled={isDisabled('phone')}
         />
-        {phoneCheck && <FieldCheckMessage status={phoneCheck.status} label="전화번호" />}
+        {phoneCheck && !isDisabled('phone') && <FieldCheckMessage status={phoneCheck.status} label="전화번호" />}
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">
@@ -155,36 +169,44 @@ export function ProfileFieldsSection({ values, onChange, phoneCheck, emailCheck 
           required
           placeholder="example@email.com"
           autoComplete="email"
+          disabled={isDisabled('email')}
         />
-        {emailCheck && <FieldCheckMessage status={emailCheck.status} label="이메일" />}
+        {emailCheck && !isDisabled('email') && <FieldCheckMessage status={emailCheck.status} label="이메일" />}
       </div>
 
-      <div className="border-t border-border pt-3">
-        <p className="mb-3 text-xs text-text-placeholder">
-          아래 정보는 선택사항입니다. 가입 후 프로필 편집에서도 입력하실 수 있습니다.
-        </p>
+      <div className="pt-1">
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-text-muted">
-              대일외고 기수 <span className="text-text-placeholder">(선택)</span>
-            </label>
+            <label className="mb-1 block text-sm font-medium text-text-muted">대일외고 기수 *</label>
             <Input
               type="text"
+              inputMode="numeric"
               value={values.fn}
               onChange={(e) => onChange('fn', e.target.value.replace(/\D/g, ''))}
-              placeholder="예: 10"
+              required
+              placeholder="숫자만 입력 (예: 10)"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-text-muted">
-              대일외고 학과 <span className="text-text-placeholder">(선택)</span>
-            </label>
-            <Input
-              type="text"
+            <label className="mb-1 block text-sm font-medium text-text-muted">대일외고 학과 *</label>
+            <select
               value={values.fmDept}
               onChange={(e) => onChange('fmDept', e.target.value)}
-              placeholder="예: 독일어과"
-            />
+              required
+              className={selectTextareaClass}
+            >
+              <option value="" disabled>학과를 선택하세요</option>
+              {DEPARTMENTS.map((dept) => (
+                <option key={dept} value={dept}>
+                  {dept}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="border-t border-border pt-3">
+            <p className="mb-3 text-xs text-text-placeholder">
+              아래 정보는 선택사항입니다. 가입 후 프로필 편집에서도 입력하실 수 있습니다.
+            </p>
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-text-muted">
@@ -272,13 +294,19 @@ export function ProfileFieldsSection({ values, onChange, phoneCheck, emailCheck 
               ))}
             </div>
             {values.tags.length < MAX_TAGS && (
-              <Input
-                type="text"
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={handleAddTag}
-                placeholder="태그 입력 후 Enter"
-              />
+              <>
+                <Input
+                  type="text"
+                  value={tagInput}
+                  onChange={(e) => {
+                    setTagInput(e.target.value);
+                    if (tagError) setTagError('');
+                  }}
+                  onKeyDown={handleAddTag}
+                  placeholder="태그 입력 후 Enter (공백 불가)"
+                />
+                {tagError && <p className="mt-1 text-xs text-error-text">{tagError}</p>}
+              </>
             )}
           </div>
         </div>

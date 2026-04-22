@@ -47,7 +47,11 @@ func (s *RegistrationService) IsEmailAvailable(email string) (bool, error) {
 }
 
 // SaveInitialTags persists tags for a newly created member. Used by the social link flow.
+// Returns ErrTagContainsWhitespace if any tag contains whitespace.
 func (s *RegistrationService) SaveInitialTags(usrSeq int, tags []string) error {
+	if err := ValidateTags(tags); err != nil {
+		return err
+	}
 	return s.profileRepo.SaveUserTags(usrSeq, tags)
 }
 
@@ -77,6 +81,12 @@ func (s *RegistrationService) Register(req model.RegisterRequest) (*model.User, 
 		}
 		if emailExists {
 			return nil, ErrEmailTaken
+		}
+	}
+
+	if len(req.Tags) > 0 {
+		if err := ValidateTags(req.Tags); err != nil {
+			return nil, err
 		}
 	}
 
