@@ -57,6 +57,14 @@ func (s *AdminJobCategoryService) Delete(seq int) error {
 	return nil
 }
 
+func (s *AdminJobCategoryService) Reorder(order []int) error {
+	if err := s.repo.Reorder(order); err != nil {
+		return err
+	}
+	s.cache.Delete("alumni_job_categories")
+	return nil
+}
+
 // isDuplicateEntry detects MariaDB duplicate key errors (error 1062).
 func isDuplicateEntry(err error) bool {
 	return strings.Contains(err.Error(), "1062")

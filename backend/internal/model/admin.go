@@ -117,8 +117,11 @@ type AdminJobCategory struct {
 
 type AdminJobCategoryUpsert struct {
 	Name   string `json:"name"`
-	Index  int    `json:"index"`
 	OpenYN string `json:"openYn"`
+}
+
+type AdminJobCategoryReorderRequest struct {
+	Order []int `json:"order"`
 }
 
 // --- Donation Order ---

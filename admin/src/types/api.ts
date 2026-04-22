@@ -261,6 +261,9 @@ export interface AdminJobCategory {
 
 export interface AdminJobCategoryUpsert {
   name: string;
-  index: number;
   openYn: 'Y' | 'N';
+}
+
+export interface AdminJobCategoryReorderRequest {
+  order: number[];
 }

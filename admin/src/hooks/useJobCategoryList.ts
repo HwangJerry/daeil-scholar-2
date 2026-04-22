@@ -1,4 +1,4 @@
-// useJobCategoryList — query and mutations for job category admin CRUD
+// useJobCategoryList — query and mutations for job category admin CRUD (incl. drag-and-drop reorder)
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiClientError } from '../api/client.ts';
 import { useToast } from './useToast.ts';
@@ -63,13 +63,50 @@ export function useJobCategoryList() {
     },
   });
 
+  const reorderMutation = useMutation<
+    void,
+    unknown,
+    number[],
+    { previous: AdminJobCategory[] | undefined }
+  >({
+    mutationFn: (order: number[]) =>
+      api.post<void>('/api/admin/job-category/reorder', { order }),
+    onMutate: async (order) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEY });
+      const previous = queryClient.getQueryData<AdminJobCategory[]>(QUERY_KEY);
+      if (previous) {
+        const bySeq = new Map(previous.map((c) => [c.seq, c]));
+        const reordered = order
+          .map((seq) => bySeq.get(seq))
+          .filter((c): c is AdminJobCategory => c !== undefined)
+          .map((c, idx) => ({ ...c, index: idx + 1 }));
+        queryClient.setQueryData(QUERY_KEY, reordered);
+      }
+      return { previous };
+    },
+    onError: (_err, _order, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(QUERY_KEY, context.previous);
+      }
+      addToast({ variant: 'error', title: '순서 저장 실패', description: '다시 시도해 주세요.' });
+    },
+    onSuccess: () => {
+      addToast({ variant: 'success', title: '순서가 저장되었습니다.' });
+    },
+    onSettled: () => {
+      invalidate();
+    },
+  });
+
   return {
     ...query,
     createCategory: createMutation.mutate,
     updateCategory: updateMutation.mutate,
     deleteCategory: deleteMutation.mutate,
+    reorderCategories: reorderMutation.mutate,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
+    isReordering: reorderMutation.isPending,
   };
 }

@@ -84,3 +84,21 @@ func (h *AdminJobCategoryHandler) Delete(w http.ResponseWriter, r *http.Request)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// Reorder handles POST /api/admin/job-category/reorder — reassigns AJC_INDX based on the given seq order.
+func (h *AdminJobCategoryHandler) Reorder(w http.ResponseWriter, r *http.Request) {
+	var req model.AdminJobCategoryReorderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
+		return
+	}
+	if len(req.Order) == 0 {
+		respondError(w, http.StatusBadRequest, "EMPTY_ORDER", "Order array must not be empty")
+		return
+	}
+	if err := h.svc.Reorder(req.Order); err != nil {
+		respondError(w, http.StatusInternalServerError, "REORDER_FAILED", "Failed to reorder job categories")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

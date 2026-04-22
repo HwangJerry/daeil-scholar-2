@@ -1,4 +1,4 @@
-// JobCategoryInlineEditRow — inline edit table row for job category CRUD
+// JobCategoryInlineEditRow — inline edit table row for job category create/update (order managed separately via DnD)
 import { Check, X } from 'lucide-react';
 import { Button } from '../ui/Button.tsx';
 import { Input } from '../ui/Input.tsx';
@@ -15,6 +15,7 @@ export interface JobCategoryInlineEditRowProps {
 export function JobCategoryInlineEditRow({ draft, onChange, onSave, onCancel, isSaving }: JobCategoryInlineEditRowProps) {
   return (
     <tr className="border-b border-border-light bg-background">
+      <td className="px-2 py-2 text-center text-cool-gray">—</td>
       <td className="px-4 py-2 text-center text-cool-gray">—</td>
       <td className="px-4 py-2">
         <Input
@@ -24,16 +25,6 @@ export function JobCategoryInlineEditRow({ draft, onChange, onSave, onCancel, is
           className="h-8 text-sm"
           disabled={isSaving}
           autoFocus
-        />
-      </td>
-      <td className="px-4 py-2">
-        <Input
-          type="number"
-          value={draft.index}
-          onChange={(e) => onChange({ index: Number(e.target.value) })}
-          className="h-8 text-sm text-center"
-          disabled={isSaving}
-          min={0}
         />
       </td>
       <td className="px-4 py-2">

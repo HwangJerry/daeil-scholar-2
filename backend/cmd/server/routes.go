@@ -193,6 +193,7 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Get("/member/stats", h.adminMember.Stats)
 		r.Get("/job-category", h.adminJobCat.List)
 		r.Post("/job-category", h.adminJobCat.Create)
+		r.Post("/job-category/reorder", h.adminJobCat.Reorder)
 		r.Put("/job-category/{seq}", h.adminJobCat.Update)
 		r.Delete("/job-category/{seq}", h.adminJobCat.Delete)
 	})
