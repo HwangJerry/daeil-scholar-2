@@ -9,6 +9,7 @@ import (
 	"github.com/dflh-saf/backend/internal/job"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/presenter"
+	"github.com/dflh-saf/backend/internal/realtime"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/jmoiron/sqlx"
@@ -55,6 +56,9 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
 
+	realtimeHub := realtime.NewHub(logger)
+	messageNotifier := service.NewRealtimeMessageNotifier(realtimeHub)
+
 	// Email infrastructure
 	emailQueue := make(chan model.EmailMessage, 100)
 	emailService := service.NewEmailService(cfg.SMTP, logger)
@@ -93,7 +97,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	likeService := service.NewLikeService(likeRepo, feedRepo)
 	commentService := service.NewCommentService(commentRepo)
 	myDonationService := service.NewMyDonationService(myDonationRepo)
-	messageService := service.NewMessageService(messageRepo, profileRepo)
+	messageService := service.NewMessageService(messageRepo, profileRepo, messageNotifier)
 	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
 	passwordChangeSvc := service.NewPasswordChangeService(profileRepo)
 	donateService := service.NewDonateService(donateRepo, easypayService, cacheStore, logger, pgAuditLogger)
@@ -135,6 +139,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		passwordChange: handler.NewPasswordChangeHandler(passwordChangeSvc),
 		badge:          handler.NewBadgeHandler(messageService, logger),
 		adminJobCat:    handler.NewAdminJobCategoryHandler(adminJobCatSvc),
+		realtime:       handler.NewRealtimeHandler(realtimeHub, logger),
 	}
 
 	return &deps{

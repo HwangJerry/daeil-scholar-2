@@ -45,6 +45,7 @@ type handlers struct {
 	passwordChange  *handler.PasswordChangeHandler
 	badge           *handler.BadgeHandler
 	adminJobCat     *handler.AdminJobCategoryHandler
+	realtime        *handler.RealtimeHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
@@ -147,6 +148,7 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Get("/api/messages/conversations/{userSeq}", h.message.GetConversationMessages)
 		r.Put("/api/messages/conversations/{userSeq}/read", h.message.MarkConversationRead)
 		r.Get("/api/badges", h.badge.GetBadges)
+		r.Get("/api/messages/stream", h.realtime.Stream)
 	})
 }
 

@@ -14,11 +14,15 @@ const maxMessageLength = 1000
 type MessageService struct {
 	repo        repository.MessageQuerier
 	profileRepo repository.ProfileQuerier
+	notifier    MessageNotifier
 }
 
 // NewMessageService creates a new MessageService.
-func NewMessageService(repo repository.MessageQuerier, profileRepo repository.ProfileQuerier) *MessageService {
-	return &MessageService{repo: repo, profileRepo: profileRepo}
+func NewMessageService(repo repository.MessageQuerier, profileRepo repository.ProfileQuerier, notifier MessageNotifier) *MessageService {
+	if notifier == nil {
+		notifier = nopMessageNotifier{}
+	}
+	return &MessageService{repo: repo, profileRepo: profileRepo, notifier: notifier}
 }
 
 // SendMessage validates and sends a message, then triggers a notification.
@@ -47,6 +51,9 @@ func (s *MessageService) SendMessage(senderSeq int, senderName string, req model
 	if err := s.repo.InsertMessage(senderSeq, req.RecvrSeq, req.Content); err != nil {
 		return err
 	}
+
+	s.notifier.NotifyMessageReceived(req.RecvrSeq, senderSeq, senderName)
+	s.notifier.NotifyMessageSent(senderSeq, req.RecvrSeq)
 
 	return nil
 }
