@@ -3,8 +3,10 @@ import { Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { PageMeta } from '../components/seo/PageMeta';
 import { RegisterForm } from '../components/auth/RegisterForm';
+import { useBlockBack } from '../hooks/useBlockBack';
 
 export function RegisterPage() {
+  useBlockBack();
   const { isLoggedIn, isLoading } = useAuth();
 
   if (isLoading) return null;

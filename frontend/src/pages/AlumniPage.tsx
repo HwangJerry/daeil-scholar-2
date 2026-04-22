@@ -9,6 +9,7 @@ import { SearchFilter, type AlumniSearchParams } from '../components/alumni/Sear
 import { AlumniCard } from '../components/alumni/AlumniCard';
 import { Bone } from '../components/ui/Skeleton';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
+import { ScrollToTopButton } from '../components/ui/ScrollToTopButton';
 import type { AlumniSearchResponse, AlumniItem } from '../types/api';
 
 const PAGE_SIZE = 30;
@@ -164,6 +165,7 @@ export function AlumniPage() {
     <AuthGuard>
       <PageMeta title="동문 검색" noIndex />
       <AlumniContent />
+      <ScrollToTopButton />
     </AuthGuard>
   );
 }

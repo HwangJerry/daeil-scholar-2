@@ -5,11 +5,13 @@ import { requestPasswordReset } from '../api/passwordReset';
 import { ApiClientError } from '../api/client';
 import { Button } from '../components/ui/Button';
 import { AlertDialog } from '../components/ui/AlertDialog';
+import { useBlockBack } from '../hooks/useBlockBack';
 
 const INPUT_CLASS =
   'w-full rounded-lg border border-border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20';
 
 export function ForgotPasswordPage() {
+  useBlockBack();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');

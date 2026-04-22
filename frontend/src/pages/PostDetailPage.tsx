@@ -47,6 +47,10 @@ export function PostDetailPage() {
         canonicalPath={`/post/${post.seq}`}
         ogType="article"
         articleData={{ headline: post.subject, publishedAt: post.regDate }}
+        breadcrumbs={[
+          { name: '홈', url: '/' },
+          { name: post.subject, url: `/post/${post.seq}` },
+        ]}
       />
       <article className="mx-auto max-w-2xl overflow-hidden rounded-xl bg-surface shadow-md border-transparent animate-fade-in-up">
         <PostContent post={post} />

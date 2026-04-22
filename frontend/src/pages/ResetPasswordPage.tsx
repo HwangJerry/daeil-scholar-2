@@ -6,6 +6,7 @@ import { ApiClientError } from '../api/client';
 import { Button } from '../components/ui/Button';
 import { AlertDialog } from '../components/ui/AlertDialog';
 import { checkPasswordStrength } from '../hooks/usePasswordValidation';
+import { useBlockBack } from '../hooks/useBlockBack';
 
 const INPUT_CLASS =
   'w-full rounded-lg border border-border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20';
@@ -17,6 +18,7 @@ const DEBOUNCE_MS = 500;
 type TokenStatus = 'loading' | 'valid' | 'invalid';
 
 export function ResetPasswordPage() {
+  useBlockBack();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get('token') ?? '';

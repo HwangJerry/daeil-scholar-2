@@ -2,6 +2,7 @@
 import { useSearchParams, Link } from 'react-router-dom';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { useBlockBack } from '../hooks/useBlockBack';
 
 // --- Constants ---
 
@@ -72,6 +73,7 @@ function FailedResult({ reason }: { reason: string }) {
 // --- Main Component ---
 
 export function DonationResultPage() {
+  useBlockBack();
   const [searchParams] = useSearchParams();
   const status = searchParams.get('status');
   const orderSeq = searchParams.get('order') ?? '';
