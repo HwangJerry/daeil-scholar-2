@@ -1,16 +1,15 @@
-// useMessageStream.ts — Subscribes to the SSE message stream and invalidates affected React Query caches
+// useMessageStream.ts — Manages the SSE message stream connection lifecycle for the logged-in user
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { createMessageStream } from '../api/realtime';
 import { useAuth } from './useAuth';
+import {
+  invalidateOnMessageNew,
+  invalidateOnMessageSent,
+} from '../utils/messageStreamInvalidations';
 
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
-
-interface MessageNewPayload {
-  fromSeq: number;
-  fromName?: string;
-}
 
 export function useMessageStream() {
   const queryClient = useQueryClient();
@@ -33,20 +32,11 @@ export function useMessageStream() {
       });
 
       es.addEventListener('message.new', (event) => {
-        try {
-          const payload = JSON.parse((event as MessageEvent).data) as MessageNewPayload;
-          queryClient.invalidateQueries({ queryKey: ['messages', 'conversations'] });
-          queryClient.invalidateQueries({ queryKey: ['messages', 'conversation', payload.fromSeq] });
-          queryClient.invalidateQueries({ queryKey: ['messages', 'inbox'] });
-          queryClient.invalidateQueries({ queryKey: ['badges'] });
-        } catch {
-          queryClient.invalidateQueries({ queryKey: ['messages'] });
-          queryClient.invalidateQueries({ queryKey: ['badges'] });
-        }
+        invalidateOnMessageNew(queryClient, (event as MessageEvent).data);
       });
 
       es.addEventListener('message.sent', () => {
-        queryClient.invalidateQueries({ queryKey: ['messages', 'conversations'] });
+        invalidateOnMessageSent(queryClient);
       });
 
       es.onerror = () => {
