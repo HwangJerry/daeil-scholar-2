@@ -5,6 +5,7 @@ import { PageMeta } from '../components/seo/PageMeta';
 import { ProfileHeader } from '../components/profile/ProfileHeader';
 import { ProfileEditForm } from '../components/profile/ProfileEditForm';
 import { AccountActions } from '../components/profile/AccountActions';
+import { SubscriptionLinkSection } from '../components/profile/SubscriptionLinkSection';
 import Footer from '../components/layout/Footer';
 
 function MyPageContent() {
@@ -27,6 +28,7 @@ function MyPageContent() {
   return (
     <div className="space-y-6 pb-20">
       <ProfileHeader onEditClick={() => setShowEdit(true)} />
+      <SubscriptionLinkSection />
       <AccountActions />
       <Footer />
     </div>

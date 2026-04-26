@@ -46,7 +46,7 @@ func main() {
 		"http://127.0.0.1:8000",
 		"https://client-macbook.tail04b57d.ts.net",
 	)
-	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg.Upload, logger)
+	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg, logger)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Server.Port,
@@ -71,6 +71,8 @@ func main() {
 	sessionJob.Start()
 	emailWorker := job.NewEmailWorker(d.emailQueue, d.emailService, logger)
 	emailWorker.Start()
+	subscriptionBillingJob := d.subscriptionBillingJob
+	subscriptionBillingJob.Start()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -79,6 +81,7 @@ func main() {
 	donationJob.Stop()
 	sessionJob.Stop()
 	emailWorker.Stop()
+	subscriptionBillingJob.Stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()

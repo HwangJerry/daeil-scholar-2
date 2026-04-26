@@ -36,6 +36,20 @@ func (r *DonateRepository) InsertOrder(usrSeq int, gate string, payType string, 
 	return id, nil
 }
 
+// InsertOrderTx creates a new WEO_ORDER row within an existing tx.
+// Used by the subscription billing job so order creation + PG approval + status update
+// all live in a single transaction per subscription charge.
+func (r *DonateRepository) InsertOrderTx(tx *sqlx.Tx, usrSeq int, gate, payType string, price int, ip string) (int64, error) {
+	result, err := tx.Exec(`
+		INSERT INTO WEO_ORDER (USR_SEQ, O_GATE, O_PAY_TYPE, O_TYPE, O_REGDATE, O_PRICE, O_PAYMENT, REG_DATE, REG_IPADDR)
+		VALUES (?, ?, ?, 'A', NOW(), ?, 'N', NOW(), ?)
+	`, usrSeq, gate, payType, price, ip)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
 func (r *DonateRepository) InsertPGData(data *model.PGData) (int64, error) {
 	result, err := r.DB.Exec(`
 		INSERT INTO WEO_PG_DATA (CNO, RES_CD, RES_MSG, AMOUNT, NUM_CARD, TRAN_DATE, AUTH_NO, PAY_TYPE, O_SEQ)

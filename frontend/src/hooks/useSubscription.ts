@@ -10,9 +10,15 @@ export interface Subscription {
   subSeq: number;
   amount: number;
   payType: string;
+  cardNo?: string | null;
   status: string;
   startDate: string;
   nextBill: string;
+  billDay?: number | null;
+  endYyyymm?: string | null;
+  lastBilledAt?: string | null;
+  failCount?: number;
+  regDate?: string;
 }
 
 interface UseSubscriptionOptions {

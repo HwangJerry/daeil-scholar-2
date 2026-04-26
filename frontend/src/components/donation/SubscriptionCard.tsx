@@ -20,9 +20,11 @@ interface SubscriptionData {
   subSeq: number;
   amount: number;
   payType: string;
+  cardNo?: string | null;
   status: string;
   startDate: string;
   nextBill: string;
+  billDay?: number | null;
 }
 
 interface SubscriptionCardProps {
@@ -66,10 +68,22 @@ export function SubscriptionCard({ subscription, onCancel, isCancelling }: Subsc
           <span className="text-text-tertiary">결제 수단</span>
           <span className="text-text-primary font-medium">{payLabel}</span>
         </div>
+        {subscription.cardNo && (
+          <div className="flex justify-between text-sm">
+            <span className="text-text-tertiary">카드번호</span>
+            <span className="text-text-primary font-medium">{subscription.cardNo}</span>
+          </div>
+        )}
         <div className="flex justify-between text-sm">
           <span className="text-text-tertiary">시작일</span>
           <span className="text-text-primary font-medium">{subscription.startDate}</span>
         </div>
+        {subscription.billDay != null && (
+          <div className="flex justify-between text-sm">
+            <span className="text-text-tertiary">매월 결제일</span>
+            <span className="text-text-primary font-medium">{subscription.billDay}일</span>
+          </div>
+        )}
         {isActive && subscription.nextBill && (
           <div className="flex justify-between text-sm">
             <span className="text-text-tertiary">다음 결제일</span>

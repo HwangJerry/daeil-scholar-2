@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/model"
@@ -14,15 +15,23 @@ import (
 )
 
 type DonateService struct {
-	repo    *repository.DonateRepository
-	cache   *cache.Cache
-	epSvc   *EasyPayService
-	logger  zerolog.Logger
-	pgAudit *PGAuditLogger
+	repo         *repository.DonateRepository
+	subActivator *SubscriptionActivator
+	cache        *cache.Cache
+	epSvc        *EasyPayService
+	logger       zerolog.Logger
+	pgAudit      *PGAuditLogger
 }
 
-func NewDonateService(repo *repository.DonateRepository, epSvc *EasyPayService, cacheStore *cache.Cache, logger zerolog.Logger, pgAudit *PGAuditLogger) *DonateService {
-	return &DonateService{repo: repo, epSvc: epSvc, cache: cacheStore, logger: logger, pgAudit: pgAudit}
+func NewDonateService(
+	repo *repository.DonateRepository,
+	subActivator *SubscriptionActivator,
+	epSvc *EasyPayService,
+	cacheStore *cache.Cache,
+	logger zerolog.Logger,
+	pgAudit *PGAuditLogger,
+) *DonateService {
+	return &DonateService{repo: repo, subActivator: subActivator, epSvc: epSvc, cache: cacheStore, logger: logger, pgAudit: pgAudit}
 }
 
 func (s *DonateService) CreateOrder(user *model.AuthUser, req model.CreateOrderRequest, ip string, cfg config.EasyPayConfig) (*model.CreateOrderResponse, error) {
@@ -112,6 +121,13 @@ func (s *DonateService) ConfirmPayment(orderNo string, encData string, sessionKe
 		gate = "profile"
 	}
 
+	// For recurring (profile) orders, ask the activator for the pending subscription
+	// tied to this order. nil is OK — automated billing orders never reach ConfirmPayment.
+	var pendingSub *model.Subscription
+	if gateCode == "P" {
+		pendingSub = s.subActivator.LookupPendingByOrder(orderSeq)
+	}
+
 	// Idempotency check BEFORE calling ep_cli.Approve() to prevent duplicate charges
 	orderPrice, paymentStatus, err := s.repo.GetOrderPrice(orderSeq)
 	if err != nil {
@@ -132,11 +148,17 @@ func (s *DonateService) ConfirmPayment(orderNo string, encData string, sessionKe
 	if err != nil {
 		s.logger.Error().Err(err).Str("orderNo", orderNo).Msg("ep_cli approval failed")
 		s.pgAudit.Log(orderNo, "approve_fail", nil, err)
+		if pendingSub != nil {
+			s.subActivator.MarkFirstPaymentFailed(pendingSub.SubSeq)
+		}
 		return err
 	}
 	if result.ResCode != "0000" {
 		s.logger.Warn().Str("resCode", result.ResCode).Str("resMsg", result.ResMsg).Str("orderNo", orderNo).Msg("PG approval rejected")
 		s.pgAudit.Log(orderNo, "approve_fail", result, nil)
+		if pendingSub != nil {
+			s.subActivator.MarkFirstPaymentFailed(pendingSub.SubSeq)
+		}
 		return fmt.Errorf("PG 승인 실패: %s (%s)", result.ResMsg, result.ResCode)
 	}
 
@@ -181,6 +203,14 @@ func (s *DonateService) ConfirmPayment(orderNo string, encData string, sessionKe
 		s.logger.Error().Err(err).Str("orderNo", orderNo).Msg("failed to update order payment")
 		s.pgAudit.Log(orderNo, "db_update_fail", result, err)
 		return fmt.Errorf("주문 업데이트 실패: %w", err)
+	}
+
+	if pendingSub != nil {
+		if err := s.subActivator.ActivateAfterFirstPayment(tx, pendingSub, result, time.Now()); err != nil {
+			s.logger.Error().Err(err).Int("subSeq", pendingSub.SubSeq).Msg("subscription activate failed")
+			s.pgAudit.Log(orderNo, "subscription_activate_fail", result, err)
+			return fmt.Errorf("정기후원 활성화 실패: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

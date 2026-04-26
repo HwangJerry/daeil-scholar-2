@@ -19,16 +19,17 @@ import (
 
 // deps holds all wired dependencies needed by the application lifecycle.
 type deps struct {
-	authService       *service.AuthService
-	handlers          handlers
-	cacheStore        *cache.Cache
-	donationRepo      *repository.DonationRepository
-	donationJob       *job.DonationSnapshotJob
-	sessionRepo       *repository.SessionRepository
-	passwordResetRepo *repository.PasswordResetRepository
-	pgAuditLog        *service.PGAuditLogger
-	emailQueue        chan model.EmailMessage
-	emailService      *service.EmailService
+	authService            *service.AuthService
+	handlers               handlers
+	cacheStore             *cache.Cache
+	donationRepo           *repository.DonationRepository
+	donationJob            *job.DonationSnapshotJob
+	subscriptionBillingJob *job.SubscriptionBillingJob
+	sessionRepo            *repository.SessionRepository
+	passwordResetRepo      *repository.PasswordResetRepository
+	pgAuditLog             *service.PGAuditLogger
+	emailQueue             chan model.EmailMessage
+	emailService           *service.EmailService
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
@@ -100,12 +101,14 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	messageService := service.NewMessageService(messageRepo, profileRepo, messageNotifier)
 	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
 	passwordChangeSvc := service.NewPasswordChangeService(profileRepo)
-	donateService := service.NewDonateService(donateRepo, easypayService, cacheStore, logger, pgAuditLogger)
+	subscriptionRepo := repository.NewSubscriptionRepository(db)
+	subscriptionActivator := service.NewSubscriptionActivator(subscriptionRepo)
+	donateService := service.NewDonateService(donateRepo, subscriptionActivator, easypayService, cacheStore, logger, pgAuditLogger)
 	adminJobCatRepo := repository.NewAdminJobCategoryRepository(db)
 	adminJobCatSvc := service.NewAdminJobCategoryService(adminJobCatRepo, cacheStore)
 
-	subscriptionRepo := repository.NewSubscriptionRepository(db)
-	subscriptionService := service.NewSubscriptionService(subscriptionRepo, donateService, cacheStore, logger)
+	subscriptionService := service.NewSubscriptionService(subscriptionRepo, donateService, easypayService, pgAuditLogger, cacheStore, logger)
+	subscriptionBillingJob := job.NewSubscriptionBillingJob(subscriptionRepo, donateRepo, easypayService, pgAuditLogger, cacheStore, cfg.EasyPay, logger)
 
 	feedPresenter := presenter.NewFeedPresenter()
 
@@ -138,20 +141,22 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		passwordReset:  handler.NewPasswordResetHandler(passwordResetService, logger),
 		passwordChange: handler.NewPasswordChangeHandler(passwordChangeSvc),
 		badge:          handler.NewBadgeHandler(messageService, logger),
-		adminJobCat:    handler.NewAdminJobCategoryHandler(adminJobCatSvc),
-		realtime:       handler.NewRealtimeHandler(realtimeHub, logger),
+		adminJobCat:       handler.NewAdminJobCategoryHandler(adminJobCatSvc),
+		adminSubscription: handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
+		realtime:          handler.NewRealtimeHandler(realtimeHub, logger),
 	}
 
 	return &deps{
-		authService:       authService,
-		handlers:          h,
-		cacheStore:        cacheStore,
-		donationRepo:      donationRepo,
-		donationJob:       donationJob,
-		sessionRepo:       sessionRepo,
-		passwordResetRepo: passwordResetRepo,
-		pgAuditLog:        pgAuditLogger,
-		emailQueue:        emailQueue,
-		emailService:      emailService,
+		authService:            authService,
+		handlers:               h,
+		cacheStore:             cacheStore,
+		donationRepo:           donationRepo,
+		donationJob:            donationJob,
+		subscriptionBillingJob: subscriptionBillingJob,
+		sessionRepo:            sessionRepo,
+		passwordResetRepo:      passwordResetRepo,
+		pgAuditLog:             pgAuditLogger,
+		emailQueue:             emailQueue,
+		emailService:           emailService,
 	}, nil
 }

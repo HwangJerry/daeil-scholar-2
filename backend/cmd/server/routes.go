@@ -16,40 +16,41 @@ import (
 
 // handlers holds all HTTP handler instances for route registration.
 type handlers struct {
-	health          *handler.HealthHandler
-	auth            *handler.AuthHandler
-	feed            *handler.FeedHandler
-	like            *handler.LikeHandler
-	comment         *handler.CommentHandler
-	donation        *handler.DonationHandler
-	alumni          *handler.AlumniHandler
-	profile         *handler.ProfileHandler
-	profileUpload   *handler.ProfileUploadHandler
-	ad              *handler.AdHandler
-	adLike          *handler.AdLikeHandler
-	adComment       *handler.AdCommentHandler
-	adminNotice     *handler.AdminNoticeHandler
-	adminAd         *handler.AdminAdHandler
-	adminDonation   *handler.AdminDonationHandler
-	adminMember     *handler.AdminMemberHandler
-	adminDashboard  *handler.AdminDashboardHandler
-	adminUpload     *handler.AdminUploadHandler
-	myDonation      *handler.MyDonationHandler
-	message         *handler.MessageHandler
-	payment         *handler.PaymentHandler
-	subscription    *handler.SubscriptionHandler
-	og              *handler.OGHandler
-	sitemap         *handler.SitemapHandler
-	rss             *handler.RSSHandler
-	passwordReset   *handler.PasswordResetHandler
-	passwordChange  *handler.PasswordChangeHandler
-	badge           *handler.BadgeHandler
-	adminJobCat     *handler.AdminJobCategoryHandler
-	realtime        *handler.RealtimeHandler
+	health            *handler.HealthHandler
+	auth              *handler.AuthHandler
+	feed              *handler.FeedHandler
+	like              *handler.LikeHandler
+	comment           *handler.CommentHandler
+	donation          *handler.DonationHandler
+	alumni            *handler.AlumniHandler
+	profile           *handler.ProfileHandler
+	profileUpload     *handler.ProfileUploadHandler
+	ad                *handler.AdHandler
+	adLike            *handler.AdLikeHandler
+	adComment         *handler.AdCommentHandler
+	adminNotice       *handler.AdminNoticeHandler
+	adminAd           *handler.AdminAdHandler
+	adminDonation     *handler.AdminDonationHandler
+	adminMember       *handler.AdminMemberHandler
+	adminDashboard    *handler.AdminDashboardHandler
+	adminUpload       *handler.AdminUploadHandler
+	myDonation        *handler.MyDonationHandler
+	message           *handler.MessageHandler
+	payment           *handler.PaymentHandler
+	subscription      *handler.SubscriptionHandler
+	og                *handler.OGHandler
+	sitemap           *handler.SitemapHandler
+	rss               *handler.RSSHandler
+	passwordReset     *handler.PasswordResetHandler
+	passwordChange    *handler.PasswordChangeHandler
+	badge             *handler.BadgeHandler
+	adminJobCat       *handler.AdminJobCategoryHandler
+	adminSubscription *handler.AdminSubscriptionHandler
+	realtime          *handler.RealtimeHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
-func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, uploadCfg config.UploadConfig, logger zerolog.Logger) chi.Router {
+func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, logger zerolog.Logger) chi.Router {
 	router := chi.NewRouter()
 	router.Use(chimw.Recoverer)
 	router.Use(mw.RequestLogger(logger))
@@ -57,8 +58,8 @@ func registerRoutes(h handlers, authService *service.AuthService, cacheStore *ca
 	router.Use(mw.MaxBodySize(1 << 20))
 
 	// Static file servers (dev: proxied from Vite/Nginx; prod: handled by Nginx alias)
-	router.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadCfg.BasePath))))
-	router.Handle("/files/*", http.StripPrefix("/files/", http.FileServer(http.Dir(uploadCfg.LegacyPath))))
+	router.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.Upload.BasePath))))
+	router.Handle("/files/*", http.StripPrefix("/files/", http.FileServer(http.Dir(cfg.Upload.LegacyPath))))
 
 	// Bot-facing OG and sitemap endpoints (no CSRF, read-only)
 	router.Get("/og/post/{seq}", h.og.GetPostOG)
@@ -66,7 +67,7 @@ func registerRoutes(h handlers, authService *service.AuthService, cacheStore *ca
 	router.Get("/rss.xml", h.rss.GetRSS)
 
 	registerPGRoutes(router, h)
-	registerAPIRoutes(router, h, authService, cacheStore, allowedOrigins)
+	registerAPIRoutes(router, h, authService, cacheStore, allowedOrigins, cfg)
 
 	return router
 }
@@ -81,14 +82,14 @@ func registerPGRoutes(router chi.Router, h handlers) {
 }
 
 // registerAPIRoutes registers all /api/* routes with CSRF protection.
-func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string) {
+func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config) {
 	router.Group(func(r chi.Router) {
 		r.Use(mw.CSRFMiddleware(allowedOrigins))
 
 		registerPublicRoutes(r, h, cacheStore)
 		registerAuthRoutes(r, h, authService)
 		registerOptionalAuthRoutes(r, h, authService)
-		registerAdminRoutes(r, h, authService)
+		registerAdminRoutes(r, h, authService, cfg)
 	})
 }
 
@@ -167,7 +168,7 @@ func registerOptionalAuthRoutes(r chi.Router, h handlers, authService *service.A
 }
 
 // registerAdminRoutes registers admin-only endpoints.
-func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthService) {
+func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthService, cfg *config.Config) {
 	r.Route("/api/admin", func(r chi.Router) {
 		r.Use(mw.AuthMiddleware(authService))
 		r.Use(mw.AdminAuthMiddleware)
@@ -198,5 +199,11 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Post("/job-category/reorder", h.adminJobCat.Reorder)
 		r.Put("/job-category/{seq}", h.adminJobCat.Update)
 		r.Delete("/job-category/{seq}", h.adminJobCat.Delete)
+
+		// Manual subscription billing trigger — only mounted in dev so production cannot
+		// accidentally fire an out-of-cycle charge run.
+		if cfg.Environment == "dev" {
+			r.Post("/subscription/run-billing", h.adminSubscription.RunBilling)
+		}
 	})
 }

@@ -18,6 +18,7 @@ type Config struct {
 	EasyPay        EasyPayConfig
 	SMTP           SMTPConfig
 	PGAuditLogPath string
+	Environment    string // "dev" exposes manual subscription billing trigger; "prod" hides it
 }
 
 // SMTPConfig holds SMTP server settings for transactional email delivery.
@@ -83,6 +84,7 @@ type EasyPayConfig struct {
 	GatewayPort       string
 	BinBase           string
 	ReturnBaseURL     string
+	AutoTrCd          string // 자동결제 transaction code (v1 confirmed value: "00101000")
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -126,6 +128,7 @@ func Load() *Config {
 			GatewayPort:       getEnv("EASYPAY_GW_PORT", "80"),
 			BinBase:           getEnv("EASYPAY_BIN_BASE", "/var/www/html/_sys/payment"),
 			ReturnBaseURL:     getEnv("EASYPAY_RETURN_BASE_URL", "http://localhost:8080"),
+			AutoTrCd:          getEnv("EASYPAY_AUTO_TR_CD", "00101000"),
 		},
 		SMTP: SMTPConfig{
 			Host:     getEnv("SMTP_HOST", ""),
@@ -135,6 +138,7 @@ func Load() *Config {
 			From:     getEnv("SMTP_FROM", "noreply@dflh.kr"),
 		},
 		PGAuditLogPath: getEnv("PG_AUDIT_LOG_PATH", "/var/logs/pg/pg-audit.log"),
+		Environment:    getEnv("ENV", "prod"),
 	}
 }
 
