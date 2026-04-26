@@ -106,16 +106,22 @@ func (s *EasyPayService) AutoBilling(billingKey, orderNo string, amount int, tra
 	return parseEasyPayResponse(string(utf8Output)), nil
 }
 
-// RevokeBillingKey is a no-op stub. EasyPay's billing-key revocation transaction code is
-// not currently verified for our merchant account, and v1 (_profile_batch.php) never called
+// ErrManualRevocationRequired signals that the billing key was NOT revoked at the PG and
+// must be revoked by an operator via the EasyPay merchant console. Returned by the
+// RevokeBillingKey stub so the caller's audit log records 'billing_key_revoke_skipped'
+// instead of falsely claiming success. See docs/billing-key-revocation-sop.md.
+var ErrManualRevocationRequired = errors.New("manual revocation required via EasyPay merchant console")
+
+// RevokeBillingKey is a stub. EasyPay's billing-key revocation transaction code is not
+// currently verified for our merchant account, and v1 (_profile_batch.php) never called
 // such an API — it simply flipped OP_STATUS='N' in the DB. Until the correct tr_cd is
-// confirmed (likely "00301000" or "00501000"), cancellation flows mark the subscription
-// 'cancelled' locally and operators must manually revoke the key via the EasyPay merchant
-// console. The caller writes a 'billing_key_revoke_skipped' audit entry.
+// confirmed (likely "00301000" or "00501000"), this returns ErrManualRevocationRequired
+// so the cancellation flow records a 'billing_key_revoke_skipped' audit entry, and the
+// operator follows docs/billing-key-revocation-sop.md to revoke at the merchant console.
 func (s *EasyPayService) RevokeBillingKey(billingKey string) error {
 	// TODO(billing-key-revoke): wire up a real revocation tr_cd once verified with EasyPay.
 	_ = billingKey
-	return nil
+	return ErrManualRevocationRequired
 }
 
 func parseEasyPayResponse(raw string) *model.ApproveResult {

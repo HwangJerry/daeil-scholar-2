@@ -84,16 +84,21 @@ placeholder_value() {
   esac
 }
 
-if [[ "${SKIP_ENV_CHECK:-0}" == "1" ]]; then
-  echo "=== Skipping env var validation (SKIP_ENV_CHECK=1) ==="
-else
-  echo "=== Validating production env vars on ${TARGET} ==="
+# Read systemd unit once; reused by env validation AND migration drift check below.
+UNIT_CONTENT=""
+if [[ "${SKIP_ENV_CHECK:-0}" != "1" || "${SKIP_MIGRATION_CHECK:-0}" != "1" ]]; then
   if ! UNIT_CONTENT=$(ssh "${SSH_OPTS[@]}" "${TARGET}" "cat ${SERVICE_PATH}" 2>&1); then
     echo "✗ Failed to read ${SERVICE_PATH}:" >&2
     echo "${UNIT_CONTENT}" | sed 's/^/    /' >&2
     echo "  Hint: ensure the service file exists and is world-readable (chmod 644)." >&2
     exit 1
   fi
+fi
+
+if [[ "${SKIP_ENV_CHECK:-0}" == "1" ]]; then
+  echo "=== Skipping env var validation (SKIP_ENV_CHECK=1) ==="
+else
+  echo "=== Validating production env vars on ${TARGET} ==="
 
   MISSING=()
   PLACEHOLDERS=()
@@ -135,6 +140,66 @@ else
   fi
 
   echo "✓ ${#REQUIRED_KEYS[@]} required env vars present and non-placeholder"
+fi
+
+# =============================================================================
+# MIGRATION DRIFT CHECK — fail if local backend/migrations/ has unapplied files
+# on the production DB. Migration history is tracked in the _migration_history
+# table created by migrate.sh. DB credentials are extracted from the systemd
+# unit content read above.
+# Skip with: SKIP_MIGRATION_CHECK=1 ./deploy.sh ...
+# =============================================================================
+if [[ "${SKIP_MIGRATION_CHECK:-0}" == "1" ]]; then
+  echo "=== Skipping migration drift check (SKIP_MIGRATION_CHECK=1) ==="
+else
+  echo "=== Checking migration drift on ${TARGET} ==="
+
+  DB_USER_VAL=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE 's/^Environment="DB_USER=(.*)"$/\1/p' | head -n 1)
+  DB_PASS_VAL=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE 's/^Environment="DB_PASSWORD=(.*)"$/\1/p' | head -n 1)
+  DB_NAME_VAL=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE 's/^Environment="DB_NAME=(.*)"$/\1/p' | head -n 1)
+
+  if [[ -z "${DB_USER_VAL}" || -z "${DB_NAME_VAL}" ]]; then
+    echo "✗ Could not extract DB_USER/DB_NAME from systemd unit." >&2
+    echo "  Set SKIP_MIGRATION_CHECK=1 to bypass." >&2
+    exit 1
+  fi
+
+  if ! REMOTE_LIST=$(ssh "${SSH_OPTS[@]}" "${TARGET}" "MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' -BN '${DB_NAME_VAL}' -e 'SELECT filename FROM _migration_history ORDER BY filename'" 2>&1); then
+    echo "✗ Failed to query _migration_history on ${TARGET}:" >&2
+    echo "${REMOTE_LIST}" | sed 's/^/    /' >&2
+    echo "" >&2
+    echo "If _migration_history doesn't exist (fresh DB or pre-migrate.sh era):" >&2
+    echo "    1. On the server, run: ./migrate.sh --seed NNN  (NNN = highest already-applied migration number)" >&2
+    echo "    2. Re-run ./deploy.sh" >&2
+    echo "  Or set SKIP_MIGRATION_CHECK=1 to bypass (NOT recommended)." >&2
+    exit 1
+  fi
+
+  LOCAL_LIST=$(cd backend/migrations && ls *.sql 2>/dev/null | grep -E '^[0-9]{3}_.*\.sql$' | sort)
+
+  PENDING=()
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    if ! grep -Fxq "$f" <<< "${REMOTE_LIST}"; then
+      PENDING+=("$f")
+    fi
+  done <<< "${LOCAL_LIST}"
+
+  if [[ ${#PENDING[@]} -gt 0 ]]; then
+    echo "" >&2
+    echo "✗ Migration drift detected — ${#PENDING[@]} unapplied migration(s) on ${TARGET}:" >&2
+    for m in "${PENDING[@]}"; do
+      echo "    - ${m}" >&2
+    done
+    echo "" >&2
+    echo "Apply on the server in order, then re-run ./deploy.sh:" >&2
+    echo "    cd /path/to/repo && ./migrate.sh" >&2
+    echo "Or set SKIP_MIGRATION_CHECK=1 to bypass (NOT recommended for prod)." >&2
+    exit 1
+  fi
+
+  TOTAL=$(printf '%s\n' "${LOCAL_LIST}" | grep -c .)
+  echo "✓ All ${TOTAL} migrations applied on remote"
 fi
 
 echo "=== Building Go backend (linux/amd64) ==="

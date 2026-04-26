@@ -36,16 +36,19 @@ func main() {
 	for i := range rawOrigins {
 		rawOrigins[i] = strings.TrimSpace(rawOrigins[i])
 	}
-	allowedOrigins := append(rawOrigins,
-		"http://localhost:3000",
-		"http://localhost:3001",
-		"http://localhost:5173",
-		"http://localhost:8000",
-		"http://127.0.0.1:3001",
-		"http://127.0.0.1:5173",
-		"http://127.0.0.1:8000",
-		"https://client-macbook.tail04b57d.ts.net",
-	)
+	allowedOrigins := rawOrigins
+	if cfg.Environment == "dev" {
+		allowedOrigins = append(allowedOrigins,
+			"http://localhost:3000",
+			"http://localhost:3001",
+			"http://localhost:5173",
+			"http://localhost:8000",
+			"http://127.0.0.1:3001",
+			"http://127.0.0.1:5173",
+			"http://127.0.0.1:8000",
+			"https://client-macbook.tail04b57d.ts.net",
+		)
+	}
 	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg, logger)
 
 	server := &http.Server{
