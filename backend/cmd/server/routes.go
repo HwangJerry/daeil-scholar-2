@@ -45,8 +45,9 @@ type handlers struct {
 	passwordChange    *handler.PasswordChangeHandler
 	badge             *handler.BadgeHandler
 	adminJobCat       *handler.AdminJobCategoryHandler
-	adminSubscription *handler.AdminSubscriptionHandler
 	realtime          *handler.RealtimeHandler
+	adminSubscription *handler.AdminSubscriptionHandler
+	visit           *handler.VisitHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
@@ -164,6 +165,7 @@ func registerOptionalAuthRoutes(r chi.Router, h handlers, authService *service.A
 		r.Post("/api/ad/{maSeq}/view", h.ad.TrackView)
 		r.Post("/api/ad/{maSeq}/click", h.ad.TrackClick)
 		r.Get("/api/ad/{maSeq}/comments", h.adComment.ListComments)
+		r.Post("/api/visit/beacon", h.visit.Beacon)
 	})
 }
 
@@ -173,6 +175,7 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Use(mw.AuthMiddleware(authService))
 		r.Use(mw.AdminAuthMiddleware)
 		r.Get("/dashboard", h.adminDashboard.Dashboard)
+		r.Get("/stats/active-users", h.adminDashboard.ActiveUsers)
 		r.Get("/feed", h.adminNotice.List)
 		r.Get("/feed/{seq}", h.adminNotice.Detail)
 		r.Post("/feed", h.adminNotice.Create)

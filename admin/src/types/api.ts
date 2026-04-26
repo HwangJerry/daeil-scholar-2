@@ -203,11 +203,28 @@ export interface UploadResponse {
 export interface DashboardStats {
   totalMembers: number;
   kakaoLinkedMembers: number;
+  /** @deprecated Prefer dauToday / mauCurrent. */
   recentLoginCount: number;
   pendingApprovals: number;
   totalNotices: number;
+  dauToday: number;
+  mauCurrent: number;
   donation: DonationSummary;
   adStats: DashboardAdStats;
+}
+
+// --- Active Users (DAU/MAU) ---
+
+export interface ActiveUsersPoint {
+  date: string;
+  dau: number;
+  mau: number;
+}
+
+export interface ActiveUsersResponse {
+  points: ActiveUsersPoint[];
+  dauToday: number;
+  mauCurrent: number;
 }
 
 export interface DonationSummary {

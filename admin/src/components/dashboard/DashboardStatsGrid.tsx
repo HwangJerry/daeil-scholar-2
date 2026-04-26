@@ -1,7 +1,7 @@
 // DashboardStatsGrid — displays key metric cards for the admin dashboard
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Users, FileText, Heart, BarChart3, UserCheck } from 'lucide-react';
+import { Users, FileText, Heart, BarChart3, UserCheck, Activity, TrendingUp } from 'lucide-react';
 import { api } from '../../api/client.ts';
 import { StatsCard } from '../ui/StatsCard.tsx';
 import { formatAmount } from '../../lib/formatAmount.ts';
@@ -15,12 +15,24 @@ export function DashboardStatsGrid() {
   });
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       <StatsCard
         label="총 회원"
         value={stats?.totalMembers.toLocaleString() ?? '—'}
         icon={<Users className="h-5 w-5" />}
         subtext={`카카오 연동: ${stats?.kakaoLinkedMembers.toLocaleString() ?? '—'}명`}
+      />
+      <StatsCard
+        label="오늘 DAU"
+        value={stats?.dauToday.toLocaleString() ?? '—'}
+        icon={<Activity className="h-5 w-5" />}
+        subtext="오늘 방문한 고유 사용자"
+      />
+      <StatsCard
+        label="MAU (30일)"
+        value={stats?.mauCurrent.toLocaleString() ?? '—'}
+        icon={<TrendingUp className="h-5 w-5" />}
+        subtext="직전 30일 고유 방문자"
       />
       <StatsCard
         label="공지 수"

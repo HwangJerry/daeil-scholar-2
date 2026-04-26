@@ -93,9 +93,11 @@ type AdminMemberDetail struct {
 type DashboardStats struct {
 	TotalMembers       int              `json:"totalMembers"`
 	KakaoLinkedMembers int              `json:"kakaoLinkedMembers"`
-	RecentLoginCount   int              `json:"recentLoginCount"`
+	RecentLoginCount   int              `json:"recentLoginCount"` // Deprecated: prefer DAUToday/MAUCurrent
 	PendingApprovals   int              `json:"pendingApprovals"`
 	TotalNotices       int              `json:"totalNotices"`
+	DAUToday           uint32           `json:"dauToday"`
+	MAUCurrent         uint32           `json:"mauCurrent"`
 	Donation           DonationSummary  `json:"donation"`
 	AdStats            DashboardAdStats `json:"adStats"`
 }

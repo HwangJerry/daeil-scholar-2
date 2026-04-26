@@ -96,7 +96,7 @@ func TestConfirmReset_InvalidOrExpiredToken(t *testing.T) {
 
 	err := svc.ConfirmReset(model.PasswordResetConfirm{
 		Token:       "expired-token",
-		NewPassword: "newpassword",
+		NewPassword: "newpass123!",
 	})
 	if err == nil {
 		t.Fatal("expected error for invalid/expired token")
@@ -109,7 +109,7 @@ func TestConfirmReset_TokenLookupError(t *testing.T) {
 
 	err := svc.ConfirmReset(model.PasswordResetConfirm{
 		Token:       "some-token",
-		NewPassword: "newpassword",
+		NewPassword: "newpass123!",
 	})
 	if err == nil {
 		t.Fatal("expected error from token lookup failure")
@@ -130,7 +130,7 @@ func TestConfirmReset_Success(t *testing.T) {
 
 	err := svc.ConfirmReset(model.PasswordResetConfirm{
 		Token:       "valid-token",
-		NewPassword: "newpassword123",
+		NewPassword: "newpass123!",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -158,7 +158,7 @@ func TestConfirmReset_UpdatePasswordError(t *testing.T) {
 
 	err := svc.ConfirmReset(model.PasswordResetConfirm{
 		Token:       "valid-token",
-		NewPassword: "newpassword123",
+		NewPassword: "newpass123!",
 	})
 	if err == nil {
 		t.Fatal("expected error from UpdatePassword failure")

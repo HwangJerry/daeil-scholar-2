@@ -41,7 +41,7 @@ func (s *stubFeedRepo) GetFilesByPost(seq int) ([]model.FileRecord, error) { ret
 func (s *stubFeedRepo) GetPostOwnerSeq(seq int) (int, error)             { return 0, nil }
 
 func newTestLikeHandler() *LikeHandler {
-	svc := service.NewLikeService(&stubLikeRepo{}, &stubFeedRepo{}, nil)
+	svc := service.NewLikeService(&stubLikeRepo{}, &stubFeedRepo{})
 	return NewLikeHandler(svc)
 }
 

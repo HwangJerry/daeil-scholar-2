@@ -44,6 +44,16 @@ func (m *mockMessageRepo) GetUnreadCount(usrSeq int) (int, error) {
 	return m.unreadCount, m.unreadErr
 }
 
+func (m *mockMessageRepo) GetConversations(usrSeq int) ([]model.ConversationSummary, error) {
+	return nil, nil
+}
+
+func (m *mockMessageRepo) GetConversationMessages(usrSeq, otherSeq, page, size int) ([]model.Message, int, error) {
+	return nil, 0, nil
+}
+
+func (m *mockMessageRepo) MarkConversationRead(usrSeq, senderSeq int) error { return nil }
+
 // mockProfileRepo implements repository.ProfileQuerier for testing.
 type mockProfileRepo struct {
 	exists    bool
@@ -135,7 +145,7 @@ func TestSendMessage_Success(t *testing.T) {
 	svc := &MessageService{
 		repo:        msgRepo,
 		profileRepo: &mockProfileRepo{exists: true},
-		notifSvc:    nil,
+		notifier:    nopMessageNotifier{},
 	}
 
 	err := svc.SendMessage(1, "Sender", model.SendMessageRequest{

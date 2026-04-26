@@ -1,5 +1,5 @@
 -- =============================================================================
--- apply_all.sql — Consolidated migration script (001–021)
+-- apply_all.sql — Consolidated migration script (001–022)
 -- Target: MariaDB 10.1.38
 -- Safe to re-run: uses IF NOT EXISTS / procedure-based column checks
 -- =============================================================================
@@ -326,6 +326,33 @@ ALTER TABLE WEO_MEMBER
 
 
 -- =============================================================================
+-- 022: Visit tracking tables for DAU/MAU
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS WEO_VISIT_DAILY (
+    VD_DATE        DATE         NOT NULL,
+    VD_VISITOR_ID  CHAR(36)     NOT NULL,
+    VD_USR_SEQ     INT          NOT NULL DEFAULT 0,
+    VD_FIRST_TS    DATETIME     NOT NULL,
+    VD_LAST_TS     DATETIME     NOT NULL,
+    VD_HITS        INT UNSIGNED NOT NULL DEFAULT 1,
+    VD_UA_HASH     CHAR(16)     DEFAULT NULL,
+    VD_IP_HASH     CHAR(16)     DEFAULT NULL,
+    PRIMARY KEY (VD_DATE, VD_VISITOR_ID),
+    KEY IX_VD_DATE_USR (VD_DATE, VD_USR_SEQ)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS WEO_VISIT_SUMMARY (
+    VS_DATE        DATE          NOT NULL PRIMARY KEY,
+    VS_DAU_TOTAL   INT UNSIGNED  NOT NULL DEFAULT 0,
+    VS_DAU_MEMBER  INT UNSIGNED  NOT NULL DEFAULT 0,
+    VS_DAU_ANON    INT UNSIGNED  NOT NULL DEFAULT 0,
+    VS_MAU_TOTAL   INT UNSIGNED  NOT NULL DEFAULT 0,
+    VS_PAGEVIEWS   INT UNSIGNED  NOT NULL DEFAULT 0,
+    REG_DATE       DATETIME      NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- =============================================================================
 -- Cleanup: Drop helper procedures
 -- =============================================================================
 DROP PROCEDURE IF EXISTS _add_column_if_not_exists;
@@ -366,6 +393,10 @@ SELECT 'ALUMNI_PASSWORD_RESET' AS chk, COUNT(*) AS found FROM information_schema
 
 -- 017: Notification table
 SELECT 'ALUMNI_NOTIFICATION' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_NOTIFICATION';
+
+-- 022: Visit tracking tables
+SELECT 'WEO_VISIT_DAILY' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_VISIT_DAILY';
+SELECT 'WEO_VISIT_SUMMARY' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_VISIT_SUMMARY';
 
 -- 021: Privacy default flipped to 'N'
 SELECT 'USR_PHONE_PUBLIC default=N' AS chk, COUNT(*) AS found FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER' AND COLUMN_NAME='USR_PHONE_PUBLIC' AND COLUMN_DEFAULT='N';

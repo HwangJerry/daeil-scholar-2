@@ -19,6 +19,7 @@ type Config struct {
 	SMTP           SMTPConfig
 	PGAuditLogPath string
 	Environment    string // "dev" exposes manual subscription billing trigger; "prod" hides it
+	VisitIPSalt    string
 }
 
 // SMTPConfig holds SMTP server settings for transactional email delivery.
@@ -139,6 +140,7 @@ func Load() *Config {
 		},
 		PGAuditLogPath: getEnv("PG_AUDIT_LOG_PATH", "/var/logs/pg/pg-audit.log"),
 		Environment:    getEnv("ENV", "prod"),
+		VisitIPSalt:    getEnv("VISIT_IP_SALT", ""),
 	}
 }
 

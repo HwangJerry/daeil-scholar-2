@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, Megaphone } from 'lucide-react';
 import { Button } from '../components/ui/Button.tsx';
 import { DashboardStatsGrid } from '../components/dashboard/DashboardStatsGrid.tsx';
+import { ActiveUsersChart } from '../components/dashboard/ActiveUsersChart.tsx';
 import { RecentNotices } from '../components/dashboard/RecentNotices.tsx';
 
 export function DashboardPage() {
@@ -11,6 +12,8 @@ export function DashboardPage() {
       <h2 className="text-xl font-bold text-dark-slate">대시보드</h2>
 
       <DashboardStatsGrid />
+
+      <ActiveUsersChart />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <RecentNotices />

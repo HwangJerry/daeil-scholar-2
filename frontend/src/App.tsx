@@ -6,9 +6,15 @@ import { queryClient } from './queryClient';
 import { AuthInitializer } from './components/auth/AuthInitializer';
 import { RealtimeProvider } from './components/realtime/RealtimeProvider';
 import { ScrollPolicy } from './hooks/useScrollPolicy';
+import { useVisitBeacon } from './hooks/useVisitBeacon';
 import AppRoutes from './routes';
 
 const SCROLL_RESTORE_ROUTES = ['/', '/alumni'] as const;
+
+function VisitTracker() {
+  useVisitBeacon();
+  return null;
+}
 
 export default function App() {
   return (
@@ -16,6 +22,7 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <ScrollPolicy restoreAllowlist={SCROLL_RESTORE_ROUTES} />
+          <VisitTracker />
           <AuthInitializer>
             <RealtimeProvider>
               <AppRoutes />

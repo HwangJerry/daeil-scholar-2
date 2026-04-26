@@ -24,12 +24,13 @@ type deps struct {
 	cacheStore             *cache.Cache
 	donationRepo           *repository.DonationRepository
 	donationJob            *job.DonationSnapshotJob
-	subscriptionBillingJob *job.SubscriptionBillingJob
 	sessionRepo            *repository.SessionRepository
 	passwordResetRepo      *repository.PasswordResetRepository
 	pgAuditLog             *service.PGAuditLogger
 	emailQueue             chan model.EmailMessage
 	emailService           *service.EmailService
+	subscriptionBillingJob *job.SubscriptionBillingJob
+	visitJob          *job.VisitAggregationJob
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
@@ -54,6 +55,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	commentRepo := repository.NewCommentRepository(db)
 	messageRepo := repository.NewMessageRepository(db)
 	passwordResetRepo := repository.NewPasswordResetRepository(db)
+	visitRepo := repository.NewVisitRepository(db)
 
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
 
@@ -83,7 +85,9 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	donationJob := job.NewDonationSnapshotJob(donationRepo, logger)
 	adminDonationOrchestrator := service.NewDonationConfigOrchestrator(adminDonationSvc, donationService, donationJob)
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
-	adminDashboardSvc := service.NewAdminDashboardService(adminMemberSvc, adminNoticeSvc, adminAdSvc, donationService)
+	visitService := service.NewVisitService(visitRepo, cacheStore, cfg.VisitIPSalt, logger)
+	visitJob := job.NewVisitAggregationJob(visitRepo, logger)
+	adminDashboardSvc := service.NewAdminDashboardService(adminMemberSvc, adminNoticeSvc, adminAdSvc, donationService, visitService)
 	fileStorage := service.NewFileStorageService(cfg.Upload.BasePath)
 	imageResizer := service.NewImageResizeService(1200)
 	fileRecordSvc := service.NewFileRecordService(fileRepo)
@@ -144,6 +148,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		adminJobCat:       handler.NewAdminJobCategoryHandler(adminJobCatSvc),
 		adminSubscription: handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
 		realtime:          handler.NewRealtimeHandler(realtimeHub, logger),
+		visit:          handler.NewVisitHandler(visitService, logger, cfg.Server.IsSecure()),
 	}
 
 	return &deps{
@@ -152,11 +157,12 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		cacheStore:             cacheStore,
 		donationRepo:           donationRepo,
 		donationJob:            donationJob,
-		subscriptionBillingJob: subscriptionBillingJob,
 		sessionRepo:            sessionRepo,
 		passwordResetRepo:      passwordResetRepo,
 		pgAuditLog:             pgAuditLogger,
 		emailQueue:             emailQueue,
 		emailService:           emailService,
+		subscriptionBillingJob: subscriptionBillingJob,
+		visitJob:          visitJob,
 	}, nil
 }

@@ -21,7 +21,7 @@ func TestStripHTMLTags(t *testing.T) {
 		{"entity lt gt", "&lt;script&gt;", "<script>"},
 		{"entity quot", `&quot;hi&quot;`, `"hi"`},
 		{"entity apos", "it&#39;s", "it's"},
-		{"newlines replaced", "line1\nline2", "line1 line2"},
+		{"newlines preserved", "line1\nline2", "line1\nline2"},
 		{"whitespace trimmed", "  hello  ", "hello"},
 		{"empty string", "", ""},
 	}

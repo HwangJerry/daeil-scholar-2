@@ -7,6 +7,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/golang-jwt/jwt/v5 v5.2.1
+	github.com/google/uuid v1.6.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/patrickmn/go-cache v2.1.0+incompatible

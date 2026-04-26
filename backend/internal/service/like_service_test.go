@@ -70,7 +70,7 @@ func (m *mockFeedRepoForLike) GetPostOwnerSeq(seq int) (int, error) { return 0, 
 func TestToggleLike_FirstLike(t *testing.T) {
 	likeRepo := &mockLikeRepo{hasUserLiked: false, hasAnyLikeRow: false}
 	feedRepo := &mockFeedRepoForLike{likeCount: 1}
-	svc := &LikeService{likeRepo: likeRepo, feedRepo: feedRepo, notifier: nil}
+	svc := &LikeService{likeRepo: likeRepo, feedRepo: feedRepo}
 
 	resp, err := svc.ToggleLike(100, 1, "TestUser")
 	if err != nil {
@@ -93,7 +93,7 @@ func TestToggleLike_FirstLike(t *testing.T) {
 func TestToggleLike_Unlike(t *testing.T) {
 	likeRepo := &mockLikeRepo{hasUserLiked: true}
 	feedRepo := &mockFeedRepoForLike{likeCount: 0}
-	svc := &LikeService{likeRepo: likeRepo, feedRepo: feedRepo, notifier: nil}
+	svc := &LikeService{likeRepo: likeRepo, feedRepo: feedRepo}
 
 	resp, err := svc.ToggleLike(100, 1, "TestUser")
 	if err != nil {
@@ -113,7 +113,7 @@ func TestToggleLike_Unlike(t *testing.T) {
 func TestToggleLike_ReLike(t *testing.T) {
 	likeRepo := &mockLikeRepo{hasUserLiked: false, hasAnyLikeRow: true}
 	feedRepo := &mockFeedRepoForLike{likeCount: 2}
-	svc := &LikeService{likeRepo: likeRepo, feedRepo: feedRepo, notifier: nil}
+	svc := &LikeService{likeRepo: likeRepo, feedRepo: feedRepo}
 
 	resp, err := svc.ToggleLike(100, 1, "TestUser")
 	if err != nil {
@@ -130,25 +130,10 @@ func TestToggleLike_ReLike(t *testing.T) {
 	}
 }
 
-func TestToggleLike_NotifierNilSafe(t *testing.T) {
-	likeRepo := &mockLikeRepo{hasUserLiked: false, hasAnyLikeRow: false}
-	feedRepo := &mockFeedRepoForLike{likeCount: 1}
-	svc := &LikeService{likeRepo: likeRepo, feedRepo: feedRepo, notifier: nil}
-
-	resp, err := svc.ToggleLike(100, 1, "TestUser")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !resp.Liked {
-		t.Error("expected Liked=true")
-	}
-	// Test passes if no panic occurs with nil notifier
-}
-
 func TestToggleLike_HasUserLikedError(t *testing.T) {
 	likeRepo := &mockLikeRepo{hasLikedErr: errors.New("db error")}
 	feedRepo := &mockFeedRepoForLike{}
-	svc := &LikeService{likeRepo: likeRepo, feedRepo: feedRepo, notifier: nil}
+	svc := &LikeService{likeRepo: likeRepo, feedRepo: feedRepo}
 
 	_, err := svc.ToggleLike(100, 1, "TestUser")
 	if err == nil {

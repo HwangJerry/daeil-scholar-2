@@ -1,13 +1,18 @@
 // AdminDashboardService — orchestrates domain services to assemble dashboard stats
 package service
 
-import "github.com/dflh-saf/backend/internal/model"
+import (
+	"time"
+
+	"github.com/dflh-saf/backend/internal/model"
+)
 
 type AdminDashboardService struct {
 	memberSvc   *AdminMemberService
 	noticeSvc   *AdminNoticeService
 	adSvc       *AdminAdService
 	donationSvc *DonationService
+	visitSvc    *VisitService
 }
 
 func NewAdminDashboardService(
@@ -15,12 +20,14 @@ func NewAdminDashboardService(
 	noticeSvc *AdminNoticeService,
 	adSvc *AdminAdService,
 	donationSvc *DonationService,
+	visitSvc *VisitService,
 ) *AdminDashboardService {
 	return &AdminDashboardService{
 		memberSvc:   memberSvc,
 		noticeSvc:   noticeSvc,
 		adSvc:       adSvc,
 		donationSvc: donationSvc,
+		visitSvc:    visitSvc,
 	}
 }
 
@@ -30,6 +37,7 @@ func (s *AdminDashboardService) GetStats() (*model.DashboardStats, error) {
 	totalNotices, _ := s.noticeSvc.CountNotices()
 	donation, _ := s.donationSvc.GetSummary()
 	adStats, _ := s.adSvc.GetDashboardAdStats()
+	dauToday, mauCurrent, _ := s.visitSvc.DashboardCounts()
 
 	if memberStats == nil {
 		memberStats = &MemberStats{}
@@ -47,7 +55,14 @@ func (s *AdminDashboardService) GetStats() (*model.DashboardStats, error) {
 		RecentLoginCount:   memberStats.RecentLoginCount,
 		PendingApprovals:   memberStats.PendingApprovals,
 		TotalNotices:       totalNotices,
+		DAUToday:           dauToday,
+		MAUCurrent:         mauCurrent,
 		Donation:           *donation,
 		AdStats:            *adStats,
 	}, nil
+}
+
+// ActiveUsers returns the DAU/MAU time series for the admin analytics endpoint.
+func (s *AdminDashboardService) ActiveUsers(from, to time.Time) (*model.ActiveUsersResponse, error) {
+	return s.visitSvc.ActiveUsers(from, to)
 }
