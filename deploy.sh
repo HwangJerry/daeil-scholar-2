@@ -166,8 +166,8 @@ rsync -avz --delete -e "ssh ${SSH_OPTS[*]}" frontend/dist/ "${TARGET}:/var/www/a
 echo "=== Uploading Admin SPA ==="
 rsync -avz --delete -e "ssh ${SSH_OPTS[*]}" admin/dist/ "${TARGET}:/var/www/admin/"
 
-echo "=== Restarting backend ==="
-ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl restart alumni-backend'
+echo "=== Reloading systemd and restarting backend ==="
+ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'
 
 echo "=== Reloading Apache httpd ==="
 ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl reload httpd'
