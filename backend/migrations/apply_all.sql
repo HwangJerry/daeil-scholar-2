@@ -1,5 +1,5 @@
 -- =============================================================================
--- apply_all.sql — Consolidated migration script (001–022)
+-- apply_all.sql — Consolidated migration script (001–023)
 -- Target: MariaDB 10.1.38
 -- Safe to re-run: uses IF NOT EXISTS / procedure-based column checks
 -- =============================================================================
@@ -326,7 +326,7 @@ ALTER TABLE WEO_MEMBER
 
 
 -- =============================================================================
--- 022: Visit tracking tables for DAU/MAU
+-- 023: Visit tracking tables for DAU/MAU
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS WEO_VISIT_DAILY (
     VD_DATE        DATE         NOT NULL,
@@ -394,7 +394,7 @@ SELECT 'ALUMNI_PASSWORD_RESET' AS chk, COUNT(*) AS found FROM information_schema
 -- 017: Notification table
 SELECT 'ALUMNI_NOTIFICATION' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_NOTIFICATION';
 
--- 022: Visit tracking tables
+-- 023: Visit tracking tables
 SELECT 'WEO_VISIT_DAILY' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_VISIT_DAILY';
 SELECT 'WEO_VISIT_SUMMARY' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_VISIT_SUMMARY';
 

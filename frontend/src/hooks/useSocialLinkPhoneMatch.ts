@@ -26,7 +26,11 @@ export function useSocialLinkPhoneMatch({ token, phone, debounceMs = 500 }: Opti
   const [status, setStatus] = useState<PhoneMatchStatus>('idle');
   const [profile, setProfile] = useState<SocialLinkPhoneMatchProfile | null>(null);
   const latestPhone = useRef(phone);
-  latestPhone.current = phone;
+
+  // Keep ref in sync outside of render so async stale-result checks see latest phone.
+  useEffect(() => {
+    latestPhone.current = phone;
+  }, [phone]);
 
   const runCheck = useCallback(
     async (p: string): Promise<SocialLinkPhoneMatchProfile | null> => {
@@ -58,12 +62,11 @@ export function useSocialLinkPhoneMatch({ token, phone, debounceMs = 500 }: Opti
     [token],
   );
 
+  // Debounced auto-check on phone change. When phone format is invalid we skip the
+  // check; the derived `displayStatus`/`displayProfile` below present 'idle' for invalid
+  // formats, so no setState is needed here (avoids cascading-render effect).
   useEffect(() => {
-    if (!isValidPhone(phone)) {
-      setStatus('idle');
-      setProfile(null);
-      return;
-    }
+    if (!isValidPhone(phone)) return;
     const timer = setTimeout(() => {
       void runCheck(phone);
     }, debounceMs);
@@ -76,5 +79,10 @@ export function useSocialLinkPhoneMatch({ token, phone, debounceMs = 500 }: Opti
 
   const refetch = useCallback(() => runCheck(phone), [phone, runCheck]);
 
-  return { status, profile, onBlur, refetch };
+  // Derived: invalid phone always presents as 'idle' / null regardless of prior result.
+  const valid = isValidPhone(phone);
+  const displayStatus: PhoneMatchStatus = valid ? status : 'idle';
+  const displayProfile = valid ? profile : null;
+
+  return { status: displayStatus, profile: displayProfile, onBlur, refetch };
 }

@@ -35,9 +35,15 @@ export function ChatThread({ otherSeq, otherName, onBack }: ChatThreadProps) {
   const { data, isLoading, isError } = useConversationMessages(otherSeq, page);
   const { mutate: markRead } = useMarkConversationRead();
 
+  // Reset paging during render when the conversation switches (avoids cascading-render effect).
+  const [prevOtherSeq, setPrevOtherSeq] = useState(otherSeq);
+  if (prevOtherSeq !== otherSeq) {
+    setPrevOtherSeq(otherSeq);
+    setPage(1);
+  }
+
   useEffect(() => {
     if (otherSeq > 0) {
-      setPage(1);
       markRead(otherSeq);
     }
   }, [otherSeq, markRead]);

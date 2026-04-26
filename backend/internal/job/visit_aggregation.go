@@ -45,7 +45,7 @@ func (j *VisitAggregationJob) Start() {
 			}
 		}()
 		for {
-			next := nextRunAt(time.Now().In(kstZone))
+			next := nextVisitAggregationRun(time.Now().In(kstZone))
 			select {
 			case <-ctx.Done():
 				j.logger.Info().Msg("visit aggregation job stopped")
@@ -131,8 +131,8 @@ func (j *VisitAggregationJob) prune(now time.Time) error {
 	return nil
 }
 
-// nextRunAt returns the next 00:10 KST moment strictly after now.
-func nextRunAt(now time.Time) time.Time {
+// nextVisitAggregationRun returns the next 00:10 KST moment strictly after now.
+func nextVisitAggregationRun(now time.Time) time.Time {
 	next := time.Date(now.Year(), now.Month(), now.Day(), 0, 10, 0, 0, kstZone)
 	if !next.After(now) {
 		next = next.AddDate(0, 0, 1)

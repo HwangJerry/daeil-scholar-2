@@ -5,6 +5,7 @@ import { usePublicJobCategories } from '../../hooks/usePublicJobCategories';
 import type { FieldCheckStatus } from '../../hooks/useFieldAvailabilityCheck';
 import { Input } from '../ui/Input';
 import { DEPARTMENTS } from '../../constants/departments';
+import type { ProfileFieldValues } from './profileFieldValues';
 
 const MAX_TAGS = 5;
 
@@ -41,38 +42,6 @@ function FieldCheckMessage({ status, label }: { status: FieldCheckStatus; label:
   if (status === 'unavailable') return <p className="mt-1 text-xs text-error-text">이미 등록된 {label}입니다.</p>;
   return <p className="mt-1 text-xs text-error-text">확인에 실패했습니다. 다시 시도해주세요.</p>;
 }
-
-export interface ProfileFieldValues {
-  name: string;
-  phone: string;
-  email: string;
-  fn: string;
-  fmDept: string;
-  jobCat: number | null;
-  bizName: string;
-  bizDesc: string;
-  bizAddr: string;
-  position: string;
-  tags: string[];
-  usrPhonePublic: 'Y' | 'N';
-  usrEmailPublic: 'Y' | 'N';
-}
-
-export const defaultProfileFieldValues: ProfileFieldValues = {
-  name: '',
-  phone: '',
-  email: '',
-  fn: '',
-  fmDept: '',
-  jobCat: null,
-  bizName: '',
-  bizDesc: '',
-  bizAddr: '',
-  position: '',
-  tags: [],
-  usrPhonePublic: 'N',
-  usrEmailPublic: 'N',
-};
 
 interface FieldCheckProps {
   status: FieldCheckStatus;

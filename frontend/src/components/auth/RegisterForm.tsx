@@ -1,7 +1,8 @@
 // RegisterForm — ID/password registration form. Profile fields are shared via ProfileFieldsSection.
 import { useState, useRef } from 'react';
-import { ProfileFieldsSection, defaultProfileFieldValues } from './ProfileFieldsSection';
-import type { ProfileFieldValues } from './ProfileFieldsSection';
+import { ProfileFieldsSection } from './ProfileFieldsSection';
+import { defaultProfileFieldValues } from './profileFieldValues';
+import type { ProfileFieldValues } from './profileFieldValues';
 import { useRegisterFormValidation } from '../../hooks/useRegisterFormValidation';
 import { useRegisterSubmit } from '../../hooks/useRegisterSubmit';
 import { useCheckUsrId } from '../../hooks/useCheckUsrId';

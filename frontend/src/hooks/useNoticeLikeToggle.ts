@@ -1,5 +1,5 @@
 // useNoticeLikeToggle — Local optimistic like toggle for notice cards in feed list
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiClientError } from '../api/client';
 import type { LikeToggleResponse } from '../types/api';
@@ -17,25 +17,33 @@ export function useNoticeLikeToggle(
   const queryClient = useQueryClient();
   const [liked, setLiked] = useState(initialLiked);
   const [likeCnt, setLikeCnt] = useState(initialLikeCnt);
-  const isMutating = useRef(false);
+  // State (not ref) so it can be read during render without violating react-hooks/refs.
+  const [isMutating, setIsMutating] = useState(false);
 
-  useEffect(() => {
-    if (!isMutating.current) {
+  // React 19 pattern: sync state from props during render when the source prop changes,
+  // bypassing the cascading-render effect. The mutation guard ensures optimistic updates
+  // (which intentionally diverge from the prop) aren't clobbered by an in-flight refetch.
+  const [prevInitialLiked, setPrevInitialLiked] = useState(initialLiked);
+  if (prevInitialLiked !== initialLiked) {
+    setPrevInitialLiked(initialLiked);
+    if (!isMutating) {
       setLiked(initialLiked);
     }
-  }, [initialLiked]);
+  }
 
-  useEffect(() => {
-    if (!isMutating.current) {
+  const [prevInitialLikeCnt, setPrevInitialLikeCnt] = useState(initialLikeCnt);
+  if (prevInitialLikeCnt !== initialLikeCnt) {
+    setPrevInitialLikeCnt(initialLikeCnt);
+    if (!isMutating) {
       setLikeCnt(initialLikeCnt);
     }
-  }, [initialLikeCnt]);
+  }
 
   const mutation = useMutation({
     mutationFn: () => api.post<LikeToggleResponse>(`/api/feed/${seq}/like`),
 
     onMutate: () => {
-      isMutating.current = true;
+      setIsMutating(true);
       const prevLiked = liked;
       const prevLikeCnt = likeCnt;
       setLiked(!prevLiked);
@@ -60,7 +68,7 @@ export function useNoticeLikeToggle(
     },
 
     onSettled: () => {
-      isMutating.current = false;
+      setIsMutating(false);
     },
   });
 

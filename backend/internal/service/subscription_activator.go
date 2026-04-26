@@ -55,6 +55,11 @@ func (a *SubscriptionActivator) ActivateAfterFirstPayment(
 // ComputeNextBillDate returns the next billing datetime one month after `from`, pinned to
 // `billDay`. billDay is clamped to 1..28 so February is always reachable. Exported because
 // the daily auto-billing batch job uses the same calculation.
+//
+// A minimum 24-hour grace is enforced: if pinning to billDay would land within a day of
+// `from` (e.g., activating on April 30 with billDay=1 would otherwise charge May 1), the
+// schedule advances another month so customers always get a full billing cycle before
+// the next charge.
 func ComputeNextBillDate(from time.Time, billDay int) time.Time {
 	if billDay < 1 {
 		billDay = 1
@@ -63,5 +68,9 @@ func ComputeNextBillDate(from time.Time, billDay int) time.Time {
 		billDay = 28
 	}
 	next := from.AddDate(0, 1, 0)
-	return time.Date(next.Year(), next.Month(), billDay, 0, 0, 0, 0, next.Location())
+	candidate := time.Date(next.Year(), next.Month(), billDay, 0, 0, 0, 0, next.Location())
+	if !candidate.After(from.Add(24 * time.Hour)) {
+		candidate = candidate.AddDate(0, 1, 0)
+	}
+	return candidate
 }

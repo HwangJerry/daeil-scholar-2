@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ListFilter, ChevronDown, Check, X } from 'lucide-react';
 
-export const STATUS_OPTIONS = [
+const STATUS_OPTIONS = [
   { value: '', label: '전체' },
   { value: 'AAA', label: '탈퇴' },
   { value: 'ABA', label: '휴면' },

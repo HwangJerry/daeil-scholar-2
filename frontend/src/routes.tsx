@@ -18,6 +18,12 @@ import { MessageComposePage } from './pages/MessageComposePage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { AboutPage } from './pages/AboutPage';
+import { GreetingsPage } from './pages/GreetingsPage';
+import { VisionPage } from './pages/VisionPage';
+import { HistoryPage } from './pages/HistoryPage';
+import { OrganizationPage } from './pages/OrganizationPage';
+import { BusinessPage } from './pages/BusinessPage';
 import { ModalRoutes } from './ModalRoutes';
 
 export default function AppRoutes() {
@@ -48,6 +54,12 @@ export default function AppRoutes() {
           <Route path="forgot-password" element={<ForgotPasswordPage />} />
           <Route path="reset-password" element={<ResetPasswordPage />} />
           <Route path="mypage" element={<MyPage />} />
+          <Route path="about" element={<AboutPage />} />
+          <Route path="greetings" element={<GreetingsPage />} />
+          <Route path="vision" element={<VisionPage />} />
+          <Route path="history" element={<HistoryPage />} />
+          <Route path="organization" element={<OrganizationPage />} />
+          <Route path="business" element={<BusinessPage />} />
         </Route>
       </Routes>
 

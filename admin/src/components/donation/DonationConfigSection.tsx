@@ -1,5 +1,5 @@
 // DonationConfigSection — inline form for editing donation goal, manual adjustment, and memo
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Settings } from 'lucide-react';
 import { Input } from '../ui/Input.tsx';
 import { Textarea } from '../ui/Textarea.tsx';
@@ -7,43 +7,62 @@ import { Button } from '../ui/Button.tsx';
 import { ErrorState } from '../ui/ErrorState.tsx';
 import { useDonationConfig } from '../../hooks/useDonationConfig.ts';
 import { formatAmount } from '../../lib/formatAmount.ts';
+import type { DonationConfig } from '../../types/api.ts';
 
 export function DonationConfigSection() {
   const { data, isLoading, isError, refetch, update, isUpdating } = useDonationConfig();
 
-  const [goal, setGoal] = useState('');
-  const [manualAdj, setManualAdj] = useState('');
-  const [note, setNote] = useState('');
-  const [overwrite, setOverwrite] = useState(false);
+  if (isError) return <ErrorState onRetry={() => void refetch()} />;
+  if (isLoading || !data) {
+    return (
+      <div className="rounded-2xl border border-border-light bg-white p-6 shadow-sm">
+        <p className="text-sm text-cool-gray">로딩 중...</p>
+      </div>
+    );
+  }
+
+  // key={data.dcSeq} remounts the form when the underlying config row changes
+  // so initial form state derives cleanly from props without a sync effect.
+  return (
+    <DonationConfigForm
+      key={data.dcSeq}
+      data={data}
+      onSave={update}
+      isUpdating={isUpdating}
+    />
+  );
+}
+
+interface DonationConfigFormProps {
+  data: DonationConfig;
+  onSave: (
+    payload: { goal: number; manualAdj: number; note: string; overwrite: boolean },
+    options?: { onSuccess?: () => void },
+  ) => void;
+  isUpdating: boolean;
+}
+
+function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProps) {
+  const [goal, setGoal] = useState(() => String(data.dcGoal));
+  const [manualAdj, setManualAdj] = useState(() => String(data.dcManualAdj));
+  const [note, setNote] = useState(() => data.dcNote ?? '');
+  const [overwrite, setOverwrite] = useState(() => data.dcOverwrite === 'Y');
   const [isEditing, setIsEditing] = useState(false);
 
-  useEffect(() => {
-    if (data) {
-      setGoal(String(data.dcGoal));
-      setManualAdj(String(data.dcManualAdj));
-      setNote(data.dcNote ?? '');
-      setOverwrite(data.dcOverwrite === 'Y');
-    }
-  }, [data]);
-
   const handleSave = () => {
-    update(
+    onSave(
       { goal: Number(goal), manualAdj: Number(manualAdj), note, overwrite },
       { onSuccess: () => setIsEditing(false) },
     );
   };
 
   const handleCancel = () => {
-    if (data) {
-      setGoal(String(data.dcGoal));
-      setManualAdj(String(data.dcManualAdj));
-      setNote(data.dcNote ?? '');
-      setOverwrite(data.dcOverwrite === 'Y');
-    }
+    setGoal(String(data.dcGoal));
+    setManualAdj(String(data.dcManualAdj));
+    setNote(data.dcNote ?? '');
+    setOverwrite(data.dcOverwrite === 'Y');
     setIsEditing(false);
   };
-
-  if (isError) return <ErrorState onRetry={() => void refetch()} />;
 
   return (
     <div className="rounded-2xl border border-border-light bg-white p-6 shadow-sm">
@@ -59,9 +78,7 @@ export function DonationConfigSection() {
         )}
       </div>
 
-      {isLoading ? (
-        <p className="text-sm text-cool-gray">로딩 중...</p>
-      ) : isEditing ? (
+      {isEditing ? (
         <div className="space-y-4">
           <div>
             <label htmlFor="cfg-goal" className="mb-1 block text-sm font-medium text-dark-slate">
@@ -120,19 +137,19 @@ export function DonationConfigSection() {
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div>
             <dt className="text-xs text-cool-gray">목표금액</dt>
-            <dd className="text-sm font-medium text-dark-slate">₩{formatAmount(data?.dcGoal ?? 0)}</dd>
+            <dd className="text-sm font-medium text-dark-slate">₩{formatAmount(data.dcGoal)}</dd>
           </div>
           <div>
             <dt className="text-xs text-cool-gray">수동 조정액</dt>
-            <dd className="text-sm font-medium text-dark-slate">₩{formatAmount(data?.dcManualAdj ?? 0)}</dd>
+            <dd className="text-sm font-medium text-dark-slate">₩{formatAmount(data.dcManualAdj)}</dd>
           </div>
           <div>
             <dt className="text-xs text-cool-gray">덮어쓰기</dt>
-            <dd className="text-sm font-medium text-dark-slate">{data?.dcOverwrite === 'Y' ? '✓ 적용 중' : '—'}</dd>
+            <dd className="text-sm font-medium text-dark-slate">{data.dcOverwrite === 'Y' ? '✓ 적용 중' : '—'}</dd>
           </div>
           <div>
             <dt className="text-xs text-cool-gray">메모</dt>
-            <dd className="text-sm text-dark-slate">{data?.dcNote || '—'}</dd>
+            <dd className="text-sm text-dark-slate">{data.dcNote || '—'}</dd>
           </div>
         </dl>
       )}

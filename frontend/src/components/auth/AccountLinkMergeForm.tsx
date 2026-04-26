@@ -1,7 +1,8 @@
 // AccountLinkMergeForm — Integrated signup form for users whose phone matches an existing member. Prefills from the matched member and locks core identifiers.
-import { useEffect, useRef, useState } from 'react';
-import { ProfileFieldsSection, defaultProfileFieldValues } from './ProfileFieldsSection';
-import type { ProfileFieldValues } from './ProfileFieldsSection';
+import { useState } from 'react';
+import { ProfileFieldsSection } from './ProfileFieldsSection';
+import { defaultProfileFieldValues } from './profileFieldValues';
+import type { ProfileFieldValues } from './profileFieldValues';
 import { useSocialLinkPrefill } from '../../hooks/useSocialLinkPrefill';
 import { useSocialLinkPhoneMatch } from '../../hooks/useSocialLinkPhoneMatch';
 import { useAccountLinkSubmit } from '../../hooks/useAccountLinkSubmit';
@@ -25,32 +26,31 @@ export function AccountLinkMergeForm({ token, initialPhone }: AccountLinkMergeFo
     ...defaultProfileFieldValues,
     phone: initialPhone,
   });
-  const didPrefill = useRef(false);
+  const [didPrefill, setDidPrefill] = useState(false);
 
   const prefill = useSocialLinkPrefill(token);
   const mergeLookup = useSocialLinkPhoneMatch({ token, phone: initialPhone });
 
-  useEffect(() => {
-    if (didPrefill.current) return;
-    const matched = mergeLookup.profile;
-    if (!matched) return;
+  // Prefill matched member fields once during render — avoids the cascading-effect render.
+  const matchedProfile = mergeLookup.profile;
+  if (!didPrefill && matchedProfile) {
+    setDidPrefill(true);
     setProfile({
-      name: matched.name,
+      name: matchedProfile.name,
       phone: initialPhone,
-      email: matched.email,
-      fn: matched.fn,
-      fmDept: matched.fmDept,
-      jobCat: matched.jobCat,
-      bizName: matched.bizName,
-      bizDesc: matched.bizDesc,
-      bizAddr: matched.bizAddr,
-      position: matched.position,
-      tags: matched.tags,
-      usrPhonePublic: matched.usrPhonePublic,
-      usrEmailPublic: matched.usrEmailPublic,
+      email: matchedProfile.email,
+      fn: matchedProfile.fn,
+      fmDept: matchedProfile.fmDept,
+      jobCat: matchedProfile.jobCat,
+      bizName: matchedProfile.bizName,
+      bizDesc: matchedProfile.bizDesc,
+      bizAddr: matchedProfile.bizAddr,
+      position: matchedProfile.position,
+      tags: matchedProfile.tags,
+      usrPhonePublic: matchedProfile.usrPhonePublic,
+      usrEmailPublic: matchedProfile.usrEmailPublic,
     });
-    didPrefill.current = true;
-  }, [mergeLookup.profile, initialPhone]);
+  }
 
   const handleProfileChange = <K extends keyof ProfileFieldValues>(
     key: K,
@@ -88,7 +88,7 @@ export function AccountLinkMergeForm({ token, initialPhone }: AccountLinkMergeFo
     });
   };
 
-  const isLoading = !didPrefill.current && mergeLookup.status !== 'unmatched' && mergeLookup.status !== 'error';
+  const isLoading = !didPrefill && mergeLookup.status !== 'unmatched' && mergeLookup.status !== 'error';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">

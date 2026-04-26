@@ -1,8 +1,9 @@
 // AccountLinkNewForm — Fresh Kakao signup form. Prefills email/profile-image from Kakao and shows a merge banner when the typed phone matches an existing member.
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ProfileFieldsSection, defaultProfileFieldValues } from './ProfileFieldsSection';
-import type { ProfileFieldValues } from './ProfileFieldsSection';
+import { ProfileFieldsSection } from './ProfileFieldsSection';
+import { defaultProfileFieldValues } from './profileFieldValues';
+import type { ProfileFieldValues } from './profileFieldValues';
 import { useCheckPhone } from '../../hooks/useCheckPhone';
 import { useCheckEmail } from '../../hooks/useCheckEmail';
 import { useSocialLinkPrefill } from '../../hooks/useSocialLinkPrefill';
@@ -24,20 +25,20 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
   const { submitting, error, submit, setError } = useAccountLinkSubmit();
 
   const [profile, setProfile] = useState<ProfileFieldValues>(defaultProfileFieldValues);
-  const didPrefillEmail = useRef(false);
+  const [didPrefillEmail, setDidPrefillEmail] = useState(false);
 
   const prefill = useSocialLinkPrefill(token);
   const phoneBannerLookup = useSocialLinkPhoneMatch({ token, phone: profile.phone });
   const phoneCheck = useCheckPhone(profile.phone);
   const emailCheck = useCheckEmail(profile.email);
 
-  useEffect(() => {
-    if (didPrefillEmail.current) return;
-    const kakaoEmail = prefill.data?.email;
-    if (!kakaoEmail) return;
+  // Prefill email from Kakao once during render when it becomes available.
+  // setState-during-render is the React 19 idiom; it skips the cascading effect re-render.
+  const kakaoEmail = prefill.data?.email;
+  if (!didPrefillEmail && kakaoEmail) {
+    setDidPrefillEmail(true);
     setProfile((prev) => (prev.email ? prev : { ...prev, email: kakaoEmail }));
-    didPrefillEmail.current = true;
-  }, [prefill.data?.email]);
+  }
 
   const handleProfileChange = <K extends keyof ProfileFieldValues>(
     key: K,

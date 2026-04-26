@@ -25,7 +25,11 @@ export function useFieldAvailabilityCheck({
 }: Options): Result {
   const [status, setStatus] = useState<FieldCheckStatus>('idle');
   const latestValue = useRef(value);
-  latestValue.current = value;
+
+  // Keep ref in sync outside of render so async stale-result checks see latest value.
+  useEffect(() => {
+    latestValue.current = value;
+  }, [value]);
 
   const runCheck = useCallback(
     async (v: string) => {
@@ -49,12 +53,11 @@ export function useFieldAvailabilityCheck({
     [isValidFormat, checkFn],
   );
 
-  // Debounced auto-check on value change
+  // Debounced auto-check on value change. When format is invalid we skip the check;
+  // the derived `displayStatus` below renders 'idle' for invalid formats, so no setState
+  // is needed here (avoids cascading-render effect).
   useEffect(() => {
-    if (!isValidFormat(value)) {
-      setStatus('idle');
-      return;
-    }
+    if (!isValidFormat(value)) return;
     const timer = setTimeout(() => runCheck(value), debounceMs);
     return () => clearTimeout(timer);
   }, [value, debounceMs, isValidFormat, runCheck]);
@@ -63,5 +66,8 @@ export function useFieldAvailabilityCheck({
     runCheck(value);
   }, [value, runCheck]);
 
-  return { status, onBlur };
+  // Derived: invalid format always presents as 'idle' regardless of prior async result.
+  const displayStatus: FieldCheckStatus = isValidFormat(value) ? status : 'idle';
+
+  return { status: displayStatus, onBlur };
 }
