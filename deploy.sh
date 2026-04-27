@@ -246,8 +246,23 @@ echo "=== Reloading Apache httpd ==="
 ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl reload httpd'
 
 echo "=== Verifying /old/ legacy routing ==="
-SMOKE_TARGET_URL="https://daeilfoundation.or.kr"
-ssh "${SSH_OPTS[@]}" "${TARGET}" "curl -sf -o /dev/null -w 'HTTP %{http_code} for /old/index.php\n' '${SMOKE_TARGET_URL}/old/index.php'" || echo "  ⚠ /old/index.php smoke test failed (non-fatal)"
-ssh "${SSH_OPTS[@]}" "${TARGET}" "curl -sf -o /dev/null -w 'HTTP %{http_code} for /old/_sys/css/_common.css\n' '${SMOKE_TARGET_URL}/old/_sys/css/_common.css'" || echo "  ⚠ /old/_sys/css/_common.css smoke test failed (non-fatal)"
+SMOKE_HOST="daeilfoundation.or.kr"
+# 1) On-server check via loopback with --resolve so hairpin-NAT/DNS issues
+#    do not mask Apache config problems. Falls back gracefully if it fails.
+ssh "${SSH_OPTS[@]}" "${TARGET}" \
+  "curl -s -o /dev/null -w '[server-loopback] HTTP %{http_code} for /old/index.php\n' \
+    --resolve ${SMOKE_HOST}:443:127.0.0.1 https://${SMOKE_HOST}/old/index.php" \
+  || echo "  ⚠ server-loopback /old/index.php failed (non-fatal)"
+ssh "${SSH_OPTS[@]}" "${TARGET}" \
+  "curl -s -o /dev/null -w '[server-loopback] HTTP %{http_code} for /old/_sys/css/_common.css\n' \
+    --resolve ${SMOKE_HOST}:443:127.0.0.1 https://${SMOKE_HOST}/old/_sys/css/_common.css" \
+  || echo "  ⚠ server-loopback /old/_sys/css/_common.css failed (non-fatal)"
+# 2) External check from the deploy machine — verifies public reachability.
+curl -s -o /dev/null -w "[external]       HTTP %{http_code} for /old/index.php\n" \
+  "https://${SMOKE_HOST}/old/index.php" \
+  || echo "  ⚠ external /old/index.php failed (non-fatal)"
+curl -s -o /dev/null -w "[external]       HTTP %{http_code} for /old/_sys/css/_common.css\n" \
+  "https://${SMOKE_HOST}/old/_sys/css/_common.css" \
+  || echo "  ⚠ external /old/_sys/css/_common.css failed (non-fatal)"
 
 echo "=== Deploy complete ==="
