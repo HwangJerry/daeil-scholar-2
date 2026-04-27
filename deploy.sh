@@ -234,7 +234,20 @@ rsync -avz --delete -e "ssh ${SSH_OPTS[*]}" admin/dist/ "${TARGET}:/var/www/admi
 echo "=== Reloading systemd and restarting backend ==="
 ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'
 
+echo "=== Uploading Apache httpd config ==="
+scp "${SCP_OPTS[@]}" deploy/httpd-alumni.conf "${TARGET}:/tmp/alumni.conf.new"
+ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo mv /tmp/alumni.conf.new /etc/httpd/conf.d/alumni.conf && sudo httpd -t'
+
+echo "=== Uploading legacy PHP auto-prepend ==="
+scp "${SCP_OPTS[@]}" deploy/_set_docroot.php "${TARGET}:/tmp/_set_docroot.php.new"
+ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo mv /tmp/_set_docroot.php.new /var/www/html/_set_docroot.php && sudo chmod 644 /var/www/html/_set_docroot.php'
+
 echo "=== Reloading Apache httpd ==="
 ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl reload httpd'
+
+echo "=== Verifying /old/ legacy routing ==="
+SMOKE_TARGET_URL="https://daeilfoundation.or.kr"
+ssh "${SSH_OPTS[@]}" "${TARGET}" "curl -sf -o /dev/null -w 'HTTP %{http_code} for /old/index.php\n' '${SMOKE_TARGET_URL}/old/index.php'" || echo "  ⚠ /old/index.php smoke test failed (non-fatal)"
+ssh "${SSH_OPTS[@]}" "${TARGET}" "curl -sf -o /dev/null -w 'HTTP %{http_code} for /old/_sys/css/_common.css\n' '${SMOKE_TARGET_URL}/old/_sys/css/_common.css'" || echo "  ⚠ /old/_sys/css/_common.css smoke test failed (non-fatal)"
 
 echo "=== Deploy complete ==="
