@@ -238,9 +238,11 @@ echo "=== Uploading Apache httpd config ==="
 scp "${SCP_OPTS[@]}" deploy/httpd-alumni.conf "${TARGET}:/tmp/alumni.conf.new"
 ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo mv /tmp/alumni.conf.new /etc/httpd/conf.d/alumni.conf && sudo httpd -t'
 
-echo "=== Uploading legacy PHP auto-prepend ==="
-scp "${SCP_OPTS[@]}" deploy/_set_docroot.php "${TARGET}:/tmp/_set_docroot.php.new"
-ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo mv /tmp/_set_docroot.php.new /var/www/html/_set_docroot.php && sudo chmod 644 /var/www/html/_set_docroot.php'
+echo "=== Uploading legacy PHP compat shims ==="
+for shim in _set_docroot.php _legacy_docroot.php _legacy_url_rewriter.php; do
+  scp "${SCP_OPTS[@]}" "deploy/${shim}" "${TARGET}:/tmp/${shim}.new"
+  ssh "${SSH_OPTS[@]}" "${TARGET}" "sudo mv /tmp/${shim}.new /var/www/html/${shim} && sudo chmod 644 /var/www/html/${shim}"
+done
 
 echo "=== Reloading Apache httpd ==="
 ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl reload httpd'
