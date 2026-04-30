@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { InfoPageShell } from '../components/info/InfoPageShell';
-import { ABOUT_INTRO, ABOUT_LINKS } from '../constants/aboutContent';
+import { ABOUT_LINKS } from '../constants/aboutContent';
 
 export function AboutPage() {
   return (
@@ -12,14 +12,6 @@ export function AboutPage() {
       subtitle="후배들의 아름다운 꿈과 높은 이상을 함께 응원합니다."
       canonicalPath="/about"
     >
-      <Card variant="default" padding="lg">
-        <div className="space-y-4 text-text-secondary leading-relaxed text-body-md">
-          {ABOUT_INTRO.map((paragraph) => (
-            <p key={paragraph.slice(0, 24)}>{paragraph}</p>
-          ))}
-        </div>
-      </Card>
-
       <section aria-labelledby="about-links-heading" className="space-y-4">
         <h2
           id="about-links-heading"

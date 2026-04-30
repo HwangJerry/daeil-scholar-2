@@ -20,9 +20,8 @@ export function GreetingsPage() {
             ))}
           </div>
 
-          <div className="pt-2 space-y-1 text-right">
+          <div className="pt-2">
             <p className="text-text-primary">{GREETINGS.closing}</p>
-            <p className="font-serif text-text-primary">— {GREETINGS.signature}</p>
           </div>
         </div>
       </Card>

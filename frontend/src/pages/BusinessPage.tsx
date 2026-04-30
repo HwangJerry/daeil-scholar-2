@@ -19,7 +19,7 @@ export function BusinessPage() {
         <p className="font-serif text-body-md font-semibold text-text-primary">
           {BUSINESS_HEADLINE}
         </p>
-        <p className="text-body-sm text-text-tertiary leading-relaxed">
+        <p className="text-body-sm text-text-tertiary leading-relaxed whitespace-pre-line">
           {BUSINESS_SUBHEAD}
         </p>
       </Card>
