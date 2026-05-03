@@ -3,6 +3,7 @@ module github.com/dflh-saf/backend
 go 1.23
 
 require (
+	github.com/cherryberryyogurt/debug-agent-go-client v0.1.1
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/go-sql-driver/mysql v1.8.1
