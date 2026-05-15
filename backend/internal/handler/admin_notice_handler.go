@@ -49,9 +49,10 @@ func (h *AdminNoticeHandler) Detail(w http.ResponseWriter, r *http.Request) {
 }
 
 type createNoticeRequest struct {
-	Subject   string `json:"subject"`
-	ContentMd string `json:"contentMd"`
-	IsPinned  string `json:"isPinned"`
+	Subject          string `json:"subject"`
+	ContentMd        string `json:"contentMd"`
+	IsPinned         string `json:"isPinned"`
+	AttachedFileSeqs []int  `json:"attachedFileSeqs"`
 }
 
 func (h *AdminNoticeHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +66,7 @@ func (h *AdminNoticeHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
 		return
 	}
-	seq, err := h.service.Create(req.Subject, req.ContentMd, user.USRName, user.USRSeq, req.IsPinned)
+	seq, err := h.service.Create(req.Subject, req.ContentMd, user.USRName, user.USRSeq, req.IsPinned, req.AttachedFileSeqs)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "CREATE_FAILED", "Failed to create notice")
 		return
@@ -84,7 +85,7 @@ func (h *AdminNoticeHandler) Update(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
-	if err := h.service.Update(seq, req.Subject, req.ContentMd, req.IsPinned); err != nil {
+	if err := h.service.Update(seq, req.Subject, req.ContentMd, req.IsPinned, req.AttachedFileSeqs); err != nil {
 		respondError(w, http.StatusInternalServerError, "UPDATE_FAILED", "Failed to update notice")
 		return
 	}

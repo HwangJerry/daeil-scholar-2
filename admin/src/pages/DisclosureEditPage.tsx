@@ -1,4 +1,4 @@
-// NoticeEditPage — composes notice form hooks with editor or legacy HTML viewer
+// DisclosureEditPage — composes disclosure form hooks with editor or legacy HTML viewer
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button.tsx';
@@ -6,25 +6,25 @@ import { Input } from '../components/ui/Input.tsx';
 import { MarkdownEditor } from '../components/editor/MarkdownEditor.tsx';
 import { HtmlContent } from '../components/common/HtmlContent.tsx';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog.tsx';
-import { useNoticeDetail } from '../hooks/useNoticeDetail.ts';
-import { useNoticeForm } from '../hooks/useNoticeForm.ts';
-import { useNoticeMutations } from '../hooks/useNoticeMutations.ts';
-import { useNoticeDelete } from '../hooks/useNoticeDelete.ts';
+import { useDisclosureDetail } from '../hooks/useDisclosureDetail.ts';
+import { useDisclosureForm } from '../hooks/useDisclosureForm.ts';
+import { useDisclosureMutations } from '../hooks/useDisclosureMutations.ts';
+import { useDisclosureDelete } from '../hooks/useDisclosureDelete.ts';
 import { useNoticeAttachments } from '../hooks/useNoticeAttachments.ts';
 import { AttachmentDropzone } from '../components/editor/AttachmentDropzone.tsx';
 import { AttachmentList } from '../components/editor/AttachmentList.tsx';
 import type { NoticeDetail } from '../types/api.ts';
 
-export function NoticeEditPage() {
+export function DisclosureEditPage() {
   const { seq } = useParams<{ seq: string }>();
-  const { data: notice } = useNoticeDetail(seq);
+  const { data: notice } = useDisclosureDetail(seq);
 
   return (
-    <NoticeEditForm key={notice?.seq ?? 'new'} seq={seq} notice={notice} />
+    <DisclosureEditForm key={notice?.seq ?? 'new'} seq={seq} notice={notice} />
   );
 }
 
-function NoticeEditForm({
+function DisclosureEditForm({
   seq,
   notice,
 }: {
@@ -32,9 +32,9 @@ function NoticeEditForm({
   notice: NoticeDetail | undefined;
 }) {
   const navigate = useNavigate();
-  const form = useNoticeForm(notice);
-  const { save, isSaving, deleteNotice } = useNoticeMutations(seq);
-  const del = useNoticeDelete(deleteNotice);
+  const form = useDisclosureForm(notice);
+  const { save, isSaving, deleteDisclosure } = useDisclosureMutations(seq);
+  const del = useDisclosureDelete(deleteDisclosure);
   const att = useNoticeAttachments(notice?.files);
 
   const isLegacy = notice?.contentFormat === 'LEGACY';
@@ -42,11 +42,11 @@ function NoticeEditForm({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/notice')}>
+        <Button variant="ghost" size="icon" onClick={() => navigate('/disclosure')}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h2 className="text-xl font-bold text-dark-slate">
-          {seq ? '공지 수정' : '공지 작성'}
+          {seq ? '공시 자료 수정' : '공시 자료 작성'}
         </h2>
       </div>
 
@@ -88,16 +88,6 @@ function NoticeEditForm({
             />
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-dark-slate">
-            <input
-              type="checkbox"
-              checked={form.isPinned}
-              onChange={(e) => form.setIsPinned(e.target.checked)}
-              className="h-4 w-4 rounded border-border text-royal-indigo focus:ring-royal-indigo"
-            />
-            상단 고정
-          </label>
-
           <div className="flex justify-between gap-3">
             {seq && (
               <Button variant="ghost" className="text-error-text" onClick={() => del.openDialog(Number(seq))}>
@@ -106,9 +96,9 @@ function NoticeEditForm({
               </Button>
             )}
             <div className="flex gap-3 ml-auto">
-              <Button variant="outline" onClick={() => navigate('/notice')}>취소</Button>
+              <Button variant="outline" onClick={() => navigate('/disclosure')}>취소</Button>
               <Button
-                onClick={() => save(form.subject, form.contentMd, form.isPinned, att.fSeqs)}
+                onClick={() => save(form.subject, form.contentMd, att.fSeqs)}
                 disabled={isSaving || !form.isValid}
               >
                 {isSaving ? '저장 중...' : '저장'}
@@ -121,7 +111,7 @@ function NoticeEditForm({
       <ConfirmDialog
         open={del.dialogOpen}
         onOpenChange={(open) => { if (!open) del.closeDialog(); }}
-        title="공지 삭제"
+        title="공시 자료 삭제"
         description="정말 삭제하시겠습니까?"
         confirmLabel="삭제"
         variant="destructive"

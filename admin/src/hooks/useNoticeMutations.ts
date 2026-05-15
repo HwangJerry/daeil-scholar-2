@@ -48,8 +48,8 @@ export function useNoticeMutations(seq: string | undefined) {
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
-  const save = (subject: string, contentMd: string, isPinned: boolean) => {
-    const payload = { subject, contentMd, isPinned: isPinned ? 'Y' : 'N' };
+  const save = (subject: string, contentMd: string, isPinned: boolean, attachedFileSeqs: number[]) => {
+    const payload = { subject, contentMd, isPinned: isPinned ? 'Y' : 'N', attachedFileSeqs };
     if (seq) {
       updateMutation.mutate(payload);
     } else {

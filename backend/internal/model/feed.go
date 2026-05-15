@@ -69,6 +69,24 @@ type NoticeDetail struct {
 	ContentMd     string `json:"contentMd,omitempty"`
 }
 
+// DisclosureItem represents a public-disclosure list row from WEO_BOARDBBS (GATE='DISCLOSURE').
+type DisclosureItem struct {
+	SEQ             int    `db:"SEQ" json:"seq"`
+	Subject         string `db:"SUBJECT" json:"subject"`
+	Summary         string `db:"SUMMARY" json:"summary"`
+	RegDate         string `db:"REG_DATE" json:"regDate"`
+	RegName         string `db:"REG_NAME" json:"regName"`
+	Hit             int    `db:"HIT" json:"hit"`
+	AttachmentCount int    `db:"attachment_count" json:"attachmentCount"`
+}
+
+// DisclosureListResponse is the API response for GET /api/disclosure.
+type DisclosureListResponse struct {
+	Items      []DisclosureItem `json:"items"`
+	NextCursor string           `json:"nextCursor"`
+	HasMore    bool             `json:"hasMore"`
+}
+
 // Comment represents a row in WEO_BOARDCOMAND table.
 type Comment struct {
 	BCSeq    int    `db:"BC_SEQ" json:"bcSeq"`

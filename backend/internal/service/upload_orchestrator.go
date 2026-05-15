@@ -18,6 +18,7 @@ type UploadResult struct {
 	URL    string `json:"url"`
 	Width  int    `json:"width"`
 	Height int    `json:"height"`
+	FSeq   int    `json:"fSeq"`
 }
 
 // Upload saves the file, optionally resizes it, and records it in WEO_FILES.
@@ -32,7 +33,7 @@ func (o *UploadOrchestrator) Upload(file multipart.File, header *multipart.FileH
 		width, height = dims.Width, dims.Height
 	}
 
-	_, _ = o.record.Record(stored, header.Filename, gate)
+	fSeq, _ := o.record.Record(stored, header.Filename, gate)
 
-	return &UploadResult{URL: stored.URLPath, Width: width, Height: height}, nil
+	return &UploadResult{URL: stored.URLPath, Width: width, Height: height, FSeq: fSeq}, nil
 }

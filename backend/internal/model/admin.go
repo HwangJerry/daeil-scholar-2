@@ -25,6 +25,28 @@ type AdminNoticeInsert struct {
 	USRSeq       int
 }
 
+// --- Disclosure (공익법인 의무공시) ---
+
+type AdminDisclosureRow struct {
+	SEQ           int    `db:"SEQ" json:"seq"`
+	Subject       string `db:"SUBJECT" json:"subject"`
+	RegDate       string `db:"REG_DATE" json:"regDate"`
+	RegName       string `db:"REG_NAME" json:"regName"`
+	Hit           int    `db:"HIT" json:"hit"`
+	OpenYN        string `db:"OPEN_YN" json:"openYn"`
+	ContentFormat string `db:"CONTENT_FORMAT" json:"contentFormat"`
+}
+
+type AdminDisclosureInsert struct {
+	Subject      string
+	Contents     string // Base64-encoded sanitized HTML
+	ContentsMD   string // raw Markdown
+	Summary      string
+	ThumbnailURL string
+	RegName      string
+	USRSeq       int
+}
+
 // --- Ad ---
 
 type AdminAdRow struct {
