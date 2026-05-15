@@ -49,6 +49,10 @@ func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusBadRequest, "INVALID_TAG", "태그에 공백을 포함할 수 없습니다")
 			return
 		}
+		if errors.Is(err, service.ErrInvalidDepartment) {
+			respondError(w, http.StatusBadRequest, "INVALID_DEPARTMENT", "유효하지 않은 학과입니다")
+			return
+		}
 		respondError(w, http.StatusInternalServerError, "UPDATE_FAILED", "Failed to update profile")
 		return
 	}

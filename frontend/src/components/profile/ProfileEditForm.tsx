@@ -347,7 +347,7 @@ export function ProfileEditForm({ onSuccess }: ProfileEditFormProps) {
                 if (tagError) setTagError('');
               }}
               onKeyDown={handleAddTag}
-              placeholder="태그 입력 후 Enter (공백 불가)"
+              placeholder="태그 입력 후 Enter (스페이스 불가)"
               className={inputClass}
             />
             {tagError && <p className="mt-1 text-xs text-error-text">{tagError}</p>}

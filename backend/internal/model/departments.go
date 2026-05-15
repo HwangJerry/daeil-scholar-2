@@ -4,12 +4,13 @@ package model
 // ValidDepartments is the canonical list of 대일외고 departments (학과).
 // Keep this in sync with frontend/src/constants/departments.ts.
 var ValidDepartments = []string{
-	"영어과",
-	"독일어과",
-	"일본어과",
-	"중국어과",
-	"프랑스어과",
-	"스페인어과",
+	"프랑스어",
+	"독일어",
+	"일본어",
+	"중국어",
+	"스페인어",
+	"러시아어",
+	"영어",
 }
 
 func IsValidDepartment(value string) bool {

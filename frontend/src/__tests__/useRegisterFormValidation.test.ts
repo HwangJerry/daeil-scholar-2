@@ -17,7 +17,7 @@ function makeFields(overrides: Partial<{
     passwordConfirm: 'Secret123!',
     email: 'test@example.com',
     fn: '10',
-    fmDept: '독일어과',
+    fmDept: '독일어',
     ...overrides,
   }
 }
@@ -153,14 +153,21 @@ describe('useRegisterFormValidation', () => {
 
     it('rejects unknown department', () => {
       const { result } = renderHook(() => useRegisterFormValidation())
-      const error = result.current.validate(makeFields({ fmDept: '라틴어과' }))
+      const error = result.current.validate(makeFields({ fmDept: '라틴어' }))
+      expect(error).toContain('학과')
+    })
+
+    it('rejects legacy values with 과 suffix', () => {
+      const { result } = renderHook(() => useRegisterFormValidation())
+      const error = result.current.validate(makeFields({ fmDept: '영어과' }))
       expect(error).toContain('학과')
     })
 
     it('accepts known departments', () => {
       const { result } = renderHook(() => useRegisterFormValidation())
-      expect(result.current.validate(makeFields({ fmDept: '영어과' }))).toBeNull()
-      expect(result.current.validate(makeFields({ fmDept: '중국어과' }))).toBeNull()
+      expect(result.current.validate(makeFields({ fmDept: '영어' }))).toBeNull()
+      expect(result.current.validate(makeFields({ fmDept: '중국어' }))).toBeNull()
+      expect(result.current.validate(makeFields({ fmDept: '러시아어' }))).toBeNull()
     })
   })
 
