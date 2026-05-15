@@ -28,7 +28,7 @@ export function VisionPage() {
           <p className="text-body-md font-serif text-text-primary leading-relaxed">
             {VISION_VISION.body}
           </p>
-          <p className="text-body-sm text-text-tertiary">{VISION_VISION.goal}</p>
+
         </Card>
       </div>
 
