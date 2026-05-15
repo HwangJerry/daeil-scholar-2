@@ -345,8 +345,8 @@ fi
 
 echo "=== Building Go backend (linux/amd64) ==="
 cd backend
-GOOS=linux GOARCH=amd64 go build -o ../dist/server ./cmd/server
-GOOS=linux GOARCH=amd64 go build -o ../dist/backfill ./cmd/backfill
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/server ./cmd/server
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/backfill ./cmd/backfill
 cd ..
 
 echo "=== Building User SPA (patch-mode=${PATCH_MODE}) ==="
