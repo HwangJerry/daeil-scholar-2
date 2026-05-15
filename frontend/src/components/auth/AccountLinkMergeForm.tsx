@@ -4,9 +4,9 @@ import { ProfileFieldsSection } from './ProfileFieldsSection';
 import { defaultProfileFieldValues } from './profileFieldValues';
 import type { ProfileFieldValues } from './profileFieldValues';
 import { useSocialLinkPrefill } from '../../hooks/useSocialLinkPrefill';
-import { useSocialLinkPhoneMatch } from '../../hooks/useSocialLinkPhoneMatch';
+import { useSocialLinkExistingMember } from '../../hooks/useSocialLinkExistingMember';
 import { useAccountLinkSubmit } from '../../hooks/useAccountLinkSubmit';
-import { KakaoProfileImagePreview } from './KakaoProfileImagePreview';
+import { SignupProfileImageEditor } from './SignupProfileImageEditor';
 import { Button } from '../ui/Button';
 import { isValidDepartment } from '../../constants/departments';
 
@@ -27,28 +27,31 @@ export function AccountLinkMergeForm({ token, initialPhone }: AccountLinkMergeFo
     phone: initialPhone,
   });
   const [didPrefill, setDidPrefill] = useState(false);
+  const [photoOverride, setPhotoOverride] = useState<{ url: string | null } | null>(null);
 
   const prefill = useSocialLinkPrefill(token);
-  const mergeLookup = useSocialLinkPhoneMatch({ token, phone: initialPhone });
+  const existing = useSocialLinkExistingMember(token, initialPhone);
 
-  // Prefill matched member fields once during render — avoids the cascading-effect render.
-  const matchedProfile = mergeLookup.profile;
-  if (!didPrefill && matchedProfile) {
+  // Prefill once during render when the matched profile arrives — React 19 idiom avoids the
+  // cascading-effect re-render and is enforced by the lint rule.
+  const matched = existing.data?.matched === true && !!existing.data.profile;
+  if (!didPrefill && matched) {
+    const p = existing.data!.profile!;
     setDidPrefill(true);
     setProfile({
-      name: matchedProfile.name,
+      name: p.name,
       phone: initialPhone,
-      email: matchedProfile.email,
-      fn: matchedProfile.fn,
-      fmDept: matchedProfile.fmDept,
-      jobCat: matchedProfile.jobCat,
-      bizName: matchedProfile.bizName,
-      bizDesc: matchedProfile.bizDesc,
-      bizAddr: matchedProfile.bizAddr,
-      position: matchedProfile.position,
-      tags: matchedProfile.tags,
-      usrPhonePublic: matchedProfile.usrPhonePublic,
-      usrEmailPublic: matchedProfile.usrEmailPublic,
+      email: p.email,
+      fn: p.fn,
+      fmDept: p.fmDept,
+      jobCat: p.jobCat,
+      bizName: p.bizName,
+      bizDesc: p.bizDesc,
+      bizAddr: p.bizAddr,
+      position: p.position,
+      tags: p.tags,
+      usrPhonePublic: p.usrPhonePublic,
+      usrEmailPublic: p.usrEmailPublic,
     });
   }
 
@@ -85,34 +88,53 @@ export function AccountLinkMergeForm({ token, initialPhone }: AccountLinkMergeFo
       tags: profile.tags,
       usrPhonePublic: profile.usrPhonePublic,
       usrEmailPublic: profile.usrEmailPublic,
+      ...(photoOverride !== null && { profileImageUrl: photoOverride.url ?? '' }),
     });
   };
 
-  const isLoading = !didPrefill && mergeLookup.status !== 'unmatched' && mergeLookup.status !== 'error';
+  const photoUrl =
+    photoOverride !== null ? photoOverride.url : prefill.data?.profileImageUrl || null;
+  const handlePhotoChange = (url: string | null) => setPhotoOverride({ url });
+
+  const unmatched = existing.data?.matched === false;
+  const showForm = didPrefill;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <KakaoProfileImagePreview imageUrl={prefill.data?.profileImageUrl || null} />
+      <SignupProfileImageEditor token={token} imageUrl={photoUrl} onChange={handlePhotoChange} />
 
-      {mergeLookup.status === 'unmatched' && (
+      {unmatched && (
         <div className="mb-4 rounded-lg bg-error-subtle px-4 py-3 text-sm text-error-text">
           입력하신 번호와 일치하는 기존 회원을 찾을 수 없습니다. 신규 가입으로 돌아가주세요.
         </div>
       )}
 
-      {isLoading ? (
+      {existing.isError && (
+        <div className="mb-4 rounded-lg bg-error-subtle px-4 py-3 text-sm text-error-text">
+          <p className="mb-2">회원 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.</p>
+          <button
+            type="button"
+            onClick={() => existing.refetch()}
+            className="text-xs underline"
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
+
+      {!showForm && !unmatched && !existing.isError ? (
         <p className="py-8 text-center text-sm text-text-placeholder">회원 정보를 불러오는 중...</p>
-      ) : (
+      ) : showForm ? (
         <ProfileFieldsSection
           values={profile}
           onChange={handleProfileChange}
           disabledFields={MERGE_DISABLED_FIELDS}
         />
-      )}
+      ) : null}
 
       {error && <p className="text-sm text-error-text">{error}</p>}
 
-      <Button type="submit" disabled={submitting || isLoading} className="w-full">
+      <Button type="submit" disabled={submitting || !showForm} className="w-full">
         {submitting ? '처리 중...' : '통합 회원가입 완료'}
       </Button>
     </form>

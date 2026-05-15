@@ -5,6 +5,7 @@ import type {
   LoginRequest,
   SocialLinkPrefillResponse,
   SocialLinkPhoneMatchResponse,
+  SocialLinkPhotoUploadResponse,
 } from '../types/api';
 
 export interface RegisterRequest {
@@ -50,5 +51,16 @@ export function getSocialLinkPhoneMatch(
   return api.get<SocialLinkPhoneMatchResponse>(
     `/api/auth/social/link/phone-match?token=${encodeURIComponent(token)}&phone=${encodeURIComponent(phone)}`,
   );
+}
+
+/** Upload a replacement profile photo during the pre-signup flow (token-gated, no DB write). */
+export function uploadSocialLinkPhoto(
+  token: string,
+  file: File,
+): Promise<SocialLinkPhotoUploadResponse> {
+  const form = new FormData();
+  form.append('token', token);
+  form.append('file', file);
+  return api.upload<SocialLinkPhotoUploadResponse>('/api/auth/social/link/photo', form);
 }
 

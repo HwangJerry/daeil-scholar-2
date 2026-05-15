@@ -10,7 +10,7 @@ import { useSocialLinkPrefill } from '../../hooks/useSocialLinkPrefill';
 import { useSocialLinkPhoneMatch } from '../../hooks/useSocialLinkPhoneMatch';
 import { useAccountLinkSubmit } from '../../hooks/useAccountLinkSubmit';
 import { PhoneMatchBanner } from './PhoneMatchBanner';
-import { KakaoProfileImagePreview } from './KakaoProfileImagePreview';
+import { SignupProfileImageEditor } from './SignupProfileImageEditor';
 import { Button } from '../ui/Button';
 import { isValidDepartment } from '../../constants/departments';
 
@@ -26,6 +26,7 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
 
   const [profile, setProfile] = useState<ProfileFieldValues>(defaultProfileFieldValues);
   const [didPrefillEmail, setDidPrefillEmail] = useState(false);
+  const [photoOverride, setPhotoOverride] = useState<{ url: string | null } | null>(null);
 
   const prefill = useSocialLinkPrefill(token);
   const phoneBannerLookup = useSocialLinkPhoneMatch({ token, phone: profile.phone });
@@ -80,14 +81,18 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
       tags: profile.tags,
       usrPhonePublic: profile.usrPhonePublic,
       usrEmailPublic: profile.usrEmailPublic,
+      ...(photoOverride !== null && { profileImageUrl: photoOverride.url ?? '' }),
     });
   };
 
   const bannerMatch = phoneBannerLookup.status === 'matched' ? phoneBannerLookup.profile : null;
+  const photoUrl =
+    photoOverride !== null ? photoOverride.url : prefill.data?.profileImageUrl || null;
+  const handlePhotoChange = (url: string | null) => setPhotoOverride({ url });
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <KakaoProfileImagePreview imageUrl={prefill.data?.profileImageUrl || null} />
+      <SignupProfileImageEditor token={token} imageUrl={photoUrl} onChange={handlePhotoChange} />
 
       {bannerMatch && (
         <PhoneMatchBanner

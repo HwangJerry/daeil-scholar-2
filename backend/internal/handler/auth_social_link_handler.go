@@ -12,21 +12,22 @@ import (
 )
 
 type socialLinkRequest struct {
-	Token          string   `json:"token"`
-	Mode           string   `json:"mode"` // "new" (default) | "merge"
-	Name           string   `json:"name"`
-	Phone          string   `json:"phone"`
-	Email          string   `json:"email"`
-	FN             string   `json:"fn"`
-	FmDept         string   `json:"fmDept"`
-	JobCat         *int     `json:"jobCat"`
-	BizName        string   `json:"bizName"`
-	BizDesc        string   `json:"bizDesc"`
-	BizAddr        string   `json:"bizAddr"`
-	Position       string   `json:"position"`
-	Tags           []string `json:"tags"`
-	USRPhonePublic string   `json:"usrPhonePublic"`
-	USREmailPublic string   `json:"usrEmailPublic"`
+	Token           string   `json:"token"`
+	Mode            string   `json:"mode"` // "new" (default) | "merge"
+	Name            string   `json:"name"`
+	Phone           string   `json:"phone"`
+	Email           string   `json:"email"`
+	FN              string   `json:"fn"`
+	FmDept          string   `json:"fmDept"`
+	JobCat          *int     `json:"jobCat"`
+	BizName         string   `json:"bizName"`
+	BizDesc         string   `json:"bizDesc"`
+	BizAddr         string   `json:"bizAddr"`
+	Position        string   `json:"position"`
+	Tags            []string `json:"tags"`
+	USRPhonePublic  string   `json:"usrPhonePublic"`
+	USREmailPublic  string   `json:"usrEmailPublic"`
+	ProfileImageURL *string  `json:"profileImageUrl,omitempty"`
 }
 
 // SocialLink handles the account linking HTTP flow for all social providers.
@@ -82,6 +83,14 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		linkEmail = linkData.Email
 	}
 
+	// Profile image: client may explicitly override the cached provider URL (replace or remove).
+	// Nil pointer ⇒ field unset ⇒ keep the cached provider URL.
+	// Non-nil ⇒ honor the client's value verbatim (including empty string for "no image").
+	profileImageURL := linkData.ProfileImageURL
+	if req.ProfileImageURL != nil {
+		profileImageURL = *req.ProfileImageURL
+	}
+
 	user, isNew, err := h.service.LinkSocialAccount(service.SocialLinkParams{
 		Mode:            mode,
 		Provider:        linkData.Provider,
@@ -99,7 +108,7 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		Tags:            req.Tags,
 		USRPhonePublic:  req.USRPhonePublic,
 		USREmailPublic:  req.USREmailPublic,
-		ProfileImageURL: linkData.ProfileImageURL,
+		ProfileImageURL: profileImageURL,
 	}, h.memberSvc)
 	if err != nil {
 		log.Error().Err(err).Str("provider", linkData.Provider).Str("socialID", linkData.SocialID).Str("mode", string(mode)).Msg("social link failed")

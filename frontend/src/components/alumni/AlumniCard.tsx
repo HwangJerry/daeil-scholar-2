@@ -45,12 +45,20 @@ export function AlumniCard({ item, currentUsrSeq, isLast }: AlumniCardProps) {
         onClick={() => setShowDetail(true)}
       >
         {/* Col 1 — Avatar */}
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-          style={{ backgroundColor: avatarColor }}
-        >
-          {item.fmName?.[0] ?? '?'}
-        </div>
+        {item.photo ? (
+          <img
+            src={item.photo}
+            alt={item.fmName}
+            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+          />
+        ) : (
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+            style={{ backgroundColor: avatarColor }}
+          >
+            {item.fmName?.[0] ?? '?'}
+          </div>
+        )}
 
         {/* Col 2 — 동문 */}
         <div className="min-w-0">
