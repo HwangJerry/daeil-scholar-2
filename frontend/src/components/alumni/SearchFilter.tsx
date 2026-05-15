@@ -1,5 +1,6 @@
 // SearchFilter — Alumni search bar with name input, dropdown filters, and active filter pills
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, RotateCcw, X } from 'lucide-react';
 import { Badge } from '../ui/Badge';
@@ -26,12 +27,15 @@ const BASE_SELECT_CLASS =
 const ACTIVE_SELECT_CLASS =
   'bg-primary text-white border-primary font-semibold';
 const INACTIVE_SELECT_CLASS = 'bg-surface text-text-secondary';
+const NAME_SEARCH_DEBOUNCE_MS = 400;
 
 export function SearchFilter({ onSearch }: SearchFilterProps) {
   const [params, setParams] = useState<AlumniSearchParams>({
     fn: '', dept: '', name: '', jobCat: '',
   });
   const [inputValue, setInputValue] = useState('');
+  const [isComposing, setIsComposing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: filters } = useQuery({
     queryKey: ['alumni', 'filters'],
@@ -42,10 +46,32 @@ export function SearchFilter({ onSearch }: SearchFilterProps) {
   const hasActiveFilter = !!(params.fn || params.dept || params.name || params.jobCat);
   const activeDropdownFilters = DROPDOWN_FILTER_KEYS.filter((k) => params[k] !== '');
 
-  const commitName = (value: string) => {
-    const next = { ...params, name: value };
+  const commitName = useCallback((value: string) => {
+    const trimmedValue = value.trim();
+    if (trimmedValue === params.name) return;
+
+    const next = { ...params, name: trimmedValue };
     setParams(next);
     onSearch(next);
+  }, [onSearch, params]);
+
+  useEffect(() => {
+    if (isComposing) return;
+
+    const trimmedValue = inputValue.trim();
+    if (trimmedValue === params.name) return;
+
+    const timerId = window.setTimeout(() => {
+      commitName(inputValue);
+    }, NAME_SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timerId);
+  }, [commitName, inputValue, isComposing, params.name]);
+
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    commitName(inputValue);
+    inputRef.current?.blur();
   };
 
   const handleSelectChange = (field: keyof AlumniSearchParams, value: string) => {
@@ -85,19 +111,29 @@ export function SearchFilter({ onSearch }: SearchFilterProps) {
 
         {/* Unit 1 — 검색창 + 초기화 버튼 */}
         <div className="flex gap-2 items-center min-[600px]:flex-1">
-          <div className="flex-1 h-10 flex items-center gap-2 bg-background border border-border rounded-lg px-3">
+          <form
+            onSubmit={handleSearchSubmit}
+            className="flex-1 h-10 flex items-center gap-2 bg-background border border-border rounded-lg px-3"
+          >
             <Search size={13} className="text-text-placeholder flex-shrink-0" />
             <input
-              type="text"
+              ref={inputRef}
+              type="search"
+              enterKeyHint="search"
+              autoComplete="off"
               placeholder="이름 또는 태그로 검색"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onBlur={() => commitName(inputValue)}
-              onKeyDown={(e) => { if (e.key === 'Enter') commitName(inputValue); }}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={(e) => {
+                setIsComposing(false);
+                setInputValue(e.currentTarget.value);
+              }}
               className="flex-1 border-none bg-transparent outline-none text-sm text-text-primary placeholder:text-text-placeholder"
             />
             {inputValue && (
               <button
+                type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { setInputValue(''); clearFilter('name'); }}
                 className="text-text-placeholder hover:text-text-secondary transition-colors"
@@ -105,7 +141,7 @@ export function SearchFilter({ onSearch }: SearchFilterProps) {
                 <X size={14} />
               </button>
             )}
-          </div>
+          </form>
           {hasActiveFilter && (
             <button
               onClick={resetAll}
