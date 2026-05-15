@@ -24,8 +24,8 @@ func NewRealtimeHandler(hub *realtime.Hub, logger zerolog.Logger) *RealtimeHandl
 }
 
 // Stream handles GET /api/messages/stream — opens an SSE connection that pushes
-// "message.new" / "message.sent" events whenever the authenticated user sends
-// or receives a direct message.
+// message lifecycle events whenever the authenticated user sends, receives, or
+// has their sent messages read.
 func (h *RealtimeHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	user, err := middleware.GetAuthUserOrError(r.Context())
 	if err != nil {

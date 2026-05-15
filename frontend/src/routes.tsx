@@ -5,14 +5,11 @@ import Layout from './components/layout/Layout';
 import { FeedPage } from './pages/FeedPage';
 import { AlumniPage } from './pages/AlumniPage';
 import { MyPage } from './pages/MyPage';
-import { DonationPage } from './pages/DonationPage';
 import { LoginPage } from './pages/LoginPage';
 import { LegacyLoginPage } from './pages/LegacyLoginPage';
 import { AccountLinkPage } from './pages/AccountLinkPage';
 import { PostDetailPage } from './pages/PostDetailPage';
 import { AdDetailPage } from './pages/AdDetailPage';
-import { DonationResultPage } from './pages/DonationResultPage';
-import { SubscriptionPage } from './pages/SubscriptionPage';
 import { MessagePage } from './pages/MessagePage';
 import { MessageComposePage } from './pages/MessageComposePage';
 import { RegisterPage } from './pages/RegisterPage';
@@ -24,6 +21,8 @@ import { VisionPage } from './pages/VisionPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { OrganizationPage } from './pages/OrganizationPage';
 import { BusinessPage } from './pages/BusinessPage';
+import { DisclosureListPage } from './pages/DisclosureListPage';
+import { DisclosureDetailPage } from './pages/DisclosureDetailPage';
 import { ModalRoutes } from './ModalRoutes';
 
 export default function AppRoutes() {
@@ -40,10 +39,7 @@ export default function AppRoutes() {
           <Route path="post/:seq" element={<PostDetailPage />} />
           <Route path="ad/:maSeq" element={<AdDetailPage />} />
           <Route path="alumni" element={<AlumniPage />} />
-          <Route path="donation" element={<DonationPage />} />
-          <Route path="donation/result" element={<DonationResultPage />} />
           <Route path="me" element={<MyPage />} />
-          <Route path="me/subscription" element={<SubscriptionPage />} />
           <Route path="messages" element={<MessagePage />} />
           <Route path="messages/:otherSeq" element={<MessagePage />} />
           <Route path="messages/new" element={<MessageComposePage />} />
@@ -60,6 +56,8 @@ export default function AppRoutes() {
           <Route path="history" element={<HistoryPage />} />
           <Route path="organization" element={<OrganizationPage />} />
           <Route path="business" element={<BusinessPage />} />
+          <Route path="disclosure" element={<DisclosureListPage />} />
+          <Route path="disclosure/:seq" element={<DisclosureDetailPage />} />
         </Route>
       </Routes>
 

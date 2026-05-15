@@ -7,9 +7,9 @@ import (
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/handler"
 	mw "github.com/dflh-saf/backend/internal/middleware"
+	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/go-chi/chi/v5"
-	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
 )
@@ -29,11 +29,15 @@ type handlers struct {
 	adLike            *handler.AdLikeHandler
 	adComment         *handler.AdCommentHandler
 	adminNotice       *handler.AdminNoticeHandler
+	adminDisclosure   *handler.AdminDisclosureHandler
+	disclosure        *handler.DisclosureHandler
 	adminAd           *handler.AdminAdHandler
 	adminDonation     *handler.AdminDonationHandler
 	adminMember       *handler.AdminMemberHandler
 	adminDashboard    *handler.AdminDashboardHandler
 	adminUpload       *handler.AdminUploadHandler
+	adminAttachUpload *handler.AdminAttachmentUploadHandler
+	socialLinkPhoto   *handler.SocialLinkPhotoHandler
 	myDonation        *handler.MyDonationHandler
 	message           *handler.MessageHandler
 	payment           *handler.PaymentHandler
@@ -45,18 +49,20 @@ type handlers struct {
 	passwordChange    *handler.PasswordChangeHandler
 	badge             *handler.BadgeHandler
 	adminJobCat       *handler.AdminJobCategoryHandler
+	history           *handler.HistoryHandler
 	realtime          *handler.RealtimeHandler
 	adminSubscription *handler.AdminSubscriptionHandler
-	visit           *handler.VisitHandler
+	visit             *handler.VisitHandler
+	adminErrorReport  *handler.AdminErrorReportHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
-func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, logger zerolog.Logger) chi.Router {
+func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, logger zerolog.Logger, debugHook *observability.Hook) chi.Router {
 	router := chi.NewRouter()
-	router.Use(chimw.Recoverer)
+	router.Use(mw.Recoverer(logger, debugHook))
 	router.Use(mw.RequestLogger(logger))
 	router.Use(mw.CORSMiddleware(allowedOrigins))
-	router.Use(mw.MaxBodySize(1 << 20))
+	router.Use(mw.MaxBodySize(2 << 20))
 
 	// Static file servers (dev: proxied from Vite/Nginx; prod: handled by Nginx alias)
 	router.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.Upload.BasePath))))
@@ -67,7 +73,8 @@ func registerRoutes(h handlers, authService *service.AuthService, cacheStore *ca
 	router.Get("/sitemap.xml", h.sitemap.GetSitemap)
 	router.Get("/rss.xml", h.rss.GetRSS)
 
-	registerPGRoutes(router, h)
+	// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
+	// registerPGRoutes(router, h)
 	registerAPIRoutes(router, h, authService, cacheStore, allowedOrigins, cfg)
 
 	return router
@@ -109,7 +116,9 @@ func registerPublicRoutes(r chi.Router, h handlers, cacheStore *cache.Cache) {
 	r.Post("/api/auth/social/link", h.auth.SocialLink)
 	r.Get("/api/auth/social/link/prefill", h.auth.SocialLinkPrefill)
 	r.Get("/api/auth/social/link/phone-match", h.auth.SocialLinkPhoneMatch)
+	r.Post("/api/auth/social/link/photo", h.socialLinkPhoto.Upload)
 	r.Post("/api/auth/kakao/link", h.auth.KakaoLink)
+	r.Get("/api/history", h.history.GetGrouped)
 	r.Get("/api/alumni/widget", h.alumni.GetWidgetPreview)
 	r.Get("/api/public/job-categories", h.alumni.GetJobCategories)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/password/reset-request", h.passwordReset.RequestReset)
@@ -130,17 +139,19 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Post("/api/profile/photo", h.profileUpload.UploadPhoto)
 		r.Post("/api/profile/bizcard", h.profileUpload.UploadBizCard)
 		r.Post("/api/profile/password", h.passwordChange.ChangePassword)
-		r.Post("/api/donation/orders", h.payment.CreateOrder)
-		r.Get("/api/donation/my", h.myDonation.GetMyDonations)
+		// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
+		// r.Post("/api/donation/orders", h.payment.CreateOrder)
+		// r.Get("/api/donation/my", h.myDonation.GetMyDonations)
 		r.Post("/api/feed/{seq}/like", h.like.ToggleLike)
 		r.Post("/api/feed/{seq}/comments", h.comment.CreateComment)
 		r.Delete("/api/feed/{seq}/comments/{cSeq}", h.comment.DeleteComment)
 		r.Post("/api/ad/{maSeq}/like", h.adLike.ToggleLike)
 		r.Post("/api/ad/{maSeq}/comments", h.adComment.CreateComment)
 		r.Delete("/api/ad/{maSeq}/comments/{acSeq}", h.adComment.DeleteComment)
-		r.Post("/api/donation/subscription", h.subscription.CreateSubscription)
-		r.Get("/api/donation/subscription", h.subscription.GetMySubscription)
-		r.Delete("/api/donation/subscription", h.subscription.CancelSubscription)
+		// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
+		// r.Post("/api/donation/subscription", h.subscription.CreateSubscription)
+		// r.Get("/api/donation/subscription", h.subscription.GetMySubscription)
+		// r.Delete("/api/donation/subscription", h.subscription.CancelSubscription)
 		r.Post("/api/messages", h.message.Send)
 		r.Get("/api/messages/inbox", h.message.GetInbox)
 		r.Get("/api/messages/outbox", h.message.GetOutbox)
@@ -162,6 +173,8 @@ func registerOptionalAuthRoutes(r chi.Router, h handlers, authService *service.A
 		r.Get("/api/feed/{seq}", h.feed.GetDetail)
 		r.Get("/api/feed/{seq}/siblings", h.feed.GetSiblings)
 		r.Get("/api/feed/{seq}/comments", h.comment.ListComments)
+		r.Get("/api/disclosure", h.disclosure.GetList)
+		r.Get("/api/disclosure/{seq}", h.disclosure.GetDetail)
 		r.Post("/api/ad/{maSeq}/view", h.ad.TrackView)
 		r.Post("/api/ad/{maSeq}/click", h.ad.TrackClick)
 		r.Get("/api/ad/{maSeq}/comments", h.adComment.ListComments)
@@ -182,7 +195,13 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Put("/feed/{seq}", h.adminNotice.Update)
 		r.Delete("/feed/{seq}", h.adminNotice.Delete)
 		r.Put("/feed/{seq}/pin", h.adminNotice.TogglePin)
+		r.Get("/disclosure", h.adminDisclosure.List)
+		r.Get("/disclosure/{seq}", h.adminDisclosure.Detail)
+		r.Post("/disclosure", h.adminDisclosure.Create)
+		r.Put("/disclosure/{seq}", h.adminDisclosure.Update)
+		r.Delete("/disclosure/{seq}", h.adminDisclosure.Delete)
 		r.Post("/upload", h.adminUpload.Upload)
+		r.Post("/upload/attachment", h.adminAttachUpload.Upload)
 		r.Get("/ad", h.adminAd.List)
 		r.Post("/ad", h.adminAd.Create)
 		r.Put("/ad/{seq}", h.adminAd.Update)
@@ -191,8 +210,10 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Get("/donation/config", h.adminDonation.GetConfig)
 		r.Put("/donation/config", h.adminDonation.UpdateConfig)
 		r.Get("/donation/history", h.adminDonation.History)
-		r.Get("/donation/orders", h.adminDonation.ListOrders)
-		r.Put("/donation/orders/{seq}", h.adminDonation.UpdateOrder)
+		// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
+		// Order CRUD stays disabled since donations now flow through the external Happy Nanum platform.
+		// r.Get("/donation/orders", h.adminDonation.ListOrders)
+		// r.Put("/donation/orders/{seq}", h.adminDonation.UpdateOrder)
 		r.Get("/member", h.adminMember.List)
 		r.Get("/member/{seq}", h.adminMember.Detail)
 		r.Put("/member/{seq}", h.adminMember.Update)
@@ -202,11 +223,17 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Post("/job-category/reorder", h.adminJobCat.Reorder)
 		r.Put("/job-category/{seq}", h.adminJobCat.Update)
 		r.Delete("/job-category/{seq}", h.adminJobCat.Delete)
+		r.Post("/errors/report", h.adminErrorReport.Report)
+		r.Get("/history", h.history.AdminList)
+		r.Post("/history", h.history.AdminCreate)
+		r.Put("/history/{seq}", h.history.AdminUpdate)
+		r.Delete("/history/{seq}", h.history.AdminDelete)
 
+		// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
 		// Manual subscription billing trigger — only mounted in dev so production cannot
 		// accidentally fire an out-of-cycle charge run.
-		if cfg.Environment == "dev" {
-			r.Post("/subscription/run-billing", h.adminSubscription.RunBilling)
-		}
+		// if cfg.Environment == "dev" {
+		// 	r.Post("/subscription/run-billing", h.adminSubscription.RunBilling)
+		// }
 	})
 }

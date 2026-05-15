@@ -131,6 +131,22 @@ export interface PostSiblings {
   next: PostSibling | null;
 }
 
+export interface DisclosureItem {
+  seq: number;
+  subject: string;
+  summary: string;
+  regDate: string;
+  regName: string;
+  hit: number;
+  attachmentCount: number;
+}
+
+export interface DisclosureListResponse {
+  items: DisclosureItem[];
+  nextCursor: string;
+  hasMore: boolean;
+}
+
 export interface DonationSummary {
   totalAmount: number;
   manualAdj: number;
@@ -238,6 +254,12 @@ export interface SocialLinkRequest {
   tags?: string[];
   usrPhonePublic?: 'Y' | 'N';
   usrEmailPublic?: 'Y' | 'N';
+  /** Override the cached provider photo. Omit to keep cached value; empty string = remove image. */
+  profileImageUrl?: string;
+}
+
+export interface SocialLinkPhotoUploadResponse {
+  url: string;
 }
 
 export type KakaoLinkRequest = SocialLinkRequest;

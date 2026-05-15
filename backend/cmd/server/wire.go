@@ -8,6 +8,7 @@ import (
 	"github.com/dflh-saf/backend/internal/handler"
 	"github.com/dflh-saf/backend/internal/job"
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/presenter"
 	"github.com/dflh-saf/backend/internal/realtime"
 	"github.com/dflh-saf/backend/internal/repository"
@@ -34,7 +35,7 @@ type deps struct {
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
-func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, error) {
+func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook *observability.Hook) (*deps, error) {
 	authRepo := repository.NewAuthRepository(db)
 	feedRepo := repository.NewFeedRepository(db)
 	donationRepo := repository.NewDonationRepository(db)
@@ -46,6 +47,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	sessionRepo := repository.NewSessionRepository(db)
 	fileRepo := repository.NewFileRepository(db)
 	adminNoticeRepo := repository.NewAdminNoticeRepository(db)
+	adminDisclosureRepo := repository.NewAdminDisclosureRepository(db)
+	disclosureRepo := repository.NewDisclosureRepository(db)
 	adminAdRepo := repository.NewAdminAdRepository(db)
 	adminDonationRepo := repository.NewAdminDonationRepository(db)
 	adminMemberRepo := repository.NewAdminMemberRepository(db)
@@ -79,7 +82,9 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	adService := service.NewAdService(adRepo)
 	adLikeService := service.NewAdLikeService(adLikeRepo)
 	adCommentService := service.NewAdCommentService(adCommentRepo)
-	adminNoticeSvc := service.NewAdminNoticeService(adminNoticeRepo)
+	adminNoticeSvc := service.NewAdminNoticeService(adminNoticeRepo, fileRepo)
+	adminDisclosureSvc := service.NewAdminDisclosureService(adminDisclosureRepo, fileRepo)
+	disclosureSvc := service.NewDisclosureService(disclosureRepo)
 	adminAdSvc := service.NewAdminAdService(adminAdRepo)
 	adminDonationSvc := service.NewAdminDonationService(adminDonationRepo, donationRepo)
 	donationJob := job.NewDonationSnapshotJob(donationRepo, logger)
@@ -92,6 +97,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	imageResizer := service.NewImageResizeService(1200)
 	fileRecordSvc := service.NewFileRecordService(fileRepo)
 	uploadOrchestrator := service.NewUploadOrchestrator(fileStorage, imageResizer, fileRecordSvc)
+	attachmentStorage := service.NewAttachmentStorageService(cfg.Upload.BasePath)
+	attachmentUploadOrchestrator := service.NewAttachmentUploadOrchestrator(attachmentStorage, fileRecordSvc)
 	profileUploadService := service.NewProfileUploadService(profileRepo, uploadOrchestrator)
 	easypayService := service.NewEasyPayService(cfg.EasyPay)
 	pgAuditLogger, err := service.NewPGAuditLogger(cfg.PGAuditLogPath)
@@ -110,6 +117,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	donateService := service.NewDonateService(donateRepo, subscriptionActivator, easypayService, cacheStore, logger, pgAuditLogger)
 	adminJobCatRepo := repository.NewAdminJobCategoryRepository(db)
 	adminJobCatSvc := service.NewAdminJobCategoryService(adminJobCatRepo, cacheStore)
+	historyRepo := repository.NewHistoryRepository(db)
+	historySvc := service.NewHistoryService(historyRepo)
 
 	subscriptionService := service.NewSubscriptionService(subscriptionRepo, donateService, easypayService, pgAuditLogger, cacheStore, logger)
 	subscriptionBillingJob := job.NewSubscriptionBillingJob(subscriptionRepo, donateRepo, easypayService, pgAuditLogger, cacheStore, cfg.EasyPay, logger)
@@ -129,12 +138,16 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		ad:             handler.NewAdHandler(adService),
 		adLike:         handler.NewAdLikeHandler(adLikeService),
 		adComment:      handler.NewAdCommentHandler(adCommentService),
-		adminNotice:    handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
+		adminNotice:     handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
+		adminDisclosure: handler.NewAdminDisclosureHandler(adminDisclosureSvc, feedPresenter),
+		disclosure:      handler.NewDisclosureHandler(disclosureSvc, feedPresenter),
 		adminAd:        handler.NewAdminAdHandler(adminAdSvc),
 		adminDonation:  handler.NewAdminDonationHandler(adminDonationOrchestrator),
 		adminMember:    handler.NewAdminMemberHandler(adminMemberSvc),
 		adminDashboard: handler.NewAdminDashboardHandler(adminDashboardSvc),
-		adminUpload:    handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
+		adminUpload:       handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
+		adminAttachUpload: handler.NewAdminAttachmentUploadHandler(attachmentUploadOrchestrator, cfg.Upload.MaxFileSizeMB),
+		socialLinkPhoto:   handler.NewSocialLinkPhotoHandler(uploadOrchestrator, cacheStore, logger),
 		myDonation:     handler.NewMyDonationHandler(myDonationService),
 		message:        handler.NewMessageHandler(messageService),
 		payment:        handler.NewPaymentHandler(donateService, cfg.EasyPay),
@@ -146,9 +159,11 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		passwordChange: handler.NewPasswordChangeHandler(passwordChangeSvc),
 		badge:          handler.NewBadgeHandler(messageService, logger),
 		adminJobCat:       handler.NewAdminJobCategoryHandler(adminJobCatSvc),
+		history:           handler.NewHistoryHandler(historySvc),
 		adminSubscription: handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
 		realtime:          handler.NewRealtimeHandler(realtimeHub, logger),
-		visit:          handler.NewVisitHandler(visitService, logger, cfg.Server.IsSecure()),
+		visit:             handler.NewVisitHandler(visitService, logger, cfg.Server.IsSecure()),
+		adminErrorReport:  handler.NewAdminErrorReportHandler(logger, debugHook),
 	}
 
 	return &deps{

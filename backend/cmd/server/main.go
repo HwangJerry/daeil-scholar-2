@@ -12,13 +12,25 @@ import (
 
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/job"
+	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
 	cfg := config.Load()
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+
+	debugHook := observability.NewHook(cfg.DebugAgent)
+	if debugHook != nil {
+		logger = logger.Hook(debugHook)
+		log.Logger = log.Logger.Hook(debugHook)
+		logger.Info().
+			Str("project", cfg.DebugAgent.Project).
+			Str("environment", cfg.DebugAgent.Environment).
+			Msg("debug agent reporter enabled")
+	}
 
 	db, err := repository.NewDB(cfg.DB)
 	if err != nil {
@@ -26,7 +38,7 @@ func main() {
 	}
 	defer db.Close()
 
-	d, err := wireDeps(db, cfg, logger)
+	d, err := wireDeps(db, cfg, logger, debugHook)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to wire dependencies")
 	}
@@ -49,7 +61,7 @@ func main() {
 			"https://client-macbook.tail04b57d.ts.net",
 		)
 	}
-	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg, logger)
+	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg, logger, debugHook)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Server.Port,
@@ -68,14 +80,18 @@ func main() {
 		}
 	}()
 
-	donationJob := d.donationJob
-	donationJob.Start()
+	// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
+	// donationJob and subscriptionBillingJob are wired in wireDeps but intentionally not Start()ed
+	// while donations are routed to the external Happy Nanum platform. Re-enable by restoring the
+	// Start()/Stop() pairs below.
+	// donationJob := d.donationJob
+	// donationJob.Start()
 	sessionJob := job.NewSessionCleanupJob(d.sessionRepo, d.passwordResetRepo, logger)
 	sessionJob.Start()
 	emailWorker := job.NewEmailWorker(d.emailQueue, d.emailService, logger)
 	emailWorker.Start()
-	subscriptionBillingJob := d.subscriptionBillingJob
-	subscriptionBillingJob.Start()
+	// subscriptionBillingJob := d.subscriptionBillingJob
+	// subscriptionBillingJob.Start()
 	visitJob := d.visitJob
 	visitJob.Start()
 
@@ -83,10 +99,10 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	donationJob.Stop()
+	// donationJob.Stop()
 	sessionJob.Stop()
 	emailWorker.Stop()
-	subscriptionBillingJob.Stop()
+	// subscriptionBillingJob.Stop()
 	visitJob.Stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
