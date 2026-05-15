@@ -109,7 +109,9 @@ func (r *DonationRepository) CountDonors() (int, error) {
 func (r *DonationRepository) GetActiveConfig() (*model.DonationConfig, error) {
 	var cfg model.DonationConfig
 	err := r.DB.Get(&cfg, `
-		SELECT DC_SEQ, DC_GOAL, DC_MANUAL_ADJ, IFNULL(DC_NOTE,'') AS DC_NOTE,
+		SELECT DC_SEQ, DC_GOAL, DC_MANUAL_ADJ,
+		       IFNULL(DC_MANUAL_DONOR_CNT,0) AS DC_MANUAL_DONOR_CNT,
+		       IFNULL(DC_NOTE,'') AS DC_NOTE,
 		       IFNULL(DC_OVERWRITE,'N') AS DC_OVERWRITE, IS_ACTIVE,
 		       IFNULL(DATE_FORMAT(REG_DATE,'%Y-%m-%d %H:%i:%s'),'') AS REG_DATE,
 		       IFNULL(REG_OPER,0) AS REG_OPER

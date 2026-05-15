@@ -39,8 +39,8 @@ func (o *DonationConfigOrchestrator) GetConfig() (*model.DonationConfig, error) 
 }
 
 // UpdateConfig persists the config, refreshes today's snapshot, and invalidates the cache.
-func (o *DonationConfigOrchestrator) UpdateConfig(goal int64, manualAdj int64, note string, overwrite bool, operSeq int) error {
-	if err := o.adminSvc.UpdateConfig(goal, manualAdj, note, overwrite, operSeq); err != nil {
+func (o *DonationConfigOrchestrator) UpdateConfig(goal int64, manualAdj int64, manualDonorCnt int, note string, overwrite bool, operSeq int) error {
+	if err := o.adminSvc.UpdateConfig(goal, manualAdj, manualDonorCnt, note, overwrite, operSeq); err != nil {
 		return err
 	}
 	if err := o.snapshotJob.CreateSnapshotNow(); err != nil {

@@ -1,9 +1,9 @@
 // DonationBanner — Donation progress widget for feed sidebar and mobile inline
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import { TrendingUp } from 'lucide-react';
 import { api } from '../../api/client';
 import { formatAmount } from '../../utils/formatAmount';
+import { EXTERNAL_DONATION_URL } from '../../constants/donation';
 import type { DonationSummary } from '../../types/api';
 
 const STALE_TIME_MS = 5 * 60_000;
@@ -56,12 +56,14 @@ export function DonationBanner() {
         </div>
       )}
 
-      <Link
-        to="/donation"
+      <a
+        href={EXTERNAL_DONATION_URL}
+        target="_blank"
+        rel="noopener noreferrer"
         className="block w-full text-center rounded-xl border border-primary text-primary text-sm font-semibold py-2.5 transition-all duration-150 hover:bg-primary hover:text-white"
       >
         기부하기
-      </Link>
+      </a>
     </div>
   );
 }

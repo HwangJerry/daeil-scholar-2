@@ -16,12 +16,12 @@ func NewAdminDonationRepository(db *sqlx.DB) *AdminDonationRepository {
 	return &AdminDonationRepository{DB: db}
 }
 
-func (r *AdminDonationRepository) UpdateConfig(goal int64, manualAdj int64, note string, overwrite string, operSeq int) error {
+func (r *AdminDonationRepository) UpdateConfig(goal int64, manualAdj int64, manualDonorCnt int, note string, overwrite string, operSeq int) error {
 	_, err := r.DB.Exec(`
 		UPDATE DONATION_CONFIG
-		SET DC_GOAL = ?, DC_MANUAL_ADJ = ?, DC_NOTE = ?, DC_OVERWRITE = ?, REG_OPER = ?, REG_DATE = NOW()
+		SET DC_GOAL = ?, DC_MANUAL_ADJ = ?, DC_MANUAL_DONOR_CNT = ?, DC_NOTE = ?, DC_OVERWRITE = ?, REG_OPER = ?, REG_DATE = NOW()
 		WHERE IS_ACTIVE = 'Y'
-	`, goal, manualAdj, note, overwrite, operSeq)
+	`, goal, manualAdj, manualDonorCnt, note, overwrite, operSeq)
 	return err
 }
 

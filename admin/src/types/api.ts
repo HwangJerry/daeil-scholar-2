@@ -63,12 +63,43 @@ export interface CreateNoticeRequest {
   subject: string;
   contentMd: string;
   isPinned?: string;
+  attachedFileSeqs?: number[];
 }
 
 export interface UpdateNoticeRequest {
   subject: string;
   contentMd: string;
   isPinned?: string;
+  attachedFileSeqs?: number[];
+}
+
+// --- Disclosure (공익법인 의무공시) ---
+
+export interface AdminDisclosureListItem {
+  seq: number;
+  subject: string;
+  regDate: string;
+  regName: string;
+  hit: number;
+  openYn: string;
+  contentFormat: 'LEGACY' | 'MARKDOWN';
+}
+
+export interface AdminDisclosureListResponse {
+  items: AdminDisclosureListItem[];
+  total: number;
+}
+
+export interface CreateDisclosureRequest {
+  subject: string;
+  contentMd: string;
+  attachedFileSeqs?: number[];
+}
+
+export interface UpdateDisclosureRequest {
+  subject: string;
+  contentMd: string;
+  attachedFileSeqs?: number[];
 }
 
 // --- Ad ---
@@ -122,6 +153,7 @@ export interface DonationConfig {
   dcSeq: number;
   dcGoal: number;
   dcManualAdj: number;
+  dcManualDonorCnt: number;
   dcNote: string;
   dcOverwrite: string; // "Y" | "N"
   isActive: string;
@@ -131,6 +163,7 @@ export interface DonationConfig {
 export interface DonationConfigUpdateRequest {
   goal: number;
   manualAdj: number;
+  manualDonorCnt: number;
   note: string;
   overwrite: boolean;
 }
@@ -196,6 +229,7 @@ export interface UploadResponse {
   url: string;
   width?: number;
   height?: number;
+  fSeq?: number;
 }
 
 // --- Dashboard ---
@@ -283,4 +317,19 @@ export interface AdminJobCategoryUpsert {
 
 export interface AdminJobCategoryReorderRequest {
   order: number[];
+}
+
+// --- History ---
+
+export interface HistoryEntry {
+  heSeq: number;
+  eventDate: string; // "YYYY-MM-DD"
+  text: string;
+  sortOrder: number;
+}
+
+export interface HistoryUpsertRequest {
+  eventDate: string;
+  text: string;
+  sortOrder: number;
 }

@@ -44,8 +44,12 @@ func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
 	}
 
 	displayAmount := snapshot.DSTotal + snapshot.ManualAdj
+	donorCount := snapshot.DonorCnt
 	if snapshot.Overwrite == "Y" {
 		displayAmount = snapshot.ManualAdj
+		if cfg, err := s.repo.GetActiveConfig(); err == nil && cfg != nil {
+			donorCount = cfg.ManualDonorCnt
+		}
 	}
 	rate := float64(0)
 	if snapshot.Goal > 0 {
@@ -55,7 +59,7 @@ func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
 		TotalAmount:     snapshot.DSTotal,
 		ManualAdj:       snapshot.ManualAdj,
 		DisplayAmount:   displayAmount,
-		DonorCount:      snapshot.DonorCnt,
+		DonorCount:      donorCount,
 		GoalAmount:      snapshot.Goal,
 		AchievementRate: rate,
 		SnapshotDate:    snapshot.DSDate,
@@ -93,6 +97,7 @@ func (s *DonationService) computeLiveSummary() (*model.DonationSummary, error) {
 	displayAmount := total + manualAdj
 	if config != nil && config.Overwrite == "Y" {
 		displayAmount = manualAdj
+		donorCount = config.ManualDonorCnt
 	}
 	rate := float64(0)
 	if goal > 0 {

@@ -36,7 +36,7 @@ export function DonationConfigSection() {
 interface DonationConfigFormProps {
   data: DonationConfig;
   onSave: (
-    payload: { goal: number; manualAdj: number; note: string; overwrite: boolean },
+    payload: { goal: number; manualAdj: number; manualDonorCnt: number; note: string; overwrite: boolean },
     options?: { onSuccess?: () => void },
   ) => void;
   isUpdating: boolean;
@@ -45,13 +45,20 @@ interface DonationConfigFormProps {
 function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProps) {
   const [goal, setGoal] = useState(() => String(data.dcGoal));
   const [manualAdj, setManualAdj] = useState(() => String(data.dcManualAdj));
+  const [manualDonorCnt, setManualDonorCnt] = useState(() => String(data.dcManualDonorCnt));
   const [note, setNote] = useState(() => data.dcNote ?? '');
   const [overwrite, setOverwrite] = useState(() => data.dcOverwrite === 'Y');
   const [isEditing, setIsEditing] = useState(false);
 
   const handleSave = () => {
     onSave(
-      { goal: Number(goal), manualAdj: Number(manualAdj), note, overwrite },
+      {
+        goal: Number(goal),
+        manualAdj: Number(manualAdj),
+        manualDonorCnt: Number(manualDonorCnt),
+        note,
+        overwrite,
+      },
       { onSuccess: () => setIsEditing(false) },
     );
   };
@@ -59,6 +66,7 @@ function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProp
   const handleCancel = () => {
     setGoal(String(data.dcGoal));
     setManualAdj(String(data.dcManualAdj));
+    setManualDonorCnt(String(data.dcManualDonorCnt));
     setNote(data.dcNote ?? '');
     setOverwrite(data.dcOverwrite === 'Y');
     setIsEditing(false);
@@ -102,6 +110,18 @@ function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProp
               value={manualAdj}
               onChange={(e) => setManualAdj(e.target.value)}
             />
+          </div>
+          <div>
+            <label htmlFor="cfg-donor-cnt" className="mb-1 block text-sm font-medium text-dark-slate">
+              기부자 수 (수동)
+            </label>
+            <Input
+              id="cfg-donor-cnt"
+              type="number"
+              value={manualDonorCnt}
+              onChange={(e) => setManualDonorCnt(e.target.value)}
+              min={0}
+            />
             <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-dark-slate">
               <input
                 type="checkbox"
@@ -109,7 +129,7 @@ function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProp
                 onChange={(e) => setOverwrite(e.target.checked)}
                 className="h-4 w-4 rounded border-gray-300 accent-indigo-600"
               />
-              덮어쓰기 — 체크 시 온라인 합산을 무시하고 수동 조정액을 누적 기부액으로 표시
+              덮어쓰기 — 체크 시 누적 금액·기부자 수를 수동 입력값으로 표시
             </label>
           </div>
           <div>
@@ -134,7 +154,7 @@ function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProp
           </div>
         </div>
       ) : (
-        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-5">
           <div>
             <dt className="text-xs text-cool-gray">목표금액</dt>
             <dd className="text-sm font-medium text-dark-slate">₩{formatAmount(data.dcGoal)}</dd>
@@ -142,6 +162,10 @@ function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProp
           <div>
             <dt className="text-xs text-cool-gray">수동 조정액</dt>
             <dd className="text-sm font-medium text-dark-slate">₩{formatAmount(data.dcManualAdj)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-cool-gray">기부자 수(수동)</dt>
+            <dd className="text-sm font-medium text-dark-slate">{data.dcManualDonorCnt.toLocaleString()}명</dd>
           </div>
           <div>
             <dt className="text-xs text-cool-gray">덮어쓰기</dt>

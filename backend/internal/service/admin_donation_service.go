@@ -21,12 +21,12 @@ func (s *AdminDonationService) GetConfig() (*model.DonationConfig, error) {
 	return s.donationRepo.GetActiveConfig()
 }
 
-func (s *AdminDonationService) UpdateConfig(goal int64, manualAdj int64, note string, overwrite bool, operSeq int) error {
+func (s *AdminDonationService) UpdateConfig(goal int64, manualAdj int64, manualDonorCnt int, note string, overwrite bool, operSeq int) error {
 	ov := "N"
 	if overwrite {
 		ov = "Y"
 	}
-	return s.repo.UpdateConfig(goal, manualAdj, note, ov, operSeq)
+	return s.repo.UpdateConfig(goal, manualAdj, manualDonorCnt, note, ov, operSeq)
 }
 
 func (s *AdminDonationService) GetHistory(days int) ([]model.DonationSnapshot, error) {

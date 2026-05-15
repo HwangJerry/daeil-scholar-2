@@ -3,7 +3,6 @@ import { Heart, Users, TrendingUp, Target } from 'lucide-react';
 import { StatsCard } from '../components/ui/StatsCard.tsx';
 import { ErrorState } from '../components/ui/ErrorState.tsx';
 import { DonationConfigSection } from '../components/donation/DonationConfigSection.tsx';
-import { DonationOrdersSection } from '../components/donation/DonationOrdersSection.tsx';
 import { useDonationMonitor } from '../hooks/useDonationMonitor.ts';
 import { formatAmount } from '../lib/formatAmount.ts';
 
@@ -62,8 +61,6 @@ export function DonationMonitorPage() {
       )}
 
       <DonationConfigSection />
-
-      <DonationOrdersSection />
 
       <div className="rounded-2xl border border-border-light bg-white p-6 shadow-sm">
         <h3 className="mb-4 font-semibold text-dark-slate">스냅샷 이력 (최근 30일)</h3>

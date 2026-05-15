@@ -84,6 +84,11 @@ func (j *DonationSnapshotJob) createSnapshot() error {
 		manualAdj = config.ManualAdj
 		goal = config.Goal
 		overwrite = config.Overwrite
+		// When overwrite is on, the snapshot's donor count carries the manual override
+		// instead of the live WEO_ORDER count — matches the public summary's logic.
+		if config.Overwrite == "Y" {
+			donorCount = config.ManualDonorCnt
+		}
 	}
 	return j.repo.UpsertSnapshot(time.Now(), total, manualAdj, donorCount, goal, overwrite)
 }
