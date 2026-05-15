@@ -2,11 +2,32 @@
 set -euo pipefail
 
 # Deploy script — cross-compile, upload, and restart services
-# Usage: ./deploy.sh [user@host] [ssh_port]
+# Usage: ./deploy.sh [user@host] [ssh_port] --patch-mode=true|false
 #   ssh_port is optional; omit to use ~/.ssh/config or the default 22.
+#   --patch-mode is required (no default). Omit to be prompted interactively.
+#     true  → user SPA bundles VITE_WIP_ADMIN_CODE from frontend/.env (cover page ON)
+#     false → user SPA built with VITE_WIP_ADMIN_CODE="" forced (cover page OFF)
 
-TARGET=${1:-"daeil-prod"}
-SSH_PORT=${2:-}
+POSITIONAL=()
+PATCH_MODE=""
+for arg in "$@"; do
+  case "$arg" in
+    --patch-mode=true)  PATCH_MODE="true" ;;
+    --patch-mode=false) PATCH_MODE="false" ;;
+    --patch-mode=*)
+      echo "✗ Invalid --patch-mode value: '${arg#--patch-mode=}' (must be true or false)" >&2
+      exit 1
+      ;;
+    --patch-mode)
+      echo "✗ --patch-mode requires =true or =false (e.g. --patch-mode=true)" >&2
+      exit 1
+      ;;
+    *) POSITIONAL+=("$arg") ;;
+  esac
+done
+
+TARGET=${POSITIONAL[0]:-"daeil-prod"}
+SSH_PORT=${POSITIONAL[1]:-}
 
 if [[ -n "${SSH_PORT}" ]]; then
   SSH_OPTS=(-p "${SSH_PORT}")
@@ -15,6 +36,25 @@ else
   SSH_OPTS=()
   SCP_OPTS=()
 fi
+
+# Resolve --patch-mode interactively if it wasn't provided on the command line.
+# No default — the user must explicitly answer true or false (mirrors the
+# /dev/tty prompt pattern used by the migration drift check below).
+if [[ -z "${PATCH_MODE}" ]]; then
+  if [[ ! -e /dev/tty ]]; then
+    echo "✗ Non-interactive shell — pass --patch-mode=true or --patch-mode=false." >&2
+    exit 1
+  fi
+  while true; do
+    read -r -p "Enable WIP gate (admin-code cover page) on the deployed build? [true/false] " ANSWER < /dev/tty
+    case "${ANSWER}" in
+      true|TRUE|True)    PATCH_MODE="true";  break ;;
+      false|FALSE|False) PATCH_MODE="false"; break ;;
+      *) echo "  Please type exactly 'true' or 'false'." ;;
+    esac
+  done
+fi
+echo "=== patch-mode = ${PATCH_MODE} ==="
 
 # =============================================================================
 # DATABASE MIGRATIONS — MANUAL STEP REQUIRED
@@ -143,6 +183,70 @@ else
 fi
 
 # =============================================================================
+# DEBUG AGENT ENV VALIDATION — all 4 vars must be set together, or all empty.
+# Empty = reporter disabled (no-op in observability.NewHook). Partial config is
+# rejected because it is almost always a mistake (e.g. forgot to copy SECRET
+# into the new unit file). Placeholder secrets/envs are also rejected so a
+# half-configured staging value never reaches production.
+# Skip with: SKIP_DEBUG_AGENT_CHECK=1 ./deploy.sh ...
+# =============================================================================
+if [[ "${SKIP_DEBUG_AGENT_CHECK:-0}" == "1" ]]; then
+  echo "=== Skipping debug agent env validation (SKIP_DEBUG_AGENT_CHECK=1) ==="
+else
+  echo "=== Validating debug agent env vars on ${TARGET} ==="
+
+  DA_KEYS=(DEBUG_AGENT_ENDPOINT DEBUG_AGENT_PROJECT DEBUG_AGENT_SECRET DEBUG_AGENT_ENVIRONMENT)
+
+  da_set_count=0
+  da_empty_count=0
+  da_bad_placeholder=()
+  da_present=()
+  da_missing=()
+  for key in "${DA_KEYS[@]}"; do
+    value=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE "s/^Environment=\"${key}=(.*)\"$/\1/p" | head -n 1)
+    if [[ -z "${value}" ]]; then
+      da_empty_count=$((da_empty_count + 1))
+      da_missing+=("${key}")
+    else
+      da_set_count=$((da_set_count + 1))
+      da_present+=("${key}")
+      # Reject known-bad placeholder values. Add new entries here if the team
+      # introduces other defaults that must never reach production.
+      case "${key}:${value}" in
+        DEBUG_AGENT_SECRET:change-me|DEBUG_AGENT_SECRET:test-secret|DEBUG_AGENT_ENVIRONMENT:dev)
+          da_bad_placeholder+=("${key}=${value}") ;;
+      esac
+    fi
+  done
+
+  if [[ ${da_set_count} -gt 0 && ${da_empty_count} -gt 0 ]]; then
+    echo "" >&2
+    echo "✗ Debug agent env vars are partially configured (${da_set_count} set, ${da_empty_count} empty)." >&2
+    echo "  Either set all 4, or leave all 4 unset/empty (reporter then runs in no-op mode)." >&2
+    echo "  Present:" >&2
+    for k in "${da_present[@]}"; do echo "    - ${k}" >&2; done
+    echo "  Missing:" >&2
+    for k in "${da_missing[@]}"; do echo "    - ${k}" >&2; done
+    echo "  Bypass with SKIP_DEBUG_AGENT_CHECK=1 if intentional." >&2
+    exit 1
+  fi
+
+  if [[ ${#da_bad_placeholder[@]} -gt 0 ]]; then
+    echo "" >&2
+    echo "✗ Debug agent placeholder values still in production unit:" >&2
+    for kv in "${da_bad_placeholder[@]}"; do echo "    - ${kv}" >&2; done
+    echo "  Replace with the real values from the Debug Agent dashboard." >&2
+    exit 1
+  fi
+
+  if [[ ${da_set_count} -eq 4 ]]; then
+    echo "✓ Debug agent enabled (all 4 env vars set)"
+  else
+    echo "✓ Debug agent disabled (no env vars set — reporter will no-op)"
+  fi
+fi
+
+# =============================================================================
 # MIGRATION DRIFT CHECK — fail if local backend/migrations/ has unapplied files
 # on the production DB. Migration history is tracked in the _migration_history
 # table created by migrate.sh. DB credentials are extracted from the systemd
@@ -187,15 +291,52 @@ else
 
   if [[ ${#PENDING[@]} -gt 0 ]]; then
     echo "" >&2
-    echo "✗ Migration drift detected — ${#PENDING[@]} unapplied migration(s) on ${TARGET}:" >&2
+    echo "⚠ Migration drift detected — ${#PENDING[@]} unapplied migration(s) on ${TARGET}:" >&2
     for m in "${PENDING[@]}"; do
       echo "    - ${m}" >&2
     done
     echo "" >&2
-    echo "Apply on the server in order, then re-run ./deploy.sh:" >&2
-    echo "    cd /path/to/repo && ./migrate.sh" >&2
-    echo "Or set SKIP_MIGRATION_CHECK=1 to bypass (NOT recommended for prod)." >&2
-    exit 1
+
+    if [[ "${APPLY_MIGRATIONS:-0}" == "1" ]]; then
+      echo "APPLY_MIGRATIONS=1 set — applying without prompt." >&2
+    else
+      # Interactive prompt. Read from /dev/tty so this works even if stdin
+      # is redirected. In non-interactive shells (no TTY), abort with guidance.
+      if [[ ! -e /dev/tty ]]; then
+        echo "✗ Non-interactive shell — cannot prompt." >&2
+        echo "  Re-run with APPLY_MIGRATIONS=1 to apply, or SKIP_MIGRATION_CHECK=1 to bypass." >&2
+        exit 1
+      fi
+      read -r -p "Apply these ${#PENDING[@]} migration(s) to ${TARGET} now? [y/N] " ANSWER < /dev/tty
+      if [[ ! "${ANSWER}" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        echo "Aborted by user. No changes made." >&2
+        echo "  Tip: set APPLY_MIGRATIONS=1 to skip this prompt next time." >&2
+        exit 1
+      fi
+    fi
+
+    echo "=== Applying ${#PENDING[@]} pending migration(s) on ${TARGET} ==="
+    for m in "${PENDING[@]}"; do
+      REMOTE_TMP="/tmp/_mig_$$_${m}"
+      echo "  APPLY ${m} ..."
+      if ! scp "${SCP_OPTS[@]}" "backend/migrations/${m}" "${TARGET}:${REMOTE_TMP}" >/dev/null; then
+        echo "✗ Failed to upload ${m} to ${TARGET}:${REMOTE_TMP}" >&2
+        echo "  Backend NOT restarted. Investigate before retrying." >&2
+        exit 1
+      fi
+      if ! ssh "${SSH_OPTS[@]}" "${TARGET}" \
+        "MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' '${DB_NAME_VAL}' < ${REMOTE_TMP} \
+         && MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' -BN '${DB_NAME_VAL}' \
+              -e \"INSERT INTO _migration_history (filename) VALUES ('${m}')\" \
+         && rm -f ${REMOTE_TMP}"; then
+        echo "✗ Migration failed: ${m}" >&2
+        echo "  DB may be in a partial state. Backend NOT restarted. Investigate before retrying." >&2
+        ssh "${SSH_OPTS[@]}" "${TARGET}" "rm -f ${REMOTE_TMP}" || true
+        exit 1
+      fi
+      echo "  OK    ${m}"
+    done
+    echo "✓ Applied ${#PENDING[@]} migration(s)"
   fi
 
   TOTAL=$(printf '%s\n' "${LOCAL_LIST}" | grep -c .)
@@ -208,10 +349,24 @@ GOOS=linux GOARCH=amd64 go build -o ../dist/server ./cmd/server
 GOOS=linux GOARCH=amd64 go build -o ../dist/backfill ./cmd/backfill
 cd ..
 
-echo "=== Building User SPA ==="
+echo "=== Building User SPA (patch-mode=${PATCH_MODE}) ==="
 cd frontend
 npm ci
-npm run build
+if [[ "${PATCH_MODE}" == "true" ]]; then
+  # patch-mode=true requires a non-empty VITE_WIP_ADMIN_CODE in frontend/.env so
+  # the WipGate component (frontend/src/components/common/WipGate.tsx) is active.
+  WIP_CODE_VAL=$(sed -nE 's/^VITE_WIP_ADMIN_CODE=("?)([^"]*)\1[[:space:]]*$/\2/p' .env | head -n 1)
+  if [[ -z "${WIP_CODE_VAL}" ]]; then
+    echo "✗ patch-mode=true requires VITE_WIP_ADMIN_CODE to be non-empty in frontend/.env" >&2
+    echo "  Either set the code in frontend/.env or re-run with --patch-mode=false." >&2
+    exit 1
+  fi
+  npm run build
+else
+  # Force-empty so .env's value is overridden at build time. The repo .env stays untouched.
+  # Vite's loadEnv merges process.env over .env for VITE_*-prefixed vars, so this wins.
+  VITE_WIP_ADMIN_CODE="" npm run build
+fi
 cd ..
 
 echo "=== Building Admin SPA ==="

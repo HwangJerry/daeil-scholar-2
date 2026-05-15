@@ -1,6 +1,7 @@
-// ErrorBoundary — catches unhandled React errors and renders a fallback UI
+// ErrorBoundary — catches unhandled React errors, reports them, and renders a fallback UI
 import { Component, type ReactNode } from 'react';
 import { AlertCircle } from 'lucide-react';
+import { reportFrontendError } from '../../lib/errorReporter';
 
 interface Props {
   children: ReactNode;
@@ -18,6 +19,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(): State {
     return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    reportFrontendError(error.message, error.stack ?? '', window.location.href, 'ErrorBoundary');
   }
 
   render() {

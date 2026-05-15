@@ -14,10 +14,15 @@ func RequestLogger(logger zerolog.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			ww := chiMiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(ww, r)
-			logger.Info().
+			status := ww.Status()
+			evt := logger.Info()
+			if status >= 500 {
+				evt = logger.Error()
+			}
+			evt.
 				Str("method", r.Method).
 				Str("path", r.URL.Path).
-				Int("status", ww.Status()).
+				Int("status", status).
 				Dur("duration", time.Since(start)).
 				Msg("request")
 		})

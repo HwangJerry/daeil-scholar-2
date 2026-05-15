@@ -227,6 +227,10 @@ The `content.go` service handles conversion. The `FeedPresenter` calls `DecodeCo
 | `EASYPAY_BIN_BASE` | `/var/www/html/_sys/payment` | Base path for `ep_cli` binary and certs |
 | `EASYPAY_RETURN_BASE_URL` | `http://localhost:8080` | Base URL for PG return callbacks |
 | `PG_AUDIT_LOG_PATH` | `/var/logs/pg/pg-audit.log` | PG payment audit log file path |
+| `DEBUG_AGENT_ENDPOINT` | (empty) | Debug Agent gateway `/ingest` URL. Empty disables the reporter (no-op hook) |
+| `DEBUG_AGENT_PROJECT` | (empty) | Project identifier sent in `X-Project` header (e.g. `daeil-scholar/backend`) |
+| `DEBUG_AGENT_SECRET` | (empty) | HMAC-SHA256 shared secret for signing reports |
+| `DEBUG_AGENT_ENVIRONMENT` | `ENV` or `dev` | Environment tag attached to every report (`prod`, `staging`, etc.) |
 
 ## Key Dependencies
 

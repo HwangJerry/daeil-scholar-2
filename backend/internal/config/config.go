@@ -17,9 +17,25 @@ type Config struct {
 	Upload         UploadConfig
 	EasyPay        EasyPayConfig
 	SMTP           SMTPConfig
+	DebugAgent     DebugAgentConfig
 	PGAuditLogPath string
 	Environment    string // "dev" exposes manual subscription billing trigger; "prod" hides it
 	VisitIPSalt    string
+}
+
+// DebugAgentConfig holds settings for the external Debug Agent error pipeline.
+// When Endpoint is empty the reporter is disabled (no-op) — main.go skips hook
+// installation entirely so dev environments do not leak secrets or noise.
+type DebugAgentConfig struct {
+	Endpoint    string
+	Project     string
+	Secret      string
+	Environment string
+}
+
+// Enabled reports whether the debug agent reporter should be installed.
+func (c DebugAgentConfig) Enabled() bool {
+	return c.Endpoint != ""
 }
 
 // SMTPConfig holds SMTP server settings for transactional email delivery.
@@ -137,6 +153,12 @@ func Load() *Config {
 			User:     getEnv("SMTP_USER", ""),
 			Password: getEnv("SMTP_PASSWORD", ""),
 			From:     getEnv("SMTP_FROM", "noreply@dflh.kr"),
+		},
+		DebugAgent: DebugAgentConfig{
+			Endpoint:    getEnv("DEBUG_AGENT_ENDPOINT", ""),
+			Project:     getEnv("DEBUG_AGENT_PROJECT", ""),
+			Secret:      getEnv("DEBUG_AGENT_SECRET", ""),
+			Environment: getEnv("DEBUG_AGENT_ENVIRONMENT", getEnv("ENV", "dev")),
 		},
 		PGAuditLogPath: getEnv("PG_AUDIT_LOG_PATH", "/var/logs/pg/pg-audit.log"),
 		Environment:    getEnv("ENV", "prod"),
