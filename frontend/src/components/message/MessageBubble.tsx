@@ -23,9 +23,9 @@ export function MessageBubble({ message, currentUserSeq }: MessageBubbleProps) {
           {message.content}
         </div>
         <div className="flex items-center gap-1 mt-0.5">
-          {isSent && (
+          {isSent && message.readYn === 'Y' && (
             <span className="text-[10px] text-text-placeholder">
-              {message.readYn === 'Y' ? '읽음' : '1'}
+              읽음
             </span>
           )}
           <span className="text-[10px] text-text-placeholder">{formatChatTime(message.regDate)}</span>

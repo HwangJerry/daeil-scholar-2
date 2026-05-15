@@ -3,23 +3,37 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/model"
-	"github.com/dflh-saf/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 )
 
+// MessageServicer defines the messaging operations used by MessageHandler.
+// Defined here (consumer side) so tests can inject a stub without importing
+// the service package.
+type MessageServicer interface {
+	SendMessage(senderSeq int, senderName string, req model.SendMessageRequest) error
+	GetInbox(usrSeq, page, size int) (*model.MessageListResponse, error)
+	GetOutbox(usrSeq, page, size int) (*model.MessageListResponse, error)
+	MarkAsRead(amSeq, usrSeq int) error
+	DeleteMessage(amSeq, usrSeq int) error
+	GetConversations(usrSeq int) (*model.ConversationListResponse, error)
+	GetConversationMessages(usrSeq, otherSeq, page, size int) (*model.MessageListResponse, error)
+	MarkConversationRead(usrSeq, senderSeq int) error
+}
+
 // MessageHandler handles message-related HTTP requests.
 type MessageHandler struct {
-	service *service.MessageService
+	service MessageServicer
 }
 
 // NewMessageHandler creates a new MessageHandler.
-func NewMessageHandler(service *service.MessageService) *MessageHandler {
-	return &MessageHandler{service: service}
+func NewMessageHandler(svc MessageServicer) *MessageHandler {
+	return &MessageHandler{service: svc}
 }
 
 // Send handles POST /api/messages.
@@ -35,7 +49,12 @@ func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.SendMessage(user.USRSeq, user.USRName, req); err != nil {
-		respondError(w, http.StatusBadRequest, "SEND_FAILED", err.Error())
+		var ve *model.ValidationError
+		if errors.As(err, &ve) {
+			respondError(w, http.StatusBadRequest, "SEND_FAILED", ve.Error())
+		} else {
+			respondError(w, http.StatusInternalServerError, "SEND_FAILED", "메시지 전송에 실패했습니다")
+		}
 		return
 	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -110,7 +129,6 @@ func (h *MessageHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
-
 
 // GetConversations handles GET /api/messages/conversations.
 func (h *MessageHandler) GetConversations(w http.ResponseWriter, r *http.Request) {

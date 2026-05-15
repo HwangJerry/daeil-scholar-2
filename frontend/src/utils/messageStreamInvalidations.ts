@@ -6,6 +6,10 @@ interface MessageNewPayload {
   fromName?: string;
 }
 
+interface MessageReadPayload {
+  readerSeq: number;
+}
+
 export function invalidateOnMessageNew(queryClient: QueryClient, rawData: string): void {
   let fromSeq: number | null = null;
   try {
@@ -29,4 +33,24 @@ export function invalidateOnMessageNew(queryClient: QueryClient, rawData: string
 
 export function invalidateOnMessageSent(queryClient: QueryClient): void {
   queryClient.invalidateQueries({ queryKey: ['messages', 'conversations'] });
+}
+
+export function invalidateOnMessageRead(queryClient: QueryClient, rawData: string): void {
+  let readerSeq: number | null = null;
+  try {
+    const payload = JSON.parse(rawData) as MessageReadPayload;
+    if (typeof payload.readerSeq === 'number') {
+      readerSeq = payload.readerSeq;
+    }
+  } catch {
+    readerSeq = null;
+  }
+
+  queryClient.invalidateQueries({ queryKey: ['messages', 'conversations'] });
+  queryClient.invalidateQueries({ queryKey: ['messages', 'outbox'] });
+  if (readerSeq !== null) {
+    queryClient.invalidateQueries({ queryKey: ['messages', 'conversation', readerSeq] });
+  } else {
+    queryClient.invalidateQueries({ queryKey: ['messages', 'conversation'] });
+  }
 }

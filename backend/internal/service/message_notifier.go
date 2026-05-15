@@ -9,12 +9,14 @@ import "github.com/dflh-saf/backend/internal/realtime"
 type MessageNotifier interface {
 	NotifyMessageReceived(recvrSeq, senderSeq int, senderName string)
 	NotifyMessageSent(senderSeq, recvrSeq int)
+	NotifyMessagesRead(senderSeq, readerSeq int)
 }
 
 type nopMessageNotifier struct{}
 
 func (nopMessageNotifier) NotifyMessageReceived(int, int, string) {}
 func (nopMessageNotifier) NotifyMessageSent(int, int)             {}
+func (nopMessageNotifier) NotifyMessagesRead(int, int)            {}
 
 // NopMessageNotifier returns a notifier that drops every event. Useful for tests.
 func NopMessageNotifier() MessageNotifier { return nopMessageNotifier{} }
@@ -43,6 +45,15 @@ func (n *RealtimeMessageNotifier) NotifyMessageSent(senderSeq, recvrSeq int) {
 		Type: "message.sent",
 		Payload: map[string]any{
 			"toSeq": recvrSeq,
+		},
+	})
+}
+
+func (n *RealtimeMessageNotifier) NotifyMessagesRead(senderSeq, readerSeq int) {
+	n.hub.Publish(senderSeq, realtime.Event{
+		Type: "message.read",
+		Payload: map[string]any{
+			"readerSeq": readerSeq,
 		},
 	})
 }

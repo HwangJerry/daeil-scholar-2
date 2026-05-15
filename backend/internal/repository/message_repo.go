@@ -2,6 +2,8 @@
 package repository
 
 import (
+	"database/sql"
+
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
 )
@@ -87,13 +89,34 @@ func (r *MessageRepository) GetOutbox(usrSeq int, page int, size int) ([]model.M
 	return messages, total, nil
 }
 
-// MarkAsRead marks a message as read.
-func (r *MessageRepository) MarkAsRead(amSeq int, usrSeq int) error {
-	_, err := r.DB.Exec(`
+// MarkAsRead marks a message as read and reports the sender if the row changed.
+func (r *MessageRepository) MarkAsRead(amSeq int, usrSeq int) (int, bool, error) {
+	result, err := r.DB.Exec(`
 		UPDATE ALUMNI_MESSAGE SET AM_READ_YN = 'Y', READ_DATE = NOW()
-		WHERE AM_SEQ = ? AND AM_RECVR_SEQ = ?
+		WHERE AM_SEQ = ? AND AM_RECVR_SEQ = ? AND AM_READ_YN = 'N'
 	`, amSeq, usrSeq)
-	return err
+	if err != nil {
+		return 0, false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, false, err
+	}
+	if affected == 0 {
+		return 0, false, nil
+	}
+
+	var senderSeq int
+	if err := r.DB.Get(&senderSeq, `
+		SELECT AM_SENDER_SEQ FROM ALUMNI_MESSAGE
+		WHERE AM_SEQ = ? AND AM_RECVR_SEQ = ?
+	`, amSeq, usrSeq); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	return senderSeq, true, nil
 }
 
 // DeleteMessage soft-deletes a message for the requesting user.
@@ -181,10 +204,17 @@ func (r *MessageRepository) GetConversationMessages(usrSeq, otherSeq, page, size
 }
 
 // MarkConversationRead marks all unread messages from senderSeq to usrSeq as read.
-func (r *MessageRepository) MarkConversationRead(usrSeq, senderSeq int) error {
-	_, err := r.DB.Exec(`
+func (r *MessageRepository) MarkConversationRead(usrSeq, senderSeq int) (bool, error) {
+	result, err := r.DB.Exec(`
 		UPDATE ALUMNI_MESSAGE SET AM_READ_YN = 'Y', READ_DATE = NOW()
 		WHERE AM_RECVR_SEQ = ? AND AM_SENDER_SEQ = ? AND AM_READ_YN = 'N' AND AM_DEL_RECVR = 'N'
 	`, usrSeq, senderSeq)
-	return err
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
 }

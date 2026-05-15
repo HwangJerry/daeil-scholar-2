@@ -2,8 +2,6 @@
 package service
 
 import (
-	"errors"
-
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 )
@@ -28,16 +26,16 @@ func NewMessageService(repo repository.MessageQuerier, profileRepo repository.Pr
 // SendMessage validates and sends a message, then triggers a notification.
 func (s *MessageService) SendMessage(senderSeq int, senderName string, req model.SendMessageRequest) error {
 	if req.Content == "" {
-		return errors.New("메시지 내용을 입력해주세요")
+		return &model.ValidationError{Msg: "메시지 내용을 입력해주세요"}
 	}
 	if len([]rune(req.Content)) > maxMessageLength {
-		return errors.New("메시지는 1000자 이하로 입력해주세요")
+		return &model.ValidationError{Msg: "메시지는 1000자 이하로 입력해주세요"}
 	}
 	if req.RecvrSeq <= 0 {
-		return errors.New("수신자를 지정해주세요")
+		return &model.ValidationError{Msg: "수신자를 지정해주세요"}
 	}
 	if senderSeq == req.RecvrSeq {
-		return errors.New("자기 자신에게는 쪽지를 보낼 수 없습니다")
+		return &model.ValidationError{Msg: "자기 자신에게는 쪽지를 보낼 수 없습니다"}
 	}
 
 	exists, err := s.profileRepo.CheckUserExists(req.RecvrSeq)
@@ -45,7 +43,7 @@ func (s *MessageService) SendMessage(senderSeq int, senderName string, req model
 		return err
 	}
 	if !exists {
-		return errors.New("존재하지 않는 회원입니다")
+		return &model.ValidationError{Msg: "존재하지 않는 회원입니다"}
 	}
 
 	if err := s.repo.InsertMessage(senderSeq, req.RecvrSeq, req.Content); err != nil {
@@ -122,7 +120,14 @@ func (s *MessageService) GetOutbox(usrSeq int, page int, size int) (*model.Messa
 
 // MarkAsRead marks a message as read.
 func (s *MessageService) MarkAsRead(amSeq int, usrSeq int) error {
-	return s.repo.MarkAsRead(amSeq, usrSeq)
+	senderSeq, changed, err := s.repo.MarkAsRead(amSeq, usrSeq)
+	if err != nil {
+		return err
+	}
+	if changed {
+		s.notifier.NotifyMessagesRead(senderSeq, usrSeq)
+	}
+	return nil
 }
 
 // DeleteMessage soft-deletes a message for the requesting user.
@@ -180,5 +185,12 @@ func (s *MessageService) GetConversationMessages(usrSeq, otherSeq, page, size in
 
 // MarkConversationRead marks all messages from senderSeq to usrSeq as read.
 func (s *MessageService) MarkConversationRead(usrSeq, senderSeq int) error {
-	return s.repo.MarkConversationRead(usrSeq, senderSeq)
+	changed, err := s.repo.MarkConversationRead(usrSeq, senderSeq)
+	if err != nil {
+		return err
+	}
+	if changed {
+		s.notifier.NotifyMessagesRead(senderSeq, usrSeq)
+	}
+	return nil
 }

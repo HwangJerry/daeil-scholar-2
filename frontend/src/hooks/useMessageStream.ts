@@ -5,6 +5,7 @@ import { createMessageStream } from '../api/realtime';
 import { useAuth } from './useAuth';
 import {
   invalidateOnMessageNew,
+  invalidateOnMessageRead,
   invalidateOnMessageSent,
 } from '../utils/messageStreamInvalidations';
 
@@ -37,6 +38,10 @@ export function useMessageStream() {
 
       es.addEventListener('message.sent', () => {
         invalidateOnMessageSent(queryClient);
+      });
+
+      es.addEventListener('message.read', (event) => {
+        invalidateOnMessageRead(queryClient, (event as MessageEvent).data);
       });
 
       es.onerror = () => {
