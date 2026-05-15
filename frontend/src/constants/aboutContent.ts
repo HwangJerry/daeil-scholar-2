@@ -12,6 +12,7 @@ export const ABOUT_LINKS: readonly AboutLink[] = [
   { to: '/history', title: '연혁', description: '장학회가 걸어온 길을 연도별로 정리했습니다.' },
   { to: '/organization', title: '조직도', description: '장학회를 이끄는 임원과 사무국을 소개합니다.' },
   { to: '/business', title: '사업소개', description: '후배들을 위한 주요 장학사업을 소개합니다.' },
+  { to: '/disclosure', title: '의무공시', description: '공익법인 의무공시 자료를 확인할 수 있습니다.' },
 ];
 
 export const FOOTER_INFO_LINKS: readonly { to: string; label: string }[] = [
@@ -21,6 +22,7 @@ export const FOOTER_INFO_LINKS: readonly { to: string; label: string }[] = [
   { to: '/history', label: '연혁' },
   { to: '/organization', label: '조직도' },
   { to: '/business', label: '사업소개' },
+  { to: '/disclosure', label: '의무공시' },
 ];
 
 export const GREETINGS = {
@@ -41,7 +43,6 @@ export const VISION_MISSION = {
 export const VISION_VISION = {
   label: 'Vision',
   body: '지속적이고 안정적인 후원 활동을 하는 장학회',
-  goal: '[Goal] 2021년 장학재단 설립',
 } as const;
 
 export interface VisionCoreValue {
@@ -69,90 +70,6 @@ export const VISION_CORE_VALUES: readonly VisionCoreValue[] = [
     bullets: [
       '장학기금 운영 투명성 유지',
       '학교, 동문과의 활발한 소통',
-    ],
-  },
-];
-
-export interface HistoryItem {
-  date: string;
-  text: string;
-}
-
-export interface HistoryYear {
-  year: number;
-  items: HistoryItem[];
-}
-
-export const HISTORY_ENTRIES: readonly HistoryYear[] = [
-  {
-    year: 2025,
-    items: [
-      { date: '10.24', text: '대일외고 장학회 제6차 현판식' },
-      { date: '10.23', text: '제4회 재능기부콘서트 - 안녕하세요? 미래에서 왔습니다!(유효현)' },
-      { date: '09.02', text: '제4회 그랜드마스터클래스 - 격변의 시대, 자본시장을 읽다(신창훈)' },
-      { date: '07.28', text: '제3회 재능기부콘서트 - 절세법과 자산 관리의 노하우(정용호)' },
-      { date: '06.26', text: '후원인의 밤' },
-      { date: '05.28', text: '제2회 재능기부콘서트 - 창업시 필요한 법률 지식(허정무)' },
-      { date: '02.23', text: '제1회 재능기부콘서트 - 취업이냐, 창업이냐, 그것이 문제로다(이준용)' },
-      { date: '01.09', text: '제3차 조찬 세미나 - 실패없는 창업 성공법칙(임상진)' },
-    ],
-  },
-  {
-    year: 2024,
-    items: [
-      { date: '10.26', text: '대일외고 장학회 제5차 현판식' },
-      { date: '08.21', text: '대일외고 서울대 최종학 교수 초청 특강' },
-      { date: '07.05', text: '제2회 그랜드마스터클래스 - 인스타그램, 트렌드를 보는 창(정다정)' },
-      { date: '01.04', text: '제1회 그랜드마스터클래스 - 우리 아이들에게 펼쳐질 미래(김승주)' },
-    ],
-  },
-  {
-    year: 2023,
-    items: [
-      { date: '10.21', text: '대일외고 장학회 제4차 현판식' },
-    ],
-  },
-  {
-    year: 2022,
-    items: [
-      { date: '11.05', text: '대일외고 장학회 제3차 현판식' },
-      { date: '09.10', text: '대일외고 장학회 남춘천CC 골프' },
-      { date: '08.22', text: '후원인의 밤' },
-      { date: '07.07', text: '대일외고 서울대 최종학 교수 초청 특강' },
-    ],
-  },
-  {
-    year: 2020,
-    items: [
-      { date: '03.21', text: '대일외고 장학회 제2차 현판식' },
-    ],
-  },
-  {
-    year: 2019,
-    items: [
-      { date: '12.31', text: '기부금대상민간단체 지정(기획재정부 공고 제2019-219호)' },
-      { date: '08.26', text: '[비영리민간단체지원법]에 따른 비영리민간단체 등록 (발급처:서울특별시, 등록번호: 2360)' },
-    ],
-  },
-  {
-    year: 2018,
-    items: [
-      { date: '12.29', text: '대일외고 장학회 현판식 및 비전선포식' },
-    ],
-  },
-  {
-    year: 2017,
-    items: [
-      { date: '12.04', text: '대일외고 장학회 창립총회 (회장:허재혁)' },
-      { date: '07.14', text: 'Dream for High School Students (미주 대일 외고 장학회) 설립' },
-      { date: '01.12', text: '대일외고 장학재단 준비위원회 설명회' },
-    ],
-  },
-  {
-    year: 2016,
-    items: [
-      { date: '12.09', text: '대일외고 장학재단 설립 추진위원회 구성 (위원장:엄은숙, 부위원장:이종민)' },
-      { date: '12.01', text: '장학재단 설립추진을 위한 역대 동문회장단 미팅' },
     ],
   },
 ];
