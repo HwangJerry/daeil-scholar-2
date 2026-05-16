@@ -26,6 +26,14 @@ export function BottomSheet({ children, onClose, maxHeight = 'auto' }: BottomShe
     };
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     isDragging.current = true;
@@ -61,10 +69,13 @@ export function BottomSheet({ children, onClose, maxHeight = 'auto' }: BottomShe
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Sheet */}
       <div
+        role="dialog"
+        aria-modal="true"
         style={{
           transform: `translateY(${dragY}px)`,
           transition: isSnapping

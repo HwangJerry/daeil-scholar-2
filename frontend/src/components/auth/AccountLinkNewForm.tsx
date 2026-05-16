@@ -1,5 +1,5 @@
 // AccountLinkNewForm — Fresh Kakao signup form. Prefills email/profile-image from Kakao and shows a merge banner when the typed phone matches an existing member.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ProfileFieldsSection } from './ProfileFieldsSection';
 import { defaultProfileFieldValues } from './profileFieldValues';
@@ -9,7 +9,9 @@ import { useCheckEmail } from '../../hooks/useCheckEmail';
 import { useSocialLinkPrefill } from '../../hooks/useSocialLinkPrefill';
 import { useSocialLinkPhoneMatch } from '../../hooks/useSocialLinkPhoneMatch';
 import { useAccountLinkSubmit } from '../../hooks/useAccountLinkSubmit';
-import { PhoneMatchBanner } from './PhoneMatchBanner';
+import { useResponsive } from '../../hooks/useResponsive';
+import { BottomSheet } from '../ui/BottomSheet';
+import { PhoneMatchBanner, PhoneMatchBottomSheetContent } from './PhoneMatchBanner';
 import { SignupProfileImageEditor } from './SignupProfileImageEditor';
 import { Button } from '../ui/Button';
 import { isValidDepartment } from '../../constants/departments';
@@ -22,11 +24,14 @@ interface AccountLinkNewFormProps {
 
 export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
   const navigate = useNavigate();
+  const { isMobile } = useResponsive();
   const { submitting, error, submit, setError } = useAccountLinkSubmit();
 
   const [profile, setProfile] = useState<ProfileFieldValues>(defaultProfileFieldValues);
   const [didPrefillEmail, setDidPrefillEmail] = useState(false);
   const [photoOverride, setPhotoOverride] = useState<{ url: string | null } | null>(null);
+  const [dismissedPhoneKey, setDismissedPhoneKey] = useState<string | null>(null);
+  const [isPhoneMatchSheetOpen, setIsPhoneMatchSheetOpen] = useState(false);
 
   const prefill = useSocialLinkPrefill(token);
   const phoneBannerLookup = useSocialLinkPhoneMatch({ token, phone: profile.phone });
@@ -86,15 +91,40 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
   };
 
   const bannerMatch = phoneBannerLookup.status === 'matched' ? phoneBannerLookup.profile : null;
+  const matchedPhoneKey = bannerMatch ? profile.phone.replace(/\D/g, '') : null;
   const photoUrl =
     photoOverride !== null ? photoOverride.url : prefill.data?.profileImageUrl || null;
   const handlePhotoChange = (url: string | null) => setPhotoOverride({ url });
+  const shouldShowMobileSheet =
+    isMobile && bannerMatch !== null && matchedPhoneKey !== null && dismissedPhoneKey !== matchedPhoneKey;
+
+  useEffect(() => {
+    setIsPhoneMatchSheetOpen(shouldShowMobileSheet);
+  }, [shouldShowMobileSheet]);
+
+  const handleDismissPhoneMatchSheet = () => {
+    if (matchedPhoneKey) {
+      setDismissedPhoneKey(matchedPhoneKey);
+    }
+    setIsPhoneMatchSheetOpen(false);
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {isPhoneMatchSheetOpen && bannerMatch && (
+        <BottomSheet onClose={handleDismissPhoneMatchSheet}>
+          <PhoneMatchBottomSheetContent
+            matchedName={bannerMatch.name}
+            matchedFN={bannerMatch.fn}
+            onConfirm={handleConfirmMerge}
+            onContinue={handleDismissPhoneMatchSheet}
+          />
+        </BottomSheet>
+      )}
+
       <SignupProfileImageEditor token={token} imageUrl={photoUrl} onChange={handlePhotoChange} />
 
-      {bannerMatch && (
+      {!isMobile && bannerMatch && (
         <PhoneMatchBanner
           matchedName={bannerMatch.name}
           matchedFN={bannerMatch.fn}
