@@ -7,6 +7,7 @@ import { Modal } from '../ui/Modal';
 import { PostContent } from '../post/PostContent';
 import { usePostDetail } from '../../hooks/usePostDetail';
 import { usePostSiblings } from '../../hooks/usePostSiblings';
+import { invalidateFeedSummaryQueries } from '../../utils/feedQueryInvalidation';
 
 function NoticeDetailSkeleton() {
   return (
@@ -70,7 +71,7 @@ export function NoticeDetailModal() {
 
   const queryClient = useQueryClient();
   const handleClose = () => {
-    queryClient.invalidateQueries({ queryKey: ['feed'] });
+    invalidateFeedSummaryQueries(queryClient);
     navigate(-1);
   };
 

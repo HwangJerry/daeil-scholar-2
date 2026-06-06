@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiClientError } from '../api/client';
 import type { LikeToggleResponse } from '../types/api';
+import { invalidateFeedSummaryQueries } from '../utils/feedQueryInvalidation';
 
 interface UseNoticeLikeToggleOptions {
   onAuthError?: () => void;
@@ -54,7 +55,7 @@ export function useNoticeLikeToggle(
     onSuccess: (data) => {
       setLiked(data.liked);
       setLikeCnt(data.likeCnt);
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
+      invalidateFeedSummaryQueries(queryClient);
     },
 
     onError: (_err, _vars, context) => {

@@ -1,10 +1,23 @@
 // useComments — React Query hooks for comment list, add, and delete
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { ApiClientError } from '../api/client';
-import type { Comment, CommentCreateRequest } from '../types/api';
+import type { Comment, CommentCreateRequest, NoticeDetail } from '../types/api';
+import { invalidateFeedSummaryQueries } from '../utils/feedQueryInvalidation';
 
 const AUTH_ERROR_STATUS = 401;
+
+function updateDetailCommentCount(
+  queryClient: QueryClient,
+  seq: number,
+  delta: number,
+) {
+  queryClient.setQueryData<NoticeDetail>(['feed', 'detail', String(seq)], (prev) => {
+    if (!prev) return prev;
+    return { ...prev, commentCnt: Math.max(0, prev.commentCnt + delta) };
+  });
+}
 
 export function useComments(seq: number) {
   return useQuery({
@@ -27,8 +40,8 @@ export function useAddComment(seq: number, options?: UseAddCommentOptions) {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed', 'comments', seq] });
-      queryClient.invalidateQueries({ queryKey: ['feed', 'detail', String(seq)] });
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
+      updateDetailCommentCount(queryClient, seq, 1);
+      invalidateFeedSummaryQueries(queryClient);
     },
 
     onError: (error: Error) => {
@@ -52,8 +65,8 @@ export function useDeleteComment(seq: number) {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed', 'comments', seq] });
-      queryClient.invalidateQueries({ queryKey: ['feed', 'detail', String(seq)] });
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
+      updateDetailCommentCount(queryClient, seq, -1);
+      invalidateFeedSummaryQueries(queryClient);
     },
   });
 }
