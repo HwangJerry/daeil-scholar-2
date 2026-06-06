@@ -6,6 +6,7 @@ import type { SocialLinkMode } from '../types/api';
 
 interface MergeState {
   phone?: string;
+  email?: string;
 }
 
 export function AccountLinkPage() {
@@ -22,6 +23,7 @@ export function AccountLinkPage() {
 
   const state = (location.state ?? null) as MergeState | null;
   const initialPhone = state?.phone ?? '';
+  const initialEmail = state?.email ?? '';
 
   // merge mode without a phone in router state is an invalid entry point — bounce back to new mode
   if (mode === 'merge' && !initialPhone) {
@@ -39,7 +41,12 @@ export function AccountLinkPage() {
       <div className="w-full max-w-sm px-4">
         <h1 className="mb-2 text-center text-xl font-bold text-text-primary">{heading}</h1>
         <p className="mb-6 text-center text-[13px] text-text-tertiary">{subheading}</p>
-        <AccountLinkForm token={token} mode={mode} initialPhone={initialPhone} />
+        <AccountLinkForm
+          token={token}
+          mode={mode}
+          initialPhone={initialPhone}
+          initialEmail={initialEmail}
+        />
       </div>
     </div>
   );

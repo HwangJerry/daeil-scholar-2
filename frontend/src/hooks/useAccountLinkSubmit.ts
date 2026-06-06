@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiClientError } from '../api/client';
 import { useAuth } from './useAuth';
-import type { SocialLinkRequest } from '../types/api';
+import type { AuthUser, SocialLinkRequest } from '../types/api';
 
 interface Result {
   submitting: boolean;
@@ -23,7 +23,11 @@ export function useAccountLinkSubmit(): Result {
       setError('');
       setSubmitting(true);
       try {
-        await api.post('/api/auth/social/link', body);
+        const user = await api.post<AuthUser>('/api/auth/social/link', body);
+        if (user.usrStatus === 'BBB') {
+          navigate('/login?error=pending_approval', { replace: true });
+          return;
+        }
         await fetchUser();
         navigate('/', { replace: true });
       } catch (err) {

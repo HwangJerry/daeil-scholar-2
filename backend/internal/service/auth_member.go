@@ -38,7 +38,7 @@ func (s *AuthService) UpdateProfilePhotoIfEmpty(usrSeq int, url string) error {
 	return s.repo.UpdateProfilePhotoIfEmpty(usrSeq, url)
 }
 
-// UpdateMemberOptionalFields updates the merge-editable optional fields on an existing member.
-func (s *AuthService) UpdateMemberOptionalFields(usrSeq int, fn, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) error {
-	return s.repo.UpdateMemberOptionalFields(usrSeq, fn, fmDept, jobCat, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic)
+// UpdateMemberMergeFields updates merge-editable fields on an existing member.
+func (s *AuthService) UpdateMemberMergeFields(usrSeq int, name, email, fn, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) error {
+	return s.repo.UpdateMemberMergeFields(usrSeq, name, email, fn, fmDept, jobCat, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic)
 }

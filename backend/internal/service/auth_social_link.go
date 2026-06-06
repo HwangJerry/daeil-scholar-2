@@ -73,8 +73,8 @@ func (s *AuthService) mergeSocialAccount(params SocialLinkParams, memberSvc *Mem
 	if existing == nil {
 		return nil, false, ErrPhoneNotFound
 	}
-	if err := s.repo.UpdateMemberOptionalFields(
-		existing.USRSeq, params.FN, params.FmDept, params.JobCat,
+	if err := s.repo.UpdateMemberMergeFields(
+		existing.USRSeq, params.Name, params.Email, params.FN, params.FmDept, params.JobCat,
 		params.BizName, params.BizDesc, params.BizAddr, params.Position,
 		params.USRPhonePublic, params.USREmailPublic,
 	); err != nil {

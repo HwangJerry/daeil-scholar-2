@@ -1,4 +1,4 @@
-// AccountLinkMergeForm — Integrated signup form for users whose phone matches an existing member. Prefills from the matched member and locks core identifiers.
+// AccountLinkMergeForm — Integrated signup form for users whose phone matches an existing member. Prefills from the matched member and locks the matched phone.
 import { useState } from 'react';
 import { ProfileFieldsSection } from './ProfileFieldsSection';
 import { defaultProfileFieldValues } from './profileFieldValues';
@@ -15,11 +15,12 @@ const FN_REGEX = /^[0-9]+$/;
 interface AccountLinkMergeFormProps {
   token: string;
   initialPhone: string;
+  initialEmail: string;
 }
 
-const MERGE_DISABLED_FIELDS: Array<keyof ProfileFieldValues> = ['name', 'phone', 'email'];
+const MERGE_DISABLED_FIELDS: Array<keyof ProfileFieldValues> = ['phone'];
 
-export function AccountLinkMergeForm({ token, initialPhone }: AccountLinkMergeFormProps) {
+export function AccountLinkMergeForm({ token, initialPhone, initialEmail }: AccountLinkMergeFormProps) {
   const { submitting, error, submit, setError } = useAccountLinkSubmit();
 
   const [profile, setProfile] = useState<ProfileFieldValues>({
@@ -37,11 +38,13 @@ export function AccountLinkMergeForm({ token, initialPhone }: AccountLinkMergeFo
   const matched = existing.data?.matched === true && !!existing.data.profile;
   if (!didPrefill && matched) {
     const p = existing.data!.profile!;
+    const existingEmail = (p.email ?? '').trim();
+    const fallbackEmail = initialEmail.trim();
     setDidPrefill(true);
     setProfile({
       name: p.name,
       phone: initialPhone,
-      email: p.email,
+      email: existingEmail || fallbackEmail,
       fn: p.fn,
       fmDept: p.fmDept,
       jobCat: p.jobCat,

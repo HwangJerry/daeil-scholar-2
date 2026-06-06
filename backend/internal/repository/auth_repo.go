@@ -214,9 +214,9 @@ func (r *AuthRepository) InsertMember(usrID, name, phone, fn, email, fmDept stri
 	return int(id), nil
 }
 
-// UpdateMemberOptionalFields updates the merge-editable fields for an existing member.
-// Core identifiers (USR_NAME, USR_PHONE, USR_EMAIL) and USR_STATUS are intentionally untouched.
-func (r *AuthRepository) UpdateMemberOptionalFields(usrSeq int, fn, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) error {
+// UpdateMemberMergeFields updates fields editable from the merge signup form.
+// USR_PHONE and USR_STATUS are intentionally untouched.
+func (r *AuthRepository) UpdateMemberMergeFields(usrSeq int, name, email, fn, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) error {
 	phonePublic := usrPhonePublic
 	if phonePublic == "" {
 		phonePublic = "N"
@@ -227,10 +227,10 @@ func (r *AuthRepository) UpdateMemberOptionalFields(usrSeq int, fn, fmDept strin
 	}
 	_, err := r.DB.Exec(`
 		UPDATE WEO_MEMBER
-		SET USR_FN = ?, USR_DEPT = ?, USR_JOB_CAT = ?, USR_BIZ_NAME = ?, USR_BIZ_DESC = ?,
+		SET USR_NAME = ?, USR_EMAIL = ?, USR_FN = ?, USR_DEPT = ?, USR_JOB_CAT = ?, USR_BIZ_NAME = ?, USR_BIZ_DESC = ?,
 		    USR_BIZ_ADDR = ?, USR_POSITION = ?, USR_PHONE_PUBLIC = ?, USR_EMAIL_PUBLIC = ?
 		WHERE USR_SEQ = ?
-	`, fn, fmDept, jobCat, bizName, bizDesc, bizAddr, position, phonePublic, emailPublic, usrSeq)
+	`, name, email, fn, fmDept, jobCat, bizName, bizDesc, bizAddr, position, phonePublic, emailPublic, usrSeq)
 	return err
 }
 

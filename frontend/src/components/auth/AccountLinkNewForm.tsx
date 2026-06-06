@@ -56,7 +56,7 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
   const handleConfirmMerge = () => {
     navigate(`/login/link?token=${encodeURIComponent(token)}&mode=merge`, {
       replace: true,
-      state: { phone: profile.phone },
+      state: { phone: profile.phone, email: profile.email },
     });
   };
 
@@ -91,12 +91,19 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
   };
 
   const bannerMatch = phoneBannerLookup.status === 'matched' ? phoneBannerLookup.profile : null;
-  const matchedPhoneKey = bannerMatch ? profile.phone.replace(/\D/g, '') : null;
+  const phoneKey = profile.phone.replace(/\D/g, '');
+  const matchedPhoneKey = bannerMatch ? phoneKey : null;
   const photoUrl =
     photoOverride !== null ? photoOverride.url : prefill.data?.profileImageUrl || null;
   const handlePhotoChange = (url: string | null) => setPhotoOverride({ url });
   const shouldShowMobileSheet =
     isMobile && bannerMatch !== null && matchedPhoneKey !== null && dismissedPhoneKey !== matchedPhoneKey;
+
+  useEffect(() => {
+    if (dismissedPhoneKey !== null && phoneKey !== dismissedPhoneKey) {
+      setDismissedPhoneKey(null);
+    }
+  }, [dismissedPhoneKey, phoneKey]);
 
   useEffect(() => {
     setIsPhoneMatchSheetOpen(shouldShowMobileSheet);
@@ -124,7 +131,7 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
 
       <SignupProfileImageEditor token={token} imageUrl={photoUrl} onChange={handlePhotoChange} />
 
-      {!isMobile && bannerMatch && (
+      {bannerMatch && (
         <PhoneMatchBanner
           matchedName={bannerMatch.name}
           matchedFN={bannerMatch.fn}

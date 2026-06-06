@@ -20,41 +20,49 @@ interface Result {
   refetch: () => Promise<SocialLinkPhoneMatchProfile | null>;
 }
 
-const isValidPhone = (v: string) => v.replace(/\D/g, '').length >= 9;
+const toPhoneKey = (v: string) => v.replace(/\D/g, '');
+const isValidPhoneKey = (v: string) => v.length >= 9;
+const isValidPhone = (v: string) => isValidPhoneKey(toPhoneKey(v));
 
 export function useSocialLinkPhoneMatch({ token, phone, debounceMs = 500 }: Options): Result {
   const [status, setStatus] = useState<PhoneMatchStatus>('idle');
   const [profile, setProfile] = useState<SocialLinkPhoneMatchProfile | null>(null);
-  const latestPhone = useRef(phone);
+  const [matchedPhoneKey, setMatchedPhoneKey] = useState<string | null>(null);
+  const latestPhoneKey = useRef(toPhoneKey(phone));
 
-  // Keep ref in sync outside of render so async stale-result checks see latest phone.
+  // Keep ref in sync outside of render so async stale-result checks see latest phone key.
   useEffect(() => {
-    latestPhone.current = phone;
+    latestPhoneKey.current = toPhoneKey(phone);
   }, [phone]);
 
   const runCheck = useCallback(
     async (p: string): Promise<SocialLinkPhoneMatchProfile | null> => {
-      if (!token || !isValidPhone(p)) {
+      const requestedPhoneKey = toPhoneKey(p);
+      if (!token || !isValidPhoneKey(requestedPhoneKey)) {
         setStatus('idle');
         setProfile(null);
+        setMatchedPhoneKey(null);
         return null;
       }
       setStatus('checking');
       try {
         const res = await getSocialLinkPhoneMatch(token, p);
-        if (latestPhone.current !== p) return null;
+        if (latestPhoneKey.current !== requestedPhoneKey) return null;
         if (res.matched && res.profile) {
           setStatus('matched');
           setProfile(res.profile);
+          setMatchedPhoneKey(requestedPhoneKey);
           return res.profile;
         }
         setStatus('unmatched');
         setProfile(null);
+        setMatchedPhoneKey(null);
         return null;
       } catch {
-        if (latestPhone.current === p) {
+        if (latestPhoneKey.current === requestedPhoneKey) {
           setStatus('error');
           setProfile(null);
+          setMatchedPhoneKey(null);
         }
         return null;
       }
@@ -80,9 +88,15 @@ export function useSocialLinkPhoneMatch({ token, phone, debounceMs = 500 }: Opti
   const refetch = useCallback(() => runCheck(phone), [phone, runCheck]);
 
   // Derived: invalid phone always presents as 'idle' / null regardless of prior result.
-  const valid = isValidPhone(phone);
-  const displayStatus: PhoneMatchStatus = valid ? status : 'idle';
-  const displayProfile = valid ? profile : null;
+  const phoneKey = toPhoneKey(phone);
+  const valid = isValidPhoneKey(phoneKey);
+  const isCurrentMatch = status === 'matched' && matchedPhoneKey === phoneKey;
+  const displayStatus: PhoneMatchStatus = valid
+    ? isCurrentMatch || status !== 'matched'
+      ? status
+      : 'idle'
+    : 'idle';
+  const displayProfile = valid && isCurrentMatch ? profile : null;
 
   return { status: displayStatus, profile: displayProfile, onBlur, refetch };
 }

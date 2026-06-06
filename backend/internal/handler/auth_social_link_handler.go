@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/service"
@@ -43,11 +44,13 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 	if mode == "" {
 		mode = service.SocialLinkModeNew
 	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.Email = strings.TrimSpace(req.Email)
 	if req.Token == "" || req.Phone == "" {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "Missing required fields")
 		return
 	}
-	if mode == service.SocialLinkModeNew && req.Name == "" {
+	if req.Name == "" || req.Email == "" {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "Missing required fields")
 		return
 	}
@@ -133,6 +136,12 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
+	if user.USRStatus == "BBB" {
+		respondJSON(w, http.StatusAccepted, authUser)
+		return
+	}
+
 	if err := h.service.LoginWithBridge(user, w, r); err != nil {
 		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 처리 중 오류가 발생했습니다")
 		return
@@ -141,6 +150,5 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		h.service.CacheKakaoToken(user.USRSeq, linkData.AccessToken)
 	}
 
-	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
 	respondJSON(w, http.StatusOK, authUser)
 }

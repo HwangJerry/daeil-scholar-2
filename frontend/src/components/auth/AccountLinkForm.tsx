@@ -7,11 +7,18 @@ interface AccountLinkFormProps {
   token: string;
   mode: SocialLinkMode;
   initialPhone?: string;
+  initialEmail?: string;
 }
 
-export function AccountLinkForm({ token, mode, initialPhone }: AccountLinkFormProps) {
+export function AccountLinkForm({ token, mode, initialPhone, initialEmail }: AccountLinkFormProps) {
   if (mode === 'merge') {
-    return <AccountLinkMergeForm token={token} initialPhone={initialPhone ?? ''} />;
+    return (
+      <AccountLinkMergeForm
+        token={token}
+        initialPhone={initialPhone ?? ''}
+        initialEmail={initialEmail ?? ''}
+      />
+    );
   }
   return <AccountLinkNewForm token={token} />;
 }
