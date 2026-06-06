@@ -118,7 +118,7 @@ export function SearchFilter({ onSearch }: SearchFilterProps) {
             <Search size={13} className="text-text-placeholder flex-shrink-0" />
             <input
               ref={inputRef}
-              type="search"
+              type="text"
               enterKeyHint="search"
               autoComplete="off"
               placeholder="이름 또는 태그로 검색"
