@@ -15,7 +15,7 @@ import (
 var ogPostTmpl string
 
 const (
-	ogSiteName    = "대일외고 장학회 | 대일외국어고등학교 장학재단"
+	ogSiteName    = "대일외고 장학회"
 	ogDefaultDesc = "대일외고 장학회 — 대일외국어고등학교(대일외고) 재학생 장학금 지원과 동문 네트워크를 운영합니다."
 )
 

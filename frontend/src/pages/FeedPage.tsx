@@ -11,7 +11,7 @@ export function FeedPage() {
     <>
       <PageMeta canonicalPath="/" />
       <header className="sr-only">
-        <h1>대일외고 장학회 | 대일외국어고등학교 장학재단</h1>
+        <h1>대일외고 장학회</h1>
         <p>
           대일외고 장학회 공식 사이트입니다. 대일외국어고등학교(대일외고) 재학생 장학금
           지원과 동문 네트워크를 운영합니다.
