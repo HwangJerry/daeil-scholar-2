@@ -348,6 +348,7 @@ cd backend
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/server ./cmd/server
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/backfill ./cmd/backfill
 cd ..
+chmod 755 dist/server dist/backfill
 
 echo "=== Building User SPA (patch-mode=${PATCH_MODE}) ==="
 cd frontend
@@ -378,13 +379,13 @@ cd ..
 echo "=== Uploading Go binary ==="
 scp "${SCP_OPTS[@]}" dist/server "${TARGET}:/app/backend/server.new"
 scp "${SCP_OPTS[@]}" dist/backfill "${TARGET}:/app/backend/backfill"
-ssh "${SSH_OPTS[@]}" "${TARGET}" 'mv /app/backend/server.new /app/backend/server'
+ssh "${SSH_OPTS[@]}" "${TARGET}" 'mv /app/backend/server.new /app/backend/server && chmod 755 /app/backend/server /app/backend/backfill'
 
 echo "=== Uploading User SPA ==="
-rsync -avz --delete -e "ssh ${SSH_OPTS[*]}" frontend/dist/ "${TARGET}:/var/www/app/"
+rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" frontend/dist/ "${TARGET}:/var/www/app/"
 
 echo "=== Uploading Admin SPA ==="
-rsync -avz --delete -e "ssh ${SSH_OPTS[*]}" admin/dist/ "${TARGET}:/var/www/admin/"
+rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" admin/dist/ "${TARGET}:/var/www/admin/"
 
 echo "=== Reloading systemd and restarting backend ==="
 ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'
