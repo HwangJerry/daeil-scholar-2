@@ -9,10 +9,11 @@ import (
 type AdminNoticeService struct {
 	repo     *repository.AdminNoticeRepository
 	fileRepo *repository.FileRepository
+	 notifier PostPushNotifier
 }
 
-func NewAdminNoticeService(repo *repository.AdminNoticeRepository, fileRepo *repository.FileRepository) *AdminNoticeService {
-	return &AdminNoticeService{repo: repo, fileRepo: fileRepo}
+func NewAdminNoticeService(repo *repository.AdminNoticeRepository, fileRepo *repository.FileRepository, notifier PostPushNotifier) *AdminNoticeService {
+	return &AdminNoticeService{repo: repo, fileRepo: fileRepo, notifier: notifier}
 }
 
 func (s *AdminNoticeService) List(page, size int, keyword string) ([]model.AdminNoticeRow, int, error) {
@@ -61,6 +62,9 @@ func (s *AdminNoticeService) Create(subject, markdownText, regName string, usrSe
 	}
 	if err := s.fileRepo.AttachFilesToNotice(seq, attachedFileSeqs); err != nil {
 		return seq, err
+	}
+	if s.notifier != nil {
+		s.notifier.NotifyPostPublished(usrSeq, seq, subject)
 	}
 	return seq, nil
 }

@@ -7,3 +7,7 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// RefreshTokenRequest is the request body for POST /api/auth/refresh.
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refreshToken"`
+}

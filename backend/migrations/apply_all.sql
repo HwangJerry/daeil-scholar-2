@@ -353,6 +353,44 @@ CREATE TABLE IF NOT EXISTS WEO_VISIT_SUMMARY (
 
 
 -- =============================================================================
+-- 028: Mobile push device tokens
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS ALUMNI_MOBILE_DEVICE_TOKEN (
+    MDT_SEQ      INT AUTO_INCREMENT PRIMARY KEY,
+    USR_SEQ      INT NOT NULL,
+    PLATFORM     VARCHAR(16) NOT NULL,
+    DEVICE_TOKEN VARCHAR(191) NOT NULL,
+    LOCALE       VARCHAR(16) NULL,
+    STATUS       ENUM('ACTIVE','INACTIVE','STALE','UNVERIFIED','REVOKED') DEFAULT 'ACTIVE',
+    INVALID_COUNT INT NOT NULL DEFAULT 0,
+    LAST_SEEN_AT DATETIME NULL,
+    CREATED_AT   DATETIME NULL,
+    UPDATED_AT   DATETIME NULL,
+    UNIQUE KEY UK_MOBILE_DEVICE_TOKEN (DEVICE_TOKEN),
+    INDEX IDX_USR (USR_SEQ, STATUS)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CALL _add_column_if_not_exists('ALUMNI_MOBILE_DEVICE_TOKEN', 'INVALID_COUNT', 'INT NOT NULL DEFAULT 0 AFTER STATUS');
+ALTER TABLE ALUMNI_MOBILE_DEVICE_TOKEN
+    MODIFY STATUS ENUM('ACTIVE','INACTIVE','STALE','UNVERIFIED','REVOKED') DEFAULT 'ACTIVE';
+
+-- =============================================================================
+-- 030: Mobile refresh-token one-time use
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS ALUMNI_MOBILE_REFRESH_TOKEN (
+    MRT_JTI        VARCHAR(64) NOT NULL PRIMARY KEY,
+    USR_SEQ        INT NOT NULL,
+    MRT_SID        VARCHAR(64) NOT NULL,
+    EXPIRES_AT     DATETIME NOT NULL,
+    CREATED_AT     DATETIME NOT NULL,
+    MRT_REVOKED_AT DATETIME NULL,
+    INDEX IDX_USR (USR_SEQ),
+    INDEX IDX_EXPIRES (EXPIRES_AT),
+    INDEX IDX_REVOKED (MRT_REVOKED_AT)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- =============================================================================
 -- Cleanup: Drop helper procedures
 -- =============================================================================
 DROP PROCEDURE IF EXISTS _add_column_if_not_exists;
@@ -393,6 +431,10 @@ SELECT 'ALUMNI_PASSWORD_RESET' AS chk, COUNT(*) AS found FROM information_schema
 
 -- 017: Notification table
 SELECT 'ALUMNI_NOTIFICATION' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_NOTIFICATION';
+-- 028: Mobile push device token table
+SELECT 'ALUMNI_MOBILE_DEVICE_TOKEN' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_MOBILE_DEVICE_TOKEN';
+-- 030: Mobile refresh-token table
+SELECT 'ALUMNI_MOBILE_REFRESH_TOKEN' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_MOBILE_REFRESH_TOKEN';
 
 -- 023: Visit tracking tables
 SELECT 'WEO_VISIT_DAILY' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_VISIT_DAILY';

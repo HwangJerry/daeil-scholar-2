@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/config"
@@ -87,6 +88,153 @@ func (h *AuthHandler) KakaoCallback(w http.ResponseWriter, r *http.Request) {
 		Bool("has_profile_image", info.ProfileImageURL != "").
 		Msg("kakao: token exchanged")
 	h.handleSocialCallback(w, r, "KT", info)
+}
+
+func (h *AuthHandler) MobileLogin(w http.ResponseWriter, r *http.Request) {
+	var req model.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
+		return
+	}
+	if req.USRID == "" || req.Password == "" {
+		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "아이디와 비밀번호를 입력하세요")
+		return
+	}
+	user, err := h.memberSvc.LoginWithPassword(req.USRID, req.Password)
+	if err != nil {
+		if errors.Is(err, service.ErrPendingApproval) {
+			respondError(w, http.StatusForbidden, "PENDING_APPROVAL", "가입 신청이 접수된 계정입니다. 관리자 승인 후 로그인 가능합니다.")
+			return
+		}
+		h.logger.Error().Err(err).Str("usrId", req.USRID).Msg("mobile login: password verification failed")
+		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 처리 중 오류가 발생했습니다")
+		return
+	}
+	if user == nil {
+		respondError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "아이디 또는 비밀번호가 올바르지 않습니다")
+		return
+	}
+	if err := h.service.LoginWithBridge(user, w, r); err != nil {
+		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("mobile login: bridge session failed")
+		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 처리 중 오류가 발생했습니다")
+		return
+	}
+	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
+	mobileSessionID := h.service.GenerateSessionID()
+	if mobileSessionID == "" {
+		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 토큰 생성에 실패했습니다")
+		return
+	}
+	mobileToken, err := h.service.GenerateMobileJWT(&authUser, mobileSessionID)
+	if err != nil {
+		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("mobile login: token issue failed")
+		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 토큰 발급에 실패했습니다")
+		return
+	}
+	refreshToken, refreshJTI, refreshExpiresAt, err := h.service.GenerateMobileRefreshJWT(&authUser, mobileSessionID)
+	if err != nil {
+		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("mobile login: refresh token issue failed")
+		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 토큰 재발급에 실패했습니다")
+		return
+	}
+	if err := h.service.RecordMobileRefreshToken(authUser.USRSeq, mobileSessionID, refreshJTI, refreshExpiresAt); err != nil {
+		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("mobile login: failed to persist refresh token")
+		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 토큰 재발급에 실패했습니다")
+		return
+	}
+	now := time.Now()
+	respondJSON(w, http.StatusOK, struct {
+		USRSeq           int    `json:"usrSeq"`
+		USRID            string `json:"usrId"`
+		USRName          string `json:"usrName"`
+		USRStatus        string `json:"usrStatus"`
+		AccessToken      string `json:"accessToken"`
+		RefreshToken     string `json:"refreshToken"`
+		AccessIssuedAt   int64  `json:"accessIssuedAt"`
+		AccessExpiresAt  int64  `json:"accessExpiresAt"`
+		RefreshExpiresAt int64  `json:"refreshExpiresAt"`
+		Sid              string `json:"sid"`
+		Jti              string `json:"jti"`
+	}{
+		USRSeq:           authUser.USRSeq,
+		USRID:            authUser.USRID,
+		USRName:          authUser.USRName,
+		USRStatus:        authUser.USRStatus,
+		AccessToken:      mobileToken,
+		RefreshToken:     refreshToken,
+		AccessIssuedAt:   now.Unix(),
+		AccessExpiresAt:  now.Add(h.cfg.JWT.MaxAge).Unix(),
+		RefreshExpiresAt: now.Add(h.cfg.JWT.MaxAge).Unix(),
+		Sid:              mobileSessionID,
+		Jti:              refreshJTI,
+	})
+}
+
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	var req model.RefreshTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
+		return
+	}
+
+	refreshToken := strings.TrimSpace(req.RefreshToken)
+	if refreshToken == "" {
+		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "refresh token is required")
+		return
+	}
+
+	user, sid, refreshJTI, err := h.service.ValidateMobileRefreshToken(refreshToken)
+	if err != nil || user == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid refresh token")
+		return
+	}
+	if ok, err := h.service.ConsumeMobileRefreshToken(user.USRSeq, refreshJTI); err != nil {
+		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("refresh: failed to consume refresh token")
+		respondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Failed to refresh token")
+		return
+	} else if !ok {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid refresh token")
+		return
+	}
+
+	if sid == "" {
+		sid = h.service.GenerateSessionID()
+	}
+
+	newAccessToken, err := h.service.GenerateMobileJWT(user, sid)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Failed to reissue access token")
+		return
+	}
+
+	newRefreshToken, newRefreshJTI, newRefreshExpAt, err := h.service.GenerateMobileRefreshJWT(user, sid)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Failed to reissue refresh token")
+		return
+	}
+	if err := h.service.RecordMobileRefreshToken(user.USRSeq, sid, newRefreshJTI, newRefreshExpAt); err != nil {
+		respondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Failed to reissue refresh token")
+		return
+	}
+
+	now := time.Now()
+	respondJSON(w, http.StatusOK, struct {
+		AccessToken      string `json:"accessToken"`
+		RefreshToken     string `json:"refreshToken"`
+		AccessIssuedAt   int64  `json:"accessIssuedAt"`
+		AccessExpiresAt  int64  `json:"accessExpiresAt"`
+		RefreshExpiresAt int64  `json:"refreshExpiresAt"`
+		Sid              string `json:"sid"`
+		Jti              string `json:"jti"`
+	}{
+		AccessToken:      newAccessToken,
+		RefreshToken:     newRefreshToken,
+		AccessIssuedAt:   now.Unix(),
+		AccessExpiresAt:  now.Add(h.cfg.JWT.MaxAge).Unix(),
+		RefreshExpiresAt: now.Add(h.cfg.JWT.MaxAge).Unix(),
+		Sid:              sid,
+		Jti:              newRefreshJTI,
+	})
 }
 
 // KakaoLink delegates to SocialLink for backward compatibility.

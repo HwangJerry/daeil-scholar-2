@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
@@ -89,6 +90,56 @@ func (r *AuthRepository) FindMemberByFNName(fn string, name string) (*model.User
 		return nil, err
 	}
 	return &user, nil
+}
+
+// InsertMobileRefreshToken stores a refresh token identifier for replay protection.
+func (r *AuthRepository) InsertMobileRefreshToken(usrSeq int, sid string, jti string, expAt time.Time) error {
+	_, err := r.DB.Exec(`
+		INSERT INTO ALUMNI_MOBILE_REFRESH_TOKEN
+			(MRT_JTI, USR_SEQ, MRT_SID, EXPIRES_AT, CREATED_AT)
+		VALUES (?, ?, ?, ?, NOW())
+	`, jti, usrSeq, sid, expAt)
+	return err
+}
+
+// RevokeMobileRefreshToken atomically marks a non-expired, non-revoked token as revoked.
+// Returns true when a row was revoked.
+func (r *AuthRepository) RevokeMobileRefreshToken(usrSeq int, jti string) (bool, error) {
+	result, err := r.DB.Exec(`
+		UPDATE ALUMNI_MOBILE_REFRESH_TOKEN
+		SET MRT_REVOKED_AT = NOW()
+		WHERE MRT_JTI = ? AND USR_SEQ = ? AND MRT_REVOKED_AT IS NULL AND EXPIRES_AT > NOW()
+	`, jti, usrSeq)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
+// RevokeMobileRefreshTokensByUser revokes all active refresh tokens for a user.
+func (r *AuthRepository) RevokeMobileRefreshTokensByUser(usrSeq int) error {
+	_, err := r.DB.Exec(`
+		UPDATE ALUMNI_MOBILE_REFRESH_TOKEN
+		SET MRT_REVOKED_AT = NOW()
+		WHERE USR_SEQ = ? AND MRT_REVOKED_AT IS NULL
+	`, usrSeq)
+	return err
+}
+
+// DeleteExpiredMobileRefreshTokens removes revoked or expired mobile refresh tokens.
+func (r *AuthRepository) DeleteExpiredMobileRefreshTokens() (int64, error) {
+	result, err := r.DB.Exec(`
+		DELETE FROM ALUMNI_MOBILE_REFRESH_TOKEN
+		WHERE MRT_REVOKED_AT IS NOT NULL OR EXPIRES_AT < NOW()
+	`)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 func (r *AuthRepository) InsertSocialLink(usrSeq int, gate string, socialID string, email string) error {

@@ -21,6 +21,7 @@ import (
 // deps holds all wired dependencies needed by the application lifecycle.
 type deps struct {
 	authService            *service.AuthService
+	authRepo               *repository.AuthRepository
 	handlers               handlers
 	cacheStore             *cache.Cache
 	donationRepo           *repository.DonationRepository
@@ -31,7 +32,7 @@ type deps struct {
 	emailQueue             chan model.EmailMessage
 	emailService           *service.EmailService
 	subscriptionBillingJob *job.SubscriptionBillingJob
-	visitJob          *job.VisitAggregationJob
+	visitJob               *job.VisitAggregationJob
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
@@ -64,6 +65,13 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 
 	realtimeHub := realtime.NewHub(logger)
 	messageNotifier := service.NewRealtimeMessageNotifier(realtimeHub)
+	pushTokenRepo := repository.NewMobileDeviceTokenRepository(db)
+	var pushProvider service.MobilePushProvider
+	if cfg.Push.APNsKeyID != "" && cfg.Push.APNSTeamID != "" && cfg.Push.APNsBundleID != "" &&
+		(cfg.Push.APNsKeyPath != "" || cfg.Push.APNsKeyValue != "") {
+		pushProvider = service.NewAPNsPushProvider(cfg.Push, logger)
+	}
+	pushService := service.NewMobilePushService(pushTokenRepo, pushProvider, logger)
 
 	// Email infrastructure
 	emailQueue := make(chan model.EmailMessage, 100)
@@ -82,7 +90,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	adService := service.NewAdService(adRepo)
 	adLikeService := service.NewAdLikeService(adLikeRepo)
 	adCommentService := service.NewAdCommentService(adCommentRepo)
-	adminNoticeSvc := service.NewAdminNoticeService(adminNoticeRepo, fileRepo)
+	adminNoticeSvc := service.NewAdminNoticeService(adminNoticeRepo, fileRepo, pushService)
 	adminDisclosureSvc := service.NewAdminDisclosureService(adminDisclosureRepo, fileRepo)
 	disclosureSvc := service.NewDisclosureService(disclosureRepo)
 	adminAdSvc := service.NewAdminAdService(adminAdRepo)
@@ -109,7 +117,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	likeService := service.NewLikeService(likeRepo, feedRepo)
 	commentService := service.NewCommentService(commentRepo)
 	myDonationService := service.NewMyDonationService(myDonationRepo)
-	messageService := service.NewMessageService(messageRepo, profileRepo, messageNotifier)
+	messageService := service.NewMessageService(messageRepo, profileRepo, messageNotifier, pushService)
 	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
 	passwordChangeSvc := service.NewPasswordChangeService(profileRepo)
 	subscriptionRepo := repository.NewSubscriptionRepository(db)
@@ -126,48 +134,50 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	feedPresenter := presenter.NewFeedPresenter()
 
 	h := handlers{
-		health:         handler.NewHealthHandler(db),
-		auth:           handler.NewAuthHandler(authService, memberService, registrationService, profileService, cacheStore, cfg, logger),
-		feed:           handler.NewFeedHandler(feedService, likeService, feedPresenter),
-		like:           handler.NewLikeHandler(likeService),
-		comment:        handler.NewCommentHandler(commentService),
-		donation:       handler.NewDonationHandler(donationService),
-		alumni:         handler.NewAlumniHandler(alumniService),
-		profile:        handler.NewProfileHandler(profileService),
-		profileUpload:  handler.NewProfileUploadHandler(profileUploadService),
-		ad:             handler.NewAdHandler(adService),
-		adLike:         handler.NewAdLikeHandler(adLikeService),
-		adComment:      handler.NewAdCommentHandler(adCommentService),
-		adminNotice:     handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
-		adminDisclosure: handler.NewAdminDisclosureHandler(adminDisclosureSvc, feedPresenter),
-		disclosure:      handler.NewDisclosureHandler(disclosureSvc, feedPresenter),
-		adminAd:        handler.NewAdminAdHandler(adminAdSvc),
-		adminDonation:  handler.NewAdminDonationHandler(adminDonationOrchestrator),
-		adminMember:    handler.NewAdminMemberHandler(adminMemberSvc),
-		adminDashboard: handler.NewAdminDashboardHandler(adminDashboardSvc),
+		health:            handler.NewHealthHandler(db),
+		auth:              handler.NewAuthHandler(authService, memberService, registrationService, profileService, cacheStore, cfg, logger),
+		feed:              handler.NewFeedHandler(feedService, likeService, feedPresenter),
+		like:              handler.NewLikeHandler(likeService),
+		comment:           handler.NewCommentHandler(commentService),
+		donation:          handler.NewDonationHandler(donationService),
+		alumni:            handler.NewAlumniHandler(alumniService),
+		profile:           handler.NewProfileHandler(profileService),
+		profileUpload:     handler.NewProfileUploadHandler(profileUploadService),
+		ad:                handler.NewAdHandler(adService),
+		adLike:            handler.NewAdLikeHandler(adLikeService),
+		adComment:         handler.NewAdCommentHandler(adCommentService),
+		adminNotice:       handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
+		adminDisclosure:   handler.NewAdminDisclosureHandler(adminDisclosureSvc, feedPresenter),
+		disclosure:        handler.NewDisclosureHandler(disclosureSvc, feedPresenter),
+		adminAd:           handler.NewAdminAdHandler(adminAdSvc),
+		adminDonation:     handler.NewAdminDonationHandler(adminDonationOrchestrator),
+		adminMember:       handler.NewAdminMemberHandler(adminMemberSvc),
+		adminDashboard:    handler.NewAdminDashboardHandler(adminDashboardSvc),
 		adminUpload:       handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
 		adminAttachUpload: handler.NewAdminAttachmentUploadHandler(attachmentUploadOrchestrator, cfg.Upload.MaxFileSizeMB),
 		socialLinkPhoto:   handler.NewSocialLinkPhotoHandler(uploadOrchestrator, cacheStore, logger),
-		myDonation:     handler.NewMyDonationHandler(myDonationService),
-		message:        handler.NewMessageHandler(messageService),
-		payment:        handler.NewPaymentHandler(donateService, cfg.EasyPay),
-		subscription:   handler.NewSubscriptionHandler(subscriptionService, cfg.EasyPay),
-		og:             handler.NewOGHandler(ogService, cfg.Server.SiteBaseURL),
-		sitemap:        handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
-		rss:            handler.NewRSSHandler(rssService, cfg.Server.SiteBaseURL),
-		passwordReset:  handler.NewPasswordResetHandler(passwordResetService, logger),
-		passwordChange: handler.NewPasswordChangeHandler(passwordChangeSvc),
-		badge:          handler.NewBadgeHandler(messageService, logger),
+		myDonation:        handler.NewMyDonationHandler(myDonationService),
+		message:           handler.NewMessageHandler(messageService),
+		payment:           handler.NewPaymentHandler(donateService, cfg.EasyPay),
+		subscription:      handler.NewSubscriptionHandler(subscriptionService, cfg.EasyPay),
+		og:                handler.NewOGHandler(ogService, cfg.Server.SiteBaseURL),
+		sitemap:           handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
+		rss:               handler.NewRSSHandler(rssService, cfg.Server.SiteBaseURL),
+		passwordReset:     handler.NewPasswordResetHandler(passwordResetService, logger),
+		passwordChange:    handler.NewPasswordChangeHandler(passwordChangeSvc),
+		badge:             handler.NewBadgeHandler(messageService, logger),
 		adminJobCat:       handler.NewAdminJobCategoryHandler(adminJobCatSvc),
 		history:           handler.NewHistoryHandler(historySvc),
 		adminSubscription: handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
 		realtime:          handler.NewRealtimeHandler(realtimeHub, logger),
 		visit:             handler.NewVisitHandler(visitService, logger, cfg.Server.IsSecure()),
 		adminErrorReport:  handler.NewAdminErrorReportHandler(logger, debugHook),
+		push:              handler.NewPushHandler(pushService),
 	}
 
 	return &deps{
 		authService:            authService,
+		authRepo:               authRepo,
 		handlers:               h,
 		cacheStore:             cacheStore,
 		donationRepo:           donationRepo,
@@ -178,6 +188,6 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		emailQueue:             emailQueue,
 		emailService:           emailService,
 		subscriptionBillingJob: subscriptionBillingJob,
-		visitJob:          visitJob,
+		visitJob:               visitJob,
 	}, nil
 }

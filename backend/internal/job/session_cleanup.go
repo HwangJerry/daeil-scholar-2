@@ -13,6 +13,7 @@ import (
 type SessionCleanupJob struct {
 	sessionRepo       *repository.SessionRepository
 	passwordResetRepo *repository.PasswordResetRepository
+	authRepo          *repository.AuthRepository
 	logger            zerolog.Logger
 	cancel            context.CancelFunc
 }
@@ -21,11 +22,13 @@ type SessionCleanupJob struct {
 func NewSessionCleanupJob(
 	sessionRepo *repository.SessionRepository,
 	passwordResetRepo *repository.PasswordResetRepository,
+	authRepo *repository.AuthRepository,
 	logger zerolog.Logger,
 ) *SessionCleanupJob {
 	return &SessionCleanupJob{
 		sessionRepo:       sessionRepo,
 		passwordResetRepo: passwordResetRepo,
+		authRepo:          authRepo,
 		logger:            logger,
 	}
 }
@@ -50,6 +53,7 @@ func (j *SessionCleanupJob) Start() {
 			case <-ticker.C:
 				j.cleanSessions()
 				j.cleanExpiredTokens()
+				j.cleanExpiredMobileRefreshTokens()
 			}
 		}
 	}()
@@ -82,5 +86,19 @@ func (j *SessionCleanupJob) cleanExpiredTokens() {
 	}
 	if deleted > 0 {
 		j.logger.Info().Int64("count", deleted).Msg("expired password reset tokens cleaned")
+	}
+}
+
+func (j *SessionCleanupJob) cleanExpiredMobileRefreshTokens() {
+	if j.authRepo == nil {
+		return
+	}
+	deleted, err := j.authRepo.DeleteExpiredMobileRefreshTokens()
+	if err != nil {
+		j.logger.Error().Err(err).Msg("mobile refresh token cleanup failed")
+		return
+	}
+	if deleted > 0 {
+		j.logger.Info().Int64("count", deleted).Msg("expired/revoked mobile refresh tokens cleaned")
 	}
 }
