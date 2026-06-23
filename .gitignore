@@ -36,3 +36,6 @@ daeil-redesign-v2.jsx
 *.key
 *.pfx
 id_ed25519*
+# Design artifacts generated externally
+docs/design-system/
+frontend/design-system/
