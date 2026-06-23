@@ -1,5 +1,6 @@
 // AccountLinkPage — Kakao account linking / new registration. Mode (new|merge) is read from the URL, and merge mode also needs a phone via router state.
 import { useSearchParams, useLocation, Navigate } from 'react-router-dom';
+import { AuthScreen } from '../components/auth/AuthScreen';
 import { AccountLinkForm } from '../components/auth/AccountLinkForm';
 import { useBlockBack } from '../hooks/useBlockBack';
 import type { SocialLinkMode } from '../types/api';
@@ -37,17 +38,13 @@ export function AccountLinkPage() {
       : '카카오 계정으로 회원 정보를 입력해주세요.';
 
   return (
-    <div className="flex min-h-[60vh] items-start justify-center pt-10 md:pt-16 animate-fade-in-up">
-      <div className="w-full max-w-sm px-4">
-        <h1 className="mb-2 text-center text-xl font-bold text-text-primary">{heading}</h1>
-        <p className="mb-6 text-center text-[13px] text-text-tertiary">{subheading}</p>
-        <AccountLinkForm
-          token={token}
-          mode={mode}
-          initialPhone={initialPhone}
-          initialEmail={initialEmail}
-        />
-      </div>
-    </div>
+    <AuthScreen title={heading} description={subheading} align="start">
+      <AccountLinkForm
+        token={token}
+        mode={mode}
+        initialPhone={initialPhone}
+        initialEmail={initialEmail}
+      />
+    </AuthScreen>
   );
 }

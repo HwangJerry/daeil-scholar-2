@@ -6,8 +6,10 @@ import { Button } from '../ui/Button';
 
 const STORAGE_KEY = 'wip-unlock';
 const EXPECTED_CODE = (import.meta.env.VITE_WIP_ADMIN_CODE ?? '') as string;
+const VISUAL_CHECK_BYPASS = import.meta.env.VITE_VISUAL_CHECK_BYPASS_WIP === '1';
 
 function readUnlocked(): boolean {
+  if (VISUAL_CHECK_BYPASS) return true;
   if (!EXPECTED_CODE) return true;
   try {
     return sessionStorage.getItem(STORAGE_KEY) === '1';

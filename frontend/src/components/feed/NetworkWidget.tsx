@@ -7,7 +7,7 @@ import type { AlumniWidgetResponse } from '../../types/api';
 
 function NetworkWidgetSkeleton() {
   return (
-    <div className="rounded-[20px] bg-surface border border-border p-7 shadow-card">
+    <div className="rounded-xl bg-surface border border-border p-7 shadow-card">
       <Bone className="h-2.5 w-20 mb-5" />
       <Bone className="h-6 w-full mb-2" />
       <Bone className="h-6 w-3/4 mb-8" />
@@ -29,8 +29,8 @@ export function NetworkWidget() {
   const totalCount = data?.totalCount ?? 0;
 
   return (
-    <div className="rounded-[20px] bg-surface border border-border p-7 shadow-card">
-      <p className="text-[10px] font-semibold text-text-placeholder tracking-widest uppercase mb-5">
+    <div className="rounded-xl bg-surface border border-border p-7 shadow-card">
+      <p className="text-mini font-semibold text-text-placeholder tracking-widest uppercase mb-5">
         동문 네트워크
       </p>
 

@@ -97,13 +97,14 @@ function InboxMessageRow({ message }: { message: MessageItem }) {
 export function MessageInbox() {
   const [page, setPage] = useState(1);
   const { data, isFetching, isLoading, isError } = useInboxMessages(page);
+  const staggerClasses = ['stagger-1', 'stagger-2', 'stagger-3'];
 
   return (
     <div className="space-y-3">
       {isLoading && (
         <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 0.05}s` }}>
+          {staggerClasses.map((staggerClass) => (
+            <div key={staggerClass} className={`animate-fade-in-up ${staggerClass}`}>
               <MessageRowSkeleton />
             </div>
           ))}

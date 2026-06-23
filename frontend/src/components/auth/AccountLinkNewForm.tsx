@@ -15,6 +15,7 @@ import { PhoneMatchBanner, PhoneMatchBottomSheetContent } from './PhoneMatchBann
 import { SignupProfileImageEditor } from './SignupProfileImageEditor';
 import { Button } from '../ui/Button';
 import { isValidDepartment } from '../../constants/departments';
+import { AuthFormError } from './AuthFormPrimitives';
 
 const FN_REGEX = /^[0-9]+$/;
 
@@ -146,7 +147,7 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
         emailCheck={emailCheck}
       />
 
-      {error && <p className="text-sm text-error-text">{error}</p>}
+      {error && <AuthFormError>{error}</AuthFormError>}
 
       <Button type="submit" disabled={submitting} className="w-full">
         {submitting ? '처리 중...' : '확인'}

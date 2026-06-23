@@ -36,7 +36,7 @@ export function ConversationItem({ conversation, isActive, onSelect }: Conversat
           <span className="text-sm font-semibold truncate font-serif text-text-primary">
             {conversation.otherName}
           </span>
-          <span className="text-[11px] text-text-placeholder flex-shrink-0">
+          <span className="text-caption text-text-placeholder flex-shrink-0">
             {formatMessageDate(conversation.lastDate)}
           </span>
         </div>

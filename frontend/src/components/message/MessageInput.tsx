@@ -48,11 +48,10 @@ export function MessageInput({ recipientSeq, onMessageSent }: MessageInputProps)
             rows={1}
             placeholder="메시지를 입력하세요"
             disabled={isPending}
-            className="w-full resize-none bg-transparent text-sm text-text-primary outline-none placeholder:text-text-placeholder max-h-32 overflow-y-auto"
-            style={{ minHeight: '24px' }}
+            className="w-full min-h-6 resize-none bg-transparent text-sm text-text-primary outline-none placeholder:text-text-placeholder max-h-32 overflow-y-auto"
           />
           {content.length > CHAR_COUNTER_THRESHOLD && (
-            <span className="absolute bottom-0 right-0 text-[10px] text-text-placeholder">
+            <span className="absolute bottom-0 right-0 text-mini text-text-placeholder">
               {content.length}/{maxLength}
             </span>
           )}

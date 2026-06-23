@@ -7,6 +7,7 @@ import { FeedCardSkeleton } from './FeedCardSkeleton';
 
 export function FeedList() {
   const { items, hasMore, isFetching, loadMore } = useFeedPagination();
+  const loadingStaggerClasses = ['stagger-1', 'stagger-2', 'stagger-3', 'stagger-4'];
 
   const { sentinelRef } = useInfiniteScroll({
     hasMore,
@@ -21,8 +22,8 @@ export function FeedList() {
   if (items.length === 0 && isFetching) {
     return (
       <div className="flex flex-col gap-4">
-        {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 0.05}s` }}>
+        {loadingStaggerClasses.map((staggerClass) => (
+          <div key={staggerClass} className={`animate-fade-in-up ${staggerClass}`}>
             <FeedCardSkeleton />
           </div>
         ))}

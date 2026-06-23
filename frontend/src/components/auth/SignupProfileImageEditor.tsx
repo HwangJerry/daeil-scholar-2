@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { User } from 'lucide-react';
 import { uploadSocialLinkPhoto } from '../../api/auth';
 import { ApiClientError } from '../../api/client';
+import { AuthActionLink, AuthDividerMark, AuthFieldMessage } from './AuthFormPrimitives';
 
 interface Props {
   token: string;
@@ -75,29 +76,26 @@ export function SignupProfileImageEditor({ token, imageUrl, onChange }: Props) {
           </div>
         )}
       </button>
-      <div className="flex items-center gap-3 text-xs">
-        <button
-          type="button"
+      <div className="flex items-center gap-3">
+        <AuthActionLink
           onClick={openPicker}
           disabled={uploading}
-          className="text-primary hover:underline disabled:text-text-placeholder disabled:no-underline"
         >
           {uploading ? '업로드 중...' : '사진 변경'}
-        </button>
+        </AuthActionLink>
         {imageUrl && !uploading && (
           <>
-            <span className="text-border">|</span>
-            <button
-              type="button"
+            <AuthDividerMark />
+            <AuthActionLink
+              tone="danger"
               onClick={handleRemove}
-              className="text-text-placeholder hover:text-error-text"
             >
               이미지 제거
-            </button>
+            </AuthActionLink>
           </>
         )}
       </div>
-      {error && <p className="text-xs text-error-text">{error}</p>}
+      {error && <AuthFieldMessage tone="error">{error}</AuthFieldMessage>}
       <input
         ref={inputRef}
         type="file"

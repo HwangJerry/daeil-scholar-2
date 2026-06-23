@@ -61,7 +61,7 @@ export function AdDetailContent({ adItem, onClose, wrapperClassName }: AdDetailC
                 <span className="opacity-40">·</span>
               </>
             )}
-            <span className="text-[10px] uppercase tracking-wider font-medium">광고</span>
+            <span className="text-mini uppercase tracking-wider font-medium">광고</span>
             {adItem.regDate && (
               <>
                 <span className="opacity-40">·</span>
