@@ -7,6 +7,7 @@ import (
 
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/repository"
+	"github.com/dflh-saf/social-auth/kakao"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
 )
@@ -17,6 +18,7 @@ type AuthService struct {
 	sessionRepo *repository.SessionRepository
 	cfg         *config.Config
 	cache       *cache.Cache
+	kakaoClient *kakao.Client
 	httpClient  *http.Client
 	logger      zerolog.Logger
 }
@@ -27,14 +29,24 @@ func NewAuthService(
 	sessionRepo *repository.SessionRepository,
 	cfg *config.Config,
 	cacheStore *cache.Cache,
+	kakaoClient *kakao.Client,
 	logger zerolog.Logger,
 ) *AuthService {
 	client := &http.Client{Timeout: 10 * time.Second}
+	if kakaoClient == nil {
+		kakaoClient = kakao.NewClient(kakao.Config{
+			ClientID:     cfg.Kakao.ClientID,
+			ClientSecret: cfg.Kakao.ClientSecret,
+			RedirectURI:  cfg.Kakao.RedirectURI,
+			HTTPClient:   client,
+		})
+	}
 	return &AuthService{
 		repo:        repo,
 		sessionRepo: sessionRepo,
 		cfg:         cfg,
 		cache:       cacheStore,
+		kakaoClient: kakaoClient,
 		httpClient:  client,
 		logger:      logger,
 	}

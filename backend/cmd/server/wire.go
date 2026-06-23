@@ -13,6 +13,7 @@ import (
 	"github.com/dflh-saf/backend/internal/realtime"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
+	"github.com/dflh-saf/social-auth/kakao"
 	"github.com/jmoiron/sqlx"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
@@ -62,6 +63,11 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	visitRepo := repository.NewVisitRepository(db)
 
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
+	kakaoClient := kakao.NewClient(kakao.Config{
+		ClientID:     cfg.Kakao.ClientID,
+		ClientSecret: cfg.Kakao.ClientSecret,
+		RedirectURI:  cfg.Kakao.RedirectURI,
+	})
 
 	realtimeHub := realtime.NewHub(logger)
 	messageNotifier := service.NewRealtimeMessageNotifier(realtimeHub)
@@ -77,7 +83,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	emailQueue := make(chan model.EmailMessage, 100)
 	emailService := service.NewEmailService(cfg.SMTP, logger)
 
-	authService := service.NewAuthService(authRepo, sessionRepo, cfg, cacheStore, logger)
+	authService := service.NewAuthService(authRepo, sessionRepo, cfg, cacheStore, kakaoClient, logger)
 	memberService := service.NewMemberService(authRepo)
 	registrationService := service.NewRegistrationService(authRepo, profileRepo)
 	feedService := service.NewFeedService(feedRepo, adRepo, cacheStore)

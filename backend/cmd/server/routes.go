@@ -109,6 +109,7 @@ func registerPublicRoutes(r chi.Router, h handlers, cacheStore *cache.Cache) {
 	r.Get("/api/donation/summary", h.donation.GetSummary)
 	r.Get("/api/auth/kakao", h.auth.KakaoLogin)
 	r.Get("/api/auth/kakao/callback", h.auth.KakaoCallback)
+	r.Post("/api/auth/kakao/mobile", h.auth.KakaoMobileLogin)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/login", h.auth.Login)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/mobile/login", h.auth.MobileLogin)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/refresh", h.auth.Refresh)
