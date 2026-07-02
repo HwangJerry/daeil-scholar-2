@@ -88,7 +88,11 @@ Owner: Backend Team / Mobile Team Lead
 - `ios`: APNs device token, `apnsEnvironment=sandbox|production`
 - `android`: FCM registration token
 
-Android 실제 smoke는 Firebase project, 앱 Firebase config, backend service-account credentials, 실제 FCM token이 모두 있어야 가능하다.
+Device token은 최대 512자까지 저장하며 절대 truncate하지 않는다. 초과 토큰은 `400 INVALID_TOKEN`으로 거절한다.
+
+Android 등록 row는 APNs 전용 routing metadata를 저장하지 않으므로 `APNS_ENVIRONMENT`, `BUNDLE_ID`는 `NULL`이어야 한다. 기존 Android row는 backend migration `033_backfill_android_push_token_metadata_and_length.sql`에서 backfill한다.
+
+Android registration-only smoke는 Firebase credentials 없이 가능하다. Android delivery smoke는 Firebase project, 앱 Firebase config, backend service-account credentials, 실제 FCM token이 모두 있어야 가능하다.
 
 ## 7) 에러/재시도 규칙
 

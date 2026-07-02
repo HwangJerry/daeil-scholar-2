@@ -74,7 +74,10 @@ func (r *MobileDeviceTokenRepository) GetActiveTokensByUser(usrSeq int) ([]Mobil
 	var tokens []MobileDeviceToken
 	err := r.DB.Select(&tokens, `
 		SELECT MDT_SEQ, USR_SEQ, PLATFORM, DEVICE_TOKEN,
-		       COALESCE(APNS_ENVIRONMENT, 'production') AS APNS_ENVIRONMENT,
+		       CASE
+		           WHEN PLATFORM = 'ios' THEN COALESCE(APNS_ENVIRONMENT, 'production')
+		           ELSE ''
+		       END AS APNS_ENVIRONMENT,
 		       COALESCE(BUNDLE_ID, '') AS BUNDLE_ID
 		FROM ALUMNI_MOBILE_DEVICE_TOKEN
 		WHERE USR_SEQ = ? AND STATUS = 'ACTIVE'
@@ -89,7 +92,10 @@ func (r *MobileDeviceTokenRepository) GetActiveTokensForBroadcast(excludeUsrSeq 
 	var tokens []MobileDeviceToken
 	err := r.DB.Select(&tokens, `
 		SELECT dt.MDT_SEQ, dt.USR_SEQ, dt.PLATFORM, dt.DEVICE_TOKEN,
-		       COALESCE(dt.APNS_ENVIRONMENT, 'production') AS APNS_ENVIRONMENT,
+		       CASE
+		           WHEN dt.PLATFORM = 'ios' THEN COALESCE(dt.APNS_ENVIRONMENT, 'production')
+		           ELSE ''
+		       END AS APNS_ENVIRONMENT,
 		       COALESCE(dt.BUNDLE_ID, '') AS BUNDLE_ID
 		FROM ALUMNI_MOBILE_DEVICE_TOKEN dt
 		INNER JOIN WEO_MEMBER m ON m.USR_SEQ = dt.USR_SEQ

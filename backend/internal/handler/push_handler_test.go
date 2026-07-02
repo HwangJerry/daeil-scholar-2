@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/dflh-saf/backend/internal/middleware"
@@ -74,6 +75,60 @@ func TestPushHandlerRegisterDeviceAcceptsAndroid(t *testing.T) {
 		service.registerReq.APNsEnvironment != "" || service.registerReq.BundleID != "" ||
 		service.registerReq.Locale != "ko-KR" {
 		t.Fatalf("unexpected android register req: %#v", service.registerReq)
+	}
+}
+
+func TestPushHandlerRegisterDeviceAcceptsMaxLengthToken(t *testing.T) {
+	service := &fakePushDeviceService{}
+	handler := NewPushHandler(service)
+	token := strings.Repeat("a", maxPushDeviceTokenLength)
+	body, err := json.Marshal(map[string]string{
+		"platform":    "android",
+		"deviceToken": token,
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/push/device/register", bytes.NewReader(body))
+	req = req.WithContext(middleware.SetAuthUser(req.Context(), &model.AuthUser{USRSeq: 42}))
+	rec := httptest.NewRecorder()
+
+	handler.RegisterDevice(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if service.registerCalls != 1 {
+		t.Fatalf("expected one service call, got %d", service.registerCalls)
+	}
+	if service.registerReq.DeviceToken != token {
+		t.Fatalf("unexpected token length: got %d want %d", len(service.registerReq.DeviceToken), maxPushDeviceTokenLength)
+	}
+}
+
+func TestPushHandlerRegisterDeviceRejectsOversizedToken(t *testing.T) {
+	service := &fakePushDeviceService{}
+	handler := NewPushHandler(service)
+	token := strings.Repeat("a", maxPushDeviceTokenLength+1)
+	body, err := json.Marshal(map[string]string{
+		"platform":    "android",
+		"deviceToken": token,
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/push/device/register", bytes.NewReader(body))
+	req = req.WithContext(middleware.SetAuthUser(req.Context(), &model.AuthUser{USRSeq: 42}))
+	rec := httptest.NewRecorder()
+
+	handler.RegisterDevice(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	assertAPIErrorCode(t, rec, "INVALID_TOKEN")
+	if service.registerCalls != 0 {
+		t.Fatalf("expected service not called, got %d calls", service.registerCalls)
 	}
 }
 

@@ -16,6 +16,8 @@ type PushHandler struct {
 	}
 }
 
+const maxPushDeviceTokenLength = 512
+
 func NewPushHandler(pushService interface {
 	RegisterDeviceToken(usrSeq int, req model.PushDeviceRegistrationRequest) error
 	UnregisterDeviceToken(usrSeq int, token string) error
@@ -47,6 +49,10 @@ func (h *PushHandler) RegisterDevice(w http.ResponseWriter, r *http.Request) {
 	req.Platform = strings.ToLower(strings.TrimSpace(req.Platform))
 	if req.DeviceToken = strings.TrimSpace(req.DeviceToken); req.DeviceToken == "" {
 		respondError(w, http.StatusBadRequest, "INVALID_TOKEN", "디바이스 토큰이 필요합니다")
+		return
+	}
+	if len(req.DeviceToken) > maxPushDeviceTokenLength {
+		respondError(w, http.StatusBadRequest, "INVALID_TOKEN", "디바이스 토큰이 올바르지 않습니다")
 		return
 	}
 	if req.Platform != "ios" && req.Platform != "android" {

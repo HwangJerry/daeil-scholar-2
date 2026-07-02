@@ -80,3 +80,75 @@ func TestMobileDeviceTokenRepositoryUpsertTokenPreservesIOSAPNsMetadata(t *testi
 		t.Fatalf("unmet sql expectations: %v", err)
 	}
 }
+
+func TestMobileDeviceTokenRepositoryGetActiveTokensByUserReadsAndroidAPNsEnvironmentAsEmpty(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewMobileDeviceTokenRepository(sqlx.NewDb(db, "sqlmock"))
+	rows := sqlmock.NewRows([]string{
+		"MDT_SEQ",
+		"USR_SEQ",
+		"PLATFORM",
+		"DEVICE_TOKEN",
+		"APNS_ENVIRONMENT",
+		"BUNDLE_ID",
+	}).AddRow(1, 10, "android", "fcm-token-1", "", "")
+
+	mock.ExpectQuery(`(?s)CASE\s+WHEN PLATFORM = 'ios' THEN COALESCE\(APNS_ENVIRONMENT, 'production'\)\s+ELSE ''\s+END AS APNS_ENVIRONMENT.*FROM ALUMNI_MOBILE_DEVICE_TOKEN`).
+		WithArgs(10).
+		WillReturnRows(rows)
+
+	tokens, err := repo.GetActiveTokensByUser(10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("expected one token, got %d", len(tokens))
+	}
+	if tokens[0].APNsEnvironment != "" {
+		t.Fatalf("expected android APNs environment to be empty, got %#v", tokens[0])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet sql expectations: %v", err)
+	}
+}
+
+func TestMobileDeviceTokenRepositoryGetActiveTokensForBroadcastReadsIOSNullAPNsEnvironmentAsProduction(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewMobileDeviceTokenRepository(sqlx.NewDb(db, "sqlmock"))
+	rows := sqlmock.NewRows([]string{
+		"MDT_SEQ",
+		"USR_SEQ",
+		"PLATFORM",
+		"DEVICE_TOKEN",
+		"APNS_ENVIRONMENT",
+		"BUNDLE_ID",
+	}).AddRow(2, 11, "ios", "apns-token-1", "production", "kr.dflh.saf")
+
+	mock.ExpectQuery(`(?s)CASE\s+WHEN dt\.PLATFORM = 'ios' THEN COALESCE\(dt\.APNS_ENVIRONMENT, 'production'\)\s+ELSE ''\s+END AS APNS_ENVIRONMENT.*FROM ALUMNI_MOBILE_DEVICE_TOKEN dt`).
+		WithArgs(10).
+		WillReturnRows(rows)
+
+	tokens, err := repo.GetActiveTokensForBroadcast(10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("expected one token, got %d", len(tokens))
+	}
+	if tokens[0].APNsEnvironment != "production" {
+		t.Fatalf("expected iOS APNs environment fallback to production, got %#v", tokens[0])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet sql expectations: %v", err)
+	}
+}

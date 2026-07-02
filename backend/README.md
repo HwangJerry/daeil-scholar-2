@@ -42,7 +42,8 @@ When no push credentials are configured, the server keeps the existing no-op loc
 Validation rules:
 
 - `platform` must be `ios` or `android`; otherwise the API returns `400 INVALID_PLATFORM`.
-- `deviceToken` is required; otherwise the API returns `400 INVALID_TOKEN`.
+- `deviceToken` is required and must be at most 512 characters; otherwise the API returns `400 INVALID_TOKEN`.
+- Device tokens are stored up to 512 ASCII characters with binary collation and must never be truncated.
 - `apnsEnvironment` is required for iOS. `environment` is accepted as a request alias.
 - `debug`, `dev`, and `development` normalize to `sandbox`.
 - `release`, `prod`, `production`, `testflight`, and `appstore` normalize to `production`.
@@ -59,7 +60,7 @@ Android registration uses the same endpoint:
 }
 ```
 
-Android tokens are stored without APNs routing metadata; `APNS_ENVIRONMENT` and `BUNDLE_ID` remain `NULL` for FCM registrations.
+Android tokens are stored without APNs routing metadata; `APNS_ENVIRONMENT` and `BUNDLE_ID` remain `NULL` for FCM registrations. Migration `033_backfill_android_push_token_metadata_and_length.sql` backfills existing Android rows to clear any APNs metadata and expands token storage for longer FCM registration tokens.
 
 `POST /api/push/device/unregister` requires authentication.
 
@@ -104,6 +105,8 @@ APNs headers set by the provider:
 ### Operations
 
 To verify production setup, register a device token from the iOS app, create a message or admin notice, and check logs for `push: send result` with `event_type`, `event_id`, `user_id`, token id/hash, APNs status, and reason. Private keys and raw device tokens must not appear in logs.
+
+Registration-only smoke tests for Android do not require Firebase credentials because they only exercise authenticated token storage. Delivery smoke tests require Firebase service-account credentials, a Firebase project, app Firebase config, and a real FCM registration token.
 
 APNs failure handling:
 
