@@ -25,6 +25,9 @@ func NewMobileDeviceTokenRepository(db *sqlx.DB) *MobileDeviceTokenRepository {
 }
 
 func (r *MobileDeviceTokenRepository) UpsertToken(usrSeq int, req model.PushDeviceRegistrationRequest) error {
+	apnsEnvironment := nullableDeviceTokenMetadata(req.APNsEnvironment)
+	bundleID := nullableDeviceTokenMetadata(req.BundleID)
+
 	_, err := r.DB.Exec(`
 		INSERT INTO ALUMNI_MOBILE_DEVICE_TOKEN
 			(USR_SEQ, PLATFORM, DEVICE_TOKEN, APNS_ENVIRONMENT, BUNDLE_ID, LOCALE, STATUS, LAST_SEEN_AT, CREATED_AT, UPDATED_AT)
@@ -38,8 +41,12 @@ func (r *MobileDeviceTokenRepository) UpsertToken(usrSeq int, req model.PushDevi
 			STATUS = 'ACTIVE',
 			LAST_SEEN_AT = NOW(),
 			UPDATED_AT = NOW()
-	`, usrSeq, req.Platform, req.DeviceToken, req.APNsEnvironment, req.BundleID, req.Locale)
+	`, usrSeq, req.Platform, req.DeviceToken, apnsEnvironment, bundleID, req.Locale)
 	return err
+}
+
+func nullableDeviceTokenMetadata(value string) sql.NullString {
+	return sql.NullString{String: value, Valid: value != ""}
 }
 
 func (r *MobileDeviceTokenRepository) DeactivateToken(usrSeq int, deviceToken string) error {

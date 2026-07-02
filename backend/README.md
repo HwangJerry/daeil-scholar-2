@@ -14,9 +14,9 @@ Configure APNs token-based auth with values from Apple Developer:
 - `APNS_ENVIRONMENT`: Default endpoint, `sandbox` or `production`.
 - `APNS_REQUEST_TIMEOUT`: APNs HTTP request timeout, for example `5s`.
 
-The server still accepts the previous `PUSH_APNS_*` names as fallbacks. Token-level `apnsEnvironment` takes precedence over `APNS_ENVIRONMENT`: debug/dev app tokens use `sandbox`, TestFlight and App Store tokens use `production`.
+The server still accepts the previous `PUSH_APNS_*` names as fallbacks. Token-level `apnsEnvironment` takes precedence over `APNS_ENVIRONMENT`.
 
-Configure Android FCM with Firebase service-account credentials:
+The backend also contains an FCM provider for Android push delivery, configured with Firebase service-account credentials:
 
 - `FCM_PROJECT_ID`: Firebase project id. `FIREBASE_PROJECT_ID` is also accepted.
 - `FCM_CREDENTIALS_JSON`: Firebase service account JSON. Do not commit this value.
@@ -39,7 +39,15 @@ When no push credentials are configured, the server keeps the existing no-op loc
 }
 ```
 
-`apnsEnvironment` must be `sandbox` or `production`. `environment` is also accepted as an alias. `bundleId` and `appBundleId` are both accepted. Registration is an upsert and reactivates the token.
+Validation rules:
+
+- `platform` must be `ios` or `android`; otherwise the API returns `400 INVALID_PLATFORM`.
+- `deviceToken` is required; otherwise the API returns `400 INVALID_TOKEN`.
+- `apnsEnvironment` is required for iOS. `environment` is accepted as a request alias.
+- `debug`, `dev`, and `development` normalize to `sandbox`.
+- `release`, `prod`, `production`, `testflight`, and `appstore` normalize to `production`.
+- Missing or unknown iOS APNs environments return `400 INVALID_APNS_ENVIRONMENT`.
+- `bundleId` and `appBundleId` are both accepted. Registration is an upsert and reactivates the token.
 
 Android registration uses the same endpoint:
 
@@ -50,6 +58,8 @@ Android registration uses the same endpoint:
   "locale": "ko-KR"
 }
 ```
+
+Android tokens are stored without APNs routing metadata; `APNS_ENVIRONMENT` and `BUNDLE_ID` remain `NULL` for FCM registrations.
 
 `POST /api/push/device/unregister` requires authentication.
 
@@ -101,4 +111,20 @@ APNs failure handling:
 - `TooManyRequests`, `ServiceUnavailable`, `InternalServerError`: transient; keep the token active and retry at the caller/job level when a queue is introduced.
 - Auth/config errors such as `InvalidProviderToken`, `ExpiredProviderToken`, `MissingTopic`: check APNs key, team id, key id, bundle id, and server clock.
 
-Android real-device smoke is unblocked at the backend registration/provider layer, but still requires a Firebase project, Android app Firebase config, configured service-account credentials, and a physical device or emulator with a real FCM registration token.
+Current delivery is best-effort and in-process: `message.new` and `admin.notice` enqueue a goroutine and call APNs directly. There is no durable outbox, retry queue, dead-letter table, or delivery status table yet. A production hardening pass should add durable event storage, bounded retries with backoff for transient APNs responses, worker observability, and replay tooling.
+
+### Tests
+
+Run targeted backend tests with:
+
+```sh
+go test ./internal/service ./internal/handler
+```
+
+This repository currently uses a local module replacement:
+
+```go
+replace github.com/dflh-saf/social-auth => ../../dflh-social-auth
+```
+
+The sibling `../../dflh-social-auth` checkout must exist relative to `backend/`, or Go setup fails before package tests start. Do not remove or rewrite this replace just to run push tests; prepare the sibling checkout or adjust the workspace consistently with the project setup.

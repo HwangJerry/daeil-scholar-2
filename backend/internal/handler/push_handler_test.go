@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +12,7 @@ import (
 )
 
 type fakePushDeviceService struct {
+	registerCalls    int
 	registerUsrSeq   int
 	registerReq      model.PushDeviceRegistrationRequest
 	unregisterUsrSeq int
@@ -18,6 +20,7 @@ type fakePushDeviceService struct {
 }
 
 func (f *fakePushDeviceService) RegisterDeviceToken(usrSeq int, req model.PushDeviceRegistrationRequest) error {
+	f.registerCalls++
 	f.registerUsrSeq = usrSeq
 	f.registerReq = req
 	return nil
@@ -54,7 +57,7 @@ func TestPushHandlerRegisterDeviceContract(t *testing.T) {
 func TestPushHandlerRegisterDeviceAcceptsAndroid(t *testing.T) {
 	service := &fakePushDeviceService{}
 	handler := NewPushHandler(service)
-	body := bytes.NewBufferString(`{"platform":" ANDROID ","deviceToken":" fcm-token ","locale":"ko-KR"}`)
+	body := bytes.NewBufferString(`{"platform":" ANDROID ","deviceToken":" fcm-token ","apnsEnvironment":"sandbox","bundleId":"kr.dflh.saf","locale":"ko-KR"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/push/device/register", body)
 	req = req.WithContext(middleware.SetAuthUser(req.Context(), &model.AuthUser{USRSeq: 42}))
 	rec := httptest.NewRecorder()
@@ -64,7 +67,11 @@ func TestPushHandlerRegisterDeviceAcceptsAndroid(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected status 201, got %d body=%s", rec.Code, rec.Body.String())
 	}
+	if service.registerCalls != 1 {
+		t.Fatalf("expected one service call, got %d", service.registerCalls)
+	}
 	if service.registerReq.Platform != "android" || service.registerReq.DeviceToken != "fcm-token" ||
+		service.registerReq.APNsEnvironment != "" || service.registerReq.BundleID != "" ||
 		service.registerReq.Locale != "ko-KR" {
 		t.Fatalf("unexpected android register req: %#v", service.registerReq)
 	}
@@ -88,6 +95,80 @@ func TestPushHandlerRegisterDeviceRejectsUnknownPlatform(t *testing.T) {
 	}
 }
 
+func TestPushHandlerRegisterDeviceRejectsMissingAPNsEnvironment(t *testing.T) {
+	service := &fakePushDeviceService{}
+	handler := NewPushHandler(service)
+	body := bytes.NewBufferString(`{"platform":"ios","deviceToken":"token-1"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/push/device/register", body)
+	req = req.WithContext(middleware.SetAuthUser(req.Context(), &model.AuthUser{USRSeq: 42}))
+	rec := httptest.NewRecorder()
+
+	handler.RegisterDevice(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	assertAPIErrorCode(t, rec, "INVALID_APNS_ENVIRONMENT")
+	if service.registerCalls != 0 {
+		t.Fatalf("expected service not called, got %d calls", service.registerCalls)
+	}
+}
+
+func TestPushHandlerRegisterDeviceRejectsInvalidAPNsEnvironment(t *testing.T) {
+	service := &fakePushDeviceService{}
+	handler := NewPushHandler(service)
+	body := bytes.NewBufferString(`{"platform":"ios","deviceToken":"token-1","apnsEnvironment":"staging"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/push/device/register", body)
+	req = req.WithContext(middleware.SetAuthUser(req.Context(), &model.AuthUser{USRSeq: 42}))
+	rec := httptest.NewRecorder()
+
+	handler.RegisterDevice(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	assertAPIErrorCode(t, rec, "INVALID_APNS_ENVIRONMENT")
+	if service.registerCalls != 0 {
+		t.Fatalf("expected service not called, got %d calls", service.registerCalls)
+	}
+}
+
+func TestPushHandlerRegisterDeviceNormalizesDebugAlias(t *testing.T) {
+	service := &fakePushDeviceService{}
+	handler := NewPushHandler(service)
+	body := bytes.NewBufferString(`{"platform":"ios","deviceToken":"token-1","environment":"debug"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/push/device/register", body)
+	req = req.WithContext(middleware.SetAuthUser(req.Context(), &model.AuthUser{USRSeq: 42}))
+	rec := httptest.NewRecorder()
+
+	handler.RegisterDevice(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if service.registerReq.APNsEnvironment != "sandbox" {
+		t.Fatalf("expected sandbox environment, got %#v", service.registerReq)
+	}
+}
+
+func TestPushHandlerRegisterDeviceNormalizesTestFlightAlias(t *testing.T) {
+	service := &fakePushDeviceService{}
+	handler := NewPushHandler(service)
+	body := bytes.NewBufferString(`{"platform":"ios","deviceToken":"token-1","environment":"testflight"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/push/device/register", body)
+	req = req.WithContext(middleware.SetAuthUser(req.Context(), &model.AuthUser{USRSeq: 42}))
+	rec := httptest.NewRecorder()
+
+	handler.RegisterDevice(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if service.registerReq.APNsEnvironment != "production" {
+		t.Fatalf("expected production environment, got %#v", service.registerReq)
+	}
+}
+
 func TestPushHandlerUnregisterDeviceContract(t *testing.T) {
 	service := &fakePushDeviceService{}
 	handler := NewPushHandler(service)
@@ -103,5 +184,16 @@ func TestPushHandlerUnregisterDeviceContract(t *testing.T) {
 	}
 	if service.unregisterUsrSeq != 42 || service.unregisterToken != "token-1" {
 		t.Fatalf("unexpected unregister call: usrSeq=%d token=%q", service.unregisterUsrSeq, service.unregisterToken)
+	}
+}
+
+func assertAPIErrorCode(t *testing.T, rec *httptest.ResponseRecorder, want string) {
+	t.Helper()
+	var body model.APIError
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode error response: %v body=%s", err, rec.Body.String())
+	}
+	if body.Code != want {
+		t.Fatalf("unexpected error code: got %q want %q body=%s", body.Code, want, rec.Body.String())
 	}
 }

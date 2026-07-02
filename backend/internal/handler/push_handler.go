@@ -61,6 +61,16 @@ func (h *PushHandler) RegisterDevice(w http.ResponseWriter, r *http.Request) {
 	if bundleID == "" {
 		bundleID = strings.TrimSpace(req.AppBundleID)
 	}
+	if req.Platform == "ios" {
+		apnsEnvironment = model.NormalizeAPNsEnvironment(apnsEnvironment)
+		if apnsEnvironment == "" {
+			respondError(w, http.StatusBadRequest, "INVALID_APNS_ENVIRONMENT", "APNs 환경값이 올바르지 않습니다")
+			return
+		}
+	} else {
+		apnsEnvironment = ""
+		bundleID = ""
+	}
 
 	payload := model.PushDeviceRegistrationRequest{
 		Platform:        req.Platform,
