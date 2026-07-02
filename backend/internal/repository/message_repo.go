@@ -19,12 +19,19 @@ func NewMessageRepository(db *sqlx.DB) *MessageRepository {
 }
 
 // InsertMessage creates a new message record.
-func (r *MessageRepository) InsertMessage(senderSeq int, recvrSeq int, content string) error {
-	_, err := r.DB.Exec(`
+func (r *MessageRepository) InsertMessage(senderSeq int, recvrSeq int, content string) (int, error) {
+	result, err := r.DB.Exec(`
 		INSERT INTO ALUMNI_MESSAGE (AM_SENDER_SEQ, AM_RECVR_SEQ, AM_CONTENT, AM_READ_YN, REG_DATE)
 		VALUES (?, ?, ?, 'N', NOW())
 	`, senderSeq, recvrSeq, content)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	messageSeq, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return int(messageSeq), nil
 }
 
 // GetInbox returns received messages for a user, paginated.

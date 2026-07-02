@@ -13,6 +13,7 @@ import (
 type mockMessageRepo struct {
 	insertErr       error
 	insertCalled    bool
+	insertSeq       int
 	inbox           []model.Message
 	inboxTotal      int
 	inboxErr        error
@@ -30,9 +31,9 @@ type mockMessageRepo struct {
 	markConvErr     error
 }
 
-func (m *mockMessageRepo) InsertMessage(senderSeq int, recvrSeq int, content string) error {
+func (m *mockMessageRepo) InsertMessage(senderSeq int, recvrSeq int, content string) (int, error) {
 	m.insertCalled = true
-	return m.insertErr
+	return m.insertSeq, m.insertErr
 }
 
 func (m *mockMessageRepo) GetInbox(usrSeq int, page int, size int) ([]model.Message, int, error) {
@@ -182,6 +183,45 @@ func TestSendMessage_InsertError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error from InsertMessage failure")
+	}
+}
+
+type mockMessagePushNotifier struct {
+	calls      int
+	messageSeq int
+	recvrSeq   int
+	senderSeq  int
+}
+
+func (m *mockMessagePushNotifier) NotifyMessageReceived(messageSeq, recvrSeq, senderSeq int, senderName string, contentPreview string) {
+	m.calls++
+	m.messageSeq = messageSeq
+	m.recvrSeq = recvrSeq
+	m.senderSeq = senderSeq
+}
+
+func TestSendMessage_EnqueuesPushAfterInsertSuccess(t *testing.T) {
+	msgRepo := &mockMessageRepo{insertSeq: 123}
+	push := &mockMessagePushNotifier{}
+	svc := &MessageService{
+		repo:        msgRepo,
+		profileRepo: &mockProfileRepo{exists: true},
+		notifier:    nopMessageNotifier{},
+		messagePush: push,
+	}
+
+	err := svc.SendMessage(10, "Sender", model.SendMessageRequest{
+		RecvrSeq: 20,
+		Content:  "Hello",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if push.calls != 1 {
+		t.Fatalf("expected one push enqueue, got %d", push.calls)
+	}
+	if push.messageSeq != 123 || push.senderSeq != 10 || push.recvrSeq != 20 {
+		t.Fatalf("unexpected push args: message=%d sender=%d recvr=%d", push.messageSeq, push.senderSeq, push.recvrSeq)
 	}
 }
 

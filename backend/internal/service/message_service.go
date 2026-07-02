@@ -52,14 +52,15 @@ func (s *MessageService) SendMessage(senderSeq int, senderName string, req model
 		return &model.ValidationError{Msg: "존재하지 않는 회원입니다"}
 	}
 
-	if err := s.repo.InsertMessage(senderSeq, req.RecvrSeq, req.Content); err != nil {
+	messageSeq, err := s.repo.InsertMessage(senderSeq, req.RecvrSeq, req.Content)
+	if err != nil {
 		return err
 	}
 
 	s.notifier.NotifyMessageReceived(req.RecvrSeq, senderSeq, senderName)
 	s.notifier.NotifyMessageSent(senderSeq, req.RecvrSeq)
 	if s.messagePush != nil {
-		s.messagePush.NotifyMessageReceived(req.RecvrSeq, senderSeq, senderName, req.Content)
+		s.messagePush.NotifyMessageReceived(messageSeq, req.RecvrSeq, senderSeq, senderName, req.Content)
 	}
 
 	return nil

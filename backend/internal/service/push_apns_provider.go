@@ -1,29 +1,24 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/config"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
+	"github.com/sideshow/apns2"
+	"github.com/sideshow/apns2/token"
 )
 
 const (
-	apnsAPIVersion       = "/3/device/"
-	apnsDefaultHost      = "api.push.apple.com"
-	apnsSandboxHost      = "api.sandbox.push.apple.com"
-	apnsAuthHeaderPrefix = "Bearer "
-	apnsTokenCacheMaxAge = 45 * time.Minute
+	apnsProductionHost = "api.push.apple.com"
+	apnsSandboxHost    = "api.sandbox.push.apple.com"
 )
 
 type APNsResponseError struct {
@@ -53,10 +48,8 @@ type APNsPushProvider struct {
 	logger     zerolog.Logger
 	httpClient *http.Client
 
-	mu         sync.Mutex
-	cachedJWT  string
-	cachedAt   time.Time
-	privateKey interface{}
+	mu        sync.Mutex
+	authToken *token.Token
 }
 
 func NewAPNsPushProvider(cfg config.PushConfig, logger zerolog.Logger) *APNsPushProvider {
@@ -67,32 +60,28 @@ func NewAPNsPushProvider(cfg config.PushConfig, logger zerolog.Logger) *APNsPush
 	}
 }
 
-func (p *APNsPushProvider) SendPush(ctx context.Context, deviceToken string, title string, body string, data map[string]any) error {
-	deviceToken = strings.TrimSpace(deviceToken)
-	if deviceToken == "" {
+func (p *APNsPushProvider) SendPush(ctx context.Context, notification PushNotification) error {
+	notification.DeviceToken = strings.TrimSpace(notification.DeviceToken)
+	if notification.DeviceToken == "" {
 		return nil
 	}
 
-	key, err := p.loadSigningKey()
+	authToken, err := p.loadAuthToken()
 	if err != nil {
 		p.logger.Error().Err(err).Msg("push: APNs signing key load failed; notification skipped")
-		return err
-	}
-	signed, err := p.signedToken(key)
-	if err != nil {
 		return err
 	}
 
 	apnsPayload := map[string]any{
 		"aps": map[string]any{
 			"alert": map[string]any{
-				"title": title,
-				"body":  body,
+				"title": notification.Title,
+				"body":  notification.Body,
 			},
 			"sound": "default",
 		},
 	}
-	for k, v := range data {
+	for k, v := range notification.Payload.CustomPayload() {
 		apnsPayload[k] = v
 	}
 
@@ -101,67 +90,88 @@ func (p *APNsPushProvider) SendPush(ctx context.Context, deviceToken string, tit
 		return err
 	}
 
-	u := &url.URL{
-		Scheme: "https",
-		Host:   "api.push.apple.com",
-		Path:   apnsAPIVersion + deviceToken,
+	apnsNotification := &apns2.Notification{
+		DeviceToken: notification.DeviceToken,
+		Topic:       apnsTopicForNotification(p.cfg, notification),
+		PushType:    apns2.PushTypeAlert,
+		Priority:    apns2.PriorityHigh,
+		Payload:     bodyData,
 	}
-	if p.cfg.APNsUseSandbox {
-		u.Host = apnsSandboxHost
+	if notification.Payload.TTLSec > 0 {
+		apnsNotification.Expiration = notification.Payload.SentAt.UTC().Add(time.Duration(notification.Payload.TTLSec) * time.Second)
+	}
+	if notification.Payload.CollapseKey != "" {
+		apnsNotification.CollapseID = notification.Payload.CollapseKey
+	}
+
+	client := apns2.NewTokenClient(authToken)
+	client.HTTPClient = p.httpClient
+	if apnsHostForEnvironment(notification.APNsEnvironment, p.cfg.APNsEnvironment) == apnsSandboxHost {
+		client.Development()
 	} else {
-		u.Host = apnsDefaultHost
+		client.Production()
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(bodyData))
+	resp, err := client.PushWithContext(ctx, apnsNotification)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", fmt.Sprintf("%s%s", apnsAuthHeaderPrefix, signed))
-	req.Header.Set("apns-topic", p.cfg.APNsBundleID)
-	req.Header.Set("apns-push-type", "alert")
-	req.Header.Set("apns-priority", "10")
-	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+	if resp.Sent() {
 		return nil
 	}
 
-	respBody, _ := io.ReadAll(resp.Body)
-	respBodyText := strings.TrimSpace(string(respBody))
 	return &APNsResponseError{
 		StatusCode: resp.StatusCode,
-		Reason:     parseAPNsReason(respBody),
-		Body:       respBodyText,
+		Reason:     resp.Reason,
 	}
 }
 
-func parseAPNsReason(respBody []byte) string {
-	var payload struct {
-		Reason string `json:"reason"`
+func makeAPNsHeaders(cfg config.PushConfig, notification PushNotification) http.Header {
+	headers := http.Header{}
+	headers.Set("apns-topic", apnsTopicForNotification(cfg, notification))
+	headers.Set("apns-push-type", "alert")
+	headers.Set("apns-priority", "10")
+	if notification.Payload.TTLSec > 0 {
+		expiration := notification.Payload.SentAt.UTC().Add(time.Duration(notification.Payload.TTLSec) * time.Second).Unix()
+		headers.Set("apns-expiration", fmt.Sprintf("%d", expiration))
 	}
-	if err := json.Unmarshal(respBody, &payload); err != nil {
-		return ""
+	if notification.Payload.CollapseKey != "" {
+		headers.Set("apns-collapse-id", notification.Payload.CollapseKey)
 	}
-	return payload.Reason
+	return headers
 }
 
-func (p *APNsPushProvider) loadSigningKey() (interface{}, error) {
+func apnsTopicForNotification(cfg config.PushConfig, notification PushNotification) string {
+	topic := strings.TrimSpace(notification.BundleID)
+	if topic == "" {
+		topic = cfg.APNsBundleID
+	}
+	return topic
+}
+
+func apnsHostForEnvironment(tokenEnvironment string, defaultEnvironment string) string {
+	env := normalizeAPNsEnvironment(tokenEnvironment)
+	if env == "" {
+		env = normalizeAPNsEnvironment(defaultEnvironment)
+	}
+	if env == "sandbox" {
+		return apnsSandboxHost
+	}
+	return apnsProductionHost
+}
+
+func (p *APNsPushProvider) loadAuthToken() (*token.Token, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.privateKey != nil {
-		return p.privateKey, nil
+	if p.authToken != nil {
+		return p.authToken, nil
 	}
 	if p.cfg.APNsKeyID == "" || (p.cfg.APNsKeyPath == "" && p.cfg.APNsKeyValue == "") || p.cfg.APNSTeamID == "" || p.cfg.APNsBundleID == "" {
 		return nil, fmt.Errorf("apns config is incomplete")
 	}
 
 	keyData := strings.TrimSpace(p.cfg.APNsKeyValue)
+	keyData = strings.ReplaceAll(keyData, `\n`, "\n")
 	if keyData == "" && p.cfg.APNsKeyPath != "" {
 		raw, err := os.ReadFile(p.cfg.APNsKeyPath)
 		if err != nil {
@@ -173,41 +183,14 @@ func (p *APNsPushProvider) loadSigningKey() (interface{}, error) {
 		return nil, fmt.Errorf("apns key not configured")
 	}
 
-	parsed, err := jwt.ParseECPrivateKeyFromPEM([]byte(keyData))
+	authKey, err := token.AuthKeyFromBytes([]byte(keyData))
 	if err != nil {
 		return nil, err
 	}
-	p.privateKey = parsed
-	return parsed, nil
-}
-
-func (p *APNsPushProvider) signedToken(privateKey interface{}) (string, error) {
-	now := time.Now().Unix()
-	p.mu.Lock()
-	cachedToken := p.cachedJWT
-	cachedFresh := cachedToken != "" && time.Since(p.cachedAt) < apnsTokenCacheMaxAge
-	p.mu.Unlock()
-	if cachedFresh {
-		return cachedToken, nil
+	p.authToken = &token.Token{
+		AuthKey: authKey,
+		KeyID:   p.cfg.APNsKeyID,
+		TeamID:  p.cfg.APNSTeamID,
 	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
-		"iss": p.cfg.APNSTeamID,
-		"iat": now,
-		"exp": now + 60*60,
-	})
-	token.Header["alg"] = "ES256"
-	token.Header["kid"] = p.cfg.APNsKeyID
-
-	signed, err := token.SignedString(privateKey)
-	if err != nil {
-		return "", err
-	}
-
-	p.mu.Lock()
-	p.cachedJWT = signed
-	p.cachedAt = time.Now()
-	p.mu.Unlock()
-
-	return signed, nil
+	return p.authToken, nil
 }

@@ -24,9 +24,13 @@ func NewPushHandler(pushService interface {
 }
 
 type registerPushDeviceRequest struct {
-	Platform    string `json:"platform"`
-	DeviceToken string `json:"deviceToken"`
-	Locale      string `json:"locale"`
+	Platform        string `json:"platform"`
+	DeviceToken     string `json:"deviceToken"`
+	APNsEnvironment string `json:"apnsEnvironment"`
+	Environment     string `json:"environment"`
+	BundleID        string `json:"bundleId"`
+	AppBundleID     string `json:"appBundleId"`
+	Locale          string `json:"locale"`
 }
 
 func (h *PushHandler) RegisterDevice(w http.ResponseWriter, r *http.Request) {
@@ -45,15 +49,25 @@ func (h *PushHandler) RegisterDevice(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_TOKEN", "디바이스 토큰이 필요합니다")
 		return
 	}
-	if req.Platform != "ios" {
+	if req.Platform != "ios" && req.Platform != "android" {
 		respondError(w, http.StatusBadRequest, "INVALID_PLATFORM", "지원하지 않는 플랫폼입니다")
 		return
 	}
+	apnsEnvironment := strings.TrimSpace(req.APNsEnvironment)
+	if apnsEnvironment == "" {
+		apnsEnvironment = strings.TrimSpace(req.Environment)
+	}
+	bundleID := strings.TrimSpace(req.BundleID)
+	if bundleID == "" {
+		bundleID = strings.TrimSpace(req.AppBundleID)
+	}
 
 	payload := model.PushDeviceRegistrationRequest{
-		Platform:    req.Platform,
-		DeviceToken: req.DeviceToken,
-		Locale:      strings.TrimSpace(req.Locale),
+		Platform:        req.Platform,
+		DeviceToken:     req.DeviceToken,
+		APNsEnvironment: apnsEnvironment,
+		BundleID:        bundleID,
+		Locale:          strings.TrimSpace(req.Locale),
 	}
 
 	if err := h.pushService.RegisterDeviceToken(user.USRSeq, payload); err != nil {
