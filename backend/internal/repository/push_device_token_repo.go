@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"strings"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
@@ -25,8 +26,11 @@ func NewMobileDeviceTokenRepository(db *sqlx.DB) *MobileDeviceTokenRepository {
 }
 
 func (r *MobileDeviceTokenRepository) UpsertToken(usrSeq int, req model.PushDeviceRegistrationRequest) error {
-	apnsEnvironment := nullableDeviceTokenMetadata(req.APNsEnvironment)
-	bundleID := nullableDeviceTokenMetadata(req.BundleID)
+	apnsEnvironment, bundleID := pushTokenMetadataForStorage(
+		req.Platform,
+		req.APNsEnvironment,
+		req.BundleID,
+	)
 
 	_, err := r.DB.Exec(`
 		INSERT INTO ALUMNI_MOBILE_DEVICE_TOKEN
@@ -43,6 +47,13 @@ func (r *MobileDeviceTokenRepository) UpsertToken(usrSeq int, req model.PushDevi
 			UPDATED_AT = NOW()
 	`, usrSeq, req.Platform, req.DeviceToken, apnsEnvironment, bundleID, req.Locale)
 	return err
+}
+
+func pushTokenMetadataForStorage(platform string, apnsEnvironment string, bundleID string) (sql.NullString, sql.NullString) {
+	if strings.EqualFold(strings.TrimSpace(platform), "android") {
+		return sql.NullString{}, sql.NullString{}
+	}
+	return nullableDeviceTokenMetadata(apnsEnvironment), nullableDeviceTokenMetadata(bundleID)
 }
 
 func nullableDeviceTokenMetadata(value string) sql.NullString {
@@ -78,7 +89,10 @@ func (r *MobileDeviceTokenRepository) GetActiveTokensByUser(usrSeq int) ([]Mobil
 		           WHEN PLATFORM = 'ios' THEN COALESCE(APNS_ENVIRONMENT, 'production')
 		           ELSE ''
 		       END AS APNS_ENVIRONMENT,
-		       COALESCE(BUNDLE_ID, '') AS BUNDLE_ID
+		       CASE
+		           WHEN PLATFORM = 'ios' THEN COALESCE(BUNDLE_ID, '')
+		           ELSE ''
+		       END AS BUNDLE_ID
 		FROM ALUMNI_MOBILE_DEVICE_TOKEN
 		WHERE USR_SEQ = ? AND STATUS = 'ACTIVE'
 	`, usrSeq)
@@ -96,7 +110,10 @@ func (r *MobileDeviceTokenRepository) GetActiveTokensForBroadcast(excludeUsrSeq 
 		           WHEN dt.PLATFORM = 'ios' THEN COALESCE(dt.APNS_ENVIRONMENT, 'production')
 		           ELSE ''
 		       END AS APNS_ENVIRONMENT,
-		       COALESCE(dt.BUNDLE_ID, '') AS BUNDLE_ID
+		       CASE
+		           WHEN dt.PLATFORM = 'ios' THEN COALESCE(dt.BUNDLE_ID, '')
+		           ELSE ''
+		       END AS BUNDLE_ID
 		FROM ALUMNI_MOBILE_DEVICE_TOKEN dt
 		INNER JOIN WEO_MEMBER m ON m.USR_SEQ = dt.USR_SEQ
 		WHERE dt.STATUS = 'ACTIVE'
