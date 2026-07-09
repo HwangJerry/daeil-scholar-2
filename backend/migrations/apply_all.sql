@@ -1,5 +1,5 @@
 -- =============================================================================
--- apply_all.sql — Consolidated migration script (001–023)
+-- apply_all.sql — Consolidated migration script (001–034)
 -- Target: MariaDB 10.1.38
 -- Safe to re-run: uses IF NOT EXISTS / procedure-based column checks
 -- =============================================================================
@@ -401,6 +401,48 @@ CREATE TABLE IF NOT EXISTS ALUMNI_MOBILE_REFRESH_TOKEN (
     INDEX IDX_REVOKED (MRT_REVOKED_AT)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- =============================================================================
+-- 034: Durable iOS push outbox
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS ALUMNI_PUSH_OUTBOX (
+    PO_SEQ            INT AUTO_INCREMENT PRIMARY KEY,
+    EVENT_TYPE        VARCHAR(64) NOT NULL,
+    EVENT_ID          VARCHAR(191) NOT NULL,
+    USR_SEQ           INT NOT NULL,
+    MDT_SEQ           INT NOT NULL,
+    DEVICE_TOKEN      VARCHAR(512) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    APNS_ENVIRONMENT  ENUM('sandbox','production') NOT NULL DEFAULT 'production',
+    BUNDLE_ID         VARCHAR(255) NULL,
+    TITLE             VARCHAR(255) NOT NULL,
+    BODY              VARCHAR(1000) NOT NULL,
+    PAYLOAD_JSON      LONGTEXT NOT NULL,
+    STATUS            ENUM('PENDING','PROCESSING','SENT','FAILED','DEAD') NOT NULL DEFAULT 'PENDING',
+    ATTEMPT_COUNT     INT NOT NULL DEFAULT 0,
+    NEXT_ATTEMPT_AT   DATETIME NOT NULL,
+    LAST_ERROR_CODE   VARCHAR(128) NULL,
+    LAST_ERROR_MESSAGE VARCHAR(1000) NULL,
+    CLAIM_TOKEN       VARCHAR(64) NULL,
+    CREATED_AT        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UPDATED_AT        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    SENT_AT           DATETIME NULL,
+    UNIQUE KEY UK_PUSH_OUTBOX_EVENT_TOKEN (EVENT_ID, MDT_SEQ),
+    INDEX IDX_PUSH_OUTBOX_DUE (STATUS, NEXT_ATTEMPT_AT),
+    INDEX IDX_PUSH_OUTBOX_CLAIM (CLAIM_TOKEN),
+    INDEX IDX_PUSH_OUTBOX_CREATED (CREATED_AT)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =============================================================================
+-- 035: Push notification preferences
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS ALUMNI_PUSH_PREFERENCE (
+    USR_SEQ         INT PRIMARY KEY,
+    NOTICE_ENABLED  ENUM('Y','N') NOT NULL DEFAULT 'Y',
+    MESSAGE_ENABLED ENUM('Y','N') NOT NULL DEFAULT 'Y',
+    CREATED_AT      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UPDATED_AT      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX IDX_PUSH_PREFERENCE_NOTICE (NOTICE_ENABLED),
+    INDEX IDX_PUSH_PREFERENCE_MESSAGE (MESSAGE_ENABLED)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =============================================================================
 -- Cleanup: Drop helper procedures
@@ -446,6 +488,10 @@ SELECT 'ALUMNI_NOTIFICATION' AS chk, COUNT(*) AS found FROM information_schema.T
 -- 028: Mobile push device token table
 SELECT 'ALUMNI_MOBILE_DEVICE_TOKEN' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_MOBILE_DEVICE_TOKEN';
 SELECT 'ALUMNI_MOBILE_DEVICE_TOKEN.APNS_ENVIRONMENT' AS chk, COUNT(*) AS found FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_MOBILE_DEVICE_TOKEN' AND COLUMN_NAME='APNS_ENVIRONMENT';
+-- 034: Push outbox table
+SELECT 'ALUMNI_PUSH_OUTBOX' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_PUSH_OUTBOX';
+-- 035: Push preference table
+SELECT 'ALUMNI_PUSH_PREFERENCE' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_PUSH_PREFERENCE';
 -- 030: Mobile refresh-token table
 SELECT 'ALUMNI_MOBILE_REFRESH_TOKEN' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_MOBILE_REFRESH_TOKEN';
 

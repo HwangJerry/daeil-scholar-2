@@ -166,6 +166,8 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Put("/api/messages/conversations/{userSeq}/read", h.message.MarkConversationRead)
 		r.Post("/api/push/device/register", h.push.RegisterDevice)
 		r.Post("/api/push/device/unregister", h.push.UnregisterDevice)
+		r.Get("/api/push/preferences", h.push.GetPreferences)
+		r.Put("/api/push/preferences", h.push.UpdatePreferences)
 		r.Get("/api/badges", h.badge.GetBadges)
 		r.Get("/api/messages/stream", h.realtime.Stream)
 	})

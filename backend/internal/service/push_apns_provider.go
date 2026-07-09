@@ -72,37 +72,12 @@ func (p *APNsPushProvider) SendPush(ctx context.Context, notification PushNotifi
 		return err
 	}
 
-	apnsPayload := map[string]any{
-		"aps": map[string]any{
-			"alert": map[string]any{
-				"title": notification.Title,
-				"body":  notification.Body,
-			},
-			"sound": "default",
-		},
-	}
-	for k, v := range notification.Payload.CustomPayload() {
-		apnsPayload[k] = v
-	}
-
-	bodyData, err := json.Marshal(apnsPayload)
+	bodyData, err := buildAPNsPayload(notification)
 	if err != nil {
 		return err
 	}
 
-	apnsNotification := &apns2.Notification{
-		DeviceToken: notification.DeviceToken,
-		Topic:       apnsTopicForNotification(p.cfg, notification),
-		PushType:    apns2.PushTypeAlert,
-		Priority:    apns2.PriorityHigh,
-		Payload:     bodyData,
-	}
-	if notification.Payload.TTLSec > 0 {
-		apnsNotification.Expiration = notification.Payload.SentAt.UTC().Add(time.Duration(notification.Payload.TTLSec) * time.Second)
-	}
-	if notification.Payload.CollapseKey != "" {
-		apnsNotification.CollapseID = notification.Payload.CollapseKey
-	}
+	apnsNotification := buildAPNsNotification(p.cfg, notification, bodyData)
 
 	client := apns2.NewTokenClient(authToken)
 	client.HTTPClient = p.httpClient
@@ -124,6 +99,39 @@ func (p *APNsPushProvider) SendPush(ctx context.Context, notification PushNotifi
 		StatusCode: resp.StatusCode,
 		Reason:     resp.Reason,
 	}
+}
+
+func buildAPNsPayload(notification PushNotification) ([]byte, error) {
+	apnsPayload := map[string]any{
+		"aps": map[string]any{
+			"alert": map[string]any{
+				"title": notification.Title,
+				"body":  notification.Body,
+			},
+			"sound": "default",
+		},
+	}
+	for k, v := range notification.Payload.CustomPayload() {
+		apnsPayload[k] = v
+	}
+	return json.Marshal(apnsPayload)
+}
+
+func buildAPNsNotification(cfg config.PushConfig, notification PushNotification, payloadBytes []byte) *apns2.Notification {
+	apnsNotification := &apns2.Notification{
+		DeviceToken: notification.DeviceToken,
+		Topic:       apnsTopicForNotification(cfg, notification),
+		PushType:    apns2.PushTypeAlert,
+		Priority:    apns2.PriorityHigh,
+		Payload:     payloadBytes,
+	}
+	if notification.Payload.TTLSec > 0 {
+		apnsNotification.Expiration = notification.Payload.SentAt.UTC().Add(time.Duration(notification.Payload.TTLSec) * time.Second)
+	}
+	if notification.Payload.CollapseKey != "" {
+		apnsNotification.CollapseID = notification.Payload.CollapseKey
+	}
+	return apnsNotification
 }
 
 func makeAPNsHeaders(cfg config.PushConfig, notification PushNotification) http.Header {

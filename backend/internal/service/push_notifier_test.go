@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -53,6 +54,39 @@ type fakeInvalidTokenError struct{}
 func (fakeInvalidTokenError) Error() string            { return "invalid token" }
 func (fakeInvalidTokenError) InvalidDeviceToken() bool { return true }
 
+type fakePushOutboxStore struct {
+	jobs []repository.PushOutboxInsert
+	err  error
+}
+
+func (f *fakePushOutboxStore) Enqueue(_ context.Context, job repository.PushOutboxInsert) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.jobs = append(f.jobs, job)
+	return nil
+}
+
+type fakePushPreferenceStore struct {
+	preferences map[int]model.PushPreferences
+	upserts     []model.PushPreferences
+}
+
+func (f *fakePushPreferenceStore) GetPreferences(usrSeq int) (model.PushPreferences, error) {
+	if f.preferences == nil {
+		return model.DefaultPushPreferences(), nil
+	}
+	if preferences, ok := f.preferences[usrSeq]; ok {
+		return preferences, nil
+	}
+	return model.DefaultPushPreferences(), nil
+}
+
+func (f *fakePushPreferenceStore) UpsertPreferences(_ int, preferences model.PushPreferences) (model.PushPreferences, error) {
+	f.upserts = append(f.upserts, preferences)
+	return preferences, nil
+}
+
 func newInlinePushService(store *fakePushTokenStore, provider *fakePushProvider) *MobilePushService {
 	return &MobilePushService{
 		tokenRepo: store,
@@ -67,6 +101,18 @@ func newInlinePushService(store *fakePushTokenStore, provider *fakePushProvider)
 	}
 }
 
+func newInlineOutboxPushService(store *fakePushTokenStore, outbox *fakePushOutboxStore, provider *fakePushProvider) *MobilePushService {
+	svc := newInlinePushService(store, provider)
+	svc.outbox = outbox
+	return svc
+}
+
+func newInlinePushServiceWithPreferences(store *fakePushTokenStore, preferences *fakePushPreferenceStore, provider *fakePushProvider) *MobilePushService {
+	svc := newInlinePushService(store, provider)
+	svc.preferences = preferences
+	return svc
+}
+
 func TestRegisterDeviceTokenUpsertsAPNsMetadata(t *testing.T) {
 	store := &fakePushTokenStore{}
 	svc := newInlinePushService(store, &fakePushProvider{})
@@ -75,7 +121,7 @@ func TestRegisterDeviceTokenUpsertsAPNsMetadata(t *testing.T) {
 		Platform:        "IOS",
 		DeviceToken:     " token-1 ",
 		APNsEnvironment: "debug",
-		BundleID:        "kr.dflh.saf",
+		BundleID:        "com.daeil.dflhsafv2",
 		Locale:          "ko-KR",
 	})
 	if err != nil {
@@ -85,7 +131,7 @@ func TestRegisterDeviceTokenUpsertsAPNsMetadata(t *testing.T) {
 		t.Fatalf("expected one upsert, got %d", len(store.upserts))
 	}
 	got := store.upserts[0]
-	if got.Platform != "ios" || got.DeviceToken != "token-1" || got.APNsEnvironment != "sandbox" || got.BundleID != "kr.dflh.saf" {
+	if got.Platform != "ios" || got.DeviceToken != "token-1" || got.APNsEnvironment != "sandbox" || got.BundleID != "com.daeil.dflhsafv2" {
 		t.Fatalf("unexpected upsert payload: %#v", got)
 	}
 }
@@ -98,7 +144,7 @@ func TestRegisterDeviceTokenUpsertsAndroidPlatform(t *testing.T) {
 		Platform:        " Android ",
 		DeviceToken:     " fcm-token-1 ",
 		APNsEnvironment: "sandbox",
-		BundleID:        "kr.dflh.saf",
+		BundleID:        "com.daeil.dflhsafv2",
 		Locale:          "ko-KR",
 	})
 	if err != nil {
@@ -152,7 +198,7 @@ func TestBuildMessageNewPayloadMatchesIOSContract(t *testing.T) {
 	if custom["event_id"] != "message.new:777:67890" {
 		t.Fatalf("unexpected event_id: %#v", custom["event_id"])
 	}
-	if custom["template_key"] != "message_new_default" {
+	if custom["template_key"] != "push.message.new" {
 		t.Fatalf("unexpected template_key: %#v", custom["template_key"])
 	}
 	if custom["template_version"] != 1 {
@@ -201,7 +247,7 @@ func TestBuildAdminNoticePayloadMatchesIOSContract(t *testing.T) {
 	if custom["event_id"] != "admin.notice:555" {
 		t.Fatalf("unexpected event_id: %#v", custom["event_id"])
 	}
-	if custom["template_key"] != "admin_notice_default" {
+	if custom["template_key"] != "push.admin.notice" {
 		t.Fatalf("unexpected template_key: %#v", custom["template_key"])
 	}
 	if custom["template_version"] != 1 {
@@ -230,7 +276,7 @@ func TestNotifyMessageReceivedSendsRecipientPayload(t *testing.T) {
 			Platform:        "ios",
 			DeviceToken:     "token-1",
 			APNsEnvironment: "sandbox",
-			BundleID:        "kr.dflh.saf.debug",
+			BundleID:        "com.daeil.dflhsafv2",
 		}},
 	}
 	provider := &fakePushProvider{}
@@ -250,6 +296,88 @@ func TestNotifyMessageReceivedSendsRecipientPayload(t *testing.T) {
 	}
 	if push.Payload.Args["sender_seq"] != 12345 || push.Payload.Args["recvr_seq"] != 67890 {
 		t.Fatalf("unexpected args: %#v", push.Payload.Args)
+	}
+}
+
+func TestNotifyMessageReceivedSkipsWhenMessagePreferenceDisabled(t *testing.T) {
+	store := &fakePushTokenStore{
+		userTokens: []repository.MobileDeviceToken{{
+			MDTSeq:          1,
+			UsrSeq:          67890,
+			Platform:        "ios",
+			DeviceToken:     "token-1",
+			APNsEnvironment: "sandbox",
+		}},
+	}
+	preferences := &fakePushPreferenceStore{
+		preferences: map[int]model.PushPreferences{
+			67890: {NoticeEnabled: true, MessageEnabled: false},
+		},
+	}
+	provider := &fakePushProvider{}
+	svc := newInlinePushServiceWithPreferences(store, preferences, provider)
+
+	svc.NotifyMessageReceived(777, 67890, 12345, "홍길동", "private message body")
+
+	if len(provider.sent) != 0 {
+		t.Fatalf("expected push skipped by message preference, got %d sends", len(provider.sent))
+	}
+}
+
+func TestNotifyMessageReceivedEnqueuesOutboxPerRecipientToken(t *testing.T) {
+	store := &fakePushTokenStore{
+		userTokens: []repository.MobileDeviceToken{
+			{MDTSeq: 1, UsrSeq: 67890, Platform: "ios", DeviceToken: "token-1", APNsEnvironment: "sandbox", BundleID: "com.daeil.dflhsafv2"},
+			{MDTSeq: 2, UsrSeq: 67890, Platform: "ios", DeviceToken: "token-2", APNsEnvironment: "production", BundleID: "com.daeil.dflhsafv2"},
+		},
+	}
+	outbox := &fakePushOutboxStore{}
+	provider := &fakePushProvider{}
+	svc := newInlineOutboxPushService(store, outbox, provider)
+
+	svc.NotifyMessageReceived(777, 67890, 12345, "홍길동", "private message body")
+
+	if len(provider.sent) != 0 {
+		t.Fatalf("expected provider not called during enqueue, got %d sends", len(provider.sent))
+	}
+	if len(outbox.jobs) != 2 {
+		t.Fatalf("expected 2 outbox jobs, got %d", len(outbox.jobs))
+	}
+	for _, job := range outbox.jobs {
+		if job.EventType != PushEventMessageNew || job.EventID != "message.new:777:67890" || job.UsrSeq != 67890 {
+			t.Fatalf("unexpected outbox job: %#v", job)
+		}
+		payload := decodeStoredPushPayload(t, job.PayloadJSON)
+		if payload["deep_link"] != "/messages/12345" || payload["user_id"] != "67890" {
+			t.Fatalf("unexpected payload: %#v", payload)
+		}
+		args := payload["args"].(map[string]any)
+		if args["sender_seq"] != float64(12345) || args["recvr_seq"] != float64(67890) {
+			t.Fatalf("unexpected args: %#v", args)
+		}
+	}
+}
+
+func TestNotifyMessageReceivedOutboxDoesNotDependOnAsyncDispatch(t *testing.T) {
+	store := &fakePushTokenStore{
+		userTokens: []repository.MobileDeviceToken{{
+			MDTSeq:          1,
+			UsrSeq:          67890,
+			Platform:        "ios",
+			DeviceToken:     "token-1",
+			APNsEnvironment: "sandbox",
+		}},
+	}
+	outbox := &fakePushOutboxStore{}
+	svc := newInlineOutboxPushService(store, outbox, &fakePushProvider{})
+	svc.dispatch = func(func()) {
+		t.Fatalf("outbox enqueue must not depend on async dispatch")
+	}
+
+	svc.NotifyMessageReceived(777, 67890, 12345, "홍길동", "private message body")
+
+	if len(outbox.jobs) != 1 {
+		t.Fatalf("expected one durable outbox job, got %d", len(outbox.jobs))
 	}
 }
 
@@ -279,6 +407,29 @@ func TestNotifyMessageReceivedSendsAndroidPayload(t *testing.T) {
 	}
 }
 
+func TestNotifyMessageReceivedKeepsAndroidDirectWhenOutboxEnabled(t *testing.T) {
+	store := &fakePushTokenStore{
+		userTokens: []repository.MobileDeviceToken{{
+			MDTSeq:      1,
+			UsrSeq:      67890,
+			Platform:    "android",
+			DeviceToken: "fcm-token-1",
+		}},
+	}
+	outbox := &fakePushOutboxStore{}
+	provider := &fakePushProvider{}
+	svc := newInlineOutboxPushService(store, outbox, provider)
+
+	svc.NotifyMessageReceived(777, 67890, 12345, "홍길동", "private message body")
+
+	if len(outbox.jobs) != 0 {
+		t.Fatalf("expected no iOS outbox jobs for android token, got %d", len(outbox.jobs))
+	}
+	if len(provider.sent) != 1 {
+		t.Fatalf("expected android direct provider send, got %d", len(provider.sent))
+	}
+}
+
 func TestNotifyPostPublishedCreatesPayloadPerRecipient(t *testing.T) {
 	store := &fakePushTokenStore{
 		broadcastTokens: []repository.MobileDeviceToken{
@@ -301,6 +452,63 @@ func TestNotifyPostPublishedCreatesPayloadPerRecipient(t *testing.T) {
 		}
 		if push.Payload.EventID != "admin.notice:555" || push.Payload.Args["post_seq"] != 555 {
 			t.Fatalf("unexpected notice payload: %#v", push.Payload)
+		}
+	}
+}
+
+func TestNotifyPostPublishedSkipsRecipientsWithNoticePreferenceDisabled(t *testing.T) {
+	store := &fakePushTokenStore{
+		broadcastTokens: []repository.MobileDeviceToken{
+			{MDTSeq: 10, UsrSeq: 67890, Platform: "ios", DeviceToken: "token-10", APNsEnvironment: "production"},
+			{MDTSeq: 11, UsrSeq: 67891, Platform: "ios", DeviceToken: "token-11", APNsEnvironment: "production"},
+		},
+	}
+	preferences := &fakePushPreferenceStore{
+		preferences: map[int]model.PushPreferences{
+			67890: {NoticeEnabled: false, MessageEnabled: true},
+			67891: {NoticeEnabled: true, MessageEnabled: true},
+		},
+	}
+	provider := &fakePushProvider{}
+	svc := newInlinePushServiceWithPreferences(store, preferences, provider)
+
+	svc.NotifyPostPublished(99, 555, "공지")
+
+	if len(provider.sent) != 1 {
+		t.Fatalf("expected one notice push, got %d", len(provider.sent))
+	}
+	if provider.sent[0].Payload.UserID != "67891" {
+		t.Fatalf("unexpected notice recipient: %#v", provider.sent[0])
+	}
+}
+
+func TestNotifyPostPublishedEnqueuesOutboxWithRecipientUserPayload(t *testing.T) {
+	store := &fakePushTokenStore{
+		broadcastTokens: []repository.MobileDeviceToken{
+			{MDTSeq: 10, UsrSeq: 67890, Platform: "ios", DeviceToken: "token-10", APNsEnvironment: "production"},
+			{MDTSeq: 11, UsrSeq: 67891, Platform: "ios", DeviceToken: "token-11", APNsEnvironment: "production"},
+		},
+	}
+	outbox := &fakePushOutboxStore{}
+	svc := newInlineOutboxPushService(store, outbox, &fakePushProvider{})
+
+	svc.NotifyPostPublished(99, 555, "공지")
+
+	if len(outbox.jobs) != 2 {
+		t.Fatalf("expected 2 outbox jobs, got %d", len(outbox.jobs))
+	}
+	for i, wantUserID := range []string{"67890", "67891"} {
+		job := outbox.jobs[i]
+		if job.EventType != PushEventAdminNotice || job.EventID != "admin.notice:555" {
+			t.Fatalf("unexpected notice outbox job: %#v", job)
+		}
+		payload := decodeStoredPushPayload(t, job.PayloadJSON)
+		if payload["user_id"] != wantUserID || payload["deep_link"] != "/feed/555" {
+			t.Fatalf("unexpected payload for job %d: %#v", i, payload)
+		}
+		args := payload["args"].(map[string]any)
+		if args["post_seq"] != float64(555) {
+			t.Fatalf("unexpected args: %#v", args)
 		}
 	}
 }
@@ -366,4 +574,13 @@ func assertPushContractField(t *testing.T, payload map[string]any, field string)
 	if _, ok := payload[field]; !ok {
 		t.Fatalf("missing payload field %q in %#v", field, payload)
 	}
+}
+
+func decodeStoredPushPayload(t *testing.T, payloadJSON string) map[string]any {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		t.Fatalf("decode payload json: %v", err)
+	}
+	return payload
 }

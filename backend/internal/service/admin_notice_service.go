@@ -7,9 +7,26 @@ import (
 )
 
 type AdminNoticeService struct {
-	repo     *repository.AdminNoticeRepository
-	fileRepo *repository.FileRepository
-	 notifier PostPushNotifier
+	repo     adminNoticeStore
+	fileRepo adminNoticeFileStore
+	notifier PostPushNotifier
+}
+
+type adminNoticeStore interface {
+	GetNotices(page, size int, keyword string) ([]model.AdminNoticeRow, int, error)
+	GetNoticeForEdit(seq int) (*model.NoticeDetail, error)
+	InsertNotice(n *model.AdminNoticeInsert) (int, error)
+	UpdateNotice(seq int, n *model.AdminNoticeInsert) error
+	DeleteNotice(seq int) error
+	TogglePin(seq int) error
+	CountNotices() (int, error)
+}
+
+type adminNoticeFileStore interface {
+	GetAttachmentsByNotice(noticeSeq int) ([]model.FileRecord, error)
+	AttachFilesToNotice(noticeSeq int, fSeqs []int) error
+	ReconcileAttachments(noticeSeq int, keepFSeqs []int) error
+	SoftDeleteFilesByJoin(noticeSeq int) error
 }
 
 func NewAdminNoticeService(repo *repository.AdminNoticeRepository, fileRepo *repository.FileRepository, notifier PostPushNotifier) *AdminNoticeService {

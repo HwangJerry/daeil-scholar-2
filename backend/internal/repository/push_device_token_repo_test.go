@@ -38,7 +38,7 @@ func TestMobileDeviceTokenRepositoryUpsertTokenStoresAndroidAPNsMetadataAsNull(t
 		Platform:        "android",
 		DeviceToken:     "fcm-token-1",
 		APNsEnvironment: "sandbox",
-		BundleID:        "kr.dflh.saf",
+		BundleID:        "com.daeil.dflhsafv2",
 		Locale:          "ko-KR",
 	})
 	if err != nil {
@@ -63,7 +63,7 @@ func TestMobileDeviceTokenRepositoryUpsertTokenPreservesIOSAPNsMetadata(t *testi
 			"ios",
 			"apns-token-1",
 			nullStringArg{value: "sandbox", valid: true},
-			nullStringArg{value: "kr.dflh.saf.debug", valid: true},
+			nullStringArg{value: "com.daeil.dflhsafv2", valid: true},
 			"ko-KR",
 		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -72,7 +72,7 @@ func TestMobileDeviceTokenRepositoryUpsertTokenPreservesIOSAPNsMetadata(t *testi
 		Platform:        "ios",
 		DeviceToken:     "apns-token-1",
 		APNsEnvironment: "sandbox",
-		BundleID:        "kr.dflh.saf.debug",
+		BundleID:        "com.daeil.dflhsafv2",
 		Locale:          "ko-KR",
 	})
 	if err != nil {
@@ -176,7 +176,7 @@ func TestMobileDeviceTokenRepositoryGetActiveTokensForBroadcastReadsIOSNullAPNsE
 		"DEVICE_TOKEN",
 		"APNS_ENVIRONMENT",
 		"BUNDLE_ID",
-	}).AddRow(2, 11, "ios", "apns-token-1", "production", "kr.dflh.saf")
+	}).AddRow(2, 11, "ios", "apns-token-1", "production", "com.daeil.dflhsafv2")
 
 	mock.ExpectQuery(`(?s)CASE\s+WHEN dt\.PLATFORM = 'ios' THEN COALESCE\(dt\.APNS_ENVIRONMENT, 'production'\)\s+ELSE ''\s+END AS APNS_ENVIRONMENT.*FROM ALUMNI_MOBILE_DEVICE_TOKEN dt`).
 		WithArgs(10).
@@ -212,7 +212,7 @@ func TestMobileDeviceTokenRepositoryGetActiveTokensByUserReadsIOSNullAPNsEnviron
 		"DEVICE_TOKEN",
 		"APNS_ENVIRONMENT",
 		"BUNDLE_ID",
-	}).AddRow(2, 11, "ios", "apns-token-1", "production", "kr.dflh.saf")
+	}).AddRow(2, 11, "ios", "apns-token-1", "production", "com.daeil.dflhsafv2")
 
 	mock.ExpectQuery(`(?s)CASE\s+WHEN PLATFORM = 'ios' THEN COALESCE\(APNS_ENVIRONMENT, 'production'\)\s+ELSE ''\s+END AS APNS_ENVIRONMENT.*FROM ALUMNI_MOBILE_DEVICE_TOKEN`).
 		WithArgs(11).

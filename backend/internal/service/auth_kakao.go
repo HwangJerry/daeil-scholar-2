@@ -3,9 +3,7 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strconv"
 )
 
 // KakaoUserInfo aggregates the fields fetched from Kakao OAuth token exchange + /v2/user/me.

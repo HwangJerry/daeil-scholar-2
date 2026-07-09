@@ -2,17 +2,21 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/service"
 )
 
 type PushHandler struct {
 	pushService interface {
 		RegisterDeviceToken(usrSeq int, req model.PushDeviceRegistrationRequest) error
 		UnregisterDeviceToken(usrSeq int, token string) error
+		GetPreferences(usrSeq int) (model.PushPreferences, error)
+		UpdatePreferences(usrSeq int, req model.PushPreferencesUpdateRequest) (model.PushPreferences, error)
 	}
 }
 
@@ -21,6 +25,8 @@ const maxPushDeviceTokenLength = 512
 func NewPushHandler(pushService interface {
 	RegisterDeviceToken(usrSeq int, req model.PushDeviceRegistrationRequest) error
 	UnregisterDeviceToken(usrSeq int, token string) error
+	GetPreferences(usrSeq int) (model.PushPreferences, error)
+	UpdatePreferences(usrSeq int, req model.PushPreferencesUpdateRequest) (model.PushPreferences, error)
 }) *PushHandler {
 	return &PushHandler{pushService: pushService}
 }
@@ -118,4 +124,41 @@ func (h *PushHandler) UnregisterDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *PushHandler) GetPreferences(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetAuthUser(r.Context())
+	if user == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
+		return
+	}
+	preferences, err := h.pushService.GetPreferences(user.USRSeq)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "PUSH_PREFERENCES_FAILED", "알림 설정을 불러오지 못했습니다")
+		return
+	}
+	respondJSON(w, http.StatusOK, preferences)
+}
+
+func (h *PushHandler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetAuthUser(r.Context())
+	if user == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
+		return
+	}
+	var req model.PushPreferencesUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_BODY", "요청 본문이 올바르지 않습니다")
+		return
+	}
+	preferences, err := h.pushService.UpdatePreferences(user.USRSeq, req)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidPushPreferences) {
+			respondError(w, http.StatusBadRequest, "INVALID_PUSH_PREFERENCES", "알림 설정값이 올바르지 않습니다")
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "PUSH_PREFERENCES_UPDATE_FAILED", "알림 설정을 저장하지 못했습니다")
+		return
+	}
+	respondJSON(w, http.StatusOK, preferences)
 }

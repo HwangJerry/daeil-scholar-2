@@ -90,6 +90,7 @@ func main() {
 	sessionJob.Start()
 	emailWorker := job.NewEmailWorker(d.emailQueue, d.emailService, logger)
 	emailWorker.Start()
+	d.pushOutboxWorker.Start()
 	// subscriptionBillingJob := d.subscriptionBillingJob
 	// subscriptionBillingJob.Start()
 	visitJob := d.visitJob
@@ -102,6 +103,7 @@ func main() {
 	// donationJob.Stop()
 	sessionJob.Stop()
 	emailWorker.Stop()
+	d.pushOutboxWorker.Stop()
 	// subscriptionBillingJob.Stop()
 	visitJob.Stop()
 

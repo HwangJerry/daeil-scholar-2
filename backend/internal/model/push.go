@@ -14,6 +14,33 @@ type PushDeviceRegistrationResponse struct {
 	Status string `json:"status"`
 }
 
+type PushPreferences struct {
+	NoticeEnabled  bool `json:"noticeEnabled"`
+	MessageEnabled bool `json:"messageEnabled"`
+}
+
+type PushPreferencesUpdateRequest struct {
+	NoticeEnabled  *bool `json:"noticeEnabled"`
+	MessageEnabled *bool `json:"messageEnabled"`
+}
+
+func DefaultPushPreferences() PushPreferences {
+	return PushPreferences{
+		NoticeEnabled:  true,
+		MessageEnabled: true,
+	}
+}
+
+func (r PushPreferencesUpdateRequest) Preferences() (PushPreferences, bool) {
+	if r.NoticeEnabled == nil || r.MessageEnabled == nil {
+		return PushPreferences{}, false
+	}
+	return PushPreferences{
+		NoticeEnabled:  *r.NoticeEnabled,
+		MessageEnabled: *r.MessageEnabled,
+	}, true
+}
+
 func NormalizeAPNsEnvironment(env string) string {
 	env = strings.ToLower(strings.TrimSpace(env))
 	switch env {

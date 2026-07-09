@@ -106,18 +106,25 @@ type EasyPayConfig struct {
 }
 
 type PushConfig struct {
-	APNsKeyID          string
-	APNSTeamID         string
-	APNsBundleID       string
-	APNsKeyPath        string
-	APNsKeyValue       string
-	APNsEnvironment    string
-	APNsUseSandbox     bool
-	APNsRequestTimeout time.Duration
-	FCMProjectID       string
-	FCMCredentialsFile string
-	FCMCredentialsJSON string
-	FCMRequestTimeout  time.Duration
+	APNsKeyID             string
+	APNSTeamID            string
+	APNsBundleID          string
+	APNsKeyPath           string
+	APNsKeyValue          string
+	APNsEnvironment       string
+	APNsUseSandbox        bool
+	APNsRequestTimeout    time.Duration
+	FCMProjectID          string
+	FCMCredentialsFile    string
+	FCMCredentialsJSON    string
+	FCMRequestTimeout     time.Duration
+	OutboxBatchSize       int
+	OutboxPollInterval    time.Duration
+	OutboxMaxAttempts     int
+	OutboxBaseBackoff     time.Duration
+	OutboxMaxBackoff      time.Duration
+	OutboxRecoveryTimeout time.Duration
+	OutboxRequestTimeout  time.Duration
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -150,18 +157,25 @@ func Load() *Config {
 			MaxAge: getDurationEnv("JWT_MAX_AGE", 24*time.Hour),
 		},
 		Push: PushConfig{
-			APNsKeyID:          getEnvWithFallback("APNS_KEY_ID", "PUSH_APNS_KEY_ID", ""),
-			APNSTeamID:         getEnvWithFallback("APNS_TEAM_ID", "PUSH_APNS_TEAM_ID", ""),
-			APNsBundleID:       getEnvWithFallback("APNS_BUNDLE_ID", "PUSH_APNS_BUNDLE_ID", ""),
-			APNsKeyPath:        getEnvWithFallback("APNS_PRIVATE_KEY_PATH", "PUSH_APNS_KEY_PATH", ""),
-			APNsKeyValue:       getEnvWithFallback("APNS_PRIVATE_KEY", "PUSH_APNS_KEY_VALUE", ""),
-			APNsEnvironment:    normalizePushEnvironment(getEnv("APNS_ENVIRONMENT", "")),
-			APNsUseSandbox:     strings.EqualFold(getEnv("PUSH_APNS_USE_SANDBOX", "false"), "true"),
-			APNsRequestTimeout: getDurationEnvWithFallback("APNS_REQUEST_TIMEOUT", "PUSH_APNS_REQUEST_TIMEOUT", 5*time.Second),
-			FCMProjectID:       getEnvWithFallback("FCM_PROJECT_ID", "FIREBASE_PROJECT_ID", ""),
-			FCMCredentialsFile: getEnvWithFallback("FCM_CREDENTIALS_FILE", "FIREBASE_SERVICE_ACCOUNT_FILE", getEnv("GOOGLE_APPLICATION_CREDENTIALS", "")),
-			FCMCredentialsJSON: getEnvWithFallback("FCM_CREDENTIALS_JSON", "FIREBASE_SERVICE_ACCOUNT_JSON", ""),
-			FCMRequestTimeout:  getDurationEnvWithFallback("FCM_REQUEST_TIMEOUT", "FIREBASE_REQUEST_TIMEOUT", 5*time.Second),
+			APNsKeyID:             getEnvWithFallback("APNS_KEY_ID", "PUSH_APNS_KEY_ID", ""),
+			APNSTeamID:            getEnvWithFallback("APNS_TEAM_ID", "PUSH_APNS_TEAM_ID", ""),
+			APNsBundleID:          getEnvWithFallback("APNS_BUNDLE_ID", "PUSH_APNS_BUNDLE_ID", ""),
+			APNsKeyPath:           getEnvWithFallback("APNS_PRIVATE_KEY_PATH", "PUSH_APNS_KEY_PATH", ""),
+			APNsKeyValue:          getEnvWithFallback("APNS_PRIVATE_KEY", "PUSH_APNS_KEY_VALUE", ""),
+			APNsEnvironment:       normalizePushEnvironment(getEnv("APNS_ENVIRONMENT", "")),
+			APNsUseSandbox:        strings.EqualFold(getEnv("PUSH_APNS_USE_SANDBOX", "false"), "true"),
+			APNsRequestTimeout:    getDurationEnvWithFallback("APNS_REQUEST_TIMEOUT", "PUSH_APNS_REQUEST_TIMEOUT", 5*time.Second),
+			FCMProjectID:          getEnvWithFallback("FCM_PROJECT_ID", "FIREBASE_PROJECT_ID", ""),
+			FCMCredentialsFile:    getEnvWithFallback("FCM_CREDENTIALS_FILE", "FIREBASE_SERVICE_ACCOUNT_FILE", getEnv("GOOGLE_APPLICATION_CREDENTIALS", "")),
+			FCMCredentialsJSON:    getEnvWithFallback("FCM_CREDENTIALS_JSON", "FIREBASE_SERVICE_ACCOUNT_JSON", ""),
+			FCMRequestTimeout:     getDurationEnvWithFallback("FCM_REQUEST_TIMEOUT", "FIREBASE_REQUEST_TIMEOUT", 5*time.Second),
+			OutboxBatchSize:       getIntEnv("PUSH_OUTBOX_BATCH_SIZE", 50),
+			OutboxPollInterval:    getDurationEnv("PUSH_OUTBOX_POLL_INTERVAL", 5*time.Second),
+			OutboxMaxAttempts:     getIntEnv("PUSH_OUTBOX_MAX_ATTEMPTS", 8),
+			OutboxBaseBackoff:     getDurationEnv("PUSH_OUTBOX_BASE_BACKOFF", 30*time.Second),
+			OutboxMaxBackoff:      getDurationEnv("PUSH_OUTBOX_MAX_BACKOFF", 15*time.Minute),
+			OutboxRecoveryTimeout: getDurationEnv("PUSH_OUTBOX_RECOVERY_TIMEOUT", 5*time.Minute),
+			OutboxRequestTimeout:  getDurationEnv("PUSH_OUTBOX_REQUEST_TIMEOUT", 10*time.Second),
 		},
 		Upload: UploadConfig{
 			BasePath:      getEnv("UPLOAD_BASE_PATH", "/var/www/uploads"),
