@@ -25,6 +25,13 @@ const (
 	pushTemplateAdminNotice = "push.admin.notice"
 	pushTemplateVersion     = 1
 	pushDefaultTTLSeconds   = 86400
+
+	messagePushFallbackTitle   = "새 쪽지가 도착했습니다"
+	messagePushFallbackBody    = "새로운 쪽지가 도착했습니다."
+	messagePushPreviewMaxRunes = 80
+
+	noticePushTitle        = "새 소식"
+	noticePushFallbackBody = "새 공지가 등록되었습니다."
 )
 
 var ErrInvalidPushPreferences = errors.New("invalid push preferences")
@@ -181,25 +188,25 @@ func (s *MobilePushService) UpdatePreferences(usrSeq int, req model.PushPreferen
 
 func (s *MobilePushService) NotifyMessageReceived(messageSeq, recvrSeq, senderSeq int, senderName string, contentPreview string) {
 	if s.outbox != nil {
-		s.notifyMessageReceived(context.Background(), messageSeq, recvrSeq, senderSeq, senderName)
+		s.notifyMessageReceived(context.Background(), messageSeq, recvrSeq, senderSeq, senderName, contentPreview)
 		return
 	}
 	s.enqueue(func() {
-		s.notifyMessageReceived(context.Background(), messageSeq, recvrSeq, senderSeq, senderName)
+		s.notifyMessageReceived(context.Background(), messageSeq, recvrSeq, senderSeq, senderName, contentPreview)
 	})
 }
 
 func (s *MobilePushService) NotifyPostPublished(authorSeq int, postSeq int, subject string) {
 	if s.outbox != nil {
-		s.notifyPostPublished(context.Background(), authorSeq, postSeq)
+		s.notifyPostPublished(context.Background(), authorSeq, postSeq, subject)
 		return
 	}
 	s.enqueue(func() {
-		s.notifyPostPublished(context.Background(), authorSeq, postSeq)
+		s.notifyPostPublished(context.Background(), authorSeq, postSeq, subject)
 	})
 }
 
-func (s *MobilePushService) notifyMessageReceived(ctx context.Context, messageSeq, recvrSeq, senderSeq int, senderName string) {
+func (s *MobilePushService) notifyMessageReceived(ctx context.Context, messageSeq, recvrSeq, senderSeq int, senderName string, contentPreview string) {
 	if !s.isMessagePushEnabled(recvrSeq) {
 		s.logger.Info().Int("user_id", recvrSeq).Str("event_type", PushEventMessageNew).Msg("push: skipped by user preference")
 		return
@@ -211,8 +218,7 @@ func (s *MobilePushService) notifyMessageReceived(ctx context.Context, messageSe
 		return
 	}
 
-	title := "새 쪽지가 도착했습니다"
-	body := "새로운 쪽지가 도착했습니다."
+	title, body := messagePushDisplayText(senderName, contentPreview)
 	payload := BuildMessageNewPushPayload(messageSeq, senderSeq, recvrSeq, s.currentTime())
 
 	for _, token := range tokens {
@@ -232,15 +238,36 @@ func (s *MobilePushService) notifyMessageReceived(ctx context.Context, messageSe
 	}
 }
 
-func (s *MobilePushService) notifyPostPublished(ctx context.Context, authorSeq int, postSeq int) {
+func messagePushDisplayText(senderName string, contentPreview string) (string, string) {
+	title := strings.Join(strings.Fields(senderName), " ")
+	if title == "" {
+		title = messagePushFallbackTitle
+	}
+
+	body := strings.Join(strings.Fields(contentPreview), " ")
+	if body == "" {
+		return title, messagePushFallbackBody
+	}
+
+	runes := []rune(body)
+	if len(runes) > messagePushPreviewMaxRunes {
+		body = string(runes[:messagePushPreviewMaxRunes-1]) + "…"
+	}
+	return title, body
+}
+
+func (s *MobilePushService) notifyPostPublished(ctx context.Context, authorSeq int, postSeq int, subject string) {
 	tokens, err := s.tokenRepo.GetActiveTokensForBroadcast(authorSeq)
 	if err != nil {
 		s.logger.Error().Err(err).Int("authorSeq", authorSeq).Msg("push: load tokens failed for new notice")
 		return
 	}
 
-	title := "새 공지"
-	body := "새 공지가 등록되었습니다."
+	title := noticePushTitle
+	body := strings.Join(strings.Fields(subject), " ")
+	if body == "" {
+		body = noticePushFallbackBody
+	}
 	sentAt := s.currentTime()
 	noticePreferenceCache := map[int]bool{}
 	for _, token := range tokens {

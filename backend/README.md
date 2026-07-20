@@ -131,7 +131,7 @@ Every APNs custom payload and FCM data payload includes:
 
 `admin.notice` uses `args.post_seq` and `deep_link: "/feed/{postSeq}"`.
 
-Payload data intentionally omits message body, sender name, notice subject, phone, address, and other PII. The app treats push as a routing/sync hint and refetches backend data.
+Custom routing data intentionally omits message body, sender name, notice subject, phone, address, and other PII. For `message.new`, the user-visible APNs/FCM alert title is the sender name and the body is a whitespace-normalized preview truncated to 80 Unicode characters. For `admin.notice`, the alert title is `새 소식` and the body is the whitespace-normalized notice subject. Blank values fall back to generic copy. iOS outbox rows retain this alert title/body until operational cleanup because retries must reproduce the same notification. The app still treats the custom payload as a routing/sync hint and refetches backend data.
 
 APNs headers set by the provider:
 

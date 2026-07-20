@@ -35,8 +35,11 @@ KPI:
 
 ## C. 보안 정책
 
-- 금지: `이름/전화번호/주소/학번/개인식별 토큰` 등을 push payload 본문에 직접 저장
-- 허용: template key 기반 렌더링 + 인앱 fetch
+- 금지: custom data/`args`에 `이름/DM 본문/전화번호/주소/학번/개인식별 토큰` 저장
+- 허용: `message.new`의 사용자 표시용 alert에 발신자 이름과 최대 80 Unicode 글자의 쪽지 미리보기 표시
+- 허용: `admin.notice`의 사용자 표시용 alert에 공지 제목 표시
+- iOS 재시도를 위한 outbox의 alert 제목/본문 저장은 허용하되 애플리케이션 로그에는 출력하지 않는다.
+- 그 외 이벤트 데이터는 template key 기반 렌더링 + 인앱 fetch를 기본으로 한다.
 - `action_token`:
   - 서명 필요(HMAC/JWT)
   - 만료(예: 10분) 및 1회성 우선 적용

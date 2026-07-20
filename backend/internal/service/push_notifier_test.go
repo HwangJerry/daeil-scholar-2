@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -288,14 +289,40 @@ func TestNotifyMessageReceivedSendsRecipientPayload(t *testing.T) {
 		t.Fatalf("expected 1 push, got %d", len(provider.sent))
 	}
 	push := provider.sent[0]
-	if push.Body != "새로운 쪽지가 도착했습니다." {
-		t.Fatalf("unexpected body: %q", push.Body)
+	if push.Title != "홍길동" || push.Body != "private message body" {
+		t.Fatalf("unexpected display text: title=%q body=%q", push.Title, push.Body)
 	}
 	if push.Payload.EventID != "message.new:777:67890" {
 		t.Fatalf("unexpected event_id: %s", push.Payload.EventID)
 	}
 	if push.Payload.Args["sender_seq"] != 12345 || push.Payload.Args["recvr_seq"] != 67890 {
 		t.Fatalf("unexpected args: %#v", push.Payload.Args)
+	}
+	if _, exists := push.Payload.Args["sender_name"]; exists {
+		t.Fatalf("sender name must not be copied into custom payload: %#v", push.Payload.Args)
+	}
+	if _, exists := push.Payload.Args["content_preview"]; exists {
+		t.Fatalf("message preview must not be copied into custom payload: %#v", push.Payload.Args)
+	}
+}
+
+func TestMessagePushDisplayTextNormalizesAndTruncatesPreview(t *testing.T) {
+	title, body := messagePushDisplayText("  홍길동\n동문  ", "  첫째 줄\n\t둘째   줄  ")
+	if title != "홍길동 동문" || body != "첫째 줄 둘째 줄" {
+		t.Fatalf("unexpected normalized display text: title=%q body=%q", title, body)
+	}
+
+	longPreview := strings.Repeat("가", messagePushPreviewMaxRunes+1)
+	_, body = messagePushDisplayText("홍길동", longPreview)
+	if len([]rune(body)) != messagePushPreviewMaxRunes || !strings.HasSuffix(body, "…") {
+		t.Fatalf("preview must be truncated to %d runes with ellipsis: %q", messagePushPreviewMaxRunes, body)
+	}
+}
+
+func TestMessagePushDisplayTextUsesFallbacksForBlankValues(t *testing.T) {
+	title, body := messagePushDisplayText(" \n ", "\t\n")
+	if title != messagePushFallbackTitle || body != messagePushFallbackBody {
+		t.Fatalf("unexpected fallbacks: title=%q body=%q", title, body)
 	}
 }
 
@@ -354,6 +381,9 @@ func TestNotifyMessageReceivedEnqueuesOutboxPerRecipientToken(t *testing.T) {
 		args := payload["args"].(map[string]any)
 		if args["sender_seq"] != float64(12345) || args["recvr_seq"] != float64(67890) {
 			t.Fatalf("unexpected args: %#v", args)
+		}
+		if job.Title != "홍길동" || job.Body != "private message body" {
+			t.Fatalf("unexpected outbox display text: title=%q body=%q", job.Title, job.Body)
 		}
 	}
 }
@@ -440,19 +470,44 @@ func TestNotifyPostPublishedCreatesPayloadPerRecipient(t *testing.T) {
 	provider := &fakePushProvider{}
 	svc := newInlinePushService(store, provider)
 
-	svc.NotifyPostPublished(99, 555, "공지")
+	svc.NotifyPostPublished(99, 555, "  장학회\n새 소식  ")
 
 	if len(provider.sent) != 2 {
 		t.Fatalf("expected 2 pushes, got %d", len(provider.sent))
 	}
 	for i, wantUserID := range []string{"67890", "67891"} {
 		push := provider.sent[i]
+		if push.Title != "새 소식" || push.Body != "장학회 새 소식" {
+			t.Fatalf("unexpected notice display text: title=%q body=%q", push.Title, push.Body)
+		}
 		if push.Payload.UserID != wantUserID {
 			t.Fatalf("expected user_id %s for push %d, got %s", wantUserID, i, push.Payload.UserID)
 		}
 		if push.Payload.EventID != "admin.notice:555" || push.Payload.Args["post_seq"] != 555 {
 			t.Fatalf("unexpected notice payload: %#v", push.Payload)
 		}
+		if _, exists := push.Payload.Args["subject"]; exists {
+			t.Fatalf("notice subject must not be copied into custom payload: %#v", push.Payload.Args)
+		}
+	}
+}
+
+func TestNotifyPostPublishedUsesFallbackForBlankSubject(t *testing.T) {
+	store := &fakePushTokenStore{
+		broadcastTokens: []repository.MobileDeviceToken{{
+			MDTSeq: 10, UsrSeq: 67890, Platform: "android", DeviceToken: "token-10",
+		}},
+	}
+	provider := &fakePushProvider{}
+	svc := newInlinePushService(store, provider)
+
+	svc.NotifyPostPublished(99, 555, " \n\t ")
+
+	if len(provider.sent) != 1 {
+		t.Fatalf("expected one notice push, got %d", len(provider.sent))
+	}
+	if push := provider.sent[0]; push.Title != noticePushTitle || push.Body != noticePushFallbackBody {
+		t.Fatalf("unexpected fallback display text: title=%q body=%q", push.Title, push.Body)
 	}
 }
 
@@ -472,7 +527,7 @@ func TestNotifyPostPublishedSkipsRecipientsWithNoticePreferenceDisabled(t *testi
 	provider := &fakePushProvider{}
 	svc := newInlinePushServiceWithPreferences(store, preferences, provider)
 
-	svc.NotifyPostPublished(99, 555, "공지")
+	svc.NotifyPostPublished(99, 555, "공지 제목")
 
 	if len(provider.sent) != 1 {
 		t.Fatalf("expected one notice push, got %d", len(provider.sent))
@@ -492,13 +547,16 @@ func TestNotifyPostPublishedEnqueuesOutboxWithRecipientUserPayload(t *testing.T)
 	outbox := &fakePushOutboxStore{}
 	svc := newInlineOutboxPushService(store, outbox, &fakePushProvider{})
 
-	svc.NotifyPostPublished(99, 555, "공지")
+	svc.NotifyPostPublished(99, 555, "공지 제목")
 
 	if len(outbox.jobs) != 2 {
 		t.Fatalf("expected 2 outbox jobs, got %d", len(outbox.jobs))
 	}
 	for i, wantUserID := range []string{"67890", "67891"} {
 		job := outbox.jobs[i]
+		if job.Title != "새 소식" || job.Body != "공지 제목" {
+			t.Fatalf("unexpected notice outbox display text: title=%q body=%q", job.Title, job.Body)
+		}
 		if job.EventType != PushEventAdminNotice || job.EventID != "admin.notice:555" {
 			t.Fatalf("unexpected notice outbox job: %#v", job)
 		}

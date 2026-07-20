@@ -1,8 +1,8 @@
 # Push Contract (dflh-saf-v2)
 
-Version: 1.1  
-Last Updated: 2026-07-02  
-Owner: Backend Team / Mobile Team Lead  
+Version: 1.2
+Last Updated: 2026-07-19
+Owner: Backend Team / Mobile Team Lead
 
 본 문서는 푸시 알림 파이프라인의 계약(Contract)을 고정한다.  
 `dflh-saf-v2-swift` 및 `dflh-saf-v2-kotlin` 마이그레이션/운영에서 아래 규칙을 코드/DB/CI에서 강제한다.
@@ -49,6 +49,8 @@ Owner: Backend Team / Mobile Team Lead
 - `event`는 Android/iOS 하위 호환 라우팅 alias이며 `event_type`과 같은 값을 사용한다.
 - `template_version`은 현재 `1`이다.
 - `args`는 라우팅에 필요한 최소 값만 포함하며, DM 본문/발신자 이름/전화번호/주소/개인식별 토큰은 포함하지 않는다.
+- `message.new`의 사용자 표시용 alert는 발신자 이름을 제목으로, 공백 정리 후 최대 80 Unicode 글자로 제한한 쪽지 미리보기를 본문으로 사용한다. 이 값은 custom data/`args`에는 중복하지 않는다.
+- `admin.notice`의 사용자 표시용 alert는 `새 소식`을 제목으로, 공백을 정리한 공지 제목을 본문으로 사용한다. 공지 제목은 custom data/`args`에는 중복하지 않는다.
 - 현재 지원 payload:
   - `message.new`: `args.sender_seq`, `args.recvr_seq`, `deep_link=/messages/{senderSeq}`
   - `admin.notice`: `args.post_seq`, `deep_link=/feed/{postSeq}`
