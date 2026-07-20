@@ -57,12 +57,33 @@ TARGET=${POSITIONAL[0]:-"daeil-prod"}
 SSH_PORT=${POSITIONAL[1]:-}
 
 if [[ -n "${SSH_PORT}" ]]; then
-  SSH_OPTS=(-p "${SSH_PORT}")
-  SCP_OPTS=(-P "${SSH_PORT}")
+  if [[ ! "${SSH_PORT}" =~ ^[0-9]+$ ]]; then
+    echo "✗ Invalid SSH port: '${SSH_PORT}' (must contain digits only)" >&2
+    exit 1
+  fi
+  RSYNC_RSH="ssh -p ${SSH_PORT}"
 else
-  SSH_OPTS=()
-  SCP_OPTS=()
+  RSYNC_RSH="ssh"
 fi
+
+# macOS ships Bash 3.2, where expanding an empty array under `set -u` raises
+# "unbound variable". Keep optional SSH arguments inside wrappers instead of
+# storing them in empty arrays so both the default and custom-port paths work.
+run_ssh() {
+  if [[ -n "${SSH_PORT}" ]]; then
+    command ssh -p "${SSH_PORT}" "$@"
+    return
+  fi
+  command ssh "$@"
+}
+
+run_scp() {
+  if [[ -n "${SSH_PORT}" ]]; then
+    command scp -P "${SSH_PORT}" "$@"
+    return
+  fi
+  command scp "$@"
+}
 
 # Resolve --patch-mode interactively if it wasn't provided on the command line.
 # No default — the user must explicitly answer true or false (mirrors the
@@ -164,7 +185,7 @@ placeholder_value() {
 # Read systemd unit once; reused by env validation AND migration drift check below.
 UNIT_CONTENT=""
 if [[ "${BUILD_BACKEND}" == "true" && ("${SKIP_ENV_CHECK:-0}" != "1" || "${SKIP_MIGRATION_CHECK:-0}" != "1") ]]; then
-  if ! UNIT_CONTENT=$(ssh "${SSH_OPTS[@]}" "${TARGET}" "cat ${SERVICE_PATH}" 2>&1); then
+  if ! UNIT_CONTENT=$(run_ssh "${TARGET}" "cat ${SERVICE_PATH}" 2>&1); then
     echo "✗ Failed to read ${SERVICE_PATH}:" >&2
     echo "${UNIT_CONTENT}" | sed 's/^/    /' >&2
     echo "  Hint: ensure the service file exists and is world-readable (chmod 644)." >&2
@@ -317,7 +338,7 @@ else
     exit 1
   fi
 
-  if ! REMOTE_LIST=$(ssh "${SSH_OPTS[@]}" "${TARGET}" "MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' -BN '${DB_NAME_VAL}' -e 'SELECT filename FROM _migration_history ORDER BY filename'" 2>&1); then
+  if ! REMOTE_LIST=$(run_ssh "${TARGET}" "MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' -BN '${DB_NAME_VAL}' -e 'SELECT filename FROM _migration_history ORDER BY filename'" 2>&1); then
     echo "✗ Failed to query _migration_history on ${TARGET}:" >&2
     echo "${REMOTE_LIST}" | sed 's/^/    /' >&2
     echo "" >&2
@@ -368,19 +389,19 @@ else
     for m in "${PENDING[@]}"; do
       REMOTE_TMP="/tmp/_mig_$$_${m}"
       echo "  APPLY ${m} ..."
-      if ! scp "${SCP_OPTS[@]}" "backend/migrations/${m}" "${TARGET}:${REMOTE_TMP}" >/dev/null; then
+      if ! run_scp "backend/migrations/${m}" "${TARGET}:${REMOTE_TMP}" >/dev/null; then
         echo "✗ Failed to upload ${m} to ${TARGET}:${REMOTE_TMP}" >&2
         echo "  Backend NOT restarted. Investigate before retrying." >&2
         exit 1
       fi
-      if ! ssh "${SSH_OPTS[@]}" "${TARGET}" \
+      if ! run_ssh "${TARGET}" \
         "MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' '${DB_NAME_VAL}' < ${REMOTE_TMP} \
          && MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' -BN '${DB_NAME_VAL}' \
               -e \"INSERT INTO _migration_history (filename) VALUES ('${m}')\" \
          && rm -f ${REMOTE_TMP}"; then
         echo "✗ Migration failed: ${m}" >&2
         echo "  DB may be in a partial state. Backend NOT restarted. Investigate before retrying." >&2
-        ssh "${SSH_OPTS[@]}" "${TARGET}" "rm -f ${REMOTE_TMP}" || true
+        run_ssh "${TARGET}" "rm -f ${REMOTE_TMP}" || true
         exit 1
       fi
       echo "  OK    ${m}"
@@ -437,55 +458,55 @@ fi
 
 if [[ "${BUILD_BACKEND}" == "true" ]]; then
   echo "=== Uploading Go binary ==="
-  scp "${SCP_OPTS[@]}" dist/server "${TARGET}:/app/backend/server.new"
-  scp "${SCP_OPTS[@]}" dist/backfill "${TARGET}:/app/backend/backfill"
-  ssh "${SSH_OPTS[@]}" "${TARGET}" 'mv /app/backend/server.new /app/backend/server && chmod 755 /app/backend/server /app/backend/backfill'
+  run_scp dist/server "${TARGET}:/app/backend/server.new"
+  run_scp dist/backfill "${TARGET}:/app/backend/backfill"
+  run_ssh "${TARGET}" 'mv /app/backend/server.new /app/backend/server && chmod 755 /app/backend/server /app/backend/backfill'
 fi
 
 if [[ "${BUILD_FRONTEND}" == "true" ]]; then
   echo "=== Uploading User SPA ==="
-  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" frontend/dist/ "${TARGET}:/var/www/app/"
+  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "${RSYNC_RSH}" frontend/dist/ "${TARGET}:/var/www/app/"
 
   echo "=== Uploading Admin SPA ==="
-  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" admin/dist/ "${TARGET}:/var/www/admin/"
+  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "${RSYNC_RSH}" admin/dist/ "${TARGET}:/var/www/admin/"
 fi
 
 if [[ "${BUILD_BACKEND}" == "true" ]]; then
   echo "=== Reloading systemd and restarting backend ==="
-  ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'
+  run_ssh "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'
 fi
 
-echo "=== Uploading Apache httpd config ==="
-scp "${SCP_OPTS[@]}" deploy/httpd-alumni.conf "${TARGET}:/tmp/alumni.conf.new"
-ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo mv /tmp/alumni.conf.new /etc/httpd/conf.d/alumni.conf && sudo httpd -t'
+  echo "=== Uploading Apache httpd config ==="
+  run_scp deploy/httpd-alumni.conf "${TARGET}:/tmp/alumni.conf.new"
+  run_ssh "${TARGET}" 'sudo mv /tmp/alumni.conf.new /etc/httpd/conf.d/alumni.conf && sudo httpd -t'
 
-echo "=== Uploading legacy PHP compat shims ==="
-for shim in _set_docroot.php _legacy_docroot.php _legacy_url_rewriter.php; do
-  scp "${SCP_OPTS[@]}" "deploy/${shim}" "${TARGET}:/tmp/${shim}.new"
-  ssh "${SSH_OPTS[@]}" "${TARGET}" "sudo mv /tmp/${shim}.new /var/www/html/${shim} && sudo chmod 644 /var/www/html/${shim}"
-done
+  echo "=== Uploading legacy PHP compat shims ==="
+  for shim in _set_docroot.php _legacy_docroot.php _legacy_url_rewriter.php; do
+    run_scp "deploy/${shim}" "${TARGET}:/tmp/${shim}.new"
+    run_ssh "${TARGET}" "sudo mv /tmp/${shim}.new /var/www/html/${shim} && sudo chmod 644 /var/www/html/${shim}"
+  done
 
-echo "=== Reloading Apache httpd ==="
-ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl reload httpd'
+  echo "=== Reloading Apache httpd ==="
+  run_ssh "${TARGET}" 'sudo systemctl reload httpd'
 
-echo "=== Verifying /old/ legacy routing ==="
-SMOKE_HOST="daeilfoundation.or.kr"
-# 1) On-server check via loopback with --resolve so hairpin-NAT/DNS issues
-#    do not mask Apache config problems. Falls back gracefully if it fails.
-ssh "${SSH_OPTS[@]}" "${TARGET}" \
-  "curl -s -o /dev/null -w '[server-loopback] HTTP %{http_code} for /old/index.php\n' \
-    --resolve ${SMOKE_HOST}:443:127.0.0.1 https://${SMOKE_HOST}/old/index.php" \
-  || echo "  ⚠ server-loopback /old/index.php failed (non-fatal)"
-ssh "${SSH_OPTS[@]}" "${TARGET}" \
-  "curl -s -o /dev/null -w '[server-loopback] HTTP %{http_code} for /old/_sys/css/_common.css\n' \
-    --resolve ${SMOKE_HOST}:443:127.0.0.1 https://${SMOKE_HOST}/old/_sys/css/_common.css" \
-  || echo "  ⚠ server-loopback /old/_sys/css/_common.css failed (non-fatal)"
-# 2) External check from the deploy machine — verifies public reachability.
-curl -s -o /dev/null -w "[external]       HTTP %{http_code} for /old/index.php\n" \
-  "https://${SMOKE_HOST}/old/index.php" \
-  || echo "  ⚠ external /old/index.php failed (non-fatal)"
-curl -s -o /dev/null -w "[external]       HTTP %{http_code} for /old/_sys/css/_common.css\n" \
-  "https://${SMOKE_HOST}/old/_sys/css/_common.css" \
-  || echo "  ⚠ external /old/_sys/css/_common.css failed (non-fatal)"
+  echo "=== Verifying /old/ legacy routing ==="
+  SMOKE_HOST="daeilfoundation.or.kr"
+  # 1) On-server check via loopback with --resolve so hairpin-NAT/DNS issues
+  #    do not mask Apache config problems. Falls back gracefully if it fails.
+  run_ssh "${TARGET}" \
+    "curl -s -o /dev/null -w '[server-loopback] HTTP %{http_code} for /old/index.php\n' \
+      --resolve ${SMOKE_HOST}:443:127.0.0.1 https://${SMOKE_HOST}/old/index.php" \
+    || echo "  ⚠ server-loopback /old/index.php failed (non-fatal)"
+  run_ssh "${TARGET}" \
+    "curl -s -o /dev/null -w '[server-loopback] HTTP %{http_code} for /old/_sys/css/_common.css\n' \
+      --resolve ${SMOKE_HOST}:443:127.0.0.1 https://${SMOKE_HOST}/old/_sys/css/_common.css" \
+    || echo "  ⚠ server-loopback /old/_sys/css/_common.css failed (non-fatal)"
+  # 2) External check from the deploy machine — verifies public reachability.
+  curl -s -o /dev/null -w "[external]       HTTP %{http_code} for /old/index.php\n" \
+    "https://${SMOKE_HOST}/old/index.php" \
+    || echo "  ⚠ external /old/index.php failed (non-fatal)"
+  curl -s -o /dev/null -w "[external]       HTTP %{http_code} for /old/_sys/css/_common.css\n" \
+    "https://${SMOKE_HOST}/old/_sys/css/_common.css" \
+    || echo "  ⚠ external /old/_sys/css/_common.css failed (non-fatal)"
 
 echo "=== Deploy complete ==="
