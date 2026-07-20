@@ -122,7 +122,7 @@ echo "=== build targets: backend=${BUILD_BACKEND}, frontend=${BUILD_FRONTEND} ==
 #
 #   mysql -u USER -p DB_NAME < backend/migrations/NNN_name.sql
 #
-# Current migration range: 001 through 018
+# Current migration range: 001 through 035
 #   001_alter_existing_tables.sql
 #   002_create_new_tables.sql
 #   003_seed_donation_config.sql
@@ -133,7 +133,7 @@ echo "=== build targets: backend=${BUILD_BACKEND}, frontend=${BUILD_FRONTEND} ==
 #   008_alumni_profile_extensions.sql
 #   009_create_message_table.sql
 #   010_create_subscription_table.sql
-#   011 through 018 — see backend/migrations/ for details
+#   011 through 035 — see backend/migrations/ for details
 #
 # Migrations MUST be applied sequentially (in numbered order).
 # =============================================================================
@@ -146,6 +146,7 @@ echo "=== build targets: backend=${BUILD_BACKEND}, frontend=${BUILD_FRONTEND} ==
 # Skip with: SKIP_ENV_CHECK=1 ./deploy.sh ...
 # =============================================================================
 SERVICE_PATH="/etc/systemd/system/alumni-backend.service"
+SERVICE_ENV_PATH="/etc/sysconfig/alumni-backend"
 
 REQUIRED_KEYS=(
   ALLOWED_ORIGIN
@@ -182,8 +183,41 @@ placeholder_value() {
   esac
 }
 
-# Read systemd unit once; reused by env validation AND migration drift check below.
+# Print a systemd EnvironmentFile value without one matching pair of quotes.
+unquote_env_value() {
+  local value="$1"
+  if [[ ${#value} -ge 2 ]]; then
+    local first="${value:0:1}"
+    local last="${value: -1}"
+    if [[ ("${first}" == '"' && "${last}" == '"') || ("${first}" == "'" && "${last}" == "'") ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+  fi
+  printf '%s' "${value}"
+}
+
+# Resolve a value from EnvironmentFile first, then fall back to legacy inline
+# Environment="KEY=value" entries while hosts are migrated. Values are never
+# printed by validation code.
+env_value() {
+  local key="$1"
+  local line=""
+  local value=""
+
+  line=$(printf '%s\n' "${ENV_CONTENT}" | sed -nE "/^[[:space:]]*${key}=/p" | tail -n 1)
+  if [[ -n "${line}" ]]; then
+    value=$(printf '%s\n' "${line}" | sed -E "s/^[[:space:]]*${key}=//")
+    unquote_env_value "${value}"
+    return
+  fi
+
+  value=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE "s/^[[:space:]]*Environment=\"${key}=(.*)\"[[:space:]]*$/\1/p" | tail -n 1)
+  printf '%s' "${value}"
+}
+
+# Read systemd configuration once; reused by env validation and migration checks.
 UNIT_CONTENT=""
+ENV_CONTENT=""
 if [[ "${BUILD_BACKEND}" == "true" && ("${SKIP_ENV_CHECK:-0}" != "1" || "${SKIP_MIGRATION_CHECK:-0}" != "1") ]]; then
   if ! UNIT_CONTENT=$(run_ssh "${TARGET}" "cat ${SERVICE_PATH}" 2>&1); then
     echo "✗ Failed to read ${SERVICE_PATH}:" >&2
@@ -191,6 +225,29 @@ if [[ "${BUILD_BACKEND}" == "true" && ("${SKIP_ENV_CHECK:-0}" != "1" || "${SKIP_
     echo "  Hint: ensure the service file exists and is world-readable (chmod 644)." >&2
     exit 1
   fi
+  if ! grep -Eq "^[[:space:]]*EnvironmentFile=-?\"?${SERVICE_ENV_PATH}\"?[[:space:]]*$" <<< "${UNIT_CONTENT}"; then
+    echo "✗ ${SERVICE_PATH} must declare EnvironmentFile=${SERVICE_ENV_PATH}." >&2
+    echo "  Install deploy/alumni-backend.service and create the environment file before deploying." >&2
+    exit 1
+  fi
+  if ! ENV_CONTENT=$(run_ssh "${TARGET}" "sudo -n cat ${SERVICE_ENV_PATH}" 2>&1); then
+    echo "✗ Failed to read ${SERVICE_ENV_PATH} with passwordless sudo." >&2
+    echo "  Ensure the file exists and the deploy user can run sudo -n cat for it." >&2
+    exit 1
+  fi
+  ENV_MODE=$(run_ssh "${TARGET}" "sudo -n stat -c '%a' ${SERVICE_ENV_PATH}" 2>/dev/null || true)
+  if [[ -z "${ENV_MODE}" ]]; then
+    echo "✗ Could not inspect permissions for ${SERVICE_ENV_PATH}." >&2
+    exit 1
+  fi
+  ENV_OTHER_MODE="${ENV_MODE#"${ENV_MODE%?}"}"
+  case "${ENV_OTHER_MODE}" in
+    4|5|6|7)
+      echo "✗ ${SERVICE_ENV_PATH} is readable by other users (mode ${ENV_MODE})." >&2
+      echo "  Run: sudo chmod 0640 ${SERVICE_ENV_PATH}" >&2
+      exit 1
+      ;;
+  esac
 else
   if [[ "${BUILD_BACKEND}" == "false" ]]; then
     echo "=== Skipping systemd service read because backend build is disabled ==="
@@ -209,9 +266,7 @@ else
   MISSING=()
   PLACEHOLDERS=()
   for key in "${REQUIRED_KEYS[@]}"; do
-    # Match Environment="KEY=VALUE" and capture VALUE. Empty value counts as missing
-    # because config.go's getEnv() falls back to defaults when the var is empty.
-    value=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE "s/^Environment=\"${key}=(.*)\"$/\1/p" | head -n 1)
+    value=$(env_value "${key}")
     if [[ -z "${value}" ]]; then
       MISSING+=("${key}")
       continue
@@ -238,7 +293,7 @@ else
       done
     fi
     echo "" >&2
-    echo "Edit ${SERVICE_PATH} on ${TARGET}, then run on the server:" >&2
+    echo "Edit ${SERVICE_ENV_PATH} on ${TARGET}, then run on the server:" >&2
     echo "    sudo systemctl daemon-reload" >&2
     echo "    sudo systemctl restart alumni-backend" >&2
     echo "Re-run ./deploy.sh once the unit is fixed (or set SKIP_ENV_CHECK=1 to bypass)." >&2
@@ -246,6 +301,94 @@ else
   fi
 
   echo "✓ ${#REQUIRED_KEYS[@]} required env vars present and non-placeholder"
+fi
+
+# =============================================================================
+# APNs CREDENTIAL VALIDATION — allow sandbox, production, or both, but reject
+# partial sets and inline private key material on the systemd host.
+# =============================================================================
+if [[ "${BUILD_BACKEND}" == "true" && "${SKIP_ENV_CHECK:-0}" != "1" ]]; then
+  echo "=== Validating APNs credential sets on ${TARGET} ==="
+
+  APNS_CONFIGURED_ENVIRONMENTS=()
+  APNS_KEY_PATHS=()
+  APNS_ERRORS=()
+  for apns_environment in SANDBOX PRODUCTION; do
+    case "${apns_environment}" in
+      SANDBOX) apns_label="sandbox" ;;
+      PRODUCTION) apns_label="production" ;;
+    esac
+    key_id=$(env_value "APNS_${apns_environment}_KEY_ID")
+    key_path=$(env_value "APNS_${apns_environment}_PRIVATE_KEY_PATH")
+    key_value=$(env_value "APNS_${apns_environment}_PRIVATE_KEY")
+
+    if [[ -n "${key_value}" ]]; then
+      APNS_ERRORS+=("APNS_${apns_environment}_PRIVATE_KEY must not contain inline key material; use APNS_${apns_environment}_PRIVATE_KEY_PATH")
+    fi
+    if [[ -n "${key_id}" || -n "${key_path}" || -n "${key_value}" ]]; then
+      if [[ -z "${key_id}" ]]; then
+        APNS_ERRORS+=("APNS_${apns_environment}_KEY_ID is required for ${apns_label}")
+      fi
+      if [[ -z "${key_path}" ]]; then
+        APNS_ERRORS+=("APNS_${apns_environment}_PRIVATE_KEY_PATH is required for ${apns_label}")
+      elif [[ ! "${key_path}" =~ ^/etc/alumni-backend/secrets/apns/[A-Za-z0-9._-]+\.p8$ ]]; then
+        APNS_ERRORS+=("APNS_${apns_environment}_PRIVATE_KEY_PATH must be an absolute .p8 path under /etc/alumni-backend/secrets/apns")
+      else
+        APNS_KEY_PATHS+=("${key_path}")
+      fi
+      APNS_CONFIGURED_ENVIRONMENTS+=("${apns_label}")
+    fi
+  done
+
+  if [[ ${#APNS_CONFIGURED_ENVIRONMENTS[@]} -gt 0 ]]; then
+    for common_key in APNS_TEAM_ID APNS_BUNDLE_ID; do
+      if [[ -z "$(env_value "${common_key}")" ]]; then
+        APNS_ERRORS+=("${common_key} is required when APNs is configured")
+      fi
+    done
+  fi
+
+  if [[ ${#APNS_ERRORS[@]} -gt 0 ]]; then
+    echo "✗ APNs configuration is invalid:" >&2
+    for apns_error in "${APNS_ERRORS[@]}"; do
+      echo "    - ${apns_error}" >&2
+    done
+    exit 1
+  fi
+
+  if [[ ${#APNS_CONFIGURED_ENVIRONMENTS[@]} -eq 0 ]]; then
+    echo "✓ APNs disabled (no credential sets configured)"
+  else
+    SERVICE_USER=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE 's/^[[:space:]]*User=([^[:space:]]+)[[:space:]]*$/\1/p' | tail -n 1)
+    if [[ -z "${SERVICE_USER}" ]]; then
+      SERVICE_USER="root"
+    fi
+    if [[ ! "${SERVICE_USER}" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]]; then
+      echo "✗ Could not safely determine alumni-backend service user." >&2
+      exit 1
+    fi
+
+    for key_path in "${APNS_KEY_PATHS[@]}"; do
+      if ! run_ssh "${TARGET}" "sudo -n test -f '${key_path}' && sudo -n -u '${SERVICE_USER}' test -r '${key_path}'"; then
+        echo "✗ APNs key is missing or unreadable by service user ${SERVICE_USER}: ${key_path}" >&2
+        exit 1
+      fi
+      KEY_MODE=$(run_ssh "${TARGET}" "sudo -n stat -c '%a' '${key_path}'" 2>/dev/null || true)
+      if [[ -z "${KEY_MODE}" ]]; then
+        echo "✗ Could not inspect permissions for APNs key: ${key_path}" >&2
+        exit 1
+      fi
+      KEY_OTHER_MODE="${KEY_MODE#"${KEY_MODE%?}"}"
+      case "${KEY_OTHER_MODE}" in
+        4|5|6|7)
+          echo "✗ APNs key is readable by other users (mode ${KEY_MODE}): ${key_path}" >&2
+          echo "  Run: sudo chmod 0640 '${key_path}'" >&2
+          exit 1
+          ;;
+      esac
+    done
+    echo "✓ APNs configured environments: ${APNS_CONFIGURED_ENVIRONMENTS[*]}"
+  fi
 fi
 
 # =============================================================================
@@ -271,7 +414,7 @@ else
   da_present=()
   da_missing=()
   for key in "${DA_KEYS[@]}"; do
-    value=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE "s/^Environment=\"${key}=(.*)\"$/\1/p" | head -n 1)
+    value=$(env_value "${key}")
     if [[ -z "${value}" ]]; then
       da_empty_count=$((da_empty_count + 1))
       da_missing+=("${key}")
@@ -317,8 +460,8 @@ fi
 # =============================================================================
 # MIGRATION DRIFT CHECK — fail if local backend/migrations/ has unapplied files
 # on the production DB. Migration history is tracked in the _migration_history
-# table created by migrate.sh. DB credentials are extracted from the systemd
-# unit content read above.
+# table created by migrate.sh. DB credentials are resolved from EnvironmentFile
+# first, with legacy inline unit values accepted during migration.
 # Skip with: SKIP_MIGRATION_CHECK=1 ./deploy.sh ...
 # =============================================================================
 if [[ "${BUILD_BACKEND}" == "false" ]]; then
@@ -328,12 +471,12 @@ elif [[ "${SKIP_MIGRATION_CHECK:-0}" == "1" ]]; then
 else
   echo "=== Checking migration drift on ${TARGET} ==="
 
-  DB_USER_VAL=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE 's/^Environment="DB_USER=(.*)"$/\1/p' | head -n 1)
-  DB_PASS_VAL=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE 's/^Environment="DB_PASSWORD=(.*)"$/\1/p' | head -n 1)
-  DB_NAME_VAL=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE 's/^Environment="DB_NAME=(.*)"$/\1/p' | head -n 1)
+  DB_USER_VAL=$(env_value DB_USER)
+  DB_PASS_VAL=$(env_value DB_PASSWORD)
+  DB_NAME_VAL=$(env_value DB_NAME)
 
   if [[ -z "${DB_USER_VAL}" || -z "${DB_NAME_VAL}" ]]; then
-    echo "✗ Could not extract DB_USER/DB_NAME from systemd unit." >&2
+    echo "✗ Could not extract DB_USER/DB_NAME from ${SERVICE_ENV_PATH}." >&2
     echo "  Set SKIP_MIGRATION_CHECK=1 to bypass." >&2
     exit 1
   fi

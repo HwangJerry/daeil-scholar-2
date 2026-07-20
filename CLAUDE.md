@@ -69,7 +69,8 @@ nginx -c "$(pwd)/nginx/dev.conf" -p "$(pwd)/nginx/"
 ./deploy.sh daeil-prod --backend-only  # Backend build/deploy path
 ```
 
-Steps: `GOOS=linux GOARCH=amd64 go build` → `npm run build` (both SPAs) → `scp` binaries + dist → `systemctl restart alumni-backend` → `systemctl reload httpd` (production web server is Apache httpd, not Nginx — `nginx/` configs are dev-only).
+Backend deployment first validates `/etc/sysconfig/alumni-backend`, APNs key permissions, and migration drift, then cross-compiles and replaces the binary before `systemctl restart alumni-backend`. The service runs as `alumni-backend`; runtime values are loaded by `EnvironmentFile` and APNs keys live under `/etc/alumni-backend/secrets/apns`. Full setup, recovery, and rollback: `docs/push/centos7-apns-operations.md`.
+
 `--backend-only` skips Apache configuration, legacy PHP compatibility shims, `httpd` reload, and legacy URL smoke checks. Full/frontend deployments still run those steps. Production uses Apache httpd, not Nginx; `nginx/` configs are dev-only.
 
 ## Architecture

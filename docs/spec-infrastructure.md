@@ -294,11 +294,14 @@ echo 300 > /proc/$(pidof php-fpm)/oom_score_adj
 ```ini
 # /etc/systemd/system/alumni-backend.service
 [Service]
-Environment="GOMEMLIMIT=80MiB"
-Environment="GOMAXPROCS=1"
+User=alumni-backend
+Group=alumni-backend
+EnvironmentFile=/etc/sysconfig/alumni-backend
 OOMScoreAdjust=0
-MemoryMax=120M
+MemoryLimit=120M
 ```
+
+`GOMEMLIMIT=80MiB`, `GOMAXPROCS=1`과 DB/JWT/SMTP/APNs 등 runtime 값은 `/etc/sysconfig/alumni-backend`에 둔다. APNs `.p8`은 `/etc/alumni-backend/secrets/apns`에 별도 저장한다. 상세 절차는 `docs/push/centos7-apns-operations.md`를 따른다.
 
 #### Go 커넥션 풀 설정
 
@@ -511,28 +514,25 @@ func main() {
 ### 12.3 배포 방식
 
 ```bash
-#!/bin/bash
-# deploy.sh
+# 전체 배포
+./deploy.sh daeil-prod --patch-mode=false
 
-# 1. 로컬에서 빌드
-GOOS=linux GOARCH=amd64 go build -o server ./cmd/server  # Go 바이너리
-cd frontend && npm run build && cd ..                      # User SPA
-cd admin && npm run build && cd ..                         # Admin SPA
-
-# 2. Go 바이너리 — atomic 교체
-scp server user@gabia:/app/backend/server.new
-ssh user@gabia 'mv /app/backend/server.new /app/backend/server'
-ssh user@gabia 'sudo systemctl restart alumni-backend'
-# → systemd가 SIGTERM 전송 → 10초 대기 (진행 중 요청 완료) → 새 프로세스 시작
-
-# 3. User SPA 정적 파일 배포
-scp -r frontend/dist/ user@gabia:/var/www/app/
-
-# 4. Admin SPA 정적 파일 배포
-scp -r admin/dist/ user@gabia:/var/www/admin/
-
-# 5. Nginx 리로드
-ssh user@gabia 'sudo systemctl reload nginx'
+# 백엔드 중심 배포
+./deploy.sh daeil-prod --backend-only
 ```
+
+백엔드 배포 순서:
+
+1. systemd unit과 `/etc/sysconfig/alumni-backend` 읽기
+2. 필수 runtime 값과 placeholder 검사
+3. APNs 환경별 Key ID/path 조합, `.p8` 권한, daemon 사용자 읽기 검사
+4. migration drift 검사 및 승인된 migration 적용
+5. `linux/amd64`, `CGO_ENABLED=0` server/backfill 빌드
+6. `/app/backend/server.new` 업로드 후 `/app/backend/server`로 교체
+7. `systemctl daemon-reload`, `systemctl restart alumni-backend`
+8. 전체/frontend 배포인 경우 Apache configuration/legacy shim 갱신 및 `httpd` reload
+9. 전체/frontend 배포인 경우 legacy URL smoke test
+
+Production reverse proxy는 Apache httpd다. `--backend-only`는 Apache와 legacy shim 단계를 건너뛴다. APNs/systemd 전환, preflight, 롤백은 `docs/push/centos7-apns-operations.md`를 기준으로 한다.
 
 ---

@@ -177,6 +177,12 @@ Dead jobs should be replayed only after confirming the cause is fixed, the paylo
 
 ### Operations
 
+For the CentOS systemd deployment, keep runtime values in `/etc/sysconfig/alumni-backend`, APNs keys in `/etc/alumni-backend/secrets/apns`, and the FCM service account at `/etc/alumni-backend/firebase-service-account.json`. The checked-in `deploy/alumni-backend.service` loads that environment file and runs as the dedicated `alumni-backend` account. Credential files use `root:alumni-backend`, mode `0640`. The deploy script verifies APNs key permissions and readability before replacing the backend binary; until FCM permission preflight is added, verify the FCM JSON separately with `sudo -u alumni-backend test -r /etc/alumni-backend/firebase-service-account.json`.
+
+The canonical server setup, migration history, permission checks, deployment incidents, key rotation, and rollback commands are documented in [`docs/push/centos7-apns-operations.md`](../docs/push/centos7-apns-operations.md).
+
+The deploy script accepts sandbox-only, production-only, or dual-key configurations. If any variable in one environment-specific credential set is present, both its `KEY_ID` and `PRIVATE_KEY_PATH` must be present. Inline private key values are rejected for the systemd deployment even though the application supports them for non-systemd environments and tests.
+
 To verify production setup, register a device token from the iOS app, create a message or admin notice, confirm rows appear in `ALUMNI_PUSH_OUTBOX`, and check logs for `push outbox delivery result` with `outbox_id`, `event_type`, `event_id`, `user_id`, token id/hash, attempt count, status, and APNs reason. Private keys, raw device tokens, and full payload bodies must not appear in logs.
 
 Registration-only smoke tests for Android do not require Firebase credentials because they only exercise authenticated token storage. Delivery smoke tests require Firebase service-account credentials, a Firebase project, app Firebase config, and a real FCM registration token. Android notifications use the high-importance channel id `dflh_push_v2`, which must remain aligned with the app manifest default channel and its application-startup channel creation.

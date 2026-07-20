@@ -1,10 +1,10 @@
 # Push Policy (dflh-saf-v2)
 
-Version: 1.1  
-Last Updated: 2026-07-02  
+Version: 1.3
+Last Updated: 2026-07-19
 Owner: Engineering Team (Backend + Mobile + QA + SRE)
 
-본 문서는 푸시 기능의 운영 정책을 정의한다.  
+본 문서는 푸시 기능의 운영 정책을 정의한다.
 모든 항목은 `do-or-die` 성격으로 정책 위반 시 PR를 차단한다.
 
 ## A. 토큰 정책
@@ -83,6 +83,12 @@ KPI:
 ## G. 운영 정책
 
 - APNs/FCM provider credentials are runtime configuration only.
+  - APNs sandbox and production credentials are separate. A key must never fall back across environments.
+  - CentOS systemd hosts use `*_PRIVATE_KEY_PATH`; inline `.p8` content is prohibited.
+  - APNs keys live under `/etc/alumni-backend/secrets/apns`, outside the application deployment directory.
+  - FCM service account JSON lives at `/etc/alumni-backend/firebase-service-account.json` with `root:alumni-backend`, mode `0640`.
+  - Runtime values live in `/etc/sysconfig/alumni-backend`, not in the tracked systemd unit.
+  - Detailed setup, rotation, recovery, and rollback follow `docs/push/centos7-apns-operations.md`.
   - Firebase service-account JSON must never be committed.
   - Backend FCM requires `FCM_CREDENTIALS_JSON` or `FCM_CREDENTIALS_FILE` and, when needed, `FCM_PROJECT_ID`.
   - Missing local credentials may use backend no-op push behavior; configured but invalid production credentials must fail clearly before smoke/launch.

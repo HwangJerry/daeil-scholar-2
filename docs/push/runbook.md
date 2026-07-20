@@ -1,7 +1,7 @@
 # Push Runbook
 
-Version: 1.0  
-Last Updated: 2026-06-11  
+Version: 1.1
+Last Updated: 2026-07-17
 Owner: SRE / On-call
 
 본 Runbook은 push 이슈 발생 시 초동 대응을 통일한다.
@@ -117,10 +117,53 @@ Owner: SRE / On-call
 ### 증빙
 - 기기군별 BGTask 실패 로그
 
+## 시나리오 6: APNs/FCM credential 또는 systemd 배포 실패
+
+### 증상
+
+- `APNs provider configured` startup 로그가 없음
+- `.p8` read/parse 오류로 backend가 시작하지 못함
+- FCM service account JSON `permission denied`로 backend가 재시작을 반복함
+- `InvalidProviderToken`, `BadDeviceToken` 급증
+- `deploy.sh`가 필수 환경변수 또는 APNs key 권한 검사에서 중단
+
+### 즉시 조치
+
+1. `SKIP_ENV_CHECK=1`로 우회하지 않는다.
+2. 새 binary 업로드 또는 daemon 재시작이 실행됐는지 확인한다.
+3. `systemctl status`와 `journalctl -u alumni-backend`의 첫 startup error를 확인한다.
+4. `/etc/sysconfig/alumni-backend`는 값이 아니라 key name만 출력해 누락 여부를 확인한다.
+5. daemon 사용자로 해당 환경 `.p8`과 FCM JSON 읽기 가능 여부를 검사한다.
+6. FCM credential, 환경파일, Android 앱의 Firebase project id가 일치하는지 확인한다.
+7. token의 `APNS_ENVIRONMENT`와 configured credential environment가 일치하는지 확인한다.
+
+### 복구
+
+- EnvironmentFile 전환 중 운영값이 누락됐다면 기존 unit/env 백업에서 복구한다.
+- FCM JSON은 `root:alumni-backend`, `0640`으로 수정하고 daemon 사용자 기준 `test -r`을 통과시킨다.
+- 새 binary가 시작하지 못하면 binary, unit, EnvironmentFile 세 파일을 함께 이전 백업으로 되돌린다.
+- Production credential이 없는 동안 Production job을 발송하거나 replay하지 않는다.
+- 상세 명령과 장애 이력은 [centos7-apns-operations.md](centos7-apns-operations.md)를 따른다.
+
+### 종료 조건
+
+- backend가 `alumni-backend` 사용자로 active
+- APNs provider configured environment가 예상값과 일치
+- FCM credential이 설정된 경우 backend dependency wiring이 성공
+- `/api/health`가 HTTP 200
+- outbox smoke job이 `SENT`
+- journal에 private key, raw device token, 환경파일 내용이 노출되지 않음
+
+### 증빙
+
+- 배포 preflight 로그
+- `systemctl status` 및 startup log
+- outbox status query 결과
+- 적용한 unit/env/key 파일의 owner/group/mode, 값 제외
+
 ## 사전 체크리스트(재발방지)
 
 - contract/policy/qa 갱신 반영
 - 토큰 상태 FSM과 purge 정책 확인
 - 배포 노트에 iOS 동작 변경 사항 명시
 - 모니터링 패널 임계치 재조정
-

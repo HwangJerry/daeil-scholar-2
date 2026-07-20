@@ -6,6 +6,7 @@
 
 ## 0) 먼저 읽을 순서
 
+- [CentOS 7 APNs/FCM 운영 이력과 표준 절차](centos7-apns-operations.md)
 - [contract.md](/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/docs/push/contract.md)
 - [policy.md](/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/docs/push/policy.md)
 - [pr-gate.md](/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/docs/push/pr-gate.md)
@@ -85,3 +86,7 @@
 1. GitHub PR 템플릿을 [pull-request-template.md](pull-request-template.md) 형식으로 등록한다.
 1. 이슈 템플릿(`issue-templates.md`)을 스프린트 보드 생성 프로세스에 반영한다.
 1. 위 문서에 있는 KPI 임계치와 경보 룰을 운영 모니터링에 등록한다.
+
+## 8) 서버 운영 기준
+
+CentOS 7 서버의 APNs 키와 FCM service account 설치, `alumni-backend` 전용 사용자, `EnvironmentFile` 전환, ACL, 배포 preflight, 장애 복구, 키 교체와 롤백은 [centos7-apns-operations.md](centos7-apns-operations.md)를 단일 운영 기준으로 사용한다.
