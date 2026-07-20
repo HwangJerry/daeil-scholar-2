@@ -6,15 +6,22 @@
 
 Configure APNs token-based auth with values from Apple Developer:
 
-- `APNS_KEY_ID`: Key ID for the APNs Auth Key.
 - `APNS_TEAM_ID`: Apple Developer Team ID.
 - `APNS_BUNDLE_ID`: iOS app bundle id used as the default `apns-topic`.
-- `APNS_PRIVATE_KEY`: Auth Key `.p8` content. Escaped `\n` is accepted.
-- `APNS_PRIVATE_KEY_PATH`: Path to the Auth Key `.p8` file. Used when `APNS_PRIVATE_KEY` is empty.
+- `APNS_SANDBOX_KEY_ID`: Key ID for the sandbox APNs Auth Key.
+- `APNS_SANDBOX_PRIVATE_KEY`: Sandbox Auth Key `.p8` content. Escaped `\n` is accepted.
+- `APNS_SANDBOX_PRIVATE_KEY_PATH`: Path to the sandbox Auth Key `.p8` file. Used when the inline value is empty.
+- `APNS_PRODUCTION_KEY_ID`: Key ID for the production APNs Auth Key.
+- `APNS_PRODUCTION_PRIVATE_KEY`: Production Auth Key `.p8` content. Escaped `\n` is accepted.
+- `APNS_PRODUCTION_PRIVATE_KEY_PATH`: Path to the production Auth Key `.p8` file. Used when the inline value is empty.
 - `APNS_ENVIRONMENT`: Default endpoint, `sandbox` or `production`.
 - `APNS_REQUEST_TIMEOUT`: APNs HTTP request timeout, for example `5s`.
 
-The server still accepts the previous `PUSH_APNS_*` names as fallbacks. Token-level `apnsEnvironment` takes precedence over `APNS_ENVIRONMENT`.
+Token-level `apnsEnvironment` selects both the APNs endpoint and the matching environment-specific signing key. Credentials never fall back across sandbox and production. The server can run with one environment configured, but a notification for an unconfigured environment fails with a configuration error and the outbox marks that job `DEAD`; configure both keys before production tokens can enqueue jobs.
+
+The server still accepts the previous `APNS_KEY_ID`, `APNS_PRIVATE_KEY*`, and `PUSH_APNS_*` names as fallbacks. Legacy credentials are assigned only to the environment selected by `APNS_ENVIRONMENT` (or `PUSH_APNS_USE_SANDBOX`) and are never shared across both environments. Environment-specific variables take precedence. On a systemd host, store `.p8` files outside the application directory and use the `*_PRIVATE_KEY_PATH` variables instead of inline private key values.
+
+APNs credential files are read and parsed during server startup. A partial credential set, unreadable file, invalid `.p8`, missing team id, or missing bundle id prevents startup instead of silently disabling delivery.
 
 iOS delivery uses the DB-backed push outbox worker:
 

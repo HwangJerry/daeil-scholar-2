@@ -78,9 +78,12 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	pushPreferenceRepo := repository.NewPushPreferenceRepository(db)
 	pushProviders := map[string]service.MobilePushProvider{}
 	var apnsProvider service.MobilePushProvider
-	if cfg.Push.APNsKeyID != "" && cfg.Push.APNSTeamID != "" && cfg.Push.APNsBundleID != "" &&
-		(cfg.Push.APNsKeyPath != "" || cfg.Push.APNsKeyValue != "") {
-		apnsProvider = service.NewAPNsPushProvider(cfg.Push, logger)
+	if cfg.Push.HasAnyAPNsCredentials() {
+		configuredAPNsProvider, providerErr := service.NewAPNsPushProvider(cfg.Push, logger)
+		if providerErr != nil {
+			return nil, providerErr
+		}
+		apnsProvider = configuredAPNsProvider
 		pushProviders["ios"] = apnsProvider
 	}
 	if cfg.Push.FCMCredentialsJSON != "" || cfg.Push.FCMCredentialsFile != "" {

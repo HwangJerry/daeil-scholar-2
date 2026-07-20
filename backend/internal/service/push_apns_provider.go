@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/config"
@@ -25,6 +24,14 @@ type APNsResponseError struct {
 	StatusCode int
 	Reason     string
 	Body       string
+}
+
+type APNsConfigurationError struct {
+	Environment string
+}
+
+func (e *APNsConfigurationError) Error() string {
+	return fmt.Sprintf("apns credentials are not configured for environment %q", e.Environment)
 }
 
 func (e *APNsResponseError) Error() string {
@@ -47,17 +54,49 @@ type APNsPushProvider struct {
 	cfg        config.PushConfig
 	logger     zerolog.Logger
 	httpClient *http.Client
-
-	mu        sync.Mutex
-	authToken *token.Token
+	authTokens map[string]*token.Token
 }
 
-func NewAPNsPushProvider(cfg config.PushConfig, logger zerolog.Logger) *APNsPushProvider {
-	return &APNsPushProvider{
+func NewAPNsPushProvider(cfg config.PushConfig, logger zerolog.Logger) (*APNsPushProvider, error) {
+	if cfg.APNSTeamID == "" {
+		return nil, fmt.Errorf("apns team id is required when APNs credentials are configured")
+	}
+	if cfg.APNsBundleID == "" {
+		return nil, fmt.Errorf("apns bundle id is required when APNs credentials are configured")
+	}
+
+	authTokens := make(map[string]*token.Token, 2)
+	configuredEnvironments := make([]string, 0, 2)
+	credentials := []struct {
+		environment string
+		credential  config.APNsCredentialConfig
+	}{
+		{environment: "sandbox", credential: cfg.APNsSandbox},
+		{environment: "production", credential: cfg.APNsProduction},
+	}
+	for _, item := range credentials {
+		if !item.credential.Configured() {
+			continue
+		}
+		authToken, err := loadAPNsAuthToken(item.environment, cfg.APNSTeamID, item.credential)
+		if err != nil {
+			return nil, err
+		}
+		authTokens[item.environment] = authToken
+		configuredEnvironments = append(configuredEnvironments, item.environment)
+	}
+	if len(authTokens) == 0 {
+		return nil, fmt.Errorf("apns credentials are not configured")
+	}
+
+	provider := &APNsPushProvider{
 		cfg:        cfg,
 		logger:     logger,
 		httpClient: &http.Client{Timeout: cfg.APNsRequestTimeout},
+		authTokens: authTokens,
 	}
+	logger.Info().Strs("environments", configuredEnvironments).Msg("push: APNs provider configured")
+	return provider, nil
 }
 
 func (p *APNsPushProvider) SendPush(ctx context.Context, notification PushNotification) error {
@@ -66,10 +105,10 @@ func (p *APNsPushProvider) SendPush(ctx context.Context, notification PushNotifi
 		return nil
 	}
 
-	authToken, err := p.loadAuthToken()
-	if err != nil {
-		p.logger.Error().Err(err).Msg("push: APNs signing key load failed; notification skipped")
-		return err
+	environment := apnsEnvironmentForNotification(notification.APNsEnvironment, p.cfg.APNsEnvironment)
+	authToken, ok := p.authTokens[environment]
+	if !ok {
+		return &APNsConfigurationError{Environment: environment}
 	}
 
 	bodyData, err := buildAPNsPayload(notification)
@@ -81,7 +120,7 @@ func (p *APNsPushProvider) SendPush(ctx context.Context, notification PushNotifi
 
 	client := apns2.NewTokenClient(authToken)
 	client.HTTPClient = p.httpClient
-	if apnsHostForEnvironment(notification.APNsEnvironment, p.cfg.APNsEnvironment) == apnsSandboxHost {
+	if environment == "sandbox" {
 		client.Development()
 	} else {
 		client.Production()
@@ -158,47 +197,52 @@ func apnsTopicForNotification(cfg config.PushConfig, notification PushNotificati
 }
 
 func apnsHostForEnvironment(tokenEnvironment string, defaultEnvironment string) string {
-	env := normalizeAPNsEnvironment(tokenEnvironment)
-	if env == "" {
-		env = normalizeAPNsEnvironment(defaultEnvironment)
-	}
+	env := apnsEnvironmentForNotification(tokenEnvironment, defaultEnvironment)
 	if env == "sandbox" {
 		return apnsSandboxHost
 	}
 	return apnsProductionHost
 }
 
-func (p *APNsPushProvider) loadAuthToken() (*token.Token, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.authToken != nil {
-		return p.authToken, nil
+func apnsEnvironmentForNotification(tokenEnvironment string, defaultEnvironment string) string {
+	environment := normalizeAPNsEnvironment(tokenEnvironment)
+	if environment == "" {
+		environment = normalizeAPNsEnvironment(defaultEnvironment)
 	}
-	if p.cfg.APNsKeyID == "" || (p.cfg.APNsKeyPath == "" && p.cfg.APNsKeyValue == "") || p.cfg.APNSTeamID == "" || p.cfg.APNsBundleID == "" {
-		return nil, fmt.Errorf("apns config is incomplete")
+	if environment == "" {
+		return "production"
+	}
+	return environment
+}
+
+func loadAPNsAuthToken(environment string, teamID string, credential config.APNsCredentialConfig) (*token.Token, error) {
+	if credential.KeyID == "" {
+		return nil, fmt.Errorf("apns %s key id is required", environment)
+	}
+	if credential.KeyPath == "" && credential.KeyValue == "" {
+		return nil, fmt.Errorf("apns %s private key is required", environment)
 	}
 
-	keyData := strings.TrimSpace(p.cfg.APNsKeyValue)
+	keyData := strings.TrimSpace(credential.KeyValue)
 	keyData = strings.ReplaceAll(keyData, `\n`, "\n")
-	if keyData == "" && p.cfg.APNsKeyPath != "" {
-		raw, err := os.ReadFile(p.cfg.APNsKeyPath)
+	if keyData == "" && credential.KeyPath != "" {
+		raw, err := os.ReadFile(credential.KeyPath)
 		if err != nil {
-			return nil, fmt.Errorf("read apns key file: %w", err)
+			return nil, fmt.Errorf("read apns %s key file: %w", environment, err)
 		}
 		keyData = string(raw)
 	}
 	if keyData == "" {
-		return nil, fmt.Errorf("apns key not configured")
+		return nil, fmt.Errorf("apns %s private key is empty", environment)
 	}
 
 	authKey, err := token.AuthKeyFromBytes([]byte(keyData))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse apns %s private key: %w", environment, err)
 	}
-	p.authToken = &token.Token{
+	return &token.Token{
 		AuthKey: authKey,
-		KeyID:   p.cfg.APNsKeyID,
-		TeamID:  p.cfg.APNSTeamID,
-	}
-	return p.authToken, nil
+		KeyID:   credential.KeyID,
+		TeamID:  teamID,
+	}, nil
 }

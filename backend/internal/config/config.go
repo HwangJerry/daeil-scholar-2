@@ -105,14 +105,24 @@ type EasyPayConfig struct {
 	AutoTrCd          string // 자동결제 transaction code (v1 confirmed value: "00101000")
 }
 
+type APNsCredentialConfig struct {
+	KeyID    string
+	KeyPath  string
+	KeyValue string
+}
+
+// Configured reports whether any value in this credential set is present.
+// Callers must still validate that the set is complete before using it.
+func (c APNsCredentialConfig) Configured() bool {
+	return c.KeyID != "" || c.KeyPath != "" || c.KeyValue != ""
+}
+
 type PushConfig struct {
-	APNsKeyID             string
 	APNSTeamID            string
 	APNsBundleID          string
-	APNsKeyPath           string
-	APNsKeyValue          string
 	APNsEnvironment       string
-	APNsUseSandbox        bool
+	APNsSandbox           APNsCredentialConfig
+	APNsProduction        APNsCredentialConfig
 	APNsRequestTimeout    time.Duration
 	FCMProjectID          string
 	FCMCredentialsFile    string
@@ -127,8 +137,44 @@ type PushConfig struct {
 	OutboxRequestTimeout  time.Duration
 }
 
+// HasAnyAPNsCredentials reports whether APNs was configured for at least one
+// environment. A partially configured set also returns true so startup
+// validation can fail instead of silently disabling push delivery.
+func (c PushConfig) HasAnyAPNsCredentials() bool {
+	return c.APNsSandbox.Configured() || c.APNsProduction.Configured()
+}
+
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
+	apnsEnvironment := normalizePushEnvironment(getEnv("APNS_ENVIRONMENT", ""))
+	legacyAPNsCredential := APNsCredentialConfig{
+		KeyID:    getEnvWithFallback("APNS_KEY_ID", "PUSH_APNS_KEY_ID", ""),
+		KeyPath:  getEnvWithFallback("APNS_PRIVATE_KEY_PATH", "PUSH_APNS_KEY_PATH", ""),
+		KeyValue: getEnvWithFallback("APNS_PRIVATE_KEY", "PUSH_APNS_KEY_VALUE", ""),
+	}
+	apnsSandbox := APNsCredentialConfig{
+		KeyID:    getEnv("APNS_SANDBOX_KEY_ID", ""),
+		KeyPath:  getEnv("APNS_SANDBOX_PRIVATE_KEY_PATH", ""),
+		KeyValue: getEnv("APNS_SANDBOX_PRIVATE_KEY", ""),
+	}
+	apnsProduction := APNsCredentialConfig{
+		KeyID:    getEnv("APNS_PRODUCTION_KEY_ID", ""),
+		KeyPath:  getEnv("APNS_PRODUCTION_PRIVATE_KEY_PATH", ""),
+		KeyValue: getEnv("APNS_PRODUCTION_PRIVATE_KEY", ""),
+	}
+	if legacyAPNsCredential.Configured() {
+		switch apnsEnvironment {
+		case "sandbox":
+			if !apnsSandbox.Configured() {
+				apnsSandbox = legacyAPNsCredential
+			}
+		case "production":
+			if !apnsProduction.Configured() {
+				apnsProduction = legacyAPNsCredential
+			}
+		}
+	}
+
 	return &Config{
 		Server: ServerConfig{
 			Port:            getEnv("SERVER_PORT", "8080"),
@@ -157,13 +203,11 @@ func Load() *Config {
 			MaxAge: getDurationEnv("JWT_MAX_AGE", 24*time.Hour),
 		},
 		Push: PushConfig{
-			APNsKeyID:             getEnvWithFallback("APNS_KEY_ID", "PUSH_APNS_KEY_ID", ""),
 			APNSTeamID:            getEnvWithFallback("APNS_TEAM_ID", "PUSH_APNS_TEAM_ID", ""),
 			APNsBundleID:          getEnvWithFallback("APNS_BUNDLE_ID", "PUSH_APNS_BUNDLE_ID", ""),
-			APNsKeyPath:           getEnvWithFallback("APNS_PRIVATE_KEY_PATH", "PUSH_APNS_KEY_PATH", ""),
-			APNsKeyValue:          getEnvWithFallback("APNS_PRIVATE_KEY", "PUSH_APNS_KEY_VALUE", ""),
-			APNsEnvironment:       normalizePushEnvironment(getEnv("APNS_ENVIRONMENT", "")),
-			APNsUseSandbox:        strings.EqualFold(getEnv("PUSH_APNS_USE_SANDBOX", "false"), "true"),
+			APNsEnvironment:       apnsEnvironment,
+			APNsSandbox:           apnsSandbox,
+			APNsProduction:        apnsProduction,
 			APNsRequestTimeout:    getDurationEnvWithFallback("APNS_REQUEST_TIMEOUT", "PUSH_APNS_REQUEST_TIMEOUT", 5*time.Second),
 			FCMProjectID:          getEnvWithFallback("FCM_PROJECT_ID", "FIREBASE_PROJECT_ID", ""),
 			FCMCredentialsFile:    getEnvWithFallback("FCM_CREDENTIALS_FILE", "FIREBASE_SERVICE_ACCOUNT_FILE", getEnv("GOOGLE_APPLICATION_CREDENTIALS", "")),

@@ -35,6 +35,10 @@ daeil-redesign-v2.jsx
 *.pem
 *.key
 *.pfx
+*.p8
+*.p12
+firebase-service-account*.json
+service-account*.json
 id_ed25519*
 # Design artifacts generated externally
 docs/design-system/
