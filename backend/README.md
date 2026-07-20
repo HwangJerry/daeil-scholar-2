@@ -179,7 +179,7 @@ Dead jobs should be replayed only after confirming the cause is fixed, the paylo
 
 To verify production setup, register a device token from the iOS app, create a message or admin notice, confirm rows appear in `ALUMNI_PUSH_OUTBOX`, and check logs for `push outbox delivery result` with `outbox_id`, `event_type`, `event_id`, `user_id`, token id/hash, attempt count, status, and APNs reason. Private keys, raw device tokens, and full payload bodies must not appear in logs.
 
-Registration-only smoke tests for Android do not require Firebase credentials because they only exercise authenticated token storage. Delivery smoke tests require Firebase service-account credentials, a Firebase project, app Firebase config, and a real FCM registration token.
+Registration-only smoke tests for Android do not require Firebase credentials because they only exercise authenticated token storage. Delivery smoke tests require Firebase service-account credentials, a Firebase project, app Firebase config, and a real FCM registration token. Android notifications use the high-importance channel id `dflh_push_v2`, which must remain aligned with the app manifest default channel and its application-startup channel creation.
 
 APNs failure handling:
 

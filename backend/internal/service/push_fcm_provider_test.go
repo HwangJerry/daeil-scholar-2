@@ -22,6 +22,10 @@ func (f *fakeFCMMessagingClient) Send(_ context.Context, message *messaging.Mess
 }
 
 func TestFCMPushProviderBuildsAndroidMessage(t *testing.T) {
+	if androidPushNotificationChannelID != "dflh_push_v2" {
+		t.Fatalf("unexpected Android notification channel id: %q", androidPushNotificationChannelID)
+	}
+
 	client := &fakeFCMMessagingClient{}
 	provider := NewFCMPushProviderForClient(client, time.Second, zerolog.Nop())
 	sentAt := time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC)
@@ -48,6 +52,10 @@ func TestFCMPushProviderBuildsAndroidMessage(t *testing.T) {
 	if client.message.Android == nil || client.message.Android.CollapseKey != "message.new:67890" ||
 		client.message.Android.Priority != "high" {
 		t.Fatalf("unexpected android config: %#v", client.message.Android)
+	}
+	if client.message.Android.Notification == nil ||
+		client.message.Android.Notification.ChannelID != androidPushNotificationChannelID {
+		t.Fatalf("unexpected android notification config: %#v", client.message.Android.Notification)
 	}
 	if client.message.Data["event_type"] != PushEventMessageNew ||
 		client.message.Data["event"] != PushEventMessageNew ||

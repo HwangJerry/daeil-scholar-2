@@ -15,6 +15,8 @@ import (
 	"google.golang.org/api/option"
 )
 
+const androidPushNotificationChannelID = "dflh_push_v2"
+
 type fcmMessagingClient interface {
 	Send(ctx context.Context, message *messaging.Message) (string, error)
 }
@@ -106,6 +108,9 @@ func (p *FCMPushProvider) SendPush(ctx context.Context, notification PushNotific
 			Priority:    "high",
 			CollapseKey: notification.Payload.CollapseKey,
 			TTL:         &ttl,
+			Notification: &messaging.AndroidNotification{
+				ChannelID: androidPushNotificationChannelID,
+			},
 		},
 	}
 
