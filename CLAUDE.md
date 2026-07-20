@@ -66,9 +66,11 @@ nginx -c "$(pwd)/nginx/dev.conf" -p "$(pwd)/nginx/"
 
 ```bash
 ./deploy.sh [user@host]   # Cross-compile Go (linux/amd64), build SPAs, SCP to Gabia, restart
+./deploy.sh daeil-prod --backend-only  # Backend build/deploy path
 ```
 
 Steps: `GOOS=linux GOARCH=amd64 go build` → `npm run build` (both SPAs) → `scp` binaries + dist → `systemctl restart alumni-backend` → `systemctl reload httpd` (production web server is Apache httpd, not Nginx — `nginx/` configs are dev-only).
+`--backend-only` skips Apache configuration, legacy PHP compatibility shims, `httpd` reload, and legacy URL smoke checks. Full/frontend deployments still run those steps. Production uses Apache httpd, not Nginx; `nginx/` configs are dev-only.
 
 ## Architecture
 

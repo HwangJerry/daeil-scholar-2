@@ -476,6 +476,7 @@ if [[ "${BUILD_BACKEND}" == "true" ]]; then
   run_ssh "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'
 fi
 
+if [[ "${BUILD_FRONTEND}" == "true" ]]; then
   echo "=== Uploading Apache httpd config ==="
   run_scp deploy/httpd-alumni.conf "${TARGET}:/tmp/alumni.conf.new"
   run_ssh "${TARGET}" 'sudo mv /tmp/alumni.conf.new /etc/httpd/conf.d/alumni.conf && sudo httpd -t'
@@ -508,5 +509,8 @@ fi
   curl -s -o /dev/null -w "[external]       HTTP %{http_code} for /old/_sys/css/_common.css\n" \
     "https://${SMOKE_HOST}/old/_sys/css/_common.css" \
     || echo "  ⚠ external /old/_sys/css/_common.css failed (non-fatal)"
+else
+  echo "=== Skipping Apache config and legacy shim deployment because frontend build is disabled ==="
+fi
 
 echo "=== Deploy complete ==="
