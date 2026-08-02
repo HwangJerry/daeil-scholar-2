@@ -30,7 +30,7 @@ func (s *RegistrationService) IsIDAvailable(usrID string) (bool, error) {
 
 // IsPhoneAvailable returns true if the phone number is not yet registered.
 func (s *RegistrationService) IsPhoneAvailable(phone string) (bool, error) {
-	exists, err := s.memberRepo.CheckPhoneExists(phone)
+	exists, err := s.memberRepo.CheckPhoneExists(model.NormalizePhoneNumber(phone).String())
 	if err != nil {
 		return false, err
 	}
@@ -58,6 +58,7 @@ func (s *RegistrationService) SaveInitialTags(usrSeq int, tags []string) error {
 // Register validates uniqueness, creates the member, and persists any signup-time tags.
 // Returns the created user or ErrIDTaken / ErrPhoneTaken on conflict.
 func (s *RegistrationService) Register(req model.RegisterRequest) (*model.User, error) {
+	req.Phone = model.NormalizePhoneNumber(req.Phone).String()
 	idExists, err := s.memberRepo.CheckIDExists(req.UsrID)
 	if err != nil {
 		return nil, err

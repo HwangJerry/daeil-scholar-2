@@ -5,6 +5,7 @@ import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Location } from 'react-router-dom';
 import { Modal } from '../ui/Modal';
 import { PostContent } from '../post/PostContent';
+import { NewsBackLink } from '../post/NewsBackLink';
 import { usePostDetail } from '../../hooks/usePostDetail';
 import { usePostSiblings } from '../../hooks/usePostSiblings';
 import { invalidateFeedSummaryQueries } from '../../utils/feedQueryInvalidation';
@@ -83,7 +84,8 @@ export function NoticeDetailModal() {
 
   return (
     <Modal onClose={handleClose}>
-      <div className="flex justify-end p-3 pb-0">
+      <div className="flex items-center justify-between p-3 pb-0">
+        <NewsBackLink />
         <button
           onClick={handleClose}
           className="rounded-lg p-1.5 text-text-tertiary hover:bg-background transition-colors duration-150"

@@ -1,0 +1,12 @@
+{
+  "status": "linkRequired",
+  "linkRequired": {
+    "linkToken": "fixture-link-token",
+    "provider": "KT",
+    "expiresAt": 1785114300,
+    "profile": {
+      "displayName": "예시 동문",
+      "email": "member@example.com"
+    }
+  }
+}

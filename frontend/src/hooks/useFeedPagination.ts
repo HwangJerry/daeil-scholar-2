@@ -1,15 +1,13 @@
-// Composes infinite query pagination and ad deduplication to fetch feed pages
+// Fetches public notice pages and excludes non-notice feed records
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useHeroExclusion } from './useHeroExclusion';
-import { useAdDeduplication } from './useAdDeduplication';
-import type { FeedItem, FeedResponse } from '../types/api';
+import type { FeedResponse, NoticeItem } from '../types/api';
 
 const PAGE_SIZE = 10;
 
 export function useFeedPagination() {
   const { heroSeq, isHeroLoaded } = useHeroExclusion();
-  const { getExcludeParam, recordAds } = useAdDeduplication();
 
   const {
     data,
@@ -23,11 +21,8 @@ export function useFeedPagination() {
       const params = new URLSearchParams({ size: String(PAGE_SIZE) });
       if (pageParam) params.set('cursor', pageParam);
       if (heroSeq) params.set('exclude_seq', String(heroSeq));
-      const excludeAds = getExcludeParam();
-      if (excludeAds) params.set('exclude_ads', excludeAds);
 
       const data = await api.get<FeedResponse>(`/api/feed?${params}`);
-      recordAds(data.items);
       return data;
     },
     initialPageParam: '',
@@ -37,7 +32,9 @@ export function useFeedPagination() {
     staleTime: 0,   // always refetch on mount for fresh counts
   });
 
-  const items: FeedItem[] = data?.pages.flatMap((p) => p.items) ?? [];
+  const items: NoticeItem[] = data?.pages.flatMap((page) =>
+    page.items.filter((item): item is NoticeItem => item.type === 'notice'),
+  ) ?? [];
 
   return {
     items,

@@ -1,0 +1,10 @@
+{
+  "request": {
+    "messageEnabled": true,
+    "messagePreviewEnabled": false
+  },
+  "response": {
+    "messageEnabled": true,
+    "messagePreviewEnabled": false
+  }
+}

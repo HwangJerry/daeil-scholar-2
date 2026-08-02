@@ -13,11 +13,13 @@ type Config struct {
 	Server         ServerConfig
 	DB             DBConfig
 	Kakao          KakaoConfig
+	Apple          AppleConfig
 	JWT            JWTConfig
 	Upload         UploadConfig
 	EasyPay        EasyPayConfig
 	SMTP           SMTPConfig
 	DebugAgent     DebugAgentConfig
+	Push           PushConfig
 	PGAuditLogPath string
 	Environment    string // "dev" exposes manual subscription billing trigger; "prod" hides it
 	VisitIPSalt    string
@@ -45,6 +47,25 @@ type SMTPConfig struct {
 	User     string
 	Password string
 	From     string
+}
+
+type PushConfig struct {
+	Enabled            bool
+	FCMProjectID       string
+	FCMCredentialsFile string
+	APNSTeamID         string
+	APNSKeyID          string
+	APNSPrivateKeyFile string
+}
+
+func (c PushConfig) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+	if c.FCMProjectID == "" || c.FCMCredentialsFile == "" || c.APNSTeamID == "" || c.APNSKeyID == "" || c.APNSPrivateKeyFile == "" {
+		return fmt.Errorf("push is enabled but provider configuration is incomplete")
+	}
+	return nil
 }
 
 type ServerConfig struct {
@@ -78,14 +99,33 @@ func (c DBConfig) DSN() string {
 }
 
 type KakaoConfig struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURI  string
+	ClientID            string
+	ClientSecret        string
+	RedirectURI         string
+	AllowedRedirectURIs []string
+}
+
+type AppleConfig struct {
+	TeamID                  string
+	KeyID                   string
+	ClientID                string
+	BundleID                string
+	PrivateKey              string
+	PrivateKeyPath          string
+	AllowedAudiences        []string
+	JWKSURL                 string
+	TokenURL                string
+	RevokeURL               string
+	ChallengeTTL            time.Duration
+	JWKSCacheTTL            time.Duration
+	CredentialEncryptionKey string
 }
 
 type JWTConfig struct {
-	Secret string
-	MaxAge time.Duration
+	Secret          string
+	MaxAge          time.Duration
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
 }
 
 type UploadConfig struct {
@@ -125,13 +165,34 @@ func Load() *Config {
 			ConnMaxIdleTime: getDurationEnv("DB_CONN_MAX_IDLE_TIME", 3*time.Minute),
 		},
 		Kakao: KakaoConfig{
-			ClientID:     getEnv("KAKAO_CLIENT_ID", ""),
-			ClientSecret: getEnv("KAKAO_CLIENT_SECRET", ""),
-			RedirectURI:  getEnv("KAKAO_REDIRECT_URI", "http://localhost:8000/api/auth/kakao/callback"),
+			ClientID:            getEnv("KAKAO_CLIENT_ID", ""),
+			ClientSecret:        getEnv("KAKAO_CLIENT_SECRET", ""),
+			RedirectURI:         getEnv("KAKAO_REDIRECT_URI", "http://localhost:8000/api/auth/kakao/callback"),
+			AllowedRedirectURIs: getCSVEnv("KAKAO_ALLOWED_REDIRECT_URIS", getEnv("KAKAO_REDIRECT_URI", "http://localhost:8000/api/auth/kakao/callback")),
+		},
+		Apple: AppleConfig{
+			TeamID:         getEnv("APPLE_TEAM_ID", ""),
+			KeyID:          getEnv("APPLE_KEY_ID", ""),
+			ClientID:       getEnv("APPLE_CLIENT_ID", ""),
+			BundleID:       getEnv("APPLE_BUNDLE_ID", ""),
+			PrivateKey:     getEnv("APPLE_PRIVATE_KEY", ""),
+			PrivateKeyPath: getEnv("APPLE_PRIVATE_KEY_PATH", ""),
+			AllowedAudiences: getCSVEnv(
+				"APPLE_ALLOWED_AUDIENCES",
+				getEnv("APPLE_BUNDLE_ID", getEnv("APPLE_CLIENT_ID", "")),
+			),
+			JWKSURL:                 getEnv("APPLE_JWKS_URL", "https://appleid.apple.com/auth/keys"),
+			TokenURL:                getEnv("APPLE_TOKEN_URL", "https://appleid.apple.com/auth/token"),
+			RevokeURL:               getEnv("APPLE_REVOKE_URL", "https://appleid.apple.com/auth/revoke"),
+			ChallengeTTL:            getDurationEnv("APPLE_CHALLENGE_TTL", 5*time.Minute),
+			JWKSCacheTTL:            getDurationEnv("APPLE_JWKS_CACHE_TTL", 6*time.Hour),
+			CredentialEncryptionKey: getEnv("SOCIAL_CREDENTIAL_ENCRYPTION_KEY", ""),
 		},
 		JWT: JWTConfig{
-			Secret: getEnv("JWT_SECRET", "change-me-in-production"),
-			MaxAge: getDurationEnv("JWT_MAX_AGE", 24*time.Hour),
+			Secret:          getEnv("JWT_SECRET", "change-me-in-production"),
+			MaxAge:          getDurationEnv("JWT_MAX_AGE", 24*time.Hour),
+			AccessTokenTTL:  getDurationEnv("ACCESS_TOKEN_TTL", 15*time.Minute),
+			RefreshTokenTTL: getDurationEnv("REFRESH_TOKEN_TTL", 30*24*time.Hour),
 		},
 		Upload: UploadConfig{
 			BasePath:      getEnv("UPLOAD_BASE_PATH", "/var/www/uploads"),
@@ -159,6 +220,14 @@ func Load() *Config {
 			Project:     getEnv("DEBUG_AGENT_PROJECT", ""),
 			Secret:      getEnv("DEBUG_AGENT_SECRET", ""),
 			Environment: getEnv("DEBUG_AGENT_ENVIRONMENT", getEnv("ENV", "dev")),
+		},
+		Push: PushConfig{
+			Enabled:            getBoolEnv("PUSH_ENABLED", false),
+			FCMProjectID:       getEnv("FCM_PROJECT_ID", ""),
+			FCMCredentialsFile: getEnv("FCM_CREDENTIALS_FILE", ""),
+			APNSTeamID:         getEnv("APNS_TEAM_ID", ""),
+			APNSKeyID:          getEnv("APNS_KEY_ID", ""),
+			APNSPrivateKeyFile: getEnv("APNS_PRIVATE_KEY_FILE", ""),
 		},
 		PGAuditLogPath: getEnv("PG_AUDIT_LOG_PATH", "/var/logs/pg/pg-audit.log"),
 		Environment:    getEnv("ENV", "prod"),
@@ -191,6 +260,16 @@ func getIntEnv(key string, fallback int) int {
 	return fallback
 }
 
+func getBoolEnv(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		v = stripInlineComment(v)
+		if parsed, err := strconv.ParseBool(v); err == nil {
+			return parsed
+		}
+	}
+	return fallback
+}
+
 func getDurationEnv(key string, fallback time.Duration) time.Duration {
 	if v := os.Getenv(key); v != "" {
 		v = stripInlineComment(v)
@@ -199,4 +278,19 @@ func getDurationEnv(key string, fallback time.Duration) time.Duration {
 		}
 	}
 	return fallback
+}
+
+func getCSVEnv(key string, fallback string) []string {
+	raw := getEnv(key, fallback)
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
 }

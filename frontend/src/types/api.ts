@@ -148,13 +148,7 @@ export interface DisclosureListResponse {
 }
 
 export interface DonationSummary {
-  totalAmount: number;
-  manualAdj: number;
   displayAmount: number;
-  donorCount: number;
-  goalAmount: number;
-  achievementRate: number;
-  snapshotDate: string;
 }
 
 export interface AlumniItem {

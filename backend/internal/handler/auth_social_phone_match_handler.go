@@ -2,7 +2,10 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
+
+	"github.com/dflh-saf/backend/internal/service"
 )
 
 type phoneMatchProfile struct {
@@ -39,13 +42,16 @@ func (h *AuthHandler) SocialLinkPhoneMatch(w http.ResponseWriter, r *http.Reques
 		respondError(w, http.StatusBadRequest, "MISSING_PHONE", "phone 파라미터가 필요합니다")
 		return
 	}
-	if _, found := h.cache.Get("social_link:" + token); !found {
-		respondError(w, http.StatusNotFound, "TOKEN_NOT_FOUND", "유효한 소셜 링크 토큰이 아닙니다")
+	if _, err := h.socialLinkTokens.Snapshot(token); errors.Is(err, service.ErrSocialLinkTokenConsumed) {
+		respondError(w, http.StatusConflict, "TOKEN_ALREADY_USED", "이미 처리된 소셜 링크 토큰입니다")
+		return
+	} else if err != nil {
+		respondError(w, http.StatusNotFound, "INVALID_TOKEN", "유효한 소셜 링크 토큰이 아닙니다")
 		return
 	}
 	existing, err := h.memberSvc.FindMemberByPhone(phone)
 	if err != nil {
-		h.logger.Error().Err(err).Str("phone", phone).Msg("social phone-match: lookup failed")
+		h.logger.Error().Err(err).Msg("social phone-match: lookup failed")
 		respondError(w, http.StatusInternalServerError, "LOOKUP_FAILED", "회원 조회에 실패했습니다")
 		return
 	}

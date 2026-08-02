@@ -1,8 +1,7 @@
-// PostContent — Composition layer delegating to PostHeader, PostBody, PostEngagement
+// PostContent — Public notice composition without member engagement controls
 import type { NoticeDetail } from '../../types/api';
 import { PostHeader } from './PostHeader';
 import { PostBody } from './PostBody';
-import { PostEngagement } from './PostEngagement';
 
 interface PostContentProps {
   post: NoticeDetail;
@@ -16,8 +15,6 @@ export function PostContent({ post }: PostContentProps) {
         regName={post.regName}
         regDate={post.regDate}
         hit={post.hit}
-        likeCnt={post.likeCnt}
-        commentCnt={post.commentCnt}
       />
 
       <PostBody
@@ -25,11 +22,6 @@ export function PostContent({ post }: PostContentProps) {
         files={post.files}
       />
 
-      <PostEngagement
-        seq={post.seq}
-        userLiked={post.userLiked}
-        likeCnt={post.likeCnt}
-      />
     </div>
   );
 }

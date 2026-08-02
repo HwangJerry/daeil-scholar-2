@@ -1,0 +1,15 @@
+{
+  "registrationRequest": {
+    "platform": "ios",
+    "deviceToken": "fixture-device-token",
+    "locale": "ko_KR",
+    "apnsEnvironment": "sandbox",
+    "bundleId": "com.daeil.dflhsafv2"
+  },
+  "unregistrationRequest": {
+    "deviceToken": "fixture-device-token"
+  },
+  "registrationResponse": {
+    "status": "registered"
+  }
+}

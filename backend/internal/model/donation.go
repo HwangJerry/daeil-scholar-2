@@ -25,3 +25,65 @@ type DonationConfig struct {
 	RegOper        int    `db:"REG_OPER"             json:"regOper"`
 }
 
+type DonationDonor struct {
+	Name       string `db:"O_DONOR_NAME" json:"name"`
+	Cohort     string `db:"O_DONOR_COHORT" json:"cohort"`
+	Department string `db:"O_DONOR_DEPARTMENT" json:"department"`
+	Phone      string `db:"O_DONOR_PHONE" json:"phone"`
+}
+
+type DonationOrderInput struct {
+	Source            string        `json:"source"`
+	TransactionNumber *string       `json:"transactionNumber"`
+	DonationDate      string        `json:"donationDate"`
+	Donor             DonationDonor `json:"donor"`
+	DonationType      string        `json:"donationType"`
+	GrossAmount       int64         `json:"grossAmount"`
+	RefundedAmount    int64         `json:"refundedAmount"`
+	Status            string        `json:"status"`
+	PaymentMethod     string        `json:"paymentMethod"`
+	Memo              *string       `json:"memo"`
+}
+
+type NormalizedDonationOrder struct {
+	DonationOrderInput
+	NetReceivedAmount int64
+	CompositeKey      string
+	LegacyGate        string
+	LegacyStatus      string
+	LegacyPayment     string
+}
+
+type DonationOrder struct {
+	OrderSeq          int64         `json:"orderSeq"`
+	Source            string        `json:"source"`
+	TransactionNumber *string       `json:"transactionNumber"`
+	DonationDate      string        `json:"donationDate"`
+	Donor             DonationDonor `json:"donor"`
+	DonationType      string        `json:"donationType"`
+	GrossAmount       int64         `json:"grossAmount"`
+	RefundedAmount    int64         `json:"refundedAmount"`
+	NetReceivedAmount int64         `json:"netReceivedAmount"`
+	Status            string        `json:"status"`
+	PaymentMethod     string        `json:"paymentMethod"`
+	Memo              *string       `json:"memo"`
+	LastEditedBy      int           `json:"lastEditedBy"`
+	LastEditedAt      string        `json:"lastEditedAt"`
+	LastEditedIP      string        `json:"lastEditedIp"`
+}
+
+type DonationOrderFilters struct {
+	Name              string
+	Phone             string
+	TransactionNumber string
+	Source            string
+	Status            string
+	DonationType      string
+}
+
+type DonationOrderPage struct {
+	Items []*DonationOrder `json:"items"`
+	Total int              `json:"total"`
+	Page  int              `json:"page"`
+	Size  int              `json:"size"`
+}

@@ -40,6 +40,8 @@ type handlers struct {
 	socialLinkPhoto   *handler.SocialLinkPhotoHandler
 	myDonation        *handler.MyDonationHandler
 	message           *handler.MessageHandler
+	memberBlock       *handler.MemberBlockHandler
+	push              *handler.PushHandler
 	payment           *handler.PaymentHandler
 	subscription      *handler.SubscriptionHandler
 	og                *handler.OGHandler
@@ -108,18 +110,23 @@ func registerPublicRoutes(r chi.Router, h handlers, cacheStore *cache.Cache) {
 	r.Get("/api/donation/summary", h.donation.GetSummary)
 	r.Get("/api/auth/kakao", h.auth.KakaoLogin)
 	r.Get("/api/auth/kakao/callback", h.auth.KakaoCallback)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/kakao/mobile", h.auth.KakaoMobileLogin)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/apple/challenge", h.auth.AppleChallenge)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/apple/mobile", h.auth.AppleMobileLogin)
+	r.Post("/api/auth/apple/notifications", h.auth.AppleServerNotification)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/mobile/login", h.auth.MobileLogin)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/refresh", h.auth.Refresh)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/login", h.auth.Login)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/register", h.auth.Register)
 	r.Get("/api/auth/check-id", h.auth.CheckID)
 	r.Get("/api/auth/check-phone", h.auth.CheckPhone)
 	r.Get("/api/auth/check-email", h.auth.CheckEmail)
-	r.Post("/api/auth/social/link", h.auth.SocialLink)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/social/link", h.auth.SocialLink)
 	r.Get("/api/auth/social/link/prefill", h.auth.SocialLinkPrefill)
 	r.Get("/api/auth/social/link/phone-match", h.auth.SocialLinkPhoneMatch)
 	r.Post("/api/auth/social/link/photo", h.socialLinkPhoto.Upload)
-	r.Post("/api/auth/kakao/link", h.auth.KakaoLink)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/kakao/link", h.auth.KakaoLink)
 	r.Get("/api/history", h.history.GetGrouped)
-	r.Get("/api/alumni/widget", h.alumni.GetWidgetPreview)
 	r.Get("/api/public/job-categories", h.alumni.GetJobCategories)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/password/reset-request", h.passwordReset.RequestReset)
 	r.Post("/api/auth/password/reset-confirm", h.passwordReset.ConfirmReset)
@@ -132,8 +139,16 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Use(mw.AuthMiddleware(authService))
 		r.Get("/api/auth/me", h.auth.Me)
 		r.Post("/api/auth/logout", h.auth.Logout)
-		r.Get("/api/alumni", h.alumni.Search)
-		r.Get("/api/alumni/filters", h.alumni.GetFilters)
+		r.Post("/api/auth/logout/all", h.auth.LogoutAll)
+		r.Get("/api/auth/account/connections", h.auth.AccountConnections)
+		r.Delete("/api/auth/social/{provider}", h.auth.DisconnectSocialProvider)
+		r.Delete("/api/auth/account", h.auth.DeleteAccount)
+		r.Get("/api/alumni/verification", h.profile.GetAlumniVerification)
+		r.Put("/api/alumni/verification", h.profile.PutAlumniVerification)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/alumni", h.alumni.Search)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/alumni/filters", h.alumni.GetFilters)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/alumni/{userSeq}", h.alumni.GetDetail)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/alumni/widget", h.alumni.GetWidgetPreview)
 		r.Get("/api/profile", h.profile.GetProfile)
 		r.Put("/api/profile", h.profile.UpdateProfile)
 		r.Post("/api/profile/photo", h.profileUpload.UploadPhoto)
@@ -152,16 +167,24 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		// r.Post("/api/donation/subscription", h.subscription.CreateSubscription)
 		// r.Get("/api/donation/subscription", h.subscription.GetMySubscription)
 		// r.Delete("/api/donation/subscription", h.subscription.CancelSubscription)
-		r.Post("/api/messages", h.message.Send)
-		r.Get("/api/messages/inbox", h.message.GetInbox)
-		r.Get("/api/messages/outbox", h.message.GetOutbox)
-		r.Put("/api/messages/{seq}/read", h.message.MarkAsRead)
-		r.Delete("/api/messages/{seq}", h.message.Delete)
-		r.Get("/api/messages/conversations", h.message.GetConversations)
-		r.Get("/api/messages/conversations/{userSeq}", h.message.GetConversationMessages)
-		r.Put("/api/messages/conversations/{userSeq}/read", h.message.MarkConversationRead)
-		r.Get("/api/badges", h.badge.GetBadges)
-		r.Get("/api/messages/stream", h.realtime.Stream)
+		r.With(mw.ApprovedAlumniMiddleware).Post("/api/messages", h.message.Send)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/messages/inbox", h.message.GetInbox)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/messages/outbox", h.message.GetOutbox)
+		r.With(mw.ApprovedAlumniMiddleware).Put("/api/messages/{seq}/read", h.message.MarkAsRead)
+		r.With(mw.ApprovedAlumniMiddleware).Delete("/api/messages/{seq}", h.message.Delete)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/messages/conversations", h.message.GetConversations)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/messages/conversations/{userSeq}", h.message.GetConversationMessages)
+		r.With(mw.ApprovedAlumniMiddleware).Put("/api/messages/conversations/{userSeq}/read", h.message.MarkConversationRead)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/blocks", h.memberBlock.List)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/blocks/{userSeq}", h.memberBlock.Get)
+		r.With(mw.ApprovedAlumniMiddleware).Put("/api/blocks/{userSeq}", h.memberBlock.Put)
+		r.With(mw.ApprovedAlumniMiddleware).Delete("/api/blocks/{userSeq}", h.memberBlock.Delete)
+		r.With(mw.ApprovedAlumniMiddleware).Post("/api/push/device/register", h.push.RegisterDevice)
+		r.With(mw.ApprovedAlumniMiddleware).Post("/api/push/device/unregister", h.push.UnregisterDevice)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/push/preferences", h.push.GetPreferences)
+		r.With(mw.ApprovedAlumniMiddleware).Put("/api/push/preferences", h.push.PutPreferences)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/badges", h.badge.GetBadges)
+		r.With(mw.ApprovedAlumniMiddleware).Get("/api/messages/stream", h.realtime.Stream)
 	})
 }
 
@@ -210,14 +233,17 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Get("/donation/config", h.adminDonation.GetConfig)
 		r.Put("/donation/config", h.adminDonation.UpdateConfig)
 		r.Get("/donation/history", h.adminDonation.History)
-		// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
-		// Order CRUD stays disabled since donations now flow through the external Happy Nanum platform.
-		// r.Get("/donation/orders", h.adminDonation.ListOrders)
-		// r.Put("/donation/orders/{seq}", h.adminDonation.UpdateOrder)
+		r.Route("/donation", func(donationRouter chi.Router) {
+			registerAdminDonationRoutes(donationRouter, h.adminDonation)
+		})
 		r.Get("/member", h.adminMember.List)
 		r.Get("/member/{seq}", h.adminMember.Detail)
 		r.Put("/member/{seq}", h.adminMember.Update)
 		r.Get("/member/stats", h.adminMember.Stats)
+		r.Get("/alumni-verifications", h.adminMember.ListAlumniVerifications)
+		r.Get("/alumni-verifications/{userSeq}", h.adminMember.GetAlumniVerificationDetail)
+		r.Post("/alumni-verifications/{userSeq}/approve", h.adminMember.ApproveAlumniVerification)
+		r.Post("/alumni-verifications/{userSeq}/reject", h.adminMember.RejectAlumniVerification)
 		r.Get("/job-category", h.adminJobCat.List)
 		r.Post("/job-category", h.adminJobCat.Create)
 		r.Post("/job-category/reorder", h.adminJobCat.Reorder)
@@ -236,4 +262,11 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		// 	r.Post("/subscription/run-billing", h.adminSubscription.RunBilling)
 		// }
 	})
+}
+
+func registerAdminDonationRoutes(router chi.Router, donationHandler *handler.AdminDonationHandler) {
+	router.Get("/orders", donationHandler.ListOrders)
+	router.Get("/orders/{orderSeq}", donationHandler.GetOrder)
+	router.Post("/orders", donationHandler.CreateOrder)
+	router.Put("/orders/{orderSeq}", donationHandler.UpdateOrder)
 }

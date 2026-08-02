@@ -3,10 +3,17 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	"strings"
+	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
+)
+
+var (
+	ErrVerificationStale         = errors.New("verification stale")
+	ErrVerificationStateConflict = errors.New("verification state conflict")
 )
 
 type AdminMemberRepository struct {
@@ -83,9 +90,121 @@ func (r *AdminMemberRepository) GetMemberDetail(seq int) (*model.AdminMemberDeta
 	return &m, nil
 }
 
+func (r *AdminMemberRepository) ListAlumniVerifications(status string) ([]model.AdminAlumniVerification, error) {
+	rows := []model.AdminAlumniVerification{}
+	err := r.DB.Select(&rows, `
+		SELECT v.USR_SEQ, m.USR_NAME, v.STATUS, v.GRADUATION_YEAR, v.COHORT, v.DEPARTMENT,
+			v.REJECTION_REASON, v.SUBMITTED_AT, v.REVIEWED_AT, v.UPDATED_AT
+		FROM ALUMNI_VERIFICATION v
+		JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
+		WHERE (? = '' OR v.STATUS = ?)
+		ORDER BY v.SUBMITTED_AT ASC, v.USR_SEQ ASC
+	`, status, status)
+	return rows, err
+}
+
+func (r *AdminMemberRepository) GetAlumniVerificationDetail(usrSeq int) (*model.AdminAlumniVerification, error) {
+	var detail model.AdminAlumniVerification
+	err := r.DB.Get(&detail, `
+		SELECT v.USR_SEQ, m.USR_NAME, v.STATUS, v.GRADUATION_YEAR, v.COHORT, v.DEPARTMENT,
+			v.REJECTION_REASON, v.SUBMITTED_AT, v.REVIEWED_AT, v.UPDATED_AT
+		FROM ALUMNI_VERIFICATION v
+		JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
+		WHERE v.USR_SEQ = ?
+		LIMIT 1
+	`, usrSeq)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &detail, nil
+}
+
 func (r *AdminMemberRepository) UpdateMemberStatus(seq int, status string) error {
 	_, err := r.DB.Exec(`UPDATE WEO_MEMBER SET USR_STATUS = ? WHERE USR_SEQ = ?`, status, seq)
 	return err
+}
+
+func (r *AdminMemberRepository) RejectAlumniVerification(
+	usrSeq int,
+	reviewerSeq int,
+	reason string,
+	expectedUpdatedAt time.Time,
+) error {
+	result, err := r.DB.Exec(`
+		UPDATE ALUMNI_VERIFICATION
+		SET STATUS = ?, REJECTION_REASON = ?, REVIEWED_AT = NOW(), REVIEWED_BY = ?, UPDATED_AT = NOW()
+		WHERE USR_SEQ = ?
+			AND STATUS IN ('pending', 'reapproval_pending')
+			AND UPDATED_AT = ?
+	`, model.VerificationRejected, reason, reviewerSeq, usrSeq, expectedUpdatedAt)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected != 1 {
+		var currentStatus model.VerificationStatus
+		var currentUpdatedAt time.Time
+		if err := r.DB.QueryRow(`
+			SELECT STATUS, UPDATED_AT
+			FROM ALUMNI_VERIFICATION
+			WHERE USR_SEQ = ?
+		`, usrSeq).Scan(&currentStatus, &currentUpdatedAt); err != nil {
+			return ErrVerificationStateConflict
+		}
+		if !currentUpdatedAt.Equal(expectedUpdatedAt) {
+			return ErrVerificationStale
+		}
+		return ErrVerificationStateConflict
+	}
+	return nil
+}
+
+func (r *AdminMemberRepository) ApproveAlumniVerification(
+	usrSeq int,
+	reviewerSeq int,
+	expectedUpdatedAt time.Time,
+) error {
+	result, err := r.DB.Exec(`
+		UPDATE ALUMNI_VERIFICATION
+		SET STATUS = ?, REJECTION_REASON = NULL,
+			REVIEWED_AT = NOW(), REVIEWED_BY = ?,
+			APPROVED_GRADUATION_YEAR = GRADUATION_YEAR,
+			APPROVED_COHORT = COHORT,
+			APPROVED_DEPARTMENT = DEPARTMENT,
+			UPDATED_AT = NOW()
+		WHERE USR_SEQ = ?
+			AND STATUS IN ('pending', 'reapproval_pending')
+			AND UPDATED_AT = ?
+	`, model.VerificationApproved, reviewerSeq, usrSeq, expectedUpdatedAt)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected != 1 {
+		var currentStatus model.VerificationStatus
+		var currentUpdatedAt time.Time
+		if err := r.DB.QueryRow(`
+			SELECT STATUS, UPDATED_AT
+			FROM ALUMNI_VERIFICATION
+			WHERE USR_SEQ = ?
+		`, usrSeq).Scan(&currentStatus, &currentUpdatedAt); err != nil {
+			return ErrVerificationStateConflict
+		}
+		if !currentUpdatedAt.Equal(expectedUpdatedAt) {
+			return ErrVerificationStale
+		}
+		return ErrVerificationStateConflict
+	}
+	return nil
 }
 
 func (r *AdminMemberRepository) HasKakaoLink(usrSeq int) (bool, error) {

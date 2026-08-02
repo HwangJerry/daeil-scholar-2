@@ -20,6 +20,10 @@ func NewAlumniService(repo *repository.AlumniRepository, cacheStore *cache.Cache
 }
 
 func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSearchResponse, error) {
+	params.Name = strings.TrimSpace(params.Name)
+	params.Cohort = strings.TrimSpace(params.Cohort)
+	params.Department = strings.TrimSpace(params.Department)
+	params.JobRole = strings.TrimSpace(params.JobRole)
 	if params.Page <= 0 {
 		params.Page = 1
 	}
@@ -33,51 +37,16 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 	if err != nil {
 		return nil, err
 	}
-	weeklyCount, err := s.repo.GetWeeklyCount()
-	if err != nil {
-		weeklyCount = 0
-	}
 	items := make([]model.AlumniCard, 0, len(records))
 	for _, record := range records {
-		var tags []string
-		if record.Tags.Valid && record.Tags.String != "" {
-			tags = strings.Split(record.Tags.String, ",")
-		}
-		if tags == nil {
-			tags = []string{}
-		}
-
-		usrSeq := 0
-		if record.USRSeq.Valid {
-			usrSeq = int(record.USRSeq.Int64)
-		}
-
-		phone := nullString(record.USRPhone)
-		if record.USRPhonePublic.Valid && record.USRPhonePublic.String == "N" {
-			phone = ""
-		}
-		email := nullString(record.USREmail)
-		if record.USREmailPublic.Valid && record.USREmailPublic.String == "N" {
-			email = ""
-		}
-
 		items = append(items, model.AlumniCard{
-			FMSeq:       usrSeq,
-			FMName:      record.USRName,
-			FMFN:        nullString(record.USRFN),
-			FMDept:      nullString(record.USRDept),
-			BizName:     nullString(record.USRBizName),
-			BizDesc:     nullString(record.USRBizDesc),
-			BizAddr:     nullString(record.USRBizAddr),
-			Position:    nullString(record.USRPosition),
-			Phone:       phone,
-			Email:       email,
-			JobCatName:  nullString(record.AJCName),
-			Tags:        tags,
-			Photo:       nullString(record.USRPhoto),
-			UsrSeq:      usrSeq,
-			Nick:        nullString(record.USRNick),
-			BizCard:     nullString(record.USRBizCard),
+			UserSeq:     record.USRSeq,
+			Name:        record.USRName,
+			PhotoURL:    nullableString(record.USRPhoto),
+			Cohort:      nullString(record.Cohort),
+			Department:  nullString(record.Department),
+			JobCategory: nullString(record.AJCName),
+			JobRole:     nullString(record.USRPosition),
 		})
 	}
 	totalPages := 0
@@ -85,18 +54,38 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 		totalPages = (total + params.Size - 1) / params.Size
 	}
 	return &model.AlumniSearchResponse{
-		Items:       items,
-		TotalCount:  total,
-		WeeklyCount: weeklyCount,
-		Page:        params.Page,
-		Size:        params.Size,
-		TotalPages:  totalPages,
+		Items:      items,
+		Page:       params.Page,
+		Size:       params.Size,
+		TotalCount: total,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func (s *AlumniService) GetDetail(viewerSeq, userSeq int) (*model.AlumniDetail, error) {
+	record, err := s.repo.GetDetail(viewerSeq, userSeq)
+	if err != nil || record == nil {
+		return nil, err
+	}
+	return &model.AlumniDetail{
+		UserSeq:     record.USRSeq,
+		Name:        record.USRName,
+		PhotoURL:    nullableString(record.USRPhoto),
+		Cohort:      nullString(record.Cohort),
+		Department:  nullString(record.Department),
+		JobCategory: nullString(record.AJCName),
+		JobRole:     nullString(record.USRPosition),
+		Phone:       publicValue(record.USRPhone, record.USRPhonePublic),
+		Email:       publicValue(record.USREmail, record.USREmailPublic),
+		BlockState: model.AlumniBlockState{
+			BlockedByMe: record.BlockedByMe,
+		},
 	}, nil
 }
 
 const widgetPreviewCacheKey = "alumni:widget:preview"
 
-// GetWidgetPreview returns a cached minimal alumni list + total count for the public widget.
+// GetWidgetPreview returns a cached minimal approved-alumni list and total count.
 func (s *AlumniService) GetWidgetPreview() (*model.AlumniWidgetResponse, error) {
 	if cached, found := s.cache.Get(widgetPreviewCacheKey); found {
 		return cached.(*model.AlumniWidgetResponse), nil
@@ -150,3 +139,17 @@ func nullString(value sql.NullString) string {
 	return value.String
 }
 
+func nullableString(value sql.NullString) *string {
+	if !value.Valid || value.String == "" {
+		return nil
+	}
+	result := value.String
+	return &result
+}
+
+func publicValue(value, public sql.NullString) *string {
+	if !public.Valid || public.String != "Y" {
+		return nil
+	}
+	return nullableString(value)
+}

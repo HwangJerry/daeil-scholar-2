@@ -1,7 +1,8 @@
-// alumni_repo.go — Alumni search repository (WEO_MEMBER only)
+// alumni_repo.go — Approved-alumni search repository.
 package repository
 
 import (
+	"database/sql"
 	"strings"
 
 	"github.com/dflh-saf/backend/internal/model"
@@ -21,8 +22,9 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 
 	countQuery := `
 		SELECT COUNT(*) FROM WEO_MEMBER m
+		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
-		WHERE m.USR_STATUS IN ('CCC', 'ZZZ')
+		WHERE v.STATUS = 'approved'
 		  AND m.USR_SEQ > 0
 	` + where
 
@@ -42,21 +44,16 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 
 	query := `
 		SELECT
-			m.USR_SEQ, m.USR_NAME, m.USR_FN, m.USR_DEPT,
-			m.USR_BIZ_NAME, m.USR_BIZ_DESC, m.USR_BIZ_ADDR,
-			m.USR_POSITION,
-			m.USR_PHONE, m.USR_EMAIL, m.USR_PHOTO,
-			m.USR_NICK, m.USR_BIZ_CARD,
-			m.USR_PHONE_PUBLIC, m.USR_EMAIL_PUBLIC,
-			jc.AJC_NAME,
-			(SELECT GROUP_CONCAT(t.AUT_TAG ORDER BY t.AUT_INDX SEPARATOR ',')
-			 FROM ALUMNI_USER_TAG t WHERE t.USR_SEQ = m.USR_SEQ) AS TAGS
+			m.USR_SEQ, m.USR_NAME, m.USR_PHOTO,
+			v.GRADUATION_YEAR, v.COHORT, v.DEPARTMENT,
+			jc.AJC_NAME, m.USR_POSITION
 		FROM WEO_MEMBER m
+		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
-		WHERE m.USR_STATUS IN ('CCC', 'ZZZ')
+		WHERE v.STATUS = 'approved'
 		  AND m.USR_SEQ > 0
 	` + where + `
-		ORDER BY m.USR_NAME ASC
+		ORDER BY m.USR_NAME ASC, m.USR_SEQ ASC
 		LIMIT ? OFFSET ?
 	`
 	queryArgs := append(args, limit, (page-1)*limit)
@@ -68,27 +65,69 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 	return records, total, nil
 }
 
+func (r *AlumniRepository) GetDetail(viewerSeq, userSeq int) (*model.AlumniRecord, error) {
+	var record model.AlumniRecord
+	err := r.DB.Get(&record, `
+		SELECT
+			m.USR_SEQ, m.USR_NAME, m.USR_PHOTO,
+			v.GRADUATION_YEAR, v.COHORT, v.DEPARTMENT,
+			jc.AJC_NAME, m.USR_POSITION,
+			m.USR_PHONE, m.USR_EMAIL,
+			m.USR_PHONE_PUBLIC, m.USR_EMAIL_PUBLIC,
+			EXISTS (
+				SELECT 1 FROM ALUMNI_MEMBER_BLOCK b
+				WHERE b.BLOCKER_USR_SEQ = ?
+				  AND b.BLOCKED_USR_SEQ = m.USR_SEQ
+			) AS BLOCKED_BY_ME
+		FROM WEO_MEMBER m
+		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
+		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
+		WHERE v.STATUS = 'approved'
+		  AND m.USR_SEQ = ?
+		LIMIT 1
+	`, viewerSeq, userSeq)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
 func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
-	fnList := make([]string, 0)
-	if err := r.DB.Select(&fnList, `
-		SELECT DISTINCT USR_FN AS fn
-		FROM WEO_MEMBER
-		WHERE USR_STATUS IN ('CCC', 'ZZZ')
-		  AND USR_SEQ > 0
-		  AND USR_FN IS NOT NULL AND USR_FN != ''
-		ORDER BY fn + 0, fn
+	graduationYears := make([]int, 0)
+	if err := r.DB.Select(&graduationYears, `
+		SELECT DISTINCT v.GRADUATION_YEAR
+		FROM ALUMNI_VERIFICATION v
+		WHERE v.STATUS = 'approved'
+		  AND v.GRADUATION_YEAR IS NOT NULL
+		ORDER BY v.GRADUATION_YEAR DESC
 	`); err != nil {
 		return nil, err
 	}
 
-	deptList := make([]string, 0)
-	if err := r.DB.Select(&deptList, `
-		SELECT DISTINCT USR_DEPT AS dept
-		FROM WEO_MEMBER
-		WHERE USR_STATUS IN ('CCC', 'ZZZ')
-		  AND USR_SEQ > 0
-		  AND USR_DEPT IS NOT NULL AND USR_DEPT != ''
-		ORDER BY dept
+	cohorts := make([]string, 0)
+	if err := r.DB.Select(&cohorts, `
+		SELECT DISTINCT v.COHORT
+		FROM ALUMNI_VERIFICATION v
+		WHERE v.STATUS = 'approved'
+		  AND v.COHORT IS NOT NULL AND v.COHORT != ''
+		ORDER BY
+		  CASE WHEN v.COHORT REGEXP '^[0-9]+$' THEN 0 ELSE 1 END,
+		  CASE WHEN v.COHORT REGEXP '^[0-9]+$' THEN CAST(v.COHORT AS UNSIGNED) END,
+		  v.COHORT ASC
+	`); err != nil {
+		return nil, err
+	}
+
+	departments := make([]string, 0)
+	if err := r.DB.Select(&departments, `
+		SELECT DISTINCT v.DEPARTMENT
+		FROM ALUMNI_VERIFICATION v
+		WHERE v.STATUS = 'approved'
+		  AND v.DEPARTMENT IS NOT NULL AND v.DEPARTMENT != ''
+		ORDER BY v.DEPARTMENT ASC
 	`); err != nil {
 		return nil, err
 	}
@@ -97,7 +136,26 @@ func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &model.AlumniFilters{FNList: fnList, DeptList: deptList, JobCategories: jobCats}, nil
+
+	jobRoles := make([]string, 0)
+	if err := r.DB.Select(&jobRoles, `
+		SELECT DISTINCT m.USR_POSITION
+		FROM WEO_MEMBER m
+		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
+		WHERE v.STATUS = 'approved'
+		  AND m.USR_POSITION IS NOT NULL AND m.USR_POSITION != ''
+		ORDER BY m.USR_POSITION ASC
+	`); err != nil {
+		return nil, err
+	}
+
+	return &model.AlumniFilters{
+		GraduationYears: graduationYears,
+		Cohorts:         cohorts,
+		Departments:     departments,
+		JobCategories:   jobCats,
+		JobRoles:        jobRoles,
+	}, nil
 }
 
 // GetJobCategories returns all active job categories.
@@ -114,29 +172,24 @@ func (r *AlumniRepository) GetJobCategories() ([]model.JobCategory, error) {
 	return cats, nil
 }
 
-// GetWeeklyCount returns the number of alumni members who registered in the last 7 days.
-func (r *AlumniRepository) GetWeeklyCount() (int, error) {
-	var count int
-	err := r.DB.Get(&count, `
-		SELECT COUNT(*) FROM WEO_MEMBER m
-		WHERE m.USR_STATUS IN ('CCC', 'ZZZ')
-		  AND m.REG_DATE > DATE_SUB(NOW(), INTERVAL 7 DAY)
-	`)
-	return count, err
-}
-
 // GetWidgetPreview returns the first 5 alumni names (alphabetically) and the total alumni count.
 func (r *AlumniRepository) GetWidgetPreview() ([]string, int, error) {
 	var total int
 	if err := r.DB.Get(&total, `
-		SELECT COUNT(*) FROM WEO_MEMBER WHERE USR_STATUS IN ('CCC', 'ZZZ')`); err != nil {
+		SELECT COUNT(*)
+		FROM WEO_MEMBER m
+		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
+		WHERE v.STATUS = 'approved'`); err != nil {
 		return nil, 0, err
 	}
 	var names []string
 	if err := r.DB.Select(&names, `
-		SELECT USR_NAME FROM WEO_MEMBER
-		WHERE USR_STATUS IN ('CCC', 'ZZZ')
-		ORDER BY USR_NAME ASC LIMIT 5`); err != nil {
+		SELECT m.USR_NAME
+		FROM WEO_MEMBER m
+		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
+		WHERE v.STATUS = 'approved'
+		ORDER BY m.USR_NAME ASC, m.USR_SEQ ASC
+		LIMIT 5`); err != nil {
 		return nil, 0, err
 	}
 	return names, total, nil
@@ -148,39 +201,30 @@ func buildAlumniFilters(params model.AlumniSearchParams) (string, []interface{})
 	var clauses []string
 	var args []interface{}
 
-	if params.FN != "" {
-		clauses = append(clauses, "AND m.USR_FN = ?")
-		args = append(args, params.FN)
+	if params.Name != "" {
+		clauses = append(clauses, "AND m.USR_NAME LIKE ?")
+		args = append(args, "%"+params.Name+"%")
 	}
-	if params.Dept != "" {
-		clauses = append(clauses, "AND m.USR_DEPT = ?")
-		args = append(args, params.Dept)
+	if params.GraduationYear > 0 {
+		clauses = append(clauses, "AND v.GRADUATION_YEAR = ?")
+		args = append(args, params.GraduationYear)
 	}
-	for _, kw := range strings.Fields(params.Name) {
-		clause, kwArgs := buildKeywordClause(kw)
-		clauses = append(clauses, clause)
-		args = append(args, kwArgs...)
+	if params.Cohort != "" {
+		clauses = append(clauses, "AND v.COHORT = ?")
+		args = append(args, params.Cohort)
 	}
-	if params.Company != "" {
-		clauses = append(clauses, "AND m.USR_BIZ_NAME LIKE ?")
-		args = append(args, params.Company+"%")
+	if params.Department != "" {
+		clauses = append(clauses, "AND v.DEPARTMENT = ?")
+		args = append(args, params.Department)
 	}
-	if params.JobCat > 0 {
+	if params.JobCategory > 0 {
 		clauses = append(clauses, "AND m.USR_JOB_CAT = ?")
-		args = append(args, params.JobCat)
+		args = append(args, params.JobCategory)
+	}
+	if params.JobRole != "" {
+		clauses = append(clauses, "AND m.USR_POSITION = ?")
+		args = append(args, params.JobRole)
 	}
 
 	return strings.Join(clauses, " "), args
-}
-
-// buildKeywordClause returns a single AND clause matching the keyword against
-// either USR_NAME or any of the user's tags (ALUMNI_USER_TAG). Uses EXISTS
-// subquery for MariaDB 10.1 compatibility (no CTE/window functions).
-func buildKeywordClause(keyword string) (string, []interface{}) {
-	like := "%" + keyword + "%"
-	clause := "AND (m.USR_NAME LIKE ? OR EXISTS (" +
-		"SELECT 1 FROM ALUMNI_USER_TAG t " +
-		"WHERE t.USR_SEQ = m.USR_SEQ AND t.AUT_TAG LIKE ?" +
-		"))"
-	return clause, []interface{}{like, like}
 }

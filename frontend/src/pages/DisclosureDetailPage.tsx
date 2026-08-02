@@ -6,6 +6,7 @@ import { PageMeta } from '../components/seo/PageMeta';
 import { HtmlContent } from '../components/common/HtmlContent';
 import { FileAttachments } from '../components/post/FileAttachments';
 import Footer from '../components/layout/Footer';
+import { AboutBackLink } from '../components/info/AboutBackLink';
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -68,6 +69,9 @@ export function DisclosureDetailPage() {
         ]}
       />
       <div className="px-4 py-6 pb-20 animate-fade-in-up">
+        <div className="mx-auto mb-4 max-w-3xl">
+          <AboutBackLink />
+        </div>
         <article className="mx-auto max-w-3xl overflow-hidden rounded-xl bg-surface shadow-md border-transparent">
           <div className="p-5 md:p-6">
             <header className="mb-5">

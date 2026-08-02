@@ -2,11 +2,11 @@
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
 import { useFeedPagination } from '../../hooks/useFeedPagination';
 import { NoticeCard } from './NoticeCard';
-import { AdCard } from './AdCard';
 import { FeedCardSkeleton } from './FeedCardSkeleton';
 
 export function FeedList() {
   const { items, hasMore, isFetching, loadMore } = useFeedPagination();
+  const notices = items.filter((item) => item.type === 'notice');
 
   const { sentinelRef } = useInfiniteScroll({
     hasMore,
@@ -14,11 +14,11 @@ export function FeedList() {
     onLoadMore: loadMore,
   });
 
-  if (items.length === 0 && !isFetching) {
+  if (notices.length === 0 && !isFetching) {
     return <p className="py-12 text-center text-sm text-text-tertiary">게시글이 없습니다.</p>;
   }
 
-  if (items.length === 0 && isFetching) {
+  if (notices.length === 0 && isFetching) {
     return (
       <div className="flex flex-col gap-4">
         {Array.from({ length: 4 }, (_, i) => (
@@ -37,20 +37,11 @@ export function FeedList() {
 
   return (
     <div className="flex flex-col gap-4">
-      {items.map((item, idx) => {
-        if (item.type === 'ad') {
-          return (
-            <div key={`ad-${item.maSeq}-${idx}`} className={staggerClass(idx)}>
-              <AdCard item={item} />
-            </div>
-          );
-        }
-        return (
+      {notices.map((item, idx) => (
           <div key={`notice-${item.seq}`} className={staggerClass(idx)}>
             <NoticeCard item={item} />
           </div>
-        );
-      })}
+      ))}
       {isFetching && (
         <div className="flex justify-center py-6">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />

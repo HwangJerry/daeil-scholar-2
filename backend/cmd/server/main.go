@@ -94,6 +94,11 @@ func main() {
 	// subscriptionBillingJob.Start()
 	visitJob := d.visitJob
 	visitJob.Start()
+	blockedMessageCleanup := d.blockedMessageCleanup
+	blockedMessageCleanup.Start()
+	if d.pushDelivery != nil {
+		d.pushDelivery.Start()
+	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -104,11 +109,17 @@ func main() {
 	emailWorker.Stop()
 	// subscriptionBillingJob.Stop()
 	visitJob.Stop()
+	blockedMessageCleanup.Stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error().Err(err).Msg("forced shutdown")
+	}
+	if d.pushDelivery != nil {
+		if err := d.pushDelivery.Stop(shutdownCtx); err != nil {
+			logger.Error().Msg("push delivery drain timed out")
+		}
 	}
 	logger.Info().Msg("server stopped")
 }

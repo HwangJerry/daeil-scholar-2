@@ -2,6 +2,12 @@
 
 > 원본: TECH_DESIGN_DOC.md — 이 파일은 원본 설계서에서 분리된 상세 문서입니다.
 
+> [!IMPORTANT]
+> 웹·Android·iOS 동시 출시 MVP의 canonical wire 계약은
+> [`mvp-api-contract.md`](./mvp-api-contract.md)입니다. 이 문서와 충돌할 경우
+> `mvp-api-contract.md`가 우선하며, 아래 내용은 기존 구현과 마이그레이션 문맥을
+> 확인하기 위한 참고 자료로만 사용합니다.
+
 ---
 
 ## 6. API 설계
@@ -12,9 +18,103 @@
 |--------|----------|------|
 | POST | `/api/auth/login` | 레거시 ID/PW 로그인 (MySQL native password 해시 검증) |
 | POST | `/api/auth/kakao` | 카카오 로그인 (Authorization Code → JWT + PHP세션 발급) |
-| POST | `/api/auth/kakao/link` | 카카오 계정 연동 또는 신규 회원가입 |
-| POST | `/api/auth/logout` | 로그아웃 (JWT + PHP세션 모두 무효화) |
+| POST | `/api/auth/mobile/login` | iOS ID/PW 로그인 → access/rotating refresh session |
+| POST | `/api/auth/kakao/mobile` | 검증된 Kakao SDK token 또는 allowlist redirect의 code 로그인 |
+| POST | `/api/auth/apple/challenge` | 일회용 Apple nonce challenge 생성 |
+| POST | `/api/auth/apple/mobile` | Apple ID token 검증 + authorization code 교환 |
+| POST | `/api/auth/social/link` | 명시적 신규 가입 또는 기존 계정 재인증 연결 |
+| POST | `/api/auth/logout` | 현재 세션만 무효화 |
+| POST | `/api/auth/logout/all` | 사용자의 모든 모바일/레거시 세션 무효화 |
+| GET | `/api/auth/account/connections` | 연결된 provider와 password 보유 여부 조회 |
+| DELETE | `/api/auth/social/{provider}` | provider revoke 후 소셜 연결 해제 |
+| DELETE | `/api/auth/account` | 회원 상태 즉시 탈퇴 처리 + 세션 revoke + provider revoke/outbox |
+| POST | `/api/auth/apple/notifications` | 서명 검증된 Apple server notification 처리 |
 | GET | `/api/auth/me` | 현재 로그인 사용자 정보 |
+
+모바일 응답은 `authenticated`, `linkRequired`, `pending`, `rejected`의 판별 가능한 `status`를 사용합니다. refresh token은 사용할 때마다 원자적으로 교체되며 이미 소비된 토큰 재사용이 감지되면 같은 `sid`의 token family 전체를 폐기합니다.
+
+#### 소셜 통합 회원가입 계약
+
+`linkRequired` 응답은 provider 검증 완료 후 생성된 일회성 연결 문맥을
+반환합니다. 이메일은 prefill/안내용일 뿐 계정 자동 통합 기준이 아닙니다.
+
+```json
+{
+  "status": "linkRequired",
+  "linkRequired": {
+    "linkToken": "opaque-token",
+    "provider": "AP",
+    "expiresAt": 1784876400,
+    "profile": {
+      "displayName": "홍길동",
+      "email": "relay@privaterelay.appleid.com"
+    }
+  }
+}
+```
+
+`POST /api/auth/social/link`의 모바일 요청은 아래 공통 필드를 사용합니다.
+전화번호는 digits-only canonical 값이며, 학과는 `프랑스어`, `독일어`,
+`일본어`, `중국어`, `스페인어`, `러시아어`, `영어` 중 하나입니다.
+
+```json
+{
+  "token": "opaque-token",
+  "mode": "new",
+  "client": "mobile",
+  "name": "홍길동",
+  "phone": "01012345678",
+  "email": "relay@privaterelay.appleid.com",
+  "fn": "31",
+  "fmDept": "영어",
+  "usrPhonePublic": "N",
+  "usrEmailPublic": "N"
+}
+```
+
+기존 계정 통합은 `mode: "merge"`와 `existingUsrId`,
+`existingPassword`를 추가합니다. 서버는 해당 자격 증명으로 `CCC` 또는
+`ZZZ` 계정을 재인증하고, 그 계정의 canonical 전화번호가 요청 값과 같을
+때만 provider를 연결합니다. `BBB`를 포함한 로그인 불가 상태나 전화번호
+후보 검색만으로는 연결하지 않습니다.
+
+유효성 오류, `REAUTHENTICATION_REQUIRED`, `PHONE_NOT_MATCHED`,
+`PHONE_TAKEN`은 같은 link token으로 재시도할 수 있습니다. 성공한 token은
+한 번만 소비되며 이후 요청은 `TOKEN_ALREADY_USED`, 처리 중인 동시 요청은
+`TOKEN_IN_PROGRESS`, 만료/알 수 없는 token은 `INVALID_TOKEN`을 반환합니다.
+회원 생성/수정, social link, encrypted credential 저장은 하나의 DB
+transaction으로 완료됩니다.
+
+#### 계정 연결 조회와 해제 계약
+
+`GET /api/auth/account/connections`:
+
+```json
+{
+  "providers": ["KT", "AP"],
+  "hasPassword": true
+}
+```
+
+provider는 `KT`(Kakao), `AP`(Apple)만 반환합니다.
+`DELETE /api/auth/social/{provider}`는 server-side에서 대체 로그인 수단을
+다시 검사합니다. 마지막 로그인 수단이면 HTTP 409와
+`LAST_LOGIN_METHOD`를 반환하며 link와 credential을 유지합니다. 연결되지
+않은 provider는 revoke/outbox 없이 idempotent 성공을 반환합니다.
+
+```json
+{
+  "status": "notConnected",
+  "connections": {
+    "providers": ["AP"],
+    "hasPassword": false
+  }
+}
+```
+
+실제 연결 해제 성공의 `status`는 `disconnected`입니다. provider revoke가
+실패하면 HTTP 503 `PROVIDER_REVOCATION_PENDING`을 반환하고 기존 link와
+credential을 유지하며 복구용 outbox를 기록합니다.
 
 ### 6.2 피드 (공지글)
 

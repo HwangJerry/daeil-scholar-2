@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
@@ -41,21 +42,46 @@ func OptionalAuthMiddleware(authService *service.AuthService) func(http.Handler)
 }
 
 func resolveAuthUser(authService *service.AuthService, r *http.Request) (*model.AuthUser, error) {
+	if bearerToken, ok := extractBearerToken(r.Header.Get("Authorization")); ok {
+		user, err := authService.ValidateMobileAccessToken(bearerToken)
+		if err != nil {
+			return nil, errors.New("unauthorized")
+		}
+		current, err := authService.GetLoginAllowedUser(user.USRSeq)
+		if err != nil || current == nil {
+			return nil, errors.New("unauthorized")
+		}
+		active, err := authService.IsMobileSessionActive(user.USRSeq, user.SessionID)
+		if err != nil || !active {
+			return nil, errors.New("unauthorized")
+		}
+		current.SessionID = user.SessionID
+		return current, nil
+	}
+
 	cookie, err := r.Cookie(jwtCookieName)
 	if err == nil && cookie.Value != "" {
 		user, jwtErr := authService.ValidateJWT(cookie.Value)
 		if jwtErr == nil && user != nil {
-			return user, nil
+			return authService.GetLoginAllowedUser(user.USRSeq)
 		}
 	}
 	legacyCookie, err := r.Cookie("DDusrSession_id")
 	if err == nil && legacyCookie.Value != "" {
 		legacyUser, legacyErr := authService.LookupLegacySession(legacyCookie.Value)
-		if legacyErr == nil && legacyUser != nil && (legacyUser.USRStatus == "CCC" || legacyUser.USRStatus == "ZZZ") {
-			return legacyUser, nil
+		if legacyErr == nil && legacyUser != nil {
+			return authService.GetLoginAllowedUser(legacyUser.USRSeq)
 		}
 	}
 	return nil, errors.New("unauthorized")
+}
+
+func extractBearerToken(header string) (string, bool) {
+	parts := strings.Fields(strings.TrimSpace(header))
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] == "" {
+		return "", false
+	}
+	return parts[1], true
 }
 
 func setJWTCookie(w http.ResponseWriter, token string, maxAge time.Duration) {

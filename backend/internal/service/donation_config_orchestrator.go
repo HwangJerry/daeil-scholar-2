@@ -54,10 +54,28 @@ func (o *DonationConfigOrchestrator) GetHistory(days int) ([]model.DonationSnaps
 	return o.adminSvc.GetHistory(days)
 }
 
-func (o *DonationConfigOrchestrator) ListOrders(page, size int, search, status, payType string) ([]model.AdminDonationOrderRow, int, error) {
-	return o.adminSvc.ListOrders(page, size, search, status, payType)
+func (o *DonationConfigOrchestrator) ListOrders(filters model.DonationOrderFilters, page, size int) (*model.DonationOrderPage, error) {
+	return o.adminSvc.ListOrders(filters, page, size)
 }
 
-func (o *DonationConfigOrchestrator) UpdateOrder(seq int, payment string, amount int) error {
-	return o.adminSvc.UpdateOrder(seq, payment, amount)
+func (o *DonationConfigOrchestrator) GetOrder(seq int64) (*model.DonationOrder, error) {
+	return o.adminSvc.GetOrder(seq)
+}
+
+func (o *DonationConfigOrchestrator) CreateOrder(input model.DonationOrderInput, operSeq int, ip string) (*model.DonationOrder, error) {
+	order, err := o.adminSvc.CreateOrder(input, operSeq, ip)
+	if err != nil {
+		return nil, err
+	}
+	o.donationSvc.InvalidateCache()
+	return order, nil
+}
+
+func (o *DonationConfigOrchestrator) UpdateOrder(seq int64, input model.DonationOrderInput, operSeq int, ip string) (*model.DonationOrder, error) {
+	order, err := o.adminSvc.UpdateOrder(seq, input, operSeq, ip)
+	if err != nil {
+		return nil, err
+	}
+	o.donationSvc.InvalidateCache()
+	return order, nil
 }

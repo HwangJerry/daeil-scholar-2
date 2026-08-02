@@ -1,20 +1,9 @@
 // Application route definitions — page routes with background-location awareness
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Navigate, Routes, Route, useLocation } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import { FeedPage } from './pages/FeedPage';
-import { AlumniPage } from './pages/AlumniPage';
-import { MyPage } from './pages/MyPage';
-import { LoginPage } from './pages/LoginPage';
-import { LegacyLoginPage } from './pages/LegacyLoginPage';
-import { AccountLinkPage } from './pages/AccountLinkPage';
 import { PostDetailPage } from './pages/PostDetailPage';
-import { AdDetailPage } from './pages/AdDetailPage';
-import { MessagePage } from './pages/MessagePage';
-import { MessageComposePage } from './pages/MessageComposePage';
-import { RegisterPage } from './pages/RegisterPage';
-import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
-import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { AboutPage } from './pages/AboutPage';
 import { GreetingsPage } from './pages/GreetingsPage';
 import { VisionPage } from './pages/VisionPage';
@@ -24,6 +13,22 @@ import { BusinessPage } from './pages/BusinessPage';
 import { DisclosureListPage } from './pages/DisclosureListPage';
 import { DisclosureDetailPage } from './pages/DisclosureDetailPage';
 import { ModalRoutes } from './ModalRoutes';
+
+const PUBLIC_ROUTES = [
+  { path: '/', element: <FeedPage /> },
+  { path: '/post/:seq', element: <PostDetailPage /> },
+  { path: '/about', element: <AboutPage /> },
+  { path: '/greetings', element: <GreetingsPage /> },
+  { path: '/vision', element: <VisionPage /> },
+  { path: '/history', element: <HistoryPage /> },
+  { path: '/organization', element: <OrganizationPage /> },
+  { path: '/business', element: <BusinessPage /> },
+  { path: '/disclosure', element: <DisclosureListPage /> },
+  { path: '/disclosure/:seq', element: <DisclosureDetailPage /> },
+  { path: '*', element: <Navigate to="/" replace /> },
+] as const;
+
+export const PUBLIC_ROUTE_PATHS = PUBLIC_ROUTES.map((route) => route.path);
 
 export default function AppRoutes() {
   const location = useLocation();
@@ -35,29 +40,9 @@ export default function AppRoutes() {
       {/* Render background page when a modal is open; otherwise render current location */}
       <Routes location={backgroundLocation ?? location}>
         <Route element={<Layout />}>
-          <Route index element={<FeedPage />} />
-          <Route path="post/:seq" element={<PostDetailPage />} />
-          <Route path="ad/:maSeq" element={<AdDetailPage />} />
-          <Route path="alumni" element={<AlumniPage />} />
-          <Route path="me" element={<MyPage />} />
-          <Route path="messages" element={<MessagePage />} />
-          <Route path="messages/:otherSeq" element={<MessagePage />} />
-          <Route path="messages/new" element={<MessageComposePage />} />
-          <Route path="login" element={<LoginPage />} />
-          <Route path="login/legacy" element={<LegacyLoginPage />} />
-          <Route path="login/link" element={<AccountLinkPage />} />
-          <Route path="register" element={<RegisterPage />} />
-          <Route path="forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="reset-password" element={<ResetPasswordPage />} />
-          <Route path="mypage" element={<MyPage />} />
-          <Route path="about" element={<AboutPage />} />
-          <Route path="greetings" element={<GreetingsPage />} />
-          <Route path="vision" element={<VisionPage />} />
-          <Route path="history" element={<HistoryPage />} />
-          <Route path="organization" element={<OrganizationPage />} />
-          <Route path="business" element={<BusinessPage />} />
-          <Route path="disclosure" element={<DisclosureListPage />} />
-          <Route path="disclosure/:seq" element={<DisclosureDetailPage />} />
+          {PUBLIC_ROUTES.map((route) => (
+            <Route key={route.path} path={route.path} element={route.element} />
+          ))}
         </Route>
       </Routes>
 

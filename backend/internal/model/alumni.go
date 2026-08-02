@@ -6,72 +6,77 @@ import (
 
 // AlumniRecord represents a member from WEO_MEMBER.
 type AlumniRecord struct {
-	USRSeq        sql.NullInt64  `db:"USR_SEQ"`
-	USRName       string         `db:"USR_NAME"`
-	USRFN         sql.NullString `db:"USR_FN"`
-	USRDept       sql.NullString `db:"USR_DEPT"`
-	USRBizName    sql.NullString `db:"USR_BIZ_NAME"`
-	USRBizDesc    sql.NullString `db:"USR_BIZ_DESC"`
-	USRBizAddr    sql.NullString `db:"USR_BIZ_ADDR"`
-	USRPhone      sql.NullString `db:"USR_PHONE"`
-	USREmail      sql.NullString `db:"USR_EMAIL"`
-	USRPhoto      sql.NullString `db:"USR_PHOTO"`
-	USRNick       sql.NullString `db:"USR_NICK"`
-	USRPosition   sql.NullString `db:"USR_POSITION"`
-	USRBizCard    sql.NullString `db:"USR_BIZ_CARD"`
+	USRSeq         int            `db:"USR_SEQ"`
+	USRName        string         `db:"USR_NAME"`
+	USRPhoto       sql.NullString `db:"USR_PHOTO"`
+	GraduationYear sql.NullInt64  `db:"GRADUATION_YEAR"`
+	Cohort         sql.NullString `db:"COHORT"`
+	Department     sql.NullString `db:"DEPARTMENT"`
+	AJCName        sql.NullString `db:"AJC_NAME"`
+	USRPosition    sql.NullString `db:"USR_POSITION"`
+	USRPhone       sql.NullString `db:"USR_PHONE"`
+	USREmail       sql.NullString `db:"USR_EMAIL"`
 	USRPhonePublic sql.NullString `db:"USR_PHONE_PUBLIC"`
 	USREmailPublic sql.NullString `db:"USR_EMAIL_PUBLIC"`
-	AJCName       sql.NullString `db:"AJC_NAME"`
-	Tags          sql.NullString `db:"TAGS"`
+	BlockedByMe    bool           `db:"BLOCKED_BY_ME"`
 }
 
 // AlumniCard is the API response for a single alumni in the search results.
 type AlumniCard struct {
-	FMSeq       int      `json:"fmSeq"`
-	FMName      string   `json:"fmName"`
-	FMFN        string   `json:"fmFn"`
-	FMDept      string   `json:"fmDept"`
-	Company     string   `json:"company"`
-	Position    string   `json:"position"`
-	Phone       string   `json:"phone"`
-	Email       string   `json:"email"`
-	BizName     string   `json:"bizName"`
-	BizDesc     string   `json:"bizDesc"`
-	BizAddr     string   `json:"bizAddr"`
-	JobCatName  string   `json:"jobCatName"`
-	Tags        []string `json:"tags"`
-	Photo       string   `json:"photo"`
-	UsrSeq      int      `json:"usrSeq"`
-	Nick        string   `json:"nick"`
-	BizCard     string   `json:"bizCard"`
+	UserSeq     int     `json:"userSeq"`
+	Name        string  `json:"name"`
+	PhotoURL    *string `json:"photoUrl"`
+	Cohort      string  `json:"cohort"`
+	Department  string  `json:"department"`
+	JobCategory string  `json:"jobCategory"`
+	JobRole     string  `json:"jobRole"`
 }
 
 // AlumniSearchParams holds the query parameters for alumni search.
 type AlumniSearchParams struct {
-	FN      string
-	Dept    string
-	Name    string
-	Company string
-	JobCat  int
-	Page    int
-	Size    int
+	Name           string
+	GraduationYear int
+	Cohort         string
+	Department     string
+	JobCategory    int
+	JobRole        string
+	Page           int
+	Size           int
 }
 
 // AlumniSearchResponse is the API response for GET /api/alumni.
 type AlumniSearchResponse struct {
-	Items       []AlumniCard `json:"items"`
-	TotalCount  int          `json:"totalCount"`
-	WeeklyCount int          `json:"weeklyCount"`
-	Page        int          `json:"page"`
-	Size        int          `json:"size"`
-	TotalPages  int          `json:"totalPages"`
+	Items      []AlumniCard `json:"items"`
+	Page       int          `json:"page"`
+	Size       int          `json:"size"`
+	TotalCount int          `json:"totalCount"`
+	TotalPages int          `json:"totalPages"`
+}
+
+type AlumniDetail struct {
+	UserSeq     int              `json:"userSeq"`
+	Name        string           `json:"name"`
+	PhotoURL    *string          `json:"photoUrl"`
+	Cohort      string           `json:"cohort"`
+	Department  string           `json:"department"`
+	JobCategory string           `json:"jobCategory"`
+	JobRole     string           `json:"jobRole"`
+	Phone       *string          `json:"phone,omitempty"`
+	Email       *string          `json:"email,omitempty"`
+	BlockState  AlumniBlockState `json:"blockState"`
+}
+
+type AlumniBlockState struct {
+	BlockedByMe bool `json:"blockedByMe"`
 }
 
 // AlumniFilters holds the available filter options for alumni search.
 type AlumniFilters struct {
-	FNList        []string      `json:"fnList"`
-	DeptList      []string      `json:"deptList"`
-	JobCategories []JobCategory `json:"jobCategories"`
+	GraduationYears []int         `json:"graduationYears"`
+	Cohorts         []string      `json:"cohorts"`
+	Departments     []string      `json:"departments"`
+	JobCategories   []JobCategory `json:"jobCategories"`
+	JobRoles        []string      `json:"jobRoles"`
 }
 
 // JobCategory represents a row in ALUMNI_JOB_CATEGORY table.
@@ -88,7 +93,7 @@ type UserTag struct {
 	Indx   int    `db:"AUT_INDX" json:"indx"`
 }
 
-// AlumniWidgetItem is a minimal alumni entry for the public widget (name only).
+// AlumniWidgetItem is a minimal approved-alumni widget entry (name only).
 type AlumniWidgetItem struct {
 	FmName string `json:"fmName"`
 }

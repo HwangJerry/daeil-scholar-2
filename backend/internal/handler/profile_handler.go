@@ -33,6 +33,50 @@ func (h *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, profile)
 }
 
+func (h *ProfileHandler) GetAlumniVerification(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetAuthUser(r.Context())
+	if user == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
+		return
+	}
+	verification, err := h.service.GetAlumniVerification(user.USRSeq)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "VERIFICATION_LOAD_FAILED", "동문 인증 상태를 불러오지 못했습니다")
+		return
+	}
+	respondJSON(w, http.StatusOK, verification)
+}
+
+func (h *ProfileHandler) PutAlumniVerification(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetAuthUser(r.Context())
+	if user == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
+		return
+	}
+	var req model.AlumniVerificationSubmissionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
+		return
+	}
+	if err := h.service.SubmitAlumniVerification(user.USRSeq, req); err != nil {
+		switch {
+		case errors.Is(err, service.ErrAcademicInformationRequired):
+			respondError(w, http.StatusBadRequest, "ACADEMIC_INFORMATION_REQUIRED", "졸업연도, 기수, 학과를 모두 입력해주세요")
+		case errors.Is(err, service.ErrInvalidDepartment):
+			respondError(w, http.StatusBadRequest, "INVALID_DEPARTMENT", "유효하지 않은 학과입니다")
+		default:
+			respondError(w, http.StatusInternalServerError, "VERIFICATION_UPDATE_FAILED", "동문 인증 정보를 저장하지 못했습니다")
+		}
+		return
+	}
+	verification, err := h.service.GetAlumniVerification(user.USRSeq)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "VERIFICATION_LOAD_FAILED", "동문 인증 상태를 불러오지 못했습니다")
+		return
+	}
+	respondJSON(w, http.StatusOK, verification)
+}
+
 func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetAuthUser(r.Context())
 	if user == nil {

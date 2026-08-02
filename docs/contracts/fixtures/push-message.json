@@ -1,0 +1,10 @@
+{
+  "type": "message",
+  "eventId": "9001",
+  "messageId": "9001",
+  "conversationUserSeq": "202",
+  "senderUserSeq": "202",
+  "senderName": "예시 동문",
+  "preview": "안녕하세요.",
+  "createdAt": "2026-07-28T01:00:00Z"
+}

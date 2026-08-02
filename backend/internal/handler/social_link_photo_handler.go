@@ -2,25 +2,24 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
-	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/service"
-	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
 )
 
 const socialLinkPhotoMaxBytes = 5 << 20 // 5 MB
 
 type SocialLinkPhotoHandler struct {
-	uploader *service.UploadOrchestrator
-	cache    *cache.Cache
-	logger   zerolog.Logger
+	uploader   *service.UploadOrchestrator
+	linkTokens *service.SocialLinkTokenStore
+	logger     zerolog.Logger
 }
 
-func NewSocialLinkPhotoHandler(uploader *service.UploadOrchestrator, cacheStore *cache.Cache, logger zerolog.Logger) *SocialLinkPhotoHandler {
-	return &SocialLinkPhotoHandler{uploader: uploader, cache: cacheStore, logger: logger}
+func NewSocialLinkPhotoHandler(uploader *service.UploadOrchestrator, linkTokens *service.SocialLinkTokenStore, logger zerolog.Logger) *SocialLinkPhotoHandler {
+	return &SocialLinkPhotoHandler{uploader: uploader, linkTokens: linkTokens, logger: logger}
 }
 
 // Upload accepts a profile photo during the social signup flow before a member row exists.
@@ -37,14 +36,13 @@ func (h *SocialLinkPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) 
 		respondError(w, http.StatusBadRequest, "MISSING_TOKEN", "token 파라미터가 필요합니다")
 		return
 	}
-	cached, found := h.cache.Get("social_link:" + token)
-	if !found {
-		respondError(w, http.StatusNotFound, "TOKEN_NOT_FOUND", "유효한 소셜 링크 토큰이 아닙니다")
+	_, err := h.linkTokens.Snapshot(token)
+	if errors.Is(err, service.ErrSocialLinkTokenConsumed) {
+		respondError(w, http.StatusConflict, "TOKEN_ALREADY_USED", "이미 처리된 소셜 링크 토큰입니다")
 		return
 	}
-	linkData, ok := cached.(model.SocialLinkData)
-	if !ok {
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Invalid cached data")
+	if err != nil {
+		respondError(w, http.StatusNotFound, "INVALID_TOKEN", "유효한 소셜 링크 토큰이 아닙니다")
 		return
 	}
 	file, header, err := r.FormFile("file")
@@ -61,8 +59,18 @@ func (h *SocialLinkPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	linkData.ProfileImageURL = result.URL
-	h.cache.Set("social_link:"+token, linkData, 5*time.Minute)
+	_, err = h.linkTokens.Update(token, func(data model.SocialLinkData) model.SocialLinkData {
+		data.ProfileImageURL = result.URL
+		return data
+	})
+	if errors.Is(err, service.ErrSocialLinkTokenInProgress) {
+		respondError(w, http.StatusConflict, "TOKEN_IN_PROGRESS", "계정 연결이 처리 중입니다")
+		return
+	}
+	if err != nil {
+		respondError(w, http.StatusConflict, "INVALID_TOKEN", "유효한 소셜 링크 토큰이 아닙니다")
+		return
+	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"url": result.URL})
 }

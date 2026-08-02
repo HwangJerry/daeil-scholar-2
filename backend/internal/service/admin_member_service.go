@@ -2,11 +2,28 @@
 package service
 
 import (
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 )
+
+var (
+	ErrRejectionReasonRequired            = errors.New("rejection reason required")
+	ErrLegacyVerificationStatusNotAllowed = errors.New("legacy verification status not allowed")
+	ErrVerificationStale                  = repository.ErrVerificationStale
+	ErrVerificationStateConflict          = repository.ErrVerificationStateConflict
+)
+
+var legacyVerificationStatuses = map[string]bool{
+	"BAA": true,
+	"BBB": true,
+	"CCC": true,
+	"ZZZ": true,
+}
 
 var allowedMemberStatuses = map[string]bool{
 	"AAA": true, // 탈퇴회원
@@ -44,13 +61,36 @@ func (s *AdminMemberService) GetDetail(seq int) (*model.AdminMemberDetail, error
 	return s.repo.GetMemberDetail(seq)
 }
 
+func (s *AdminMemberService) ListAlumniVerifications(status string) ([]model.AdminAlumniVerification, error) {
+	return s.repo.ListAlumniVerifications(strings.TrimSpace(status))
+}
+
+func (s *AdminMemberService) GetAlumniVerificationDetail(usrSeq int) (*model.AdminAlumniVerification, error) {
+	return s.repo.GetAlumniVerificationDetail(usrSeq)
+}
+
 // UpdateStatus validates and applies a member status change.
 func (s *AdminMemberService) UpdateStatus(seq int, status string) error {
+	if legacyVerificationStatuses[status] {
+		return ErrLegacyVerificationStatusNotAllowed
+	}
 	if !allowedMemberStatuses[status] {
 		return fmt.Errorf("invalid member status: %s", status)
 	}
 
 	return s.repo.UpdateMemberStatus(seq, status)
+}
+
+func (s *AdminMemberService) RejectAlumniVerification(usrSeq int, reviewerSeq int, reason string, expectedUpdatedAt time.Time) error {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return ErrRejectionReasonRequired
+	}
+	return s.repo.RejectAlumniVerification(usrSeq, reviewerSeq, reason, expectedUpdatedAt)
+}
+
+func (s *AdminMemberService) ApproveAlumniVerification(usrSeq int, reviewerSeq int, expectedUpdatedAt time.Time) error {
+	return s.repo.ApproveAlumniVerification(usrSeq, reviewerSeq, expectedUpdatedAt)
 }
 
 // HasKakaoLink checks whether a member has a linked Kakao social account.

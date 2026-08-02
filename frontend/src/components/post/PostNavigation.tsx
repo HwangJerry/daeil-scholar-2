@@ -1,4 +1,4 @@
-// PostNavigation — 이전/다음글 네비게이션 및 피드 복귀 링크
+// PostNavigation — 이전/다음글 네비게이션
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { usePostSiblings } from '../../hooks/usePostSiblings';
@@ -33,14 +33,6 @@ export function PostNavigation({ currentSeq }: PostNavigationProps) {
             <span className="truncate">{siblings.next.subject}</span>
           </Link>
         )}
-      </div>
-      <div className="px-5 py-3">
-        <Link
-          to="/"
-          className="group inline-flex items-center gap-1 text-sm text-text-tertiary hover:text-text-primary hover:gap-2 transition-all duration-150"
-        >
-          &larr; 피드로 돌아가기
-        </Link>
       </div>
     </nav>
   );

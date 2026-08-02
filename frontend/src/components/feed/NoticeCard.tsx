@@ -3,7 +3,6 @@ import { Pin } from 'lucide-react';
 import { formatAbsoluteDate } from '../../utils/date';
 import type { NoticeItem } from '../../types/api';
 import { FeedCard } from './FeedCard';
-import { NoticeCardEngagement } from './NoticeCardEngagement';
 import { NoticeCardLink } from './NoticeCardLink';
 import { NoticeCardSummary } from './NoticeCardSummary';
 import { NOTICE_CATEGORY_LABELS } from './noticeCard.constants';
@@ -38,16 +37,6 @@ export function NoticeCard({ item }: { item: NoticeItem }) {
           <FeedCard.Image src={item.thumbnailUrl} alt={item.subject} />
         </NoticeCardLink>
       )}
-
-      <FeedCard.Divider />
-
-      <NoticeCardEngagement
-        seq={item.seq}
-        likeCnt={item.likeCnt ?? 0}
-        commentCnt={item.commentCnt ?? 0}
-        hit={item.hit ?? 0}
-        userLiked={item.userLiked ?? false}
-      />
     </FeedCard>
   );
 }

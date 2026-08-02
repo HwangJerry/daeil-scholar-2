@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	loginMaxAttempts    = 10
-	loginAttemptKeyPref = "login_attempts:"
+	loginMaxAttempts     = 10
+	loginAttemptKeyPref  = "login_attempts:"
 	loginRateLimitWindow = 15 * time.Minute
 )
 
@@ -22,7 +22,7 @@ func LoginRateLimiter(c *cache.Cache) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := clientIP(r)
-			key := loginAttemptKeyPref + ip
+			key := loginAttemptKeyPref + ip + ":" + r.URL.Path
 
 			c.Add(key, 0, loginRateLimitWindow)
 			count, _ := c.IncrementInt(key, 1)

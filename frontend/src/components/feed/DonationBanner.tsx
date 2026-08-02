@@ -16,45 +16,44 @@ export function DonationBanner() {
   });
 
   if (isLoading) {
-    return <div className="h-48 rounded-[20px] skeleton-shimmer" />;
+    return (
+      <section id="donation-summary" aria-label="누적 기부액" className="scroll-mt-20">
+        <div className="h-48 rounded-[20px] skeleton-shimmer" />
+      </section>
+    );
   }
 
-  if (isError || !data) return null;
-
-  const rate = Math.min(data.achievementRate, 100);
-  const hasGoal = data.goalAmount > 0;
+  if (isError || !data) {
+    return (
+      <section
+        id="donation-summary"
+        aria-label="누적 기부액"
+        className="scroll-mt-20 rounded-[20px] bg-surface border border-border p-7 shadow-card"
+      >
+        <p className="text-sm text-text-tertiary">누적 기부액을 불러오지 못했습니다.</p>
+      </section>
+    );
+  }
 
   return (
-    <div className="rounded-[20px] bg-surface border border-border p-7 shadow-card">
+    <section
+      id="donation-summary"
+      aria-labelledby="donation-summary-heading"
+      className="scroll-mt-20 rounded-[20px] bg-surface border border-border p-7 shadow-card"
+    >
       <p className="text-[10px] font-semibold text-text-placeholder tracking-widest uppercase mb-4">
-        기부 캠페인
+        함께 만드는 내일
       </p>
 
       <div className="flex items-center gap-2 mb-1">
         <TrendingUp size={16} className="text-primary flex-shrink-0" />
-        <span className="text-xs text-text-tertiary">누적 기부액</span>
+        <h2 id="donation-summary-heading" className="text-xs text-text-tertiary">
+          누적 기부액
+        </h2>
       </div>
-      <p className="text-2xl font-bold text-text-primary mb-1">
+      <p className="text-2xl font-bold text-text-primary mb-5">
         {formatAmount(data.displayAmount)}원
       </p>
-      <p className="text-sm text-text-tertiary mb-4">
-        {data.donorCount}명 참여
-        {hasGoal && <span> · 달성률 {rate.toFixed(0)}%</span>}
-      </p>
-
-      {hasGoal && (
-        <div className="mb-4">
-          <div className="h-1.5 overflow-hidden rounded-full bg-border">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-primary to-hero-via animate-fill-bar"
-              style={{ width: `${rate}%` }}
-            />
-          </div>
-          <p className="mt-1.5 text-right text-xs text-text-placeholder">
-            목표 {formatAmount(data.goalAmount)}원
-          </p>
-        </div>
-      )}
 
       <a
         href={EXTERNAL_DONATION_URL}
@@ -64,6 +63,6 @@ export function DonationBanner() {
       >
         기부하기
       </a>
-    </div>
+    </section>
   );
 }

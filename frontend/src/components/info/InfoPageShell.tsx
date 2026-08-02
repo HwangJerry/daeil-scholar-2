@@ -2,6 +2,7 @@
 import type { ReactNode } from 'react';
 import { PageMeta } from '../seo/PageMeta';
 import Footer from '../layout/Footer';
+import { AboutBackLink } from './AboutBackLink';
 
 interface InfoPageShellProps {
   title: string;
@@ -20,7 +21,10 @@ export function InfoPageShell({ title, subtitle, canonicalPath, children }: Info
           {subtitle && <p className="text-text-tertiary">{subtitle}</p>}
         </header>
 
-        <main className="mx-auto w-full max-w-3xl space-y-6">{children}</main>
+        <main className="mx-auto w-full max-w-3xl space-y-6">
+          {canonicalPath !== '/about' && <AboutBackLink />}
+          {children}
+        </main>
 
         <Footer />
       </div>

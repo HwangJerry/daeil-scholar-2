@@ -1,9 +1,20 @@
+# syntax=docker/dockerfile:1.7
 # backend/Dockerfile — Multi-stage build for the Go API server
+# Required build secret: docker build --secret id=github_token,src=/secure/path/to/token .
 # Stage 1: build
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25.12-alpine AS builder
 WORKDIR /app
+RUN apk --no-cache add git ca-certificates
+ENV GOPRIVATE=github.com/cherryberryyogurt/* \
+    GIT_TERMINAL_PROMPT=0
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=secret,id=github_token,required=true \
+    set -eu; \
+    token="$(cat /run/secrets/github_token)"; \
+    printf 'machine github.com login x-access-token password %s\n' "$token" > /root/.netrc; \
+    chmod 600 /root/.netrc; \
+    go mod download; \
+    rm -f /root/.netrc
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
 

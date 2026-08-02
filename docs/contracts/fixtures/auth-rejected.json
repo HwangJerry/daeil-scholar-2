@@ -1,0 +1,28 @@
+{
+  "status": "authenticated",
+  "session": {
+    "user": {
+      "usrSeq": 101,
+      "usrId": "legacy-compatible-id",
+      "usrName": "예시 동문",
+      "email": "member@example.com",
+      "adminRole": null,
+      "verification": {
+        "graduationYear": 2003,
+        "cohort": "18",
+        "department": "영어",
+        "rejectionReason": "확인 가능한 학적 정보를 다시 입력해주세요.",
+        "submittedAt": "2026-07-27T01:00:00Z",
+        "reviewedAt": "2026-07-27T02:00:00Z",
+        "status": "rejected"
+      }
+    },
+    "accessToken": "fixture-access-token",
+    "refreshToken": "fixture-refresh-token",
+    "accessIssuedAt": 1785114000,
+    "accessExpiresAt": 1785117600,
+    "refreshExpiresAt": 1787706000,
+    "sid": "fixture-session-id",
+    "jti": "fixture-refresh-jti"
+  }
+}

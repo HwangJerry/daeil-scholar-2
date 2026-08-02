@@ -1,0 +1,14 @@
+{
+  "code": "IMPORT_VALIDATION_FAILED",
+  "message": "파일의 오류를 수정한 뒤 다시 업로드해주세요.",
+  "details": {
+    "errors": [
+      {
+        "row": 4,
+        "field": "phone",
+        "code": "INVALID_PHONE",
+        "message": "010 휴대전화 형식이 아닙니다."
+      }
+    ]
+  }
+}

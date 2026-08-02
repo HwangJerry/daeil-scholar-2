@@ -37,7 +37,13 @@ func (h *SitemapHandler) GetSitemap(w http.ResponseWriter, r *http.Request) {
 	base := h.siteBaseURL
 	urls := []sitemapURL{
 		{Loc: base + "/", ChangeFreq: "daily", Priority: "1.0"},
-		{Loc: base + "/donation", ChangeFreq: "weekly", Priority: "0.7"},
+		{Loc: base + "/about", ChangeFreq: "monthly", Priority: "0.7"},
+		{Loc: base + "/greetings", ChangeFreq: "monthly", Priority: "0.6"},
+		{Loc: base + "/vision", ChangeFreq: "monthly", Priority: "0.6"},
+		{Loc: base + "/history", ChangeFreq: "monthly", Priority: "0.6"},
+		{Loc: base + "/organization", ChangeFreq: "monthly", Priority: "0.6"},
+		{Loc: base + "/business", ChangeFreq: "monthly", Priority: "0.6"},
+		{Loc: base + "/disclosure", ChangeFreq: "weekly", Priority: "0.7"},
 	}
 
 	posts, err := h.sitemapSvc.GetAllPublicPostsForSitemap()

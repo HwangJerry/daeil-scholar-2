@@ -13,77 +13,105 @@ import (
 )
 
 type socialLinkRequest struct {
-	Token           string   `json:"token"`
-	Mode            string   `json:"mode"` // "new" (default) | "merge"
-	Name            string   `json:"name"`
-	Phone           string   `json:"phone"`
-	Email           string   `json:"email"`
-	FN              string   `json:"fn"`
-	FmDept          string   `json:"fmDept"`
-	JobCat          *int     `json:"jobCat"`
-	BizName         string   `json:"bizName"`
-	BizDesc         string   `json:"bizDesc"`
-	BizAddr         string   `json:"bizAddr"`
-	Position        string   `json:"position"`
-	Tags            []string `json:"tags"`
-	USRPhonePublic  string   `json:"usrPhonePublic"`
-	USREmailPublic  string   `json:"usrEmailPublic"`
-	ProfileImageURL *string  `json:"profileImageUrl,omitempty"`
+	Token            string   `json:"token"`
+	LinkToken        string   `json:"linkToken"`
+	Mode             string   `json:"mode"`   // "new" (default) | "merge"
+	Client           string   `json:"client"` // "web" (default) | "mobile"
+	ExistingUSRID    string   `json:"existingUsrId"`
+	ExistingEmail    string   `json:"-"`
+	ExistingPassword string   `json:"existingPassword"`
+	Password         string   `json:"password"`
+	Name             string   `json:"name"`
+	Phone            string   `json:"phone"`
+	Email            string   `json:"email"`
+	FN               string   `json:"fn"`
+	FmDept           string   `json:"fmDept"`
+	JobCat           *int     `json:"jobCat"`
+	BizName          string   `json:"bizName"`
+	BizDesc          string   `json:"bizDesc"`
+	BizAddr          string   `json:"bizAddr"`
+	Position         string   `json:"position"`
+	Tags             []string `json:"tags"`
+	USRPhonePublic   string   `json:"usrPhonePublic"`
+	USREmailPublic   string   `json:"usrEmailPublic"`
+	ProfileImageURL  *string  `json:"profileImageUrl,omitempty"`
 }
 
 // SocialLink handles the account linking HTTP flow for all social providers.
-// Behavior is mode-driven: "new" creates a fresh member, "merge" attaches the
-// social link to an existing member found by phone (user confirmed via UI banner).
+// Behavior is mode-driven: "new" creates a fresh member, while "merge" attaches
+// the social link only after existing ID/password reauthentication and a
+// canonical phone match.
 func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 	var req socialLinkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
+	canonicalMobileMerge := normalizeCanonicalMobileSocialLinkRequest(&req)
 	mode := service.SocialLinkMode(req.Mode)
 	if mode == "" {
 		mode = service.SocialLinkModeNew
 	}
+	req.Token = strings.TrimSpace(req.Token)
 	req.Name = strings.TrimSpace(req.Name)
 	req.Email = strings.TrimSpace(req.Email)
-	if req.Token == "" || req.Phone == "" {
+	req.Phone = model.NormalizePhoneNumber(req.Phone).String()
+	req.FN = strings.TrimSpace(req.FN)
+	req.FmDept = strings.TrimSpace(req.FmDept)
+	req.ExistingUSRID = strings.TrimSpace(req.ExistingUSRID)
+	if req.Token == "" {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "Missing required fields")
 		return
 	}
-	if req.Name == "" || req.Email == "" {
+	if !canonicalMobileMerge && req.Phone == "" {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "Missing required fields")
 		return
 	}
-	if req.FN == "" || req.FmDept == "" {
+	if !canonicalMobileMerge && (req.Name == "" || req.Email == "") {
+		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "Missing required fields")
+		return
+	}
+	if !canonicalMobileMerge && (req.FN == "" || req.FmDept == "") {
 		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "필수 입력값이 누락되었습니다")
 		return
 	}
-	if !fnDigitRegex.MatchString(req.FN) {
+	if !canonicalMobileMerge && !fnDigitRegex.MatchString(req.FN) {
 		respondError(w, http.StatusBadRequest, "INVALID_FN", "기수는 숫자로 입력해주세요")
 		return
 	}
-	if !model.IsValidDepartment(req.FmDept) {
+	if !canonicalMobileMerge && !model.IsValidDepartment(req.FmDept) {
 		respondError(w, http.StatusBadRequest, "INVALID_DEPARTMENT", "유효하지 않은 학과입니다")
 		return
 	}
+	if err := service.ValidateTags(req.Tags); err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_TAG", "태그에 공백을 포함할 수 없습니다")
+		return
+	}
 
-	cached, found := h.cache.Get("social_link:" + req.Token)
-	if !found {
+	lease, err := h.socialLinkTokens.Begin(req.Token)
+	switch {
+	case errors.Is(err, service.ErrSocialLinkTokenInProgress):
+		respondError(w, http.StatusConflict, "TOKEN_IN_PROGRESS", "동일한 계정 연결 요청이 처리 중입니다.")
+		return
+	case errors.Is(err, service.ErrSocialLinkTokenConsumed):
+		respondError(w, http.StatusConflict, "TOKEN_ALREADY_USED", "이미 처리된 소셜 링크 토큰입니다. 다시 소셜 로그인해주세요.")
+		return
+	case err != nil:
 		respondError(w, http.StatusBadRequest, "INVALID_TOKEN", "Link token expired or invalid")
 		return
 	}
-	linkData, ok := cached.(model.SocialLinkData)
-	if !ok {
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Invalid cached data")
-		return
-	}
-	h.cache.Delete("social_link:" + req.Token)
-
-	// In merge mode the server uses existing member's email/name; the form fields are readonly.
-	// Cached email is the authoritative reference for the social link row.
-	linkEmail := req.Email
+	tokenConsumed := false
+	defer func() {
+		if !tokenConsumed {
+			_ = h.socialLinkTokens.Release(lease)
+		}
+	}()
+	linkData := lease.Data
+	// Provider email is profile metadata only. Keep the verifier-derived value on
+	// the social link; use the form email only when the provider supplied none.
+	linkEmail := linkData.Email
 	if linkEmail == "" {
-		linkEmail = linkData.Email
+		linkEmail = req.Email
 	}
 
 	// Profile image: client may explicitly override the cached provider URL (replace or remove).
@@ -94,32 +122,59 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		profileImageURL = *req.ProfileImageURL
 	}
 
+	provider := model.SocialProvider(linkData.Provider)
+	credential := linkData.AccessToken
+	if provider == model.SocialProviderApple {
+		credential = linkData.RevocationToken
+	}
+	if err := h.socialLifecycle.EnsureCredentialStorageAvailable(credential); err != nil {
+		h.logger.Error().Err(err).Str("provider", linkData.Provider).Msg("social credential storage unavailable")
+		respondError(w, http.StatusServiceUnavailable, "CREDENTIAL_STORAGE_UNAVAILABLE", "소셜 계정 연결을 완료할 수 없습니다.")
+		return
+	}
+	encryptedCredential, err := h.socialLifecycle.EncryptCredential(credential)
+	if err != nil {
+		h.logger.Error().Err(err).Str("provider", linkData.Provider).Msg("social credential encryption failed")
+		respondError(w, http.StatusServiceUnavailable, "CREDENTIAL_STORAGE_UNAVAILABLE", "소셜 계정 연결을 완료할 수 없습니다.")
+		return
+	}
 	user, isNew, err := h.service.LinkSocialAccount(service.SocialLinkParams{
-		Mode:            mode,
-		Provider:        linkData.Provider,
-		SocialID:        linkData.SocialID,
-		Email:           linkEmail,
-		Name:            req.Name,
-		Phone:           req.Phone,
-		FN:              req.FN,
-		FmDept:          req.FmDept,
-		JobCat:          req.JobCat,
-		BizName:         req.BizName,
-		BizDesc:         req.BizDesc,
-		BizAddr:         req.BizAddr,
-		Position:        req.Position,
-		Tags:            req.Tags,
-		USRPhonePublic:  req.USRPhonePublic,
-		USREmailPublic:  req.USREmailPublic,
-		ProfileImageURL: profileImageURL,
+		Mode:                mode,
+		Provider:            linkData.Provider,
+		SocialID:            linkData.SocialID,
+		Email:               linkEmail,
+		Name:                req.Name,
+		Phone:               req.Phone,
+		FN:                  req.FN,
+		FmDept:              req.FmDept,
+		JobCat:              req.JobCat,
+		BizName:             req.BizName,
+		BizDesc:             req.BizDesc,
+		BizAddr:             req.BizAddr,
+		Position:            req.Position,
+		Tags:                req.Tags,
+		USRPhonePublic:      req.USRPhonePublic,
+		USREmailPublic:      req.USREmailPublic,
+		ProfileImageURL:     profileImageURL,
+		ExistingUSRID:       req.ExistingUSRID,
+		ExistingEmail:       req.ExistingEmail,
+		ExistingPassword:    req.ExistingPassword,
+		EncryptedCredential: encryptedCredential,
 	}, h.memberSvc)
 	if err != nil {
-		log.Error().Err(err).Str("provider", linkData.Provider).Str("socialID", linkData.SocialID).Str("mode", string(mode)).Msg("social link failed")
+		if writeSocialLinkError(w, err) {
+			return
+		}
+		log.Error().Err(err).Str("provider", linkData.Provider).Str("mode", string(mode)).Msg("social link failed")
 		switch {
 		case errors.Is(err, service.ErrPhoneAlreadyRegistered):
 			respondError(w, http.StatusConflict, "PHONE_TAKEN", "이미 가입된 전화번호입니다. 통합 회원가입으로 진행해주세요.")
 		case errors.Is(err, service.ErrPhoneNotFound):
 			respondError(w, http.StatusConflict, "PHONE_NOT_MATCHED", "해당 전화번호의 기존 회원을 찾을 수 없습니다")
+		case errors.Is(err, service.ErrExistingAccountReauthenticationRequired):
+			respondError(w, http.StatusUnauthorized, "REAUTHENTICATION_REQUIRED", "기존 계정 아이디와 비밀번호로 다시 인증해주세요.")
+		case isLoginPolicyError(err):
+			respondError(w, http.StatusForbidden, service.LoginErrorCode(err), "이 계정은 현재 로그인할 수 없습니다.")
 		default:
 			respondError(w, http.StatusInternalServerError, "LINK_FAILED", "계정 연동에 실패했습니다")
 		}
@@ -136,7 +191,23 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	tokenConsumed = true
+	if err := h.socialLinkTokens.Consume(lease); err != nil {
+		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Str("provider", linkData.Provider).Msg("social link token consume failed")
+		respondError(w, http.StatusInternalServerError, "LINK_STATE_FAILED", "계정 연결은 완료되었지만 상태를 확정할 수 없습니다. 다시 소셜 로그인해주세요.")
+		return
+	}
 	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
+	if strings.EqualFold(req.Client, "mobile") {
+		result, resultErr := h.socialAuth.CompleteMobileLink(user)
+		if resultErr != nil {
+			respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 토큰 발급에 실패했습니다")
+			return
+		}
+		writeMobileAuthResult(w, result)
+		return
+	}
+
 	if user.USRStatus == "BBB" {
 		respondJSON(w, http.StatusAccepted, authUser)
 		return
@@ -151,4 +222,27 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, authUser)
+}
+
+func normalizeCanonicalMobileSocialLinkRequest(req *socialLinkRequest) bool {
+	linkToken := strings.TrimSpace(req.LinkToken)
+	email := strings.TrimSpace(req.Email)
+	if linkToken == "" || email == "" || req.Password == "" {
+		return false
+	}
+	req.Token = linkToken
+	req.Mode = string(service.SocialLinkModeMerge)
+	req.Client = "mobile"
+	req.ExistingEmail = email
+	req.ExistingPassword = req.Password
+	req.ExistingUSRID = ""
+	return true
+}
+
+func writeSocialLinkError(w http.ResponseWriter, err error) bool {
+	if errors.Is(err, service.ErrAccountMergeNotSupported) {
+		respondError(w, http.StatusConflict, "ACCOUNT_MERGE_NOT_SUPPORTED", "이미 분리된 계정은 자동으로 병합할 수 없습니다.")
+		return true
+	}
+	return false
 }

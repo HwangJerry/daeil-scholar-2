@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "userSeq": 202,
+      "name": "예시 동문",
+      "photoUrl": "/files/profile/example.jpg",
+      "cohort": "18",
+      "department": "영어",
+      "jobCategory": "교육",
+      "jobRole": "교사"
+    }
+  ],
+  "page": 1,
+  "size": 20,
+  "totalCount": 1,
+  "totalPages": 1
+}

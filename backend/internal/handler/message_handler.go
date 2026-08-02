@@ -16,14 +16,14 @@ import (
 // Defined here (consumer side) so tests can inject a stub without importing
 // the service package.
 type MessageServicer interface {
-	SendMessage(senderSeq int, senderName string, req model.SendMessageRequest) error
+	SendMessage(senderSeq int, senderName string, req model.SendMessageRequest) (*model.SendMessageResponse, error)
 	GetInbox(usrSeq, page, size int) (*model.MessageListResponse, error)
 	GetOutbox(usrSeq, page, size int) (*model.MessageListResponse, error)
 	MarkAsRead(amSeq, usrSeq int) error
 	DeleteMessage(amSeq, usrSeq int) error
-	GetConversations(usrSeq int) (*model.ConversationListResponse, error)
-	GetConversationMessages(usrSeq, otherSeq, page, size int) (*model.MessageListResponse, error)
-	MarkConversationRead(usrSeq, senderSeq int) error
+	GetConversations(usrSeq int, cursor string, size int) (*model.ConversationListResponse, error)
+	GetConversationMessages(usrSeq, otherSeq int, before string, size int) (*model.ConversationMessageListResponse, error)
+	MarkConversationRead(usrSeq, senderSeq int, throughMessageID int64) error
 }
 
 // MessageHandler handles message-related HTTP requests.
@@ -48,7 +48,8 @@ func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
-	if err := h.service.SendMessage(user.USRSeq, user.USRName, req); err != nil {
+	accepted, err := h.service.SendMessage(user.USRSeq, user.USRName, req)
+	if err != nil {
 		var ve *model.ValidationError
 		if errors.As(err, &ve) {
 			respondError(w, http.StatusBadRequest, "SEND_FAILED", ve.Error())
@@ -57,7 +58,7 @@ func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	respondJSON(w, http.StatusOK, accepted)
 }
 
 // GetInbox handles GET /api/messages/inbox.
@@ -137,9 +138,14 @@ func (h *MessageHandler) GetConversations(w http.ResponseWriter, r *http.Request
 		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
 		return
 	}
-	result, err := h.service.GetConversations(user.USRSeq)
+	result, err := h.service.GetConversations(user.USRSeq, r.URL.Query().Get("cursor"), parseSize(r, 20))
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "CONVERSATIONS_FAILED", "Failed to load conversations")
+		var validationErr *model.ValidationError
+		if errors.As(err, &validationErr) {
+			respondError(w, http.StatusBadRequest, "INVALID_REQUEST", validationErr.Error())
+		} else {
+			respondError(w, http.StatusInternalServerError, "CONVERSATIONS_FAILED", "Failed to load conversations")
+		}
 		return
 	}
 	respondJSON(w, http.StatusOK, result)
@@ -153,14 +159,18 @@ func (h *MessageHandler) GetConversationMessages(w http.ResponseWriter, r *http.
 		return
 	}
 	otherSeq, err := strconv.Atoi(chi.URLParam(r, "userSeq"))
-	if err != nil {
+	if err != nil || otherSeq <= 0 {
 		respondError(w, http.StatusBadRequest, "INVALID_SEQ", "Invalid user seq")
 		return
 	}
-	page, size := parsePagination(r)
-	result, err := h.service.GetConversationMessages(user.USRSeq, otherSeq, page, size)
+	result, err := h.service.GetConversationMessages(user.USRSeq, otherSeq, r.URL.Query().Get("before"), parseSize(r, 30))
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "CONVERSATION_MESSAGES_FAILED", "Failed to load conversation messages")
+		var validationErr *model.ValidationError
+		if errors.As(err, &validationErr) {
+			respondError(w, http.StatusBadRequest, "INVALID_REQUEST", validationErr.Error())
+		} else {
+			respondError(w, http.StatusInternalServerError, "CONVERSATION_MESSAGES_FAILED", "Failed to load conversation messages")
+		}
 		return
 	}
 	respondJSON(w, http.StatusOK, result)
@@ -174,15 +184,20 @@ func (h *MessageHandler) MarkConversationRead(w http.ResponseWriter, r *http.Req
 		return
 	}
 	senderSeq, err := strconv.Atoi(chi.URLParam(r, "userSeq"))
-	if err != nil {
+	if err != nil || senderSeq <= 0 {
 		respondError(w, http.StatusBadRequest, "INVALID_SEQ", "Invalid user seq")
 		return
 	}
-	if err := h.service.MarkConversationRead(user.USRSeq, senderSeq); err != nil {
+	var request model.MarkConversationReadRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.ThroughMessageID <= 0 {
+		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "throughMessageId가 필요합니다")
+		return
+	}
+	if err := h.service.MarkConversationRead(user.USRSeq, senderSeq, request.ThroughMessageID); err != nil {
 		respondError(w, http.StatusInternalServerError, "MARK_READ_FAILED", "Failed to mark conversation as read")
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func parsePagination(r *http.Request) (int, int) {
@@ -195,4 +210,12 @@ func parsePagination(r *http.Request) (int, int) {
 		size = s
 	}
 	return page, size
+}
+
+func parseSize(r *http.Request, defaultSize int) int {
+	size := defaultSize
+	if parsed, err := strconv.Atoi(r.URL.Query().Get("size")); err == nil && parsed > 0 {
+		size = parsed
+	}
+	return size
 }

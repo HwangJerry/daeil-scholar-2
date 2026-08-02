@@ -1,4 +1,4 @@
-// DonationSummaryCard — Cumulative donation progress with dark navy gradient editorial style
+// DonationSummaryCard — Canonical cumulative donation amount card
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { formatAmount } from '../../utils/formatAmount';
@@ -27,9 +27,6 @@ export function DonationSummaryCard() {
   }
 
   const displayAmount = data?.displayAmount ?? 0;
-  const goalAmount = data?.goalAmount ?? 0;
-  const donorCount = data?.donorCount ?? 0;
-  const rate = data ? Math.min(data.achievementRate, 100) : 0;
 
   return (
     <div className="relative overflow-hidden rounded-[20px] bg-gradient-to-br from-hero-from via-hero-via to-hero-to p-6 text-white shadow-xl">
@@ -43,16 +40,9 @@ export function DonationSummaryCard() {
         {formatAmount(displayAmount)}원
       </h2>
 
-      <div className="relative w-full bg-white/10 rounded-full h-2 mb-2 overflow-hidden">
-        <div
-          className="h-2 rounded-full bg-gradient-to-r from-white to-white/60 animate-fill-bar"
-          style={{ width: `${rate}%` }}
-        />
-      </div>
-      <div className="relative flex justify-between text-xs text-white/50">
-        <span>{donorCount}명 참여</span>
-        <span>목표: {goalAmount > 0 ? `${formatAmount(goalAmount)}원` : '-'}</span>
-      </div>
+      <p className="relative text-sm leading-relaxed text-white/70">
+        완료된 기부 거래의 최종 실수령액 합계입니다.
+      </p>
     </div>
   );
 }

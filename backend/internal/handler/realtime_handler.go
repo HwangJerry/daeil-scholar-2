@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/middleware"
@@ -49,7 +51,13 @@ func (h *RealtimeHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sub := h.hub.Subscribe(user.USRSeq)
+	lastEventID, err := strconv.ParseInt(strings.TrimSpace(r.Header.Get("Last-Event-ID")), 10, 64)
+	var sub *realtime.Subscriber
+	if err == nil && lastEventID > 0 {
+		sub = h.hub.Subscribe(user.USRSeq, lastEventID)
+	} else {
+		sub = h.hub.Subscribe(user.USRSeq)
+	}
 	defer h.hub.Unsubscribe(sub)
 
 	if _, err := fmt.Fprint(w, "event: ready\ndata: {\"ok\":true}\n\n"); err != nil {
@@ -74,12 +82,22 @@ func (h *RealtimeHandler) Stream(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
+			payload, ok := ev.Payload.(map[string]any)
+			if !ok {
+				h.logger.Warn().Str("eventType", ev.Type).Msg("realtime payload missing canonical event ID")
+				continue
+			}
+			eventID, ok := payload["eventId"].(int64)
+			if !ok || eventID <= 0 {
+				h.logger.Warn().Str("eventType", ev.Type).Msg("realtime payload has invalid canonical event ID")
+				continue
+			}
 			data, err := json.Marshal(ev.Payload)
 			if err != nil {
 				h.logger.Warn().Err(err).Str("eventType", ev.Type).Msg("realtime payload marshal failed")
 				continue
 			}
-			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, data); err != nil {
+			if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", eventID, ev.Type, data); err != nil {
 				return
 			}
 			flusher.Flush()

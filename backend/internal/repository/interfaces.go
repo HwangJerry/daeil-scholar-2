@@ -31,15 +31,18 @@ type FeedQuerier interface {
 
 // MessageQuerier defines the methods used by MessageService for messaging operations.
 type MessageQuerier interface {
-	InsertMessage(senderSeq int, recvrSeq int, content string) error
+	FindAcceptedMessage(senderSeq int, clientMessageID string) (*model.SendMessageResponse, error)
+	AcceptMessage(senderSeq, recvrSeq int, clientMessageID, content string) (*model.SendMessageResponse, error)
+	IsApprovedAlumni(usrSeq int) (bool, error)
 	GetInbox(usrSeq int, page int, size int) ([]model.Message, int, error)
 	GetOutbox(usrSeq int, page int, size int) ([]model.Message, int, error)
 	MarkAsRead(amSeq int, usrSeq int) (int, bool, error)
 	DeleteMessage(amSeq int, usrSeq int) error
 	GetUnreadCount(usrSeq int) (int, error)
-	GetConversations(usrSeq int) ([]model.ConversationSummary, error)
+	GetConversations(usrSeq int, beforeCreatedAt *time.Time, beforeMessageID int64, limit int) ([]model.ConversationSummary, error)
 	GetConversationMessages(usrSeq, otherSeq, page, size int) ([]model.Message, int, error)
-	MarkConversationRead(usrSeq, senderSeq int) (bool, error)
+	GetCanonicalConversationMessages(usrSeq, otherSeq int, beforeCreatedAt *time.Time, beforeMessageID int64, limit int) ([]model.Message, error)
+	MarkConversationRead(usrSeq, senderSeq int, throughMessageID int64) (bool, error)
 }
 
 // ProfileQuerier defines the profile methods used by MessageService for user existence checks.

@@ -20,22 +20,32 @@ import (
 // ── Stub service ──────────────────────────────────────────────────────────────
 
 type stubMsgService struct {
-	sendErr        error
-	inboxResult    *model.MessageListResponse
-	inboxErr       error
-	outboxResult   *model.MessageListResponse
-	outboxErr      error
-	markAsReadErr  error
-	deleteErr      error
-	convResult     *model.ConversationListResponse
-	convErr        error
-	convMsgsResult *model.MessageListResponse
-	convMsgsErr    error
-	markConvErr    error
+	sendResult      *model.SendMessageResponse
+	sendErr         error
+	inboxResult     *model.MessageListResponse
+	inboxErr        error
+	outboxResult    *model.MessageListResponse
+	outboxErr       error
+	markAsReadErr   error
+	deleteErr       error
+	convResult      *model.ConversationListResponse
+	convErr         error
+	convMsgsResult  *model.ConversationMessageListResponse
+	convMsgsErr     error
+	markConvErr     error
+	markConvThrough int64
 }
 
-func (s *stubMsgService) SendMessage(_ int, _ string, _ model.SendMessageRequest) error {
-	return s.sendErr
+func (s *stubMsgService) SendMessage(_ int, _ string, _ model.SendMessageRequest) (*model.SendMessageResponse, error) {
+	if s.sendResult == nil {
+		s.sendResult = &model.SendMessageResponse{
+			MessageID:       9001,
+			ClientMessageID: "018f1f1a-7c65-7b65-b845-123456789abc",
+			Status:          "accepted",
+			CreatedAt:       "2026-07-28T01:00:00Z",
+		}
+	}
+	return s.sendResult, s.sendErr
 }
 func (s *stubMsgService) GetInbox(_, _, _ int) (*model.MessageListResponse, error) {
 	if s.inboxResult == nil {
@@ -49,21 +59,32 @@ func (s *stubMsgService) GetOutbox(_, _, _ int) (*model.MessageListResponse, err
 	}
 	return s.outboxResult, s.outboxErr
 }
-func (s *stubMsgService) MarkAsRead(_, _ int) error   { return s.markAsReadErr }
+func (s *stubMsgService) MarkAsRead(_, _ int) error    { return s.markAsReadErr }
 func (s *stubMsgService) DeleteMessage(_, _ int) error { return s.deleteErr }
-func (s *stubMsgService) GetConversations(_ int) (*model.ConversationListResponse, error) {
+func (s *stubMsgService) GetConversations(_ int, _ string, size int) (*model.ConversationListResponse, error) {
 	if s.convResult == nil {
 		return &model.ConversationListResponse{Items: []model.ConversationSummary{}}, s.convErr
 	}
+	if size > 0 && len(s.convResult.Items) > size {
+		nextCursor := "opaque-next"
+		return &model.ConversationListResponse{
+			Items:      s.convResult.Items[:size],
+			NextCursor: &nextCursor,
+			HasMore:    true,
+		}, s.convErr
+	}
 	return s.convResult, s.convErr
 }
-func (s *stubMsgService) GetConversationMessages(_, _, _, _ int) (*model.MessageListResponse, error) {
+func (s *stubMsgService) GetConversationMessages(_, _ int, _ string, _ int) (*model.ConversationMessageListResponse, error) {
 	if s.convMsgsResult == nil {
-		return &model.MessageListResponse{Items: []model.Message{}}, s.convMsgsErr
+		return &model.ConversationMessageListResponse{Items: []model.ConversationMessage{}}, s.convMsgsErr
 	}
 	return s.convMsgsResult, s.convMsgsErr
 }
-func (s *stubMsgService) MarkConversationRead(_, _ int) error { return s.markConvErr }
+func (s *stubMsgService) MarkConversationRead(_, _ int, throughMessageID int64) error {
+	s.markConvThrough = throughMessageID
+	return s.markConvErr
+}
 
 var _ MessageServicer = (*stubMsgService)(nil)
 
@@ -175,10 +196,38 @@ func TestMessageSend_Success(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rr.Code)
 	}
-	var resp map[string]string
+	var resp model.SendMessageResponse
 	decodeJSON(t, rr, &resp)
-	if resp["status"] != "ok" {
-		t.Errorf("expected status=ok, got %s", resp["status"])
+	if resp.Status != "accepted" {
+		t.Errorf("expected status=accepted, got %s", resp.Status)
+	}
+}
+
+func TestMessageSend_ReturnsCanonicalAcceptedResponse(t *testing.T) {
+	h := newTestHandler(&stubMsgService{})
+	body := []byte(`{"userSeq":202,"clientMessageId":"018f1f1a-7c65-7b65-b845-123456789abc","content":"안녕하세요."}`)
+	rr := httptest.NewRecorder()
+	h.Send(rr, authRequest(http.MethodPost, "/api/messages", body))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	var response map[string]interface{}
+	decodeJSON(t, rr, &response)
+	if response["messageId"] != float64(9001) {
+		t.Fatalf("messageId = %#v, want 9001", response["messageId"])
+	}
+	if response["clientMessageId"] != "018f1f1a-7c65-7b65-b845-123456789abc" {
+		t.Fatalf("clientMessageId = %#v", response["clientMessageId"])
+	}
+	if response["status"] != "accepted" {
+		t.Fatalf("status = %#v, want accepted", response["status"])
+	}
+	if response["createdAt"] != "2026-07-28T01:00:00Z" {
+		t.Fatalf("createdAt = %#v", response["createdAt"])
+	}
+	if len(response) != 4 {
+		t.Fatalf("response fields = %#v, want closed canonical four-field response", response)
 	}
 }
 
@@ -404,27 +453,51 @@ func TestGetConversations_ServiceError(t *testing.T) {
 	}
 }
 
+func TestGetConversations_InvalidCursorReturnsBadRequest(t *testing.T) {
+	h := newTestHandler(&stubMsgService{convErr: &model.ValidationError{Msg: "cursor가 올바르지 않습니다"}})
+	rr := httptest.NewRecorder()
+	h.GetConversations(rr, authRequest(http.MethodGet, "/api/messages/conversations?cursor=bad", nil))
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+	var apiErr model.APIError
+	decodeJSON(t, rr, &apiErr)
+	if apiErr.Code != "INVALID_REQUEST" {
+		t.Fatalf("code = %q, want INVALID_REQUEST", apiErr.Code)
+	}
+}
+
 func TestGetConversations_ResponseShape(t *testing.T) {
 	h := newTestHandler(&stubMsgService{
 		convResult: &model.ConversationListResponse{
 			Items: []model.ConversationSummary{
-				{OtherSeq: 2, OtherName: "Alice", LastMessage: "hey", UnreadCount: 3},
+				{UserSeq: 2, Name: "Alice", LastMessage: "hey", LastMessageAt: "2026-07-28T01:00:00Z", UnreadCount: 3},
+				{UserSeq: 3, Name: "Bob", LastMessage: "older", LastMessageAt: "2026-07-27T01:00:00Z"},
 			},
 		},
 	})
 	rr := httptest.NewRecorder()
-	h.GetConversations(rr, authRequest(http.MethodGet, "/api/messages/conversations", nil))
+	h.GetConversations(rr, authRequest(http.MethodGet, "/api/messages/conversations?size=1", nil))
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rr.Code)
 	}
-	var resp model.ConversationListResponse
+	var resp map[string]interface{}
 	decodeJSON(t, rr, &resp)
-	if len(resp.Items) != 1 {
-		t.Errorf("expected 1 item, got %d", len(resp.Items))
+	items, ok := resp["items"].([]interface{})
+	if !ok || len(items) != 1 {
+		t.Fatalf("items = %#v, want one canonical item", resp["items"])
 	}
-	if resp.Items[0].OtherSeq != 2 || resp.Items[0].UnreadCount != 3 {
-		t.Errorf("unexpected conversation item: %+v", resp.Items[0])
+	item := items[0].(map[string]interface{})
+	if item["userSeq"] != float64(2) || item["name"] != "Alice" || item["lastMessageAt"] != "2026-07-28T01:00:00Z" {
+		t.Fatalf("canonical item = %#v", item)
+	}
+	if item["blockedByMe"] != false || item["unreadCount"] != float64(3) {
+		t.Fatalf("canonical state = %#v", item)
+	}
+	if resp["hasMore"] != true || resp["nextCursor"] == nil {
+		t.Fatalf("pagination = %#v", resp)
 	}
 }
 
@@ -438,6 +511,17 @@ func TestGetConversationMessages_InvalidUserSeq(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestGetConversationMessages_RejectsNonPositiveUserSeq(t *testing.T) {
+	h := newTestHandler(&stubMsgService{convMsgsResult: &model.ConversationMessageListResponse{Items: []model.ConversationMessage{}}})
+	req := withChiParam(authRequest(http.MethodGet, "/api/messages/conversations/0", nil), "userSeq", "0")
+	rr := httptest.NewRecorder()
+	h.GetConversationMessages(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
 	}
 }
 
@@ -458,13 +542,36 @@ func TestGetConversationMessages_ServiceError(t *testing.T) {
 }
 
 func TestGetConversationMessages_Success(t *testing.T) {
-	h := newTestHandler(&stubMsgService{})
+	h := newTestHandler(&stubMsgService{convMsgsResult: &model.ConversationMessageListResponse{Items: []model.ConversationMessage{
+		{
+			MessageID: 9001, Sender: model.MessageParticipant{UserSeq: 1, Name: "Test User"},
+			RecipientUserSeq: 2, Content: "hello", Read: true,
+			CreatedAt: "2026-07-28T01:00:00Z",
+		},
+	}}})
 	req := withChiParam(authRequest(http.MethodGet, "/api/messages/conversations/2", nil), "userSeq", "2")
 	rr := httptest.NewRecorder()
 	h.GetConversationMessages(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	var resp map[string]interface{}
+	decodeJSON(t, rr, &resp)
+	items, ok := resp["items"].([]interface{})
+	if !ok || len(items) != 1 {
+		t.Fatalf("items = %#v", resp["items"])
+	}
+	item := items[0].(map[string]interface{})
+	sender, ok := item["sender"].(map[string]interface{})
+	if !ok || sender["userSeq"] != float64(1) || sender["name"] != "Test User" {
+		t.Fatalf("sender = %#v", item["sender"])
+	}
+	if item["messageId"] != float64(9001) || item["recipientUserSeq"] != float64(2) || item["read"] != true {
+		t.Fatalf("canonical message = %#v", item)
+	}
+	if _, legacy := resp["totalCount"]; legacy || resp["hasMore"] != false {
+		t.Fatalf("canonical envelope = %#v", resp)
 	}
 }
 
@@ -497,9 +604,20 @@ func TestMarkConversationRead_InvalidSeq(t *testing.T) {
 	}
 }
 
+func TestMarkConversationRead_RejectsNonPositiveUserSeq(t *testing.T) {
+	h := newTestHandler(&stubMsgService{})
+	req := withChiParam(authRequest(http.MethodPut, "/api/messages/conversations/0/read", []byte(`{"throughMessageId":9001}`)), "userSeq", "0")
+	rr := httptest.NewRecorder()
+	h.MarkConversationRead(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
 func TestMarkConversationRead_ServiceError(t *testing.T) {
 	h := newTestHandler(&stubMsgService{markConvErr: errors.New("db down")})
-	req := withChiParam(authRequest(http.MethodPut, "/api/messages/conversations/2/read", nil), "userSeq", "2")
+	req := withChiParam(authRequest(http.MethodPut, "/api/messages/conversations/2/read", []byte(`{"throughMessageId":9001}`)), "userSeq", "2")
 	rr := httptest.NewRecorder()
 	h.MarkConversationRead(rr, req)
 
@@ -509,13 +627,36 @@ func TestMarkConversationRead_ServiceError(t *testing.T) {
 }
 
 func TestMarkConversationRead_Success(t *testing.T) {
-	h := newTestHandler(&stubMsgService{})
-	req := withChiParam(authRequest(http.MethodPut, "/api/messages/conversations/2/read", nil), "userSeq", "2")
+	stub := &stubMsgService{}
+	h := newTestHandler(stub)
+	req := withChiParam(authRequest(http.MethodPut, "/api/messages/conversations/2/read", []byte(`{"throughMessageId":9001}`)), "userSeq", "2")
 	rr := httptest.NewRecorder()
 	h.MarkConversationRead(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", rr.Code)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rr.Code)
+	}
+	if rr.Body.Len() != 0 {
+		t.Fatalf("204 response body = %q, want empty", rr.Body.String())
+	}
+	if stub.markConvThrough != 9001 {
+		t.Fatalf("throughMessageId = %d, want 9001", stub.markConvThrough)
+	}
+}
+
+func TestMarkConversationRead_RequiresThroughMessageID(t *testing.T) {
+	h := newTestHandler(&stubMsgService{})
+	req := withChiParam(authRequest(http.MethodPut, "/api/messages/conversations/2/read", []byte(`{}`)), "userSeq", "2")
+	rr := httptest.NewRecorder()
+	h.MarkConversationRead(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+	var apiErr model.APIError
+	decodeJSON(t, rr, &apiErr)
+	if apiErr.Code != "INVALID_REQUEST" {
+		t.Fatalf("code = %q, want INVALID_REQUEST", apiErr.Code)
 	}
 }
 

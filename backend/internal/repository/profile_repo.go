@@ -1,12 +1,23 @@
 package repository
 
 import (
+	"database/sql"
+	"errors"
+
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 )
 
 type ProfileRepository struct {
 	DB *sqlx.DB
+}
+
+type alumniVerificationAcademicRecord struct {
+	Status                 model.VerificationStatus `db:"STATUS"`
+	ApprovedGraduationYear sql.NullInt64            `db:"APPROVED_GRADUATION_YEAR"`
+	ApprovedCohort         sql.NullString           `db:"APPROVED_COHORT"`
+	ApprovedDepartment     sql.NullString           `db:"APPROVED_DEPARTMENT"`
 }
 
 func NewProfileRepository(db *sqlx.DB) *ProfileRepository {
@@ -62,6 +73,126 @@ func (r *ProfileRepository) GetProfile(usrSeq int) (*model.UserProfile, error) {
 	return &profile, nil
 }
 
+func (r *ProfileRepository) SubmitAlumniVerification(usrSeq int, req model.AlumniVerificationSubmissionRequest) error {
+	err := r.submitAlumniVerificationOnce(usrSeq, req)
+	var mysqlErr *mysql.MySQLError
+	if errors.As(err, &mysqlErr) && (mysqlErr.Number == 1062 || mysqlErr.Number == 1213) {
+		return r.submitAlumniVerificationOnce(usrSeq, req)
+	}
+	return err
+}
+
+func (r *ProfileRepository) submitAlumniVerificationOnce(usrSeq int, req model.AlumniVerificationSubmissionRequest) error {
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var current alumniVerificationAcademicRecord
+	err = tx.Get(&current, `
+		SELECT STATUS, APPROVED_GRADUATION_YEAR, APPROVED_COHORT, APPROVED_DEPARTMENT
+		FROM ALUMNI_VERIFICATION
+		WHERE USR_SEQ = ?
+		FOR UPDATE
+	`, usrSeq)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	isNewApplication := errors.Is(err, sql.ErrNoRows)
+	nextStatus := model.VerificationPending
+	academicChanged := true
+	if !isNewApplication {
+		academicChanged = !current.ApprovedGraduationYear.Valid ||
+			int(current.ApprovedGraduationYear.Int64) != req.GraduationYear ||
+			!current.ApprovedCohort.Valid || current.ApprovedCohort.String != req.Cohort ||
+			!current.ApprovedDepartment.Valid || current.ApprovedDepartment.String != req.Department
+		nextStatus = current.Status.AfterAcademicSubmission(academicChanged)
+	}
+
+	if _, err := tx.Exec(`
+		UPDATE WEO_MEMBER
+		SET USR_FN = ?, USR_DEPT = ?
+		WHERE USR_SEQ = ?
+	`, req.Cohort, req.Department, usrSeq); err != nil {
+		return err
+	}
+	if isNewApplication {
+		if _, err := tx.Exec(`
+			INSERT INTO ALUMNI_VERIFICATION (
+				USR_SEQ, STATUS, GRADUATION_YEAR, COHORT, DEPARTMENT,
+				REJECTION_REASON, SUBMITTED_AT, REVIEWED_AT, REVIEWED_BY,
+				APPROVED_GRADUATION_YEAR, APPROVED_COHORT, APPROVED_DEPARTMENT,
+				CREATED_AT, UPDATED_AT
+			) VALUES (?, ?, ?, ?, ?, NULL, NOW(), NULL, NULL, NULL, NULL, NULL, NOW(), NOW())
+		`, usrSeq, model.VerificationPending, req.GraduationYear, req.Cohort, req.Department); err != nil {
+			return err
+		}
+	} else if current.Status == model.VerificationApproved && !academicChanged {
+		if _, err := tx.Exec(`
+			UPDATE ALUMNI_VERIFICATION
+			SET GRADUATION_YEAR = ?, COHORT = ?, DEPARTMENT = ?, UPDATED_AT = NOW()
+			WHERE USR_SEQ = ?
+		`, req.GraduationYear, req.Cohort, req.Department, usrSeq); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tx.Exec(`
+			UPDATE ALUMNI_VERIFICATION
+			SET STATUS = ?, GRADUATION_YEAR = ?, COHORT = ?, DEPARTMENT = ?,
+				REJECTION_REASON = NULL, SUBMITTED_AT = NOW(), REVIEWED_AT = NULL,
+				REVIEWED_BY = NULL, UPDATED_AT = NOW()
+			WHERE USR_SEQ = ?
+		`, nextStatus, req.GraduationYear, req.Cohort, req.Department, usrSeq); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *ProfileRepository) GetAlumniVerification(usrSeq int) (*model.AlumniVerification, error) {
+	var verification model.AlumniVerification
+	var graduationYear sql.NullInt64
+	var cohort, department, rejectionReason sql.NullString
+	var submittedAt, reviewedAt sql.NullTime
+	err := r.DB.QueryRow(`
+		SELECT STATUS, GRADUATION_YEAR, COHORT, DEPARTMENT, REJECTION_REASON,
+			SUBMITTED_AT, REVIEWED_AT
+		FROM ALUMNI_VERIFICATION
+		WHERE USR_SEQ = ?
+		LIMIT 1
+	`, usrSeq).Scan(
+		&verification.Status, &graduationYear, &cohort, &department, &rejectionReason,
+		&submittedAt, &reviewedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return &model.AlumniVerification{Status: model.VerificationUnsubmitted}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if graduationYear.Valid {
+		value := int(graduationYear.Int64)
+		verification.GraduationYear = &value
+	}
+	if cohort.Valid {
+		verification.Cohort = &cohort.String
+	}
+	if department.Valid {
+		verification.Department = &department.String
+	}
+	if rejectionReason.Valid {
+		verification.RejectionReason = &rejectionReason.String
+	}
+	if submittedAt.Valid {
+		verification.SubmittedAt = &submittedAt.Time
+	}
+	if reviewedAt.Valid {
+		verification.ReviewedAt = &reviewedAt.Time
+	}
+	return &verification, nil
+}
+
 // GetUserTags returns the tags for a specific user.
 func (r *ProfileRepository) GetUserTags(usrSeq int) ([]string, error) {
 	var tags []string
@@ -94,21 +225,15 @@ func (r *ProfileRepository) UpdateProfile(usrSeq int, req model.ProfileUpdateReq
 	}
 	_, err := r.DB.Exec(`
 		UPDATE WEO_MEMBER
-		SET USR_NAME = ?, USR_FN = ?, USR_PHONE = ?, USR_EMAIL = ?,
+		SET USR_NAME = ?, USR_PHONE = ?, USR_EMAIL = ?,
 			USR_BIZ_NAME = ?, USR_BIZ_DESC = ?, USR_BIZ_ADDR = ?,
 			USR_POSITION = NULLIF(?, ''),
 			USR_JOB_CAT = NULLIF(?, 0),
 			USR_PHONE_PUBLIC = ?, USR_EMAIL_PUBLIC = ?
 		WHERE USR_SEQ = ?
-	`, req.USRName, req.USRFN, req.USRPhone, req.USREmail,
+	`, req.USRName, req.USRPhone, req.USREmail,
 		req.BizName, req.BizDesc, req.BizAddr,
 		req.Position, jobCat, phonePublic, emailPublic, usrSeq)
-	if err != nil {
-		return err
-	}
-	_, err = r.DB.Exec(`
-		UPDATE WEO_MEMBER SET USR_DEPT = ? WHERE USR_SEQ = ?
-	`, req.FmDept, usrSeq)
 	return err
 }
 

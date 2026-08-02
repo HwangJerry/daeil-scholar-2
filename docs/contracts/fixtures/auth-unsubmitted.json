@@ -1,0 +1,28 @@
+{
+  "session": {
+    "accessExpiresAt": 1785117600,
+    "accessIssuedAt": 1785114000,
+    "accessToken": "fixture-access-token",
+    "jti": "fixture-refresh-jti",
+    "refreshExpiresAt": 1787706000,
+    "refreshToken": "fixture-refresh-token",
+    "sid": "fixture-session-id",
+    "user": {
+      "adminRole": null,
+      "email": "member@example.com",
+      "usrId": "legacy-compatible-id",
+      "usrName": "예시 회원",
+      "usrSeq": 104,
+      "verification": {
+        "cohort": null,
+        "department": null,
+        "graduationYear": null,
+        "rejectionReason": null,
+        "reviewedAt": null,
+        "status": "unsubmitted",
+        "submittedAt": null
+      }
+    }
+  },
+  "status": "authenticated"
+}

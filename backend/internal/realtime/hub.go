@@ -3,11 +3,15 @@ package realtime
 
 import (
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 )
 
-const subscriberBuffer = 8
+const (
+	eventHistoryLimit = 256
+	subscriberBuffer  = eventHistoryLimit
+)
 
 type Event struct {
 	Type    string      `json:"type"`
@@ -22,17 +26,21 @@ type Subscriber struct {
 type Hub struct {
 	mu          sync.RWMutex
 	subscribers map[int]map[*Subscriber]struct{}
+	history     map[int][]Event
+	nextEventID int64
 	logger      zerolog.Logger
 }
 
 func NewHub(logger zerolog.Logger) *Hub {
 	return &Hub{
 		subscribers: make(map[int]map[*Subscriber]struct{}),
+		history:     make(map[int][]Event),
+		nextEventID: time.Now().UTC().UnixMilli(),
 		logger:      logger,
 	}
 }
 
-func (h *Hub) Subscribe(userSeq int) *Subscriber {
+func (h *Hub) Subscribe(userSeq int, afterEventID ...int64) *Subscriber {
 	sub := &Subscriber{
 		UserSeq: userSeq,
 		Ch:      make(chan Event, subscriberBuffer),
@@ -45,6 +53,13 @@ func (h *Hub) Subscribe(userSeq int) *Subscriber {
 		h.subscribers[userSeq] = set
 	}
 	set[sub] = struct{}{}
+	if len(afterEventID) > 0 {
+		for _, event := range h.history[userSeq] {
+			if eventID(event) > afterEventID[0] {
+				sub.Ch <- event
+			}
+		}
+	}
 	return sub
 }
 
@@ -69,25 +84,38 @@ func (h *Hub) Unsubscribe(s *Subscriber) {
 // if a subscriber's buffer is full the event is dropped (REST endpoints remain
 // the source of truth, so a missed push only delays a refetch).
 func (h *Hub) Publish(userSeq int, ev Event) {
-	h.mu.RLock()
+	h.mu.Lock()
+	h.nextEventID++
+	if payload, ok := ev.Payload.(map[string]any); ok {
+		payload["eventId"] = h.nextEventID
+	}
+	history := append(h.history[userSeq], ev)
+	if len(history) > eventHistoryLimit {
+		history = history[len(history)-eventHistoryLimit:]
+	}
+	h.history[userSeq] = history
 	set, ok := h.subscribers[userSeq]
 	if !ok {
-		h.mu.RUnlock()
+		h.mu.Unlock()
 		return
 	}
-	targets := make([]*Subscriber, 0, len(set))
 	for sub := range set {
-		targets = append(targets, sub)
-	}
-	h.mu.RUnlock()
-
-	for _, sub := range targets {
 		select {
 		case sub.Ch <- ev:
 		default:
 			h.logger.Warn().Int("userSeq", userSeq).Str("eventType", ev.Type).Msg("realtime subscriber buffer full, dropping event")
 		}
 	}
+	h.mu.Unlock()
+}
+
+func eventID(event Event) int64 {
+	payload, ok := event.Payload.(map[string]any)
+	if !ok {
+		return 0
+	}
+	id, _ := payload["eventId"].(int64)
+	return id
 }
 
 func (h *Hub) Count() int {

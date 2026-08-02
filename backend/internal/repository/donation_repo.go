@@ -93,6 +93,19 @@ func (r *DonationRepository) SumDonations() (int64, error) {
 	return total, nil
 }
 
+func (r *DonationRepository) SumNetReceivedDonations() (int64, error) {
+	var total int64
+	err := r.DB.Get(&total, `
+		SELECT CAST(COALESCE(SUM(O_NET_RECEIVED_AMOUNT), 0) AS SIGNED)
+		FROM WEO_ORDER
+		WHERE O_LIFECYCLE_STATUS IN ('completed', 'partially_refunded')
+	`)
+	if err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 func (r *DonationRepository) CountDonors() (int, error) {
 	var count int
 	err := r.DB.Get(&count, `
