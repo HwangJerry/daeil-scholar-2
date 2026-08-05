@@ -453,11 +453,15 @@ fi
 
 if [[ "${BUILD_BACKEND}" == "true" ]]; then
   echo "=== Building Go backend (linux/amd64) ==="
+  [[ $(GOTOOLCHAIN=local go env GOVERSION) == go1.25.2 ]] || {
+    echo "✗ Backend artifact build requires local Go 1.25.2." >&2
+    exit 1
+  }
   cd backend
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/server ./cmd/server
+  GOWORK=off GOFLAGS='' GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -o ../dist/server ./cmd/server
   chmod 755 ../dist/server
   if [[ $BUILD_BACKFILL_ARTIFACT == 1 ]]; then
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/backfill ./cmd/backfill
+    GOWORK=off GOFLAGS='' GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -o ../dist/backfill ./cmd/backfill
     chmod 755 ../dist/backfill
   fi
   cd ..

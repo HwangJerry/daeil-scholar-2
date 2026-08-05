@@ -52,6 +52,11 @@ grep -Fq 'maintenance-record-deployment.sh' "$DEPLOY" ||
 for deployment_binding in APPROVED_SOURCE_REVISION APPROVED_BACKEND_ARTIFACT_SHA256 ACTIVE_UNIT_PROTOCOL BACKEND_ROLLBACK_PATH; do
   grep -Fq "$deployment_binding" "$DEPLOY" || fail "deploy.sh is missing ${deployment_binding} binding"
 done
+# shellcheck disable=SC2016 # Match the literal command substitution in deploy.sh.
+grep -Fq '[[ $(GOTOOLCHAIN=local go env GOVERSION) == go1.25.2 ]]' "$DEPLOY" ||
+  fail "deploy does not pin the approved Go toolchain before building"
+grep -Fq "GOWORK=off GOFLAGS='' GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -o ../dist/server ./cmd/server" "$DEPLOY" ||
+  fail "backend build is not path-independent or does not match the approved artifact environment"
 for required_example_key in EASYPAY_IMMEDIATELY_MALL_ID EASYPAY_PROFILE_MALL_ID EASYPAY_BIN_BASE ENV; do
   grep -Eq "^${required_example_key}=" "$ROOT/deploy/alumni-backend.env.example" ||
     fail "EnvironmentFile example is missing ${required_example_key}"
