@@ -52,6 +52,20 @@ func (s *MemberService) LoginWithPassword(usrID, password string) (*model.User, 
 	return nil, nil
 }
 
+// LoginWithEmailPassword verifies a canonical email credential while keeping
+// alumni verification separate from account lifecycle eligibility.
+func (s *MemberService) LoginWithEmailPassword(email, password string) (*model.User, error) {
+	hashed := MysqlNativePassword(password)
+	user, err := s.repo.FindMemberByEmailAndPwdAny(email, hashed)
+	if err != nil || user == nil {
+		return user, err
+	}
+	if err := (LoginEligibilityPolicy{}).EnsureLoginAllowed(user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
 // FindMemberByPhone finds an active member by phone number.
 func (s *MemberService) FindMemberByPhone(phone string) (*model.User, error) {
 	return s.repo.FindMemberByPhone(phone)

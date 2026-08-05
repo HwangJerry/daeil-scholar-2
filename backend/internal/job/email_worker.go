@@ -2,32 +2,41 @@
 package job
 
 import (
-	"context"
+	"sync"
+	"time"
 
+	"github.com/dflh-saf/backend/internal/maintenance"
 	"github.com/dflh-saf/backend/internal/model"
-	"github.com/dflh-saf/backend/internal/service"
 	"github.com/rs/zerolog"
 )
 
 // EmailWorker reads EmailMessage values from a channel and delivers them
 // via the EmailService in a dedicated goroutine.
 type EmailWorker struct {
-	queue  <-chan model.EmailMessage
-	svc    *service.EmailService
-	logger zerolog.Logger
-	cancel context.CancelFunc
+	queue           <-chan model.EmailMessage
+	svc             EmailSender
+	maintenanceGate *maintenance.Gate
+	logger          zerolog.Logger
+	stop            chan struct{}
+	done            chan struct{}
+	stopOnce        sync.Once
+}
+
+type EmailSender interface {
+	Send(model.EmailMessage) error
 }
 
 // NewEmailWorker creates an EmailWorker bound to the given channel and service.
-func NewEmailWorker(queue <-chan model.EmailMessage, svc *service.EmailService, logger zerolog.Logger) *EmailWorker {
-	return &EmailWorker{queue: queue, svc: svc, logger: logger}
+func NewEmailWorker(queue <-chan model.EmailMessage, svc EmailSender, maintenanceGate *maintenance.Gate, logger zerolog.Logger) *EmailWorker {
+	return &EmailWorker{queue: queue, svc: svc, maintenanceGate: maintenanceGate, logger: logger}
 }
 
 // Start begins consuming messages from the queue in a background goroutine.
 func (w *EmailWorker) Start() {
-	ctx, cancel := context.WithCancel(context.Background())
-	w.cancel = cancel
+	w.stop = make(chan struct{})
+	w.done = make(chan struct{})
 	go func() {
+		defer close(w.done)
 		defer func() {
 			if r := recover(); r != nil {
 				w.logger.Error().Interface("panic", r).Msg("email worker panicked")
@@ -35,17 +44,27 @@ func (w *EmailWorker) Start() {
 		}()
 		w.logger.Info().Msg("email worker started")
 		for {
+			if w.maintenanceGate.Active() {
+				select {
+				case <-w.stop:
+					w.logger.Info().Msg("email worker stopped")
+					return
+				case <-time.After(100 * time.Millisecond):
+					continue
+				}
+			}
 			select {
-			case <-ctx.Done():
+			case <-w.stop:
+				if !w.maintenanceGate.Active() {
+					w.drainQueue()
+				}
 				w.logger.Info().Msg("email worker stopped")
 				return
 			case msg, ok := <-w.queue:
 				if !ok {
 					return
 				}
-				if err := w.svc.Send(msg); err != nil {
-					w.logger.Error().Err(err).Str("to", msg.To).Msg("email delivery failed")
-				}
+				w.send(msg)
 			}
 		}
 	}()
@@ -53,7 +72,36 @@ func (w *EmailWorker) Start() {
 
 // Stop signals the background goroutine to exit.
 func (w *EmailWorker) Stop() {
-	if w.cancel != nil {
-		w.cancel()
+	if w.stop != nil {
+		w.stopOnce.Do(func() { close(w.stop) })
+	}
+	if w.done != nil {
+		<-w.done
+	}
+}
+
+func (w *EmailWorker) drainQueue() {
+	if w.svc == nil {
+		return
+	}
+	for {
+		select {
+		case msg, ok := <-w.queue:
+			if !ok {
+				return
+			}
+			w.send(msg)
+		default:
+			return
+		}
+	}
+}
+
+func (w *EmailWorker) send(msg model.EmailMessage) {
+	if w.svc == nil {
+		return
+	}
+	if err := w.svc.Send(msg); err != nil {
+		w.logger.Error().Err(err).Str("to", msg.To).Msg("email delivery failed")
 	}
 }

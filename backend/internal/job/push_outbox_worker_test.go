@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/dflh-saf/backend/internal/maintenance"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
@@ -15,13 +18,15 @@ import (
 )
 
 type fakePushOutboxWorkerStore struct {
-	jobs       map[int]*repository.PushOutboxJob
-	claimIDs   []int
-	recovered  int64
-	resetCalls int
-	retries    []int
-	dead       []int
-	sent       []int
+	jobs             map[int]*repository.PushOutboxJob
+	claimIDs         []int
+	recovered        int64
+	resetCalls       int
+	retries          []int
+	dead             []int
+	sent             []int
+	delivering       []int
+	deliveryStartErr error
 }
 
 func newFakePushOutboxWorkerStore(jobs ...repository.PushOutboxJob) *fakePushOutboxWorkerStore {
@@ -45,6 +50,14 @@ func (f *fakePushOutboxWorkerStore) ClaimDue(_ context.Context, _ int) ([]reposi
 func (f *fakePushOutboxWorkerStore) MarkSent(_ context.Context, poSeq int) error {
 	f.jobs[poSeq].Status = repository.PushOutboxStatusSent
 	f.sent = append(f.sent, poSeq)
+	return nil
+}
+
+func (f *fakePushOutboxWorkerStore) MarkDeliveryStarted(_ context.Context, poSeq int) error {
+	if f.deliveryStartErr != nil {
+		return f.deliveryStartErr
+	}
+	f.delivering = append(f.delivering, poSeq)
 	return nil
 }
 
@@ -75,14 +88,28 @@ func (f *fakePushOutboxWorkerStore) ResetStuckProcessing(_ context.Context, _ ti
 }
 
 type fakeWorkerPushProvider struct {
-	err  error
-	sent []service.PushNotification
+	err     error
+	sent    []service.PushNotification
+	started chan struct{}
+	release chan struct{}
 }
 
 func (f *fakeWorkerPushProvider) SendPush(_ context.Context, notification service.PushNotification) error {
+	if f.started != nil {
+		close(f.started)
+	}
+	if f.release != nil {
+		<-f.release
+	}
 	f.sent = append(f.sent, notification)
 	return f.err
 }
+
+type timeoutWorkerPushError struct{}
+
+func (timeoutWorkerPushError) Error() string   { return "provider response timeout" }
+func (timeoutWorkerPushError) Timeout() bool   { return true }
+func (timeoutWorkerPushError) Temporary() bool { return true }
 
 type fakeWorkerTokenRevoker struct {
 	revoked []string
@@ -123,8 +150,84 @@ func TestPushOutboxWorkerSuccessMarksSent(t *testing.T) {
 	if len(provider.sent) != 1 {
 		t.Fatalf("expected provider called once, got %d", len(provider.sent))
 	}
+	if len(store.delivering) != 1 || store.delivering[0] != 100 {
+		t.Fatalf("delivery-start markers = %#v, want [100]", store.delivering)
+	}
 	if store.jobs[100].Status != repository.PushOutboxStatusSent || len(store.sent) != 1 {
 		t.Fatalf("expected job sent, got %#v", store.jobs[100])
+	}
+}
+
+func TestPushOutboxWorkerDoesNotSendWithoutDurableDeliveryStart(t *testing.T) {
+	store := newFakePushOutboxWorkerStore(makeWorkerOutboxJob(100, 0))
+	store.deliveryStartErr = errors.New("database unavailable")
+	provider := &fakeWorkerPushProvider{}
+	worker := newTestPushOutboxWorker(store, &fakeWorkerTokenRevoker{}, provider)
+
+	if err := worker.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if len(provider.sent) != 0 {
+		t.Fatalf("provider sends = %d, want 0", len(provider.sent))
+	}
+}
+
+func TestPushOutboxWorkerStopWaitsForInFlightDeliveryDisposition(t *testing.T) {
+	store := newFakePushOutboxWorkerStore(makeWorkerOutboxJob(100, 0))
+	provider := &fakeWorkerPushProvider{started: make(chan struct{}), release: make(chan struct{})}
+	worker := newTestPushOutboxWorker(store, &fakeWorkerTokenRevoker{}, provider)
+	worker.Start()
+
+	select {
+	case <-provider.started:
+	case <-time.After(time.Second):
+		t.Fatal("provider did not start")
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		worker.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+		t.Fatal("Stop returned before in-flight delivery disposition")
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	close(provider.release)
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("Stop did not acknowledge worker completion")
+	}
+	if len(store.sent) != 1 {
+		t.Fatalf("sent dispositions = %d, want 1", len(store.sent))
+	}
+}
+
+func TestPushOutboxWorkerDoesNotTouchStoreDuringMaintenance(t *testing.T) {
+	sentinel := filepath.Join(t.TempDir(), "maintenance")
+	if err := os.WriteFile(sentinel, []byte("active\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gate, err := maintenance.NewGate(sentinel, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := newFakePushOutboxWorkerStore(makeWorkerOutboxJob(100, 0))
+	provider := &fakeWorkerPushProvider{}
+	worker := newTestPushOutboxWorker(store, &fakeWorkerTokenRevoker{}, provider)
+	worker.maintenanceGate = gate
+
+	if err := worker.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if store.resetCalls != 0 {
+		t.Fatalf("maintenance worker touched store: reset calls = %d", store.resetCalls)
+	}
+	if len(provider.sent) != 0 {
+		t.Fatalf("maintenance worker sent %d pushes", len(provider.sent))
 	}
 }
 
@@ -162,6 +265,40 @@ func TestPushOutboxWorkerTransientErrorSchedulesRetry(t *testing.T) {
 	}
 	if !got.NextAttemptAt.Equal(worker.now().Add(worker.cfg.BaseBackoff)) {
 		t.Fatalf("unexpected retry time: %s", got.NextAttemptAt)
+	}
+}
+
+func TestPushOutboxWorkerTimeoutAfterDeliveryStartIsNotRetried(t *testing.T) {
+	job := makeWorkerOutboxJob(100, 0)
+	store := newFakePushOutboxWorkerStore(job)
+	provider := &fakeWorkerPushProvider{err: context.DeadlineExceeded}
+	worker := newTestPushOutboxWorker(store, &fakeWorkerTokenRevoker{}, provider)
+
+	if err := worker.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	got := store.jobs[100]
+	if got.Status != repository.PushOutboxStatusDead ||
+		got.LastErrorCode.String != "DELIVERY_STATE_UNCERTAIN" ||
+		len(store.retries) != 0 {
+		t.Fatalf("ambiguous timeout disposition = %#v, retries = %v", got, store.retries)
+	}
+}
+
+func TestPushOutboxWorkerNetworkTimeoutAfterDeliveryStartIsNotRetried(t *testing.T) {
+	job := makeWorkerOutboxJob(100, 0)
+	store := newFakePushOutboxWorkerStore(job)
+	provider := &fakeWorkerPushProvider{err: timeoutWorkerPushError{}}
+	worker := newTestPushOutboxWorker(store, &fakeWorkerTokenRevoker{}, provider)
+
+	if err := worker.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	got := store.jobs[100]
+	if got.Status != repository.PushOutboxStatusDead ||
+		got.LastErrorCode.String != "DELIVERY_STATE_UNCERTAIN" ||
+		len(store.retries) != 0 {
+		t.Fatalf("ambiguous network timeout disposition = %#v, retries = %v", got, store.retries)
 	}
 }
 
@@ -263,7 +400,7 @@ func newTestPushOutboxWorkerWithPreferences(
 	if preferences != nil {
 		preferenceReader = preferences
 	}
-	return NewPushOutboxWorker(store, revoker, preferenceReader, provider, PushOutboxWorkerConfig{
+	return NewPushOutboxWorker(store, revoker, preferenceReader, provider, nil, PushOutboxWorkerConfig{
 		BatchSize:       10,
 		PollInterval:    time.Hour,
 		MaxAttempts:     3,

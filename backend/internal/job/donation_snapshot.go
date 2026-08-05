@@ -4,18 +4,20 @@ import (
 	"context"
 	"time"
 
+	"github.com/dflh-saf/backend/internal/maintenance"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/rs/zerolog"
 )
 
 type DonationSnapshotJob struct {
-	repo   *repository.DonationRepository
-	logger zerolog.Logger
-	cancel context.CancelFunc
+	repo            *repository.DonationRepository
+	maintenanceGate *maintenance.Gate
+	logger          zerolog.Logger
+	cancel          context.CancelFunc
 }
 
-func NewDonationSnapshotJob(repo *repository.DonationRepository, logger zerolog.Logger) *DonationSnapshotJob {
-	return &DonationSnapshotJob{repo: repo, logger: logger}
+func NewDonationSnapshotJob(repo *repository.DonationRepository, maintenanceGate *maintenance.Gate, logger zerolog.Logger) *DonationSnapshotJob {
+	return &DonationSnapshotJob{repo: repo, maintenanceGate: maintenanceGate, logger: logger}
 }
 
 func (j *DonationSnapshotJob) Start() {
@@ -65,6 +67,9 @@ func (j *DonationSnapshotJob) CreateSnapshotNow() error {
 }
 
 func (j *DonationSnapshotJob) createSnapshot() error {
+	if j.maintenanceGate.Active() {
+		return maintenance.ErrWritesFrozen
+	}
 	total, err := j.repo.SumDonations()
 	if err != nil {
 		return err
@@ -89,6 +94,9 @@ func (j *DonationSnapshotJob) createSnapshot() error {
 		if config.Overwrite == "Y" {
 			donorCount = config.ManualDonorCnt
 		}
+	}
+	if j.maintenanceGate.Active() {
+		return maintenance.ErrWritesFrozen
 	}
 	return j.repo.UpsertSnapshot(time.Now(), total, manualAdj, donorCount, goal, overwrite)
 }

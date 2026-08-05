@@ -26,7 +26,10 @@ type PGAuditEntry struct {
 }
 
 // NewPGAuditLogger opens (or creates) the audit log file at the given path.
-func NewPGAuditLogger(path string) (*PGAuditLogger, error) {
+func NewPGAuditLogger(path string, maintenanceActive ...bool) (*PGAuditLogger, error) {
+	if len(maintenanceActive) > 0 && maintenanceActive[0] {
+		return &PGAuditLogger{}, nil
+	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("pg audit: create dir %s: %w", dir, err)
@@ -40,6 +43,9 @@ func NewPGAuditLogger(path string) (*PGAuditLogger, error) {
 
 // Log writes a single audit entry as JSON + newline, then fsyncs.
 func (l *PGAuditLogger) Log(orderNo string, event string, data interface{}, err error) {
+	if l == nil || l.file == nil {
+		return
+	}
 	entry := PGAuditEntry{
 		Timestamp: time.Now().Format(time.RFC3339),
 		OrderNo:   orderNo,
@@ -61,6 +67,9 @@ func (l *PGAuditLogger) Log(orderNo string, event string, data interface{}, err 
 
 // Close closes the underlying file.
 func (l *PGAuditLogger) Close() error {
+	if l == nil || l.file == nil {
+		return nil
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.file.Close()

@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/dflh-saf/backend/internal/maintenance"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/rs/zerolog"
@@ -22,13 +23,14 @@ const (
 // VisitAggregationJob produces a per-day summary row and prunes raw visit
 // records older than the retention window. Modeled after DonationSnapshotJob.
 type VisitAggregationJob struct {
-	repo   *repository.VisitRepository
-	logger zerolog.Logger
-	cancel context.CancelFunc
+	repo            *repository.VisitRepository
+	maintenanceGate *maintenance.Gate
+	logger          zerolog.Logger
+	cancel          context.CancelFunc
 }
 
-func NewVisitAggregationJob(repo *repository.VisitRepository, logger zerolog.Logger) *VisitAggregationJob {
-	return &VisitAggregationJob{repo: repo, logger: logger}
+func NewVisitAggregationJob(repo *repository.VisitRepository, maintenanceGate *maintenance.Gate, logger zerolog.Logger) *VisitAggregationJob {
+	return &VisitAggregationJob{repo: repo, maintenanceGate: maintenanceGate, logger: logger}
 }
 
 // Start backfills any missing summary rows for the last few days, then loops
@@ -51,6 +53,9 @@ func (j *VisitAggregationJob) Start() {
 				j.logger.Info().Msg("visit aggregation job stopped")
 				return
 			case <-time.After(time.Until(next)):
+				if j.maintenanceGate.Active() {
+					continue
+				}
 				yesterday := next.AddDate(0, 0, -1)
 				if err := j.aggregate(yesterday); err != nil {
 					j.logger.Error().Err(err).Msg("visit aggregation failed")
@@ -74,8 +79,14 @@ func (j *VisitAggregationJob) Stop() {
 // backfillRecent ensures the last N days have summary rows so the admin chart
 // isn't empty after a server restart that missed a midnight window.
 func (j *VisitAggregationJob) backfillRecent() {
+	if j.maintenanceGate.Active() {
+		return
+	}
 	now := time.Now().In(kstZone)
 	for offset := 1; offset <= backfillWindowDays; offset++ {
+		if j.maintenanceGate.Active() {
+			return
+		}
 		day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, kstZone).AddDate(0, 0, -offset)
 		exists, err := j.repo.HasSummary(day)
 		if err != nil {
@@ -107,6 +118,9 @@ func (j *VisitAggregationJob) aggregate(day time.Time) error {
 	if err != nil {
 		return err
 	}
+	if j.maintenanceGate.Active() {
+		return nil
+	}
 	return j.repo.UpsertSummary(model.VisitSummary{
 		Date:      day,
 		DAUTotal:  total,
@@ -120,6 +134,9 @@ func (j *VisitAggregationJob) aggregate(day time.Time) error {
 
 // prune deletes raw visit rows older than the retention window.
 func (j *VisitAggregationJob) prune(now time.Time) error {
+	if j.maintenanceGate.Active() {
+		return nil
+	}
 	cutoff := now.AddDate(0, 0, -visitRetentionDays)
 	deleted, err := j.repo.DeleteDailyBefore(cutoff)
 	if err != nil {

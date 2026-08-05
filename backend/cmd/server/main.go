@@ -61,7 +61,7 @@ func main() {
 			"https://client-macbook.tail04b57d.ts.net",
 		)
 	}
-	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg, logger, debugHook)
+	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg, logger, debugHook, d.maintenanceGate)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Server.Port,
@@ -86,9 +86,9 @@ func main() {
 	// Start()/Stop() pairs below.
 	// donationJob := d.donationJob
 	// donationJob.Start()
-	sessionJob := job.NewSessionCleanupJob(d.sessionRepo, d.passwordResetRepo, d.authRepo, logger)
+	sessionJob := job.NewSessionCleanupJob(d.sessionRepo, d.passwordResetRepo, d.authRepo, d.maintenanceGate, logger)
 	sessionJob.Start()
-	emailWorker := job.NewEmailWorker(d.emailQueue, d.emailService, logger)
+	emailWorker := job.NewEmailWorker(d.emailQueue, d.emailService, d.maintenanceGate, logger)
 	emailWorker.Start()
 	d.pushOutboxWorker.Start()
 	// subscriptionBillingJob := d.subscriptionBillingJob
@@ -100,17 +100,17 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error().Err(err).Msg("forced shutdown")
+	}
+
 	// donationJob.Stop()
 	sessionJob.Stop()
 	emailWorker.Stop()
 	d.pushOutboxWorker.Stop()
 	// subscriptionBillingJob.Stop()
 	visitJob.Stop()
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
-	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		logger.Error().Err(err).Msg("forced shutdown")
-	}
 	logger.Info().Msg("server stopped")
 }

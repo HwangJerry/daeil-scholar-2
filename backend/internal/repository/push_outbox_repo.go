@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -136,6 +137,28 @@ func (r *PushOutboxRepository) MarkSent(ctx context.Context, poSeq int) error {
 	return err
 }
 
+func (r *PushOutboxRepository) MarkDeliveryStarted(ctx context.Context, poSeq int) error {
+	result, err := r.DB.ExecContext(ctx, `
+		UPDATE ALUMNI_PUSH_OUTBOX
+		SET LAST_ERROR_CODE = 'DELIVERY_STARTED',
+		    LAST_ERROR_MESSAGE = NULL,
+		    UPDATED_AT = NOW()
+		WHERE PO_SEQ = ?
+		  AND STATUS = 'PROCESSING'
+	`, poSeq)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
+		return fmt.Errorf("push outbox delivery-start rows affected = %d, want 1", affected)
+	}
+	return nil
+}
+
 func (r *PushOutboxRepository) MarkRetryScheduled(ctx context.Context, poSeq int, nextAttemptAt time.Time, errorCode string, errorMessage string) error {
 	_, err := r.DB.ExecContext(ctx, `
 		UPDATE ALUMNI_PUSH_OUTBOX
@@ -171,10 +194,16 @@ func (r *PushOutboxRepository) ResetStuckProcessing(ctx context.Context, olderTh
 	}
 	result, err := r.DB.ExecContext(ctx, `
 		UPDATE ALUMNI_PUSH_OUTBOX
-		SET STATUS = 'FAILED',
+		SET STATUS = CASE WHEN LAST_ERROR_CODE = 'DELIVERY_STARTED' THEN 'DEAD' ELSE 'FAILED' END,
 		    NEXT_ATTEMPT_AT = NOW(),
-		    LAST_ERROR_CODE = 'STUCK_PROCESSING',
-		    LAST_ERROR_MESSAGE = 'processing job recovered after timeout',
+		    LAST_ERROR_MESSAGE = CASE
+		      WHEN LAST_ERROR_CODE = 'DELIVERY_STARTED' THEN 'provider delivery outcome requires manual reconciliation'
+		      ELSE 'processing job recovered after timeout'
+		    END,
+		    LAST_ERROR_CODE = CASE
+		      WHEN LAST_ERROR_CODE = 'DELIVERY_STARTED' THEN 'DELIVERY_STATE_UNCERTAIN'
+		      ELSE 'STUCK_PROCESSING'
+		    END,
 		    CLAIM_TOKEN = NULL,
 		    UPDATED_AT = NOW()
 		WHERE STATUS = 'PROCESSING'

@@ -137,6 +137,7 @@ func (s *AuthService) ValidateMobileAccessToken(tokenStr string) (*model.AuthUse
 		USRSeq:    usrSeq,
 		USRName:   claims.Name,
 		USRStatus: claims.Status,
+		SessionID: claims.SID,
 	}, nil
 }
 

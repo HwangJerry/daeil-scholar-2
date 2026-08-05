@@ -42,7 +42,7 @@ func (r *AuthRepository) FindMemberBySocialID(gate string, socialID string) (*mo
 		SELECT m.USR_SEQ, m.USR_ID, m.USR_NAME, m.USR_STATUS, m.USR_PHONE, m.USR_FN, m.USR_EMAIL, m.USR_NICK, m.USR_PHOTO
 		FROM WEO_MEMBER_SOCIAL s
 		JOIN WEO_MEMBER m ON s.USR_SEQ = m.USR_SEQ
-		WHERE s.NMS_GATE = ? AND s.NMS_ID = ?
+		WHERE s.NMS_GATE = ? AND s.NMS_ID = ? AND s.NMS_STATUS = 'ACTIVE'
 		LIMIT 1
 	`, gate, socialID)
 	if err != nil {
@@ -93,13 +93,26 @@ func (r *AuthRepository) FindMemberByFNName(fn string, name string) (*model.User
 }
 
 // InsertMobileRefreshToken stores a refresh token identifier for replay protection.
-func (r *AuthRepository) InsertMobileRefreshToken(usrSeq int, sid string, jti string, expAt time.Time) error {
-	_, err := r.DB.Exec(`
+func (r *AuthRepository) InsertMobileRefreshToken(usrSeq int, sid string, jti string, expAt time.Time, expectedStatus string) error {
+	result, err := r.DB.Exec(`
 		INSERT INTO ALUMNI_MOBILE_REFRESH_TOKEN
 			(MRT_JTI, USR_SEQ, MRT_SID, EXPIRES_AT, CREATED_AT)
-		VALUES (?, ?, ?, ?, NOW())
-	`, jti, usrSeq, sid, expAt)
-	return err
+		SELECT ?, m.USR_SEQ, ?, ?, NOW()
+		FROM WEO_MEMBER m
+		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
+		WHERE m.USR_SEQ = ? AND m.USR_STATUS = ?
+	`, jti, sid, expAt, usrSeq, expectedStatus)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
+		return ErrSessionPrincipalChanged
+	}
+	return nil
 }
 
 // RevokeMobileRefreshToken atomically marks a non-expired, non-revoked token as revoked.
@@ -107,8 +120,11 @@ func (r *AuthRepository) InsertMobileRefreshToken(usrSeq int, sid string, jti st
 func (r *AuthRepository) RevokeMobileRefreshToken(usrSeq int, jti string) (bool, error) {
 	result, err := r.DB.Exec(`
 		UPDATE ALUMNI_MOBILE_REFRESH_TOKEN
-		SET MRT_REVOKED_AT = NOW()
-		WHERE MRT_JTI = ? AND USR_SEQ = ? AND MRT_REVOKED_AT IS NULL AND EXPIRES_AT > NOW()
+		SET MRT_REVOKED_AT = COALESCE(MRT_REVOKED_AT, NOW()),
+			REVOKED_AT = COALESCE(REVOKED_AT, NOW())
+		WHERE MRT_JTI = ? AND USR_SEQ = ?
+		  AND MRT_REVOKED_AT IS NULL AND REVOKED_AT IS NULL
+		  AND CONSUMED_AT IS NULL AND EXPIRES_AT > NOW()
 	`, jti, usrSeq)
 	if err != nil {
 		return false, err
@@ -124,8 +140,9 @@ func (r *AuthRepository) RevokeMobileRefreshToken(usrSeq int, jti string) (bool,
 func (r *AuthRepository) RevokeMobileRefreshTokensByUser(usrSeq int) error {
 	_, err := r.DB.Exec(`
 		UPDATE ALUMNI_MOBILE_REFRESH_TOKEN
-		SET MRT_REVOKED_AT = NOW()
-		WHERE USR_SEQ = ? AND MRT_REVOKED_AT IS NULL
+		SET MRT_REVOKED_AT = COALESCE(MRT_REVOKED_AT, NOW()),
+			REVOKED_AT = COALESCE(REVOKED_AT, NOW())
+		WHERE USR_SEQ = ? AND (MRT_REVOKED_AT IS NULL OR REVOKED_AT IS NULL)
 	`, usrSeq)
 	return err
 }
@@ -134,7 +151,10 @@ func (r *AuthRepository) RevokeMobileRefreshTokensByUser(usrSeq int) error {
 func (r *AuthRepository) DeleteExpiredMobileRefreshTokens() (int64, error) {
 	result, err := r.DB.Exec(`
 		DELETE FROM ALUMNI_MOBILE_REFRESH_TOKEN
-		WHERE MRT_REVOKED_AT IS NOT NULL OR EXPIRES_AT < NOW()
+		WHERE MRT_REVOKED_AT IS NOT NULL
+		   OR REVOKED_AT IS NOT NULL
+		   OR CONSUMED_AT IS NOT NULL
+		   OR EXPIRES_AT < NOW()
 	`)
 	if err != nil {
 		return 0, err
@@ -167,7 +187,31 @@ func (r *AuthRepository) DeleteLegacySessionsByUser(usrSeq int) error {
 	return err
 }
 
+func (r *AuthRepository) DeleteLegacySession(usrSeq int, sessionID string) error {
+	_, err := r.DB.Exec(`DELETE FROM WEO_MEMBER_LOG WHERE USR_SEQ = ? AND SESSIONID = ?`, usrSeq, sessionID)
+	return err
+}
+
 func (r *AuthRepository) InsertLoginLog(usrSeq int, sessionID string, ipAddr string, userAgent string) error {
+	_, err := r.DB.Exec(`
+		INSERT INTO WEO_MEMBER_LOG
+			(USR_SEQ, LOG_DATE, REG_DATE, REG_IPADDR, SESSIONID, REG_AGENT)
+		VALUES (?, NOW(), NOW(), ?, ?, ?)
+	`, usrSeq, ipAddr, sessionID, userAgent)
+	return err
+}
+
+func (r *AuthRepository) RecordBridgeLogin(usrSeq int, sessionID string, ipAddr string, userAgent string) error {
+	// Production WEO_MEMBER and WEO_MEMBER_LOG are MyISAM, so transaction
+	// rollback cannot protect this sequence. Write non-credential metadata
+	// first so a failure cannot leave an unissued login session behind.
+	if _, err := r.DB.Exec(`
+		UPDATE WEO_MEMBER
+		SET TOTAL_LOG_CNT = TOTAL_LOG_CNT + 1, LAST_LOG_DATE = NOW()
+		WHERE USR_SEQ = ?
+	`, usrSeq); err != nil {
+		return err
+	}
 	_, err := r.DB.Exec(`
 		INSERT INTO WEO_MEMBER_LOG
 			(USR_SEQ, LOG_DATE, REG_DATE, REG_IPADDR, SESSIONID, REG_AGENT)

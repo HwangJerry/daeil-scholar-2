@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/dflh-saf/backend/internal/maintenance"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/rs/zerolog"
 )
@@ -14,6 +15,7 @@ type SessionCleanupJob struct {
 	sessionRepo       *repository.SessionRepository
 	passwordResetRepo *repository.PasswordResetRepository
 	authRepo          *repository.AuthRepository
+	maintenanceGate   *maintenance.Gate
 	logger            zerolog.Logger
 	cancel            context.CancelFunc
 }
@@ -23,12 +25,14 @@ func NewSessionCleanupJob(
 	sessionRepo *repository.SessionRepository,
 	passwordResetRepo *repository.PasswordResetRepository,
 	authRepo *repository.AuthRepository,
+	maintenanceGate *maintenance.Gate,
 	logger zerolog.Logger,
 ) *SessionCleanupJob {
 	return &SessionCleanupJob{
 		sessionRepo:       sessionRepo,
 		passwordResetRepo: passwordResetRepo,
 		authRepo:          authRepo,
+		maintenanceGate:   maintenanceGate,
 		logger:            logger,
 	}
 }
@@ -51,12 +55,20 @@ func (j *SessionCleanupJob) Start() {
 				j.logger.Info().Msg("session cleanup job stopped")
 				return
 			case <-ticker.C:
-				j.cleanSessions()
-				j.cleanExpiredTokens()
-				j.cleanExpiredMobileRefreshTokens()
+				j.RunOnce()
 			}
 		}
 	}()
+}
+
+// RunOnce performs one cleanup cycle unless maintenance has frozen writers.
+func (j *SessionCleanupJob) RunOnce() {
+	if j.maintenanceGate.Active() {
+		return
+	}
+	j.cleanSessions()
+	j.cleanExpiredTokens()
+	j.cleanExpiredMobileRefreshTokens()
 }
 
 // Stop signals the background goroutine to exit.

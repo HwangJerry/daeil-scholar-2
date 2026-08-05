@@ -12,6 +12,7 @@ import (
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
@@ -51,11 +52,7 @@ func (h *AuthHandler) KakaoLogin(w http.ResponseWriter, r *http.Request) {
 	query.Set("response_type", "code")
 	query.Set("state", state)
 	authURL.RawQuery = query.Encode()
-	h.logger.Debug().
-		Str("client_id", h.cfg.Kakao.ClientID).
-		Str("redirect_uri", h.cfg.Kakao.RedirectURI).
-		Str("auth_url", authURL.String()).
-		Msg("kakao: redirecting to authorize")
+	h.logger.Debug().Msg("kakao: redirecting to authorize")
 	http.Redirect(w, r, authURL.String(), http.StatusFound)
 }
 
@@ -71,22 +68,14 @@ func (h *AuthHandler) KakaoCallback(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_CODE", "Missing code")
 		return
 	}
-	h.logger.Debug().
-		Str("code", code[:min(len(code), 8)]+"...").
-		Str("state", state).
-		Msg("kakao: callback received")
+	h.logger.Debug().Msg("kakao: callback received")
 	info, err := h.service.ExchangeKakaoToken(code)
 	if err != nil {
-		h.logger.Error().Err(err).Msg("kakao: token exchange failed")
+		h.logger.Error().Msg("kakao: token exchange failed")
 		respondError(w, http.StatusBadRequest, "KAKAO_EXCHANGE_FAILED", "Kakao token exchange failed")
 		return
 	}
-	h.logger.Debug().
-		Str("kakao_id", info.KakaoID).
-		Str("email", info.Email).
-		Str("nickname", info.Nickname).
-		Bool("has_profile_image", info.ProfileImageURL != "").
-		Msg("kakao: token exchanged")
+	h.logger.Debug().Bool("has_profile_image", info.ProfileImageURL != "").Msg("kakao: token exchanged")
 	h.handleSocialCallback(w, r, "KT", info)
 }
 
@@ -96,17 +85,25 @@ func (h *AuthHandler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
-	if req.USRID == "" || req.Password == "" {
-		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "아이디와 비밀번호를 입력하세요")
+	email := strings.TrimSpace(req.Email)
+	usrID := strings.TrimSpace(req.USRID)
+	if (email == "" && usrID == "") || req.Password == "" {
+		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "이메일과 비밀번호를 입력하세요")
 		return
 	}
-	user, err := h.memberSvc.LoginWithPassword(req.USRID, req.Password)
+	var user *model.User
+	var err error
+	if email != "" {
+		user, err = h.memberSvc.LoginWithEmailPassword(email, req.Password)
+	} else {
+		user, err = h.memberSvc.LoginWithPassword(usrID, req.Password)
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrPendingApproval) {
-			respondError(w, http.StatusForbidden, "PENDING_APPROVAL", "가입 신청이 접수된 계정입니다. 관리자 승인 후 로그인 가능합니다.")
+		if errors.Is(err, service.ErrLoginSuspended) || errors.Is(err, service.ErrLoginWithdrawn) {
+			respondError(w, http.StatusForbidden, service.LoginErrorCode(err), "이 계정은 현재 로그인할 수 없습니다.")
 			return
 		}
-		h.logger.Error().Err(err).Str("usrId", req.USRID).Msg("mobile login: password verification failed")
+		h.logger.Error().Msg("mobile login: password verification failed")
 		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 처리 중 오류가 발생했습니다")
 		return
 	}
@@ -114,59 +111,19 @@ func (h *AuthHandler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "아이디 또는 비밀번호가 올바르지 않습니다")
 		return
 	}
-	if err := h.service.LoginWithBridge(user, w, r); err != nil {
-		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("mobile login: bridge session failed")
-		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 처리 중 오류가 발생했습니다")
-		return
-	}
-	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
-	mobileSessionID := h.service.GenerateSessionID()
-	if mobileSessionID == "" {
-		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 토큰 생성에 실패했습니다")
-		return
-	}
-	mobileToken, err := h.service.GenerateMobileJWT(&authUser, mobileSessionID)
+	session, err := h.service.IssueMobileSession(user)
 	if err != nil {
-		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("mobile login: token issue failed")
+		if errors.Is(err, service.ErrLoginSuspended) || errors.Is(err, service.ErrLoginWithdrawn) {
+			respondError(w, http.StatusForbidden, service.LoginErrorCode(err), "이 계정은 현재 로그인할 수 없습니다.")
+			return
+		}
+		h.logger.Error().Msg("mobile login: session issue failed")
 		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 토큰 발급에 실패했습니다")
 		return
 	}
-	refreshToken, refreshJTI, refreshExpiresAt, err := h.service.GenerateMobileRefreshJWT(&authUser, mobileSessionID)
-	if err != nil {
-		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("mobile login: refresh token issue failed")
-		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 토큰 재발급에 실패했습니다")
-		return
-	}
-	if err := h.service.RecordMobileRefreshToken(authUser.USRSeq, mobileSessionID, refreshJTI, refreshExpiresAt); err != nil {
-		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("mobile login: failed to persist refresh token")
-		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 토큰 재발급에 실패했습니다")
-		return
-	}
-	now := time.Now()
-	respondJSON(w, http.StatusOK, struct {
-		USRSeq           int    `json:"usrSeq"`
-		USRID            string `json:"usrId"`
-		USRName          string `json:"usrName"`
-		USRStatus        string `json:"usrStatus"`
-		AccessToken      string `json:"accessToken"`
-		RefreshToken     string `json:"refreshToken"`
-		AccessIssuedAt   int64  `json:"accessIssuedAt"`
-		AccessExpiresAt  int64  `json:"accessExpiresAt"`
-		RefreshExpiresAt int64  `json:"refreshExpiresAt"`
-		Sid              string `json:"sid"`
-		Jti              string `json:"jti"`
-	}{
-		USRSeq:           authUser.USRSeq,
-		USRID:            authUser.USRID,
-		USRName:          authUser.USRName,
-		USRStatus:        authUser.USRStatus,
-		AccessToken:      mobileToken,
-		RefreshToken:     refreshToken,
-		AccessIssuedAt:   now.Unix(),
-		AccessExpiresAt:  now.Add(h.cfg.JWT.MaxAge).Unix(),
-		RefreshExpiresAt: now.Add(h.cfg.JWT.MaxAge).Unix(),
-		Sid:              mobileSessionID,
-		Jti:              refreshJTI,
+	writeMobileAuthResult(w, model.SocialAuthResult{
+		Status:  model.SocialAuthAuthenticated,
+		Session: session,
 	})
 }
 
@@ -183,58 +140,22 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, sid, refreshJTI, err := h.service.ValidateMobileRefreshToken(refreshToken)
-	if err != nil || user == nil {
-		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid refresh token")
-		return
-	}
-	if ok, err := h.service.ConsumeMobileRefreshToken(user.USRSeq, refreshJTI); err != nil {
-		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("refresh: failed to consume refresh token")
-		respondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Failed to refresh token")
-		return
-	} else if !ok {
-		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid refresh token")
-		return
-	}
-
-	if sid == "" {
-		sid = h.service.GenerateSessionID()
-	}
-
-	newAccessToken, err := h.service.GenerateMobileJWT(user, sid)
+	session, err := h.service.RotateMobileSession(refreshToken)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Failed to reissue access token")
+		switch {
+		case errors.Is(err, repository.ErrRefreshTokenReplay):
+			respondError(w, http.StatusUnauthorized, "REFRESH_REPLAY_DETECTED", "세션을 다시 시작해주세요.")
+		case errors.Is(err, repository.ErrRefreshTokenInvalid):
+			respondError(w, http.StatusUnauthorized, "INVALID_REFRESH_TOKEN", "세션을 다시 시작해주세요.")
+		case errors.Is(err, service.ErrLoginSuspended), errors.Is(err, service.ErrLoginWithdrawn):
+			respondError(w, http.StatusForbidden, service.LoginErrorCode(err), "이 계정은 현재 로그인할 수 없습니다.")
+		default:
+			h.logger.Error().Msg("refresh: rotation failed")
+			respondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Failed to refresh token")
+		}
 		return
 	}
-
-	newRefreshToken, newRefreshJTI, newRefreshExpAt, err := h.service.GenerateMobileRefreshJWT(user, sid)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Failed to reissue refresh token")
-		return
-	}
-	if err := h.service.RecordMobileRefreshToken(user.USRSeq, sid, newRefreshJTI, newRefreshExpAt); err != nil {
-		respondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "Failed to reissue refresh token")
-		return
-	}
-
-	now := time.Now()
-	respondJSON(w, http.StatusOK, struct {
-		AccessToken      string `json:"accessToken"`
-		RefreshToken     string `json:"refreshToken"`
-		AccessIssuedAt   int64  `json:"accessIssuedAt"`
-		AccessExpiresAt  int64  `json:"accessExpiresAt"`
-		RefreshExpiresAt int64  `json:"refreshExpiresAt"`
-		Sid              string `json:"sid"`
-		Jti              string `json:"jti"`
-	}{
-		AccessToken:      newAccessToken,
-		RefreshToken:     newRefreshToken,
-		AccessIssuedAt:   now.Unix(),
-		AccessExpiresAt:  now.Add(h.cfg.JWT.MaxAge).Unix(),
-		RefreshExpiresAt: now.Add(h.cfg.JWT.MaxAge).Unix(),
-		Sid:              sid,
-		Jti:              newRefreshJTI,
-	})
+	respondJSON(w, http.StatusOK, session)
 }
 
 // KakaoLink delegates to SocialLink for backward compatibility.
@@ -258,7 +179,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusForbidden, "PENDING_APPROVAL", "가입 신청이 접수된 계정입니다. 관리자 승인 후 로그인 가능합니다.")
 			return
 		}
-		h.logger.Error().Err(err).Str("usrId", req.USRID).Msg("login: password verification failed")
+		h.logger.Error().Err(err).Msg("login: password verification failed")
 		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 처리 중 오류가 발생했습니다")
 		return
 	}
@@ -267,7 +188,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.LoginWithBridge(user, w, r); err != nil {
-		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("login: bridge session failed")
+		if errors.Is(err, service.ErrLoginSuspended) || errors.Is(err, service.ErrLoginWithdrawn) {
+			respondError(w, http.StatusForbidden, service.LoginErrorCode(err), "이 계정은 현재 로그인할 수 없습니다.")
+			return
+		}
+		h.logger.Error().Err(err).Msg("login: bridge session failed")
 		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 처리 중 오류가 발생했습니다")
 		return
 	}
@@ -326,7 +251,7 @@ func (h *AuthHandler) CheckID(w http.ResponseWriter, r *http.Request) {
 	}
 	available, err := h.registerSvc.IsIDAvailable(usrID)
 	if err != nil {
-		h.logger.Error().Err(err).Str("usrId", usrID).Msg("check-id: db error")
+		h.logger.Error().Err(err).Msg("check-id: db error")
 		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "아이디 중복 확인에 실패했습니다")
 		return
 	}
@@ -341,7 +266,7 @@ func (h *AuthHandler) CheckPhone(w http.ResponseWriter, r *http.Request) {
 	}
 	available, err := h.registerSvc.IsPhoneAvailable(phone)
 	if err != nil {
-		h.logger.Error().Err(err).Str("phone", phone).Msg("check-phone: db error")
+		h.logger.Error().Err(err).Msg("check-phone: db error")
 		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "전화번호 중복 확인에 실패했습니다")
 		return
 	}
@@ -356,7 +281,7 @@ func (h *AuthHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
 	}
 	available, err := h.registerSvc.IsEmailAvailable(email)
 	if err != nil {
-		h.logger.Error().Err(err).Str("email", email).Msg("check-email: db error")
+		h.logger.Error().Msg("check-email: db error")
 		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "이메일 중복 확인에 실패했습니다")
 		return
 	}
@@ -365,19 +290,48 @@ func (h *AuthHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetAuthUser(r.Context())
-	usrSeq := 0
-	if user != nil {
-		usrSeq = user.USRSeq
+	if err := h.service.LogoutCurrent(w, user); err != nil {
+		h.logger.Error().Err(err).Msg("logout: session revoke failed")
+		respondError(w, http.StatusInternalServerError, "LOGOUT_FAILED", "로그아웃에 실패했습니다")
+		return
 	}
-	h.service.Logout(w, usrSeq)
-	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetAuthUser(r.Context())
 	if user == nil {
 		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
 		return
 	}
+	if err := h.service.LogoutAll(w, user.USRSeq); err != nil {
+		h.logger.Error().Err(err).Msg("logout all: session revoke failed")
+		respondError(w, http.StatusInternalServerError, "LOGOUT_FAILED", "로그아웃에 실패했습니다")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+	claim := middleware.GetAuthUser(r.Context())
+	if claim == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
+		return
+	}
+	user, err := h.service.GetCurrentUser(claim.USRSeq)
+	if err != nil {
+		h.logger.Error().Msg("auth me: principal lookup failed")
+		respondError(w, http.StatusInternalServerError, "AUTH_PRINCIPAL_FAILED", "사용자 정보를 불러오지 못했습니다")
+		return
+	}
+	if user == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "유효하지 않은 세션입니다")
+		return
+	}
+	if err := (service.LoginEligibilityPolicy{}).EnsureStatusAllowed(user.USRStatus); err != nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "유효하지 않은 세션입니다")
+		return
+	}
+	user.USRStatus = ""
 	respondJSON(w, http.StatusOK, user)
 }

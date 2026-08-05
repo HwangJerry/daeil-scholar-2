@@ -3,9 +3,6 @@ import { api } from './client';
 import type {
   AuthUser,
   LoginRequest,
-  SocialLinkPrefillResponse,
-  SocialLinkPhoneMatchResponse,
-  SocialLinkPhotoUploadResponse,
 } from '../types/api';
 
 export interface RegisterRequest {
@@ -34,33 +31,5 @@ export function legacyLogin(req: LoginRequest): Promise<AuthUser> {
 /** New member registration with ID/password. */
 export function register(req: RegisterRequest): Promise<AuthUser> {
   return api.post<AuthUser>('/api/auth/register', req);
-}
-
-/** Fetch cached social-provider data (email/nickname/profileImage) for the signup form. */
-export function getSocialLinkPrefill(token: string): Promise<SocialLinkPrefillResponse> {
-  return api.get<SocialLinkPrefillResponse>(
-    `/api/auth/social/link/prefill?token=${encodeURIComponent(token)}`,
-  );
-}
-
-/** Check whether the given phone belongs to an existing member; returns their profile for merge-mode prefill. */
-export function getSocialLinkPhoneMatch(
-  token: string,
-  phone: string,
-): Promise<SocialLinkPhoneMatchResponse> {
-  return api.get<SocialLinkPhoneMatchResponse>(
-    `/api/auth/social/link/phone-match?token=${encodeURIComponent(token)}&phone=${encodeURIComponent(phone)}`,
-  );
-}
-
-/** Upload a replacement profile photo during the pre-signup flow (token-gated, no DB write). */
-export function uploadSocialLinkPhoto(
-  token: string,
-  file: File,
-): Promise<SocialLinkPhotoUploadResponse> {
-  const form = new FormData();
-  form.append('token', token);
-  form.append('file', file);
-  return api.upload<SocialLinkPhotoUploadResponse>('/api/auth/social/link/photo', form);
 }
 

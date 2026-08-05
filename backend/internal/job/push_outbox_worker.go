@@ -2,8 +2,12 @@ package job
 
 import (
 	"context"
+	"errors"
+	"net"
+	"sync"
 	"time"
 
+	"github.com/dflh-saf/backend/internal/maintenance"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
@@ -24,6 +28,7 @@ type PushOutboxWorkerConfig struct {
 
 type PushOutboxStore interface {
 	ClaimDue(ctx context.Context, batchSize int) ([]repository.PushOutboxJob, error)
+	MarkDeliveryStarted(ctx context.Context, poSeq int) error
 	MarkSent(ctx context.Context, poSeq int) error
 	MarkRetryScheduled(ctx context.Context, poSeq int, nextAttemptAt time.Time, errorCode string, errorMessage string) error
 	MarkDead(ctx context.Context, poSeq int, errorCode string, errorMessage string) error
@@ -39,14 +44,17 @@ type PushPreferenceReader interface {
 }
 
 type PushOutboxWorker struct {
-	outbox      PushOutboxStore
-	tokens      PushTokenRevoker
-	preferences PushPreferenceReader
-	provider    service.MobilePushProvider
-	cfg         PushOutboxWorkerConfig
-	logger      zerolog.Logger
-	cancel      context.CancelFunc
-	now         func() time.Time
+	outbox          PushOutboxStore
+	tokens          PushTokenRevoker
+	preferences     PushPreferenceReader
+	provider        service.MobilePushProvider
+	maintenanceGate *maintenance.Gate
+	cfg             PushOutboxWorkerConfig
+	logger          zerolog.Logger
+	stop            chan struct{}
+	done            chan struct{}
+	stopOnce        sync.Once
+	now             func() time.Time
 }
 
 func NewPushOutboxWorker(
@@ -54,17 +62,19 @@ func NewPushOutboxWorker(
 	tokens PushTokenRevoker,
 	preferences PushPreferenceReader,
 	provider service.MobilePushProvider,
+	maintenanceGate *maintenance.Gate,
 	cfg PushOutboxWorkerConfig,
 	logger zerolog.Logger,
 ) *PushOutboxWorker {
 	return &PushOutboxWorker{
-		outbox:      outbox,
-		tokens:      tokens,
-		preferences: preferences,
-		provider:    provider,
-		cfg:         normalizePushOutboxWorkerConfig(cfg),
-		logger:      logger,
-		now:         time.Now,
+		outbox:          outbox,
+		tokens:          tokens,
+		preferences:     preferences,
+		provider:        provider,
+		maintenanceGate: maintenanceGate,
+		cfg:             normalizePushOutboxWorkerConfig(cfg),
+		logger:          logger,
+		now:             time.Now,
 	}
 }
 
@@ -89,10 +99,11 @@ func (w *PushOutboxWorker) Start() {
 		w.logger.Warn().Msg("push outbox worker disabled: APNs provider is not configured")
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	w.cancel = cancel
+	w.stop = make(chan struct{})
+	w.done = make(chan struct{})
 	ticker := time.NewTicker(w.cfg.PollInterval)
 	go func() {
+		defer close(w.done)
 		defer func() {
 			if r := recover(); r != nil {
 				w.logger.Error().Interface("panic", r).Msg("push outbox worker panicked")
@@ -105,11 +116,17 @@ func (w *PushOutboxWorker) Start() {
 			Int("max_attempts", w.cfg.MaxAttempts).
 			Msg("push outbox worker started")
 		for {
-			if err := w.RunOnce(ctx); err != nil {
+			select {
+			case <-w.stop:
+				w.logger.Info().Msg("push outbox worker stopped")
+				return
+			default:
+			}
+			if err := w.RunOnce(context.Background()); err != nil {
 				w.logger.Error().Err(err).Msg("push outbox worker tick failed")
 			}
 			select {
-			case <-ctx.Done():
+			case <-w.stop:
 				w.logger.Info().Msg("push outbox worker stopped")
 				return
 			case <-ticker.C:
@@ -119,12 +136,18 @@ func (w *PushOutboxWorker) Start() {
 }
 
 func (w *PushOutboxWorker) Stop() {
-	if w.cancel != nil {
-		w.cancel()
+	if w.stop != nil {
+		w.stopOnce.Do(func() { close(w.stop) })
+	}
+	if w.done != nil {
+		<-w.done
 	}
 }
 
 func (w *PushOutboxWorker) RunOnce(ctx context.Context) error {
+	if w.maintenanceGate.Active() {
+		return nil
+	}
 	if w.outbox == nil || w.provider == nil {
 		return nil
 	}
@@ -161,6 +184,12 @@ func (w *PushOutboxWorker) processJob(parent context.Context, job repository.Pus
 		w.markDead(parent, job, "INVALID_PAYLOAD", err)
 		return
 	}
+	if err := w.outbox.MarkDeliveryStarted(parent, job.POSeq); err != nil {
+		w.logger.Error().Err(err).Int("outbox_id", job.POSeq).Msg("push outbox delivery start marker failed")
+		w.scheduleRetryOrDead(parent, job, "DELIVERY_START_FAILED", err)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(parent, w.cfg.RequestTimeout)
 	defer cancel()
 	err = w.provider.SendPush(ctx, notification)
@@ -174,6 +203,12 @@ func (w *PushOutboxWorker) processJob(parent context.Context, job repository.Pus
 	}
 
 	reason := service.PushErrorReason(err)
+	var networkError net.Error
+	if errors.Is(err, context.DeadlineExceeded) ||
+		(errors.As(err, &networkError) && networkError.Timeout()) {
+		w.markDead(parent, job, "DELIVERY_STATE_UNCERTAIN", err)
+		return
+	}
 	if service.IsInvalidDeviceToken(err) {
 		if w.tokens != nil {
 			if revokeErr := w.tokens.RevokeToken(job.DeviceToken); revokeErr != nil {

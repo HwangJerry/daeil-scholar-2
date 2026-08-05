@@ -236,60 +236,13 @@ export interface ProfileUpdateRequest {
   usrEmailPublic: 'Y' | 'N';
 }
 
-export type SocialLinkMode = 'new' | 'merge';
-
 export interface SocialLinkRequest {
-  token: string;
-  mode: SocialLinkMode;
-  name: string;
-  phone: string;
+  linkToken: string;
   email: string;
-  fn: string;
-  fmDept?: string;
-  jobCat?: number | null;
-  bizName?: string;
-  bizDesc?: string;
-  bizAddr?: string;
-  position?: string;
-  tags?: string[];
-  usrPhonePublic?: 'Y' | 'N';
-  usrEmailPublic?: 'Y' | 'N';
-  /** Override the cached provider photo. Omit to keep cached value; empty string = remove image. */
-  profileImageUrl?: string;
-}
-
-export interface SocialLinkPhotoUploadResponse {
-  url: string;
+  password: string;
 }
 
 export type KakaoLinkRequest = SocialLinkRequest;
-
-export interface SocialLinkPrefillResponse {
-  provider: string;
-  email: string;
-  nickname: string;
-  profileImageUrl: string;
-}
-
-export interface SocialLinkPhoneMatchProfile {
-  name: string;
-  email: string;
-  fn: string;
-  fmDept: string;
-  jobCat: number | null;
-  bizName: string;
-  bizDesc: string;
-  bizAddr: string;
-  position: string;
-  tags: string[];
-  usrPhonePublic: 'Y' | 'N';
-  usrEmailPublic: 'Y' | 'N';
-}
-
-export interface SocialLinkPhoneMatchResponse {
-  matched: boolean;
-  profile?: SocialLinkPhoneMatchProfile;
-}
 
 export interface LoginRequest {
   usrId: string;

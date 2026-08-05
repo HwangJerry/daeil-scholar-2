@@ -65,10 +65,15 @@ type ProfileUpdateRequest struct {
 
 // AuthUser is the minimal user info stored in context after authentication.
 type AuthUser struct {
-	USRSeq    int    `json:"usrSeq"`
-	USRID     string `json:"usrId"`
-	USRName   string `json:"usrName"`
-	USRStatus string `json:"usrStatus"`
+	USRSeq          int                `db:"USR_SEQ" json:"usrSeq"`
+	USRID           string             `db:"USR_ID" json:"usrId"`
+	USRName         string             `db:"USR_NAME" json:"usrName"`
+	Email           string             `db:"USR_EMAIL" json:"email"`
+	AdminRole       *AdminRole         `json:"adminRole"`
+	Verification    AlumniVerification `json:"verification"`
+	USRStatus       string             `db:"USR_STATUS" json:"usrStatus,omitempty"`
+	SessionID       string             `json:"-" db:"-"`
+	LegacySessionID string             `json:"-" db:"-"`
 }
 
 // JWTClaims represents the JWT token claims.

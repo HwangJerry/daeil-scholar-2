@@ -44,14 +44,17 @@ func OptionalAuthMiddleware(authService *service.AuthService) func(http.Handler)
 func resolveAuthUser(authService *service.AuthService, r *http.Request, strictHeader bool) (*model.AuthUser, error) {
 	user, usedHeader, err := resolveAuthFromAuthorizationHeader(authService, r)
 	if err == nil && user != nil {
-		return user, nil
+		if legacyCookie, legacyErr := r.Cookie("DDusrSession_id"); legacyErr == nil {
+			user.LegacySessionID = legacyCookie.Value
+		}
+		return revalidateAuthUser(authService, user)
 	}
 	if strictHeader && usedHeader {
 		return nil, errors.New("unauthorized")
 	}
 
 	if user, err := resolveAuthFromCookies(authService, r); err == nil && user != nil {
-		return user, nil
+		return revalidateAuthUser(authService, user)
 	}
 
 	if !usedHeader && err != nil {
@@ -59,6 +62,28 @@ func resolveAuthUser(authService *service.AuthService, r *http.Request, strictHe
 	}
 
 	return nil, errors.New("unauthorized")
+}
+
+func revalidateAuthUser(authService *service.AuthService, claim *model.AuthUser) (*model.AuthUser, error) {
+	if claim == nil || claim.USRSeq <= 0 {
+		return nil, errors.New("unauthorized")
+	}
+	principal, err := authService.GetCurrentUser(claim.USRSeq)
+	if err != nil || principal == nil {
+		return nil, errors.New("unauthorized")
+	}
+	if err := (service.LoginEligibilityPolicy{}).EnsureStatusAllowed(principal.USRStatus); err != nil {
+		return nil, errors.New("unauthorized")
+	}
+	if claim.SessionID != "" {
+		active, err := authService.IsMobileSessionActive(principal.USRSeq, claim.SessionID)
+		if err != nil || !active {
+			return nil, errors.New("unauthorized")
+		}
+	}
+	principal.SessionID = claim.SessionID
+	principal.LegacySessionID = claim.LegacySessionID
+	return principal, nil
 }
 
 func resolveAuthFromAuthorizationHeader(authService *service.AuthService, r *http.Request) (*model.AuthUser, bool, error) {
@@ -94,6 +119,9 @@ func resolveAuthFromCookies(authService *service.AuthService, r *http.Request) (
 	if cookie, err := r.Cookie(jwtCookieName); err == nil && cookie.Value != "" {
 		user, jwtErr := authService.ValidateJWT(cookie.Value)
 		if jwtErr == nil && user != nil {
+			if legacyCookie, legacyErr := r.Cookie("DDusrSession_id"); legacyErr == nil {
+				user.LegacySessionID = legacyCookie.Value
+			}
 			return user, nil
 		}
 	}
@@ -101,7 +129,8 @@ func resolveAuthFromCookies(authService *service.AuthService, r *http.Request) (
 	legacyCookie, err := r.Cookie("DDusrSession_id")
 	if err == nil && legacyCookie.Value != "" {
 		legacyUser, legacyErr := authService.LookupLegacySession(legacyCookie.Value)
-		if legacyErr == nil && legacyUser != nil && (legacyUser.USRStatus == "CCC" || legacyUser.USRStatus == "ZZZ") {
+		if legacyErr == nil && legacyUser != nil {
+			legacyUser.LegacySessionID = legacyCookie.Value
 			return legacyUser, nil
 		}
 	}

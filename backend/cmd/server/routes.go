@@ -6,6 +6,7 @@ import (
 
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/handler"
+	"github.com/dflh-saf/backend/internal/maintenance"
 	mw "github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/service"
@@ -58,12 +59,13 @@ type handlers struct {
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
-func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, logger zerolog.Logger, debugHook *observability.Hook) chi.Router {
+func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, logger zerolog.Logger, debugHook *observability.Hook, maintenanceGate *maintenance.Gate) chi.Router {
 	router := chi.NewRouter()
 	router.Use(mw.Recoverer(logger, debugHook))
 	router.Use(mw.RequestLogger(logger))
 	router.Use(mw.CORSMiddleware(allowedOrigins))
 	router.Use(mw.MaxBodySize(2 << 20))
+	router.Use(mw.MaintenanceWriteMiddleware(maintenanceGate))
 
 	// Static file servers (dev: proxied from Vite/Nginx; prod: handled by Nginx alias)
 	router.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.Upload.BasePath))))
@@ -109,7 +111,7 @@ func registerPublicRoutes(r chi.Router, h handlers, cacheStore *cache.Cache) {
 	r.Get("/api/donation/summary", h.donation.GetSummary)
 	r.Get("/api/auth/kakao", h.auth.KakaoLogin)
 	r.Get("/api/auth/kakao/callback", h.auth.KakaoCallback)
-	r.Post("/api/auth/kakao/mobile", h.auth.KakaoMobileLogin)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/kakao/mobile", h.auth.KakaoMobileLogin)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/login", h.auth.Login)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/mobile/login", h.auth.MobileLogin)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/refresh", h.auth.Refresh)
@@ -117,13 +119,10 @@ func registerPublicRoutes(r chi.Router, h handlers, cacheStore *cache.Cache) {
 	r.Get("/api/auth/check-id", h.auth.CheckID)
 	r.Get("/api/auth/check-phone", h.auth.CheckPhone)
 	r.Get("/api/auth/check-email", h.auth.CheckEmail)
-	r.Post("/api/auth/social/link", h.auth.SocialLink)
-	r.Get("/api/auth/social/link/prefill", h.auth.SocialLinkPrefill)
-	r.Get("/api/auth/social/link/phone-match", h.auth.SocialLinkPhoneMatch)
-	r.Post("/api/auth/social/link/photo", h.socialLinkPhoto.Upload)
-	r.Post("/api/auth/kakao/link", h.auth.KakaoLink)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/social/link", h.auth.SocialLink)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/social/link/web", h.auth.SocialLinkWeb)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/kakao/link", h.auth.KakaoLink)
 	r.Get("/api/history", h.history.GetGrouped)
-	r.Get("/api/alumni/widget", h.alumni.GetWidgetPreview)
 	r.Get("/api/public/job-categories", h.alumni.GetJobCategories)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/password/reset-request", h.passwordReset.RequestReset)
 	r.Post("/api/auth/password/reset-confirm", h.passwordReset.ConfirmReset)
@@ -136,40 +135,45 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Use(mw.AuthMiddleware(authService))
 		r.Get("/api/auth/me", h.auth.Me)
 		r.Post("/api/auth/logout", h.auth.Logout)
-		r.Get("/api/alumni", h.alumni.Search)
-		r.Get("/api/alumni/filters", h.alumni.GetFilters)
-		r.Get("/api/profile", h.profile.GetProfile)
-		r.Put("/api/profile", h.profile.UpdateProfile)
-		r.Post("/api/profile/photo", h.profileUpload.UploadPhoto)
-		r.Post("/api/profile/bizcard", h.profileUpload.UploadBizCard)
-		r.Post("/api/profile/password", h.passwordChange.ChangePassword)
-		// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
-		// r.Post("/api/donation/orders", h.payment.CreateOrder)
-		// r.Get("/api/donation/my", h.myDonation.GetMyDonations)
-		r.Post("/api/feed/{seq}/like", h.like.ToggleLike)
-		r.Post("/api/feed/{seq}/comments", h.comment.CreateComment)
-		r.Delete("/api/feed/{seq}/comments/{cSeq}", h.comment.DeleteComment)
-		r.Post("/api/ad/{maSeq}/like", h.adLike.ToggleLike)
-		r.Post("/api/ad/{maSeq}/comments", h.adComment.CreateComment)
-		r.Delete("/api/ad/{maSeq}/comments/{acSeq}", h.adComment.DeleteComment)
-		// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
-		// r.Post("/api/donation/subscription", h.subscription.CreateSubscription)
-		// r.Get("/api/donation/subscription", h.subscription.GetMySubscription)
-		// r.Delete("/api/donation/subscription", h.subscription.CancelSubscription)
-		r.Post("/api/messages", h.message.Send)
-		r.Get("/api/messages/inbox", h.message.GetInbox)
-		r.Get("/api/messages/outbox", h.message.GetOutbox)
-		r.Put("/api/messages/{seq}/read", h.message.MarkAsRead)
-		r.Delete("/api/messages/{seq}", h.message.Delete)
-		r.Get("/api/messages/conversations", h.message.GetConversations)
-		r.Get("/api/messages/conversations/{userSeq}", h.message.GetConversationMessages)
-		r.Put("/api/messages/conversations/{userSeq}/read", h.message.MarkConversationRead)
-		r.Post("/api/push/device/register", h.push.RegisterDevice)
-		r.Post("/api/push/device/unregister", h.push.UnregisterDevice)
-		r.Get("/api/push/preferences", h.push.GetPreferences)
-		r.Put("/api/push/preferences", h.push.UpdatePreferences)
-		r.Get("/api/badges", h.badge.GetBadges)
-		r.Get("/api/messages/stream", h.realtime.Stream)
+		r.Post("/api/auth/logout/all", h.auth.LogoutAll)
+		r.Group(func(r chi.Router) {
+			r.Use(mw.AlumniApprovedMiddleware(authService))
+			r.Get("/api/profile", h.profile.GetProfile)
+			r.Put("/api/profile", h.profile.UpdateProfile)
+			r.Post("/api/profile/photo", h.profileUpload.UploadPhoto)
+			r.Post("/api/profile/bizcard", h.profileUpload.UploadBizCard)
+			r.Post("/api/profile/password", h.passwordChange.ChangePassword)
+			// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
+			// r.Post("/api/donation/orders", h.payment.CreateOrder)
+			// r.Get("/api/donation/my", h.myDonation.GetMyDonations)
+			r.Post("/api/feed/{seq}/like", h.like.ToggleLike)
+			r.Post("/api/feed/{seq}/comments", h.comment.CreateComment)
+			r.Delete("/api/feed/{seq}/comments/{cSeq}", h.comment.DeleteComment)
+			r.Post("/api/ad/{maSeq}/like", h.adLike.ToggleLike)
+			r.Post("/api/ad/{maSeq}/comments", h.adComment.CreateComment)
+			r.Delete("/api/ad/{maSeq}/comments/{acSeq}", h.adComment.DeleteComment)
+			// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
+			// r.Post("/api/donation/subscription", h.subscription.CreateSubscription)
+			// r.Get("/api/donation/subscription", h.subscription.GetMySubscription)
+			// r.Delete("/api/donation/subscription", h.subscription.CancelSubscription)
+			r.Get("/api/alumni", h.alumni.Search)
+			r.Get("/api/alumni/filters", h.alumni.GetFilters)
+			r.Get("/api/alumni/widget", h.alumni.GetWidgetPreview)
+			r.Post("/api/messages", h.message.Send)
+			r.Get("/api/messages/inbox", h.message.GetInbox)
+			r.Get("/api/messages/outbox", h.message.GetOutbox)
+			r.Put("/api/messages/{seq}/read", h.message.MarkAsRead)
+			r.Delete("/api/messages/{seq}", h.message.Delete)
+			r.Get("/api/messages/conversations", h.message.GetConversations)
+			r.Get("/api/messages/conversations/{userSeq}", h.message.GetConversationMessages)
+			r.Put("/api/messages/conversations/{userSeq}/read", h.message.MarkConversationRead)
+			r.Post("/api/push/device/register", h.push.RegisterDevice)
+			r.Post("/api/push/device/unregister", h.push.UnregisterDevice)
+			r.Get("/api/push/preferences", h.push.GetPreferences)
+			r.Put("/api/push/preferences", h.push.UpdatePreferences)
+			r.Get("/api/badges", h.badge.GetBadges)
+			r.Get("/api/messages/stream", h.realtime.Stream)
+		})
 	})
 }
 
@@ -194,6 +198,7 @@ func registerOptionalAuthRoutes(r chi.Router, h handlers, authService *service.A
 func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthService, cfg *config.Config) {
 	r.Route("/api/admin", func(r chi.Router) {
 		r.Use(mw.AuthMiddleware(authService))
+		r.Use(mw.AlumniApprovedMiddleware(authService))
 		r.Use(mw.AdminAuthMiddleware)
 		r.Get("/dashboard", h.adminDashboard.Dashboard)
 		r.Get("/stats/active-users", h.adminDashboard.ActiveUsers)
@@ -224,7 +229,7 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		// r.Put("/donation/orders/{seq}", h.adminDonation.UpdateOrder)
 		r.Get("/member", h.adminMember.List)
 		r.Get("/member/{seq}", h.adminMember.Detail)
-		r.Put("/member/{seq}", h.adminMember.Update)
+		r.With(mw.RootAdminAuthMiddleware).Put("/member/{seq}", h.adminMember.Update)
 		r.Get("/member/stats", h.adminMember.Stats)
 		r.Get("/job-category", h.adminJobCat.List)
 		r.Post("/job-category", h.adminJobCat.Create)

@@ -8,6 +8,7 @@ import (
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/handler"
 	"github.com/dflh-saf/backend/internal/job"
+	"github.com/dflh-saf/backend/internal/maintenance"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/presenter"
@@ -36,10 +37,15 @@ type deps struct {
 	subscriptionBillingJob *job.SubscriptionBillingJob
 	visitJob               *job.VisitAggregationJob
 	pushOutboxWorker       *job.PushOutboxWorker
+	maintenanceGate        *maintenance.Gate
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
 func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook *observability.Hook) (*deps, error) {
+	maintenanceGate, err := maintenance.NewRuntimeGate(cfg.Environment, cfg.Maintenance.SentinelPath, cfg.Maintenance.SmokeProofSHA256, cfg.Maintenance.SmokeAllowedPaths...)
+	if err != nil {
+		return nil, err
+	}
 	authRepo := repository.NewAuthRepository(db)
 	feedRepo := repository.NewFeedRepository(db)
 	donationRepo := repository.NewDonationRepository(db)
@@ -92,7 +98,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	}
 	pushProvider := service.NewPlatformPushProvider(logger, pushProviders)
 	pushService := service.NewMobilePushServiceWithOutboxAndPreferences(pushTokenRepo, pushPreferenceRepo, pushOutboxRepo, pushProvider, logger)
-	pushOutboxWorker := job.NewPushOutboxWorker(pushOutboxRepo, pushTokenRepo, pushPreferenceRepo, apnsProvider, job.PushOutboxWorkerConfig{
+	pushOutboxWorker := job.NewPushOutboxWorker(pushOutboxRepo, pushTokenRepo, pushPreferenceRepo, apnsProvider, maintenanceGate, job.PushOutboxWorkerConfig{
 		BatchSize:       cfg.Push.OutboxBatchSize,
 		PollInterval:    cfg.Push.OutboxPollInterval,
 		MaxAttempts:     cfg.Push.OutboxMaxAttempts,
@@ -124,11 +130,11 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	disclosureSvc := service.NewDisclosureService(disclosureRepo)
 	adminAdSvc := service.NewAdminAdService(adminAdRepo)
 	adminDonationSvc := service.NewAdminDonationService(adminDonationRepo, donationRepo)
-	donationJob := job.NewDonationSnapshotJob(donationRepo, logger)
+	donationJob := job.NewDonationSnapshotJob(donationRepo, maintenanceGate, logger)
 	adminDonationOrchestrator := service.NewDonationConfigOrchestrator(adminDonationSvc, donationService, donationJob)
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
 	visitService := service.NewVisitService(visitRepo, cacheStore, cfg.VisitIPSalt, logger)
-	visitJob := job.NewVisitAggregationJob(visitRepo, logger)
+	visitJob := job.NewVisitAggregationJob(visitRepo, maintenanceGate, logger)
 	adminDashboardSvc := service.NewAdminDashboardService(adminMemberSvc, adminNoticeSvc, adminAdSvc, donationService, visitService)
 	fileStorage := service.NewFileStorageService(cfg.Upload.BasePath)
 	imageResizer := service.NewImageResizeService(1200)
@@ -138,7 +144,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	attachmentUploadOrchestrator := service.NewAttachmentUploadOrchestrator(attachmentStorage, fileRecordSvc)
 	profileUploadService := service.NewProfileUploadService(profileRepo, uploadOrchestrator)
 	easypayService := service.NewEasyPayService(cfg.EasyPay)
-	pgAuditLogger, err := service.NewPGAuditLogger(cfg.PGAuditLogPath)
+	pgAuditLogger, err := service.NewPGAuditLogger(cfg.PGAuditLogPath, maintenanceGate.Active())
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +164,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	historySvc := service.NewHistoryService(historyRepo)
 
 	subscriptionService := service.NewSubscriptionService(subscriptionRepo, donateService, easypayService, pgAuditLogger, cacheStore, logger)
-	subscriptionBillingJob := job.NewSubscriptionBillingJob(subscriptionRepo, donateRepo, easypayService, pgAuditLogger, cacheStore, cfg.EasyPay, logger)
+	subscriptionBillingJob := job.NewSubscriptionBillingJob(subscriptionRepo, donateRepo, easypayService, pgAuditLogger, cacheStore, cfg.EasyPay, maintenanceGate, logger)
 
 	feedPresenter := presenter.NewFeedPresenter()
 
@@ -219,5 +225,6 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		subscriptionBillingJob: subscriptionBillingJob,
 		visitJob:               visitJob,
 		pushOutboxWorker:       pushOutboxWorker,
+		maintenanceGate:        maintenanceGate,
 	}, nil
 }

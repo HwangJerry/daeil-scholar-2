@@ -98,7 +98,7 @@ func TestPushOutboxRepositoryResetStuckProcessing(t *testing.T) {
 	defer db.Close()
 
 	repo := NewPushOutboxRepository(sqlx.NewDb(db, "sqlmock"))
-	mock.ExpectExec(regexp.QuoteMeta("UPDATE ALUMNI_PUSH_OUTBOX")).
+	mock.ExpectExec(regexp.QuoteMeta("STATUS = CASE WHEN LAST_ERROR_CODE = 'DELIVERY_STARTED' THEN 'DEAD' ELSE 'FAILED' END")).
 		WithArgs(300).
 		WillReturnResult(sqlmock.NewResult(0, 2))
 
@@ -108,6 +108,26 @@ func TestPushOutboxRepositoryResetStuckProcessing(t *testing.T) {
 	}
 	if count != 2 {
 		t.Fatalf("expected 2 recovered jobs, got %d", count)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet sql expectations: %v", err)
+	}
+}
+
+func TestPushOutboxRepositoryMarkDeliveryStarted(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewPushOutboxRepository(sqlx.NewDb(db, "sqlmock"))
+	mock.ExpectExec(regexp.QuoteMeta("LAST_ERROR_CODE = 'DELIVERY_STARTED'")).
+		WithArgs(100).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.MarkDeliveryStarted(context.Background(), 100); err != nil {
+		t.Fatalf("MarkDeliveryStarted: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet sql expectations: %v", err)

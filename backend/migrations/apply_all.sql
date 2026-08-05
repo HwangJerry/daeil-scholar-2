@@ -1,7 +1,9 @@
 -- =============================================================================
--- apply_all.sql — Consolidated migration script (001–034)
+-- apply_all.sql — Historical consolidated migration script (001–035 only)
 -- Target: MariaDB 10.1.38
 -- Safe to re-run: uses IF NOT EXISTS / procedure-based column checks
+-- Migrations 036–039 are intentionally excluded. Apply them only through the
+-- checksummed scripts/kakao-auth-rollout/apply-migrations.sh approval gate.
 -- =============================================================================
 
 -- Helper procedure: Add column only if it doesn't already exist
@@ -444,6 +446,8 @@ CREATE TABLE IF NOT EXISTS ALUMNI_PUSH_PREFERENCE (
     INDEX IDX_PUSH_PREFERENCE_MESSAGE (MESSAGE_ENABLED)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 036–039 intentionally not embedded; dedicated runner only.
+
 -- =============================================================================
 -- Cleanup: Drop helper procedures
 -- =============================================================================
@@ -503,4 +507,4 @@ SELECT 'WEO_VISIT_SUMMARY' AS chk, COUNT(*) AS found FROM information_schema.TAB
 SELECT 'USR_PHONE_PUBLIC default=N' AS chk, COUNT(*) AS found FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER' AND COLUMN_NAME='USR_PHONE_PUBLIC' AND COLUMN_DEFAULT='N';
 SELECT 'USR_EMAIL_PUBLIC default=N' AS chk, COUNT(*) AS found FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER' AND COLUMN_NAME='USR_EMAIL_PUBLIC' AND COLUMN_DEFAULT='N';
 
-SELECT '=== ALL MIGRATIONS APPLIED ===' AS status;
+SELECT '=== HISTORICAL AGGREGATE 001-035 APPLIED; 036-039 NOT APPLIED ===' AS status;

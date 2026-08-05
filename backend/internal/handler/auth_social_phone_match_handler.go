@@ -45,7 +45,7 @@ func (h *AuthHandler) SocialLinkPhoneMatch(w http.ResponseWriter, r *http.Reques
 	}
 	existing, err := h.memberSvc.FindMemberByPhone(phone)
 	if err != nil {
-		h.logger.Error().Err(err).Str("phone", phone).Msg("social phone-match: lookup failed")
+		h.logger.Error().Err(err).Msg("social phone-match: lookup failed")
 		respondError(w, http.StatusInternalServerError, "LOOKUP_FAILED", "회원 조회에 실패했습니다")
 		return
 	}
@@ -55,7 +55,7 @@ func (h *AuthHandler) SocialLinkPhoneMatch(w http.ResponseWriter, r *http.Reques
 	}
 	profile, err := h.profileSvc.GetProfile(existing.USRSeq)
 	if err != nil {
-		h.logger.Error().Err(err).Int("usrSeq", existing.USRSeq).Msg("social phone-match: profile fetch failed")
+		h.logger.Error().Err(err).Msg("social phone-match: profile fetch failed")
 		respondError(w, http.StatusInternalServerError, "PROFILE_FAILED", "회원 프로필 조회에 실패했습니다")
 		return
 	}

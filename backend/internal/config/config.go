@@ -19,6 +19,7 @@ type Config struct {
 	EasyPay        EasyPayConfig
 	SMTP           SMTPConfig
 	DebugAgent     DebugAgentConfig
+	Maintenance    MaintenanceConfig
 	PGAuditLogPath string
 	Environment    string // "dev" exposes manual subscription billing trigger; "prod" hides it
 	VisitIPSalt    string
@@ -53,6 +54,13 @@ type ServerConfig struct {
 	AllowedOrigin   string
 	SiteBaseURL     string
 	ShutdownTimeout time.Duration
+}
+
+// MaintenanceConfig controls the shared write-freeze sentinel and smoke proof.
+type MaintenanceConfig struct {
+	SentinelPath      string
+	SmokeProofSHA256  string
+	SmokeAllowedPaths []string
 }
 
 // IsSecure returns true when the allowed origin uses HTTPS.
@@ -204,6 +212,11 @@ func Load() *Config {
 			Secret:      getEnv("DEBUG_AGENT_SECRET", ""),
 			Environment: getEnv("DEBUG_AGENT_ENVIRONMENT", getEnv("ENV", "dev")),
 		},
+		Maintenance: MaintenanceConfig{
+			SentinelPath:      getEnv("MAINTENANCE_SENTINEL_PATH", "/run/alumni/maintenance"),
+			SmokeProofSHA256:  getEnv("MAINTENANCE_SMOKE_PROOF_SHA256", ""),
+			SmokeAllowedPaths: getCSVEnv("MAINTENANCE_SMOKE_ALLOWED_PATHS"),
+		},
 		PGAuditLogPath: getEnv("PG_AUDIT_LOG_PATH", "/var/logs/pg/pg-audit.log"),
 		Environment:    getEnv("ENV", "prod"),
 		VisitIPSalt:    getEnv("VISIT_IP_SALT", ""),
@@ -260,6 +273,21 @@ func getDurationEnvWithFallback(primaryKey, fallbackKey string, fallback time.Du
 		}
 	}
 	return getDurationEnv(fallbackKey, fallback)
+}
+
+func getCSVEnv(key string) []string {
+	raw := getEnv(key, "")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
 }
 
 func normalizePushEnvironment(env string) string {

@@ -2,6 +2,7 @@
 package service
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -12,13 +13,19 @@ import (
 	"github.com/rs/zerolog"
 )
 
+type KakaoAuthClient interface {
+	AuthenticateByCode(context.Context, string, string) (kakao.AuthResult, error)
+	AuthenticateByAccessToken(context.Context, string) (kakao.AuthResult, error)
+	Logout(context.Context, string) error
+}
+
 // AuthService handles authentication, session management, and Kakao OAuth integration.
 type AuthService struct {
 	repo        *repository.AuthRepository
 	sessionRepo *repository.SessionRepository
 	cfg         *config.Config
 	cache       *cache.Cache
-	kakaoClient *kakao.Client
+	kakaoClient KakaoAuthClient
 	httpClient  *http.Client
 	logger      zerolog.Logger
 }
@@ -29,7 +36,7 @@ func NewAuthService(
 	sessionRepo *repository.SessionRepository,
 	cfg *config.Config,
 	cacheStore *cache.Cache,
-	kakaoClient *kakao.Client,
+	kakaoClient KakaoAuthClient,
 	logger zerolog.Logger,
 ) *AuthService {
 	client := &http.Client{Timeout: 10 * time.Second}

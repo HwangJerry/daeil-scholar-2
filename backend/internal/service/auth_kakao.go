@@ -75,6 +75,6 @@ func (s *AuthService) LogoutKakao(usrSeq int) error {
 	if err := s.kakaoClient.Logout(context.Background(), token); err != nil {
 		return fmt.Errorf("kakao logout request failed: %w", err)
 	}
-	s.logger.Info().Int("usrSeq", usrSeq).Msg("kakao access token invalidated")
+	s.logger.Info().Msg("kakao access token invalidated")
 	return nil
 }

@@ -57,11 +57,11 @@ func (s *PasswordResetService) RequestReset(req model.PasswordResetRequest) erro
 
 	user, err := s.repo.FindMemberByEmail(req.Email)
 	if err != nil {
-		s.logger.Error().Err(err).Str("email", req.Email).Msg("password reset: email lookup failed")
+		s.logger.Error().Msg("password reset: email lookup failed")
 		return nil
 	}
 	if user == nil {
-		s.logger.Debug().Str("email", req.Email).Msg("password reset: no member found for email")
+		s.logger.Debug().Msg("password reset: no member found for email")
 		return nil
 	}
 
@@ -74,7 +74,7 @@ func (s *PasswordResetService) RequestReset(req model.PasswordResetRequest) erro
 	expiresAt := time.Now().Add(resetTokenExpiry)
 
 	if err := s.repo.InsertToken(user.USRSeq, token, expiresAt); err != nil {
-		s.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("password reset: token insert failed")
+		s.logger.Error().Err(err).Msg("password reset: token insert failed")
 		return nil
 	}
 
@@ -95,9 +95,9 @@ func (s *PasswordResetService) RequestReset(req model.PasswordResetRequest) erro
 	}
 	select {
 	case s.emailQueue <- msg:
-		s.logger.Info().Str("email", req.Email).Msg("password reset email enqueued")
+		s.logger.Info().Msg("password reset email enqueued")
 	default:
-		s.logger.Warn().Str("email", req.Email).Msg("password reset: email queue full")
+		s.logger.Warn().Msg("password reset: email queue full")
 	}
 
 	return nil
@@ -125,7 +125,7 @@ func (s *PasswordResetService) ConfirmReset(req model.PasswordResetConfirm) erro
 
 	hashed := MysqlNativePassword(req.NewPassword)
 	if err := s.repo.UpdatePassword(tokenRow.USRSeq, hashed); err != nil {
-		s.logger.Error().Err(err).Int("usrSeq", tokenRow.USRSeq).Msg("password reset: password update failed")
+		s.logger.Error().Err(err).Msg("password reset: password update failed")
 		return errors.New("비밀번호 변경에 실패했습니다")
 	}
 

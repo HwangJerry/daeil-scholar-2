@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dflh-saf/backend/internal/config"
+	"github.com/dflh-saf/backend/internal/maintenance"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
@@ -35,14 +36,15 @@ type EasyPayBilling interface {
 // SubscriptionBillingJob charges active recurring subscriptions whose BILL_DAY matches today.
 // Each subscription is processed in its own transaction; one failure does not roll back others.
 type SubscriptionBillingJob struct {
-	subRepo    *repository.SubscriptionRepository
-	donateRepo *repository.DonateRepository
-	epSvc      EasyPayBilling
-	pgAudit    *service.PGAuditLogger
-	cache      *cache.Cache
-	cfg        config.EasyPayConfig
-	logger     zerolog.Logger
-	cancel     context.CancelFunc
+	subRepo         *repository.SubscriptionRepository
+	donateRepo      *repository.DonateRepository
+	epSvc           EasyPayBilling
+	pgAudit         *service.PGAuditLogger
+	cache           *cache.Cache
+	cfg             config.EasyPayConfig
+	maintenanceGate *maintenance.Gate
+	logger          zerolog.Logger
+	cancel          context.CancelFunc
 }
 
 // NewSubscriptionBillingJob wires the daily billing job.
@@ -53,16 +55,18 @@ func NewSubscriptionBillingJob(
 	pgAudit *service.PGAuditLogger,
 	cacheStore *cache.Cache,
 	cfg config.EasyPayConfig,
+	maintenanceGate *maintenance.Gate,
 	logger zerolog.Logger,
 ) *SubscriptionBillingJob {
 	return &SubscriptionBillingJob{
-		subRepo:    subRepo,
-		donateRepo: donateRepo,
-		epSvc:      epSvc,
-		pgAudit:    pgAudit,
-		cache:      cacheStore,
-		cfg:        cfg,
-		logger:     logger,
+		subRepo:         subRepo,
+		donateRepo:      donateRepo,
+		epSvc:           epSvc,
+		pgAudit:         pgAudit,
+		cache:           cacheStore,
+		cfg:             cfg,
+		maintenanceGate: maintenanceGate,
+		logger:          logger,
 	}
 }
 
@@ -107,6 +111,9 @@ func (j *SubscriptionBillingJob) Stop() {
 // admin manual-trigger endpoint. Returns the count of attempted-and-succeeded charges plus
 // the slice of per-subscription errors (one entry per failing row).
 func (j *SubscriptionBillingJob) RunOnce(now time.Time) (int, []error) {
+	if j.maintenanceGate.Active() {
+		return 0, []error{maintenance.ErrWritesFrozen}
+	}
 	billDay := now.Day()
 	if billDay > 28 {
 		billDay = 28
