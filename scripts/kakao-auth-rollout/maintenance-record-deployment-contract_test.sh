@@ -22,12 +22,14 @@ if [[ ${1:-} == is-active && ${2:-} == --quiet ]]; then
   [[ ${FAKE_SERVICE_ACTIVE:-1} == 1 ]]
   exit
 fi
-if [[ ${1:-} == show && ${2:-} == --property && ${3:-} == MainPID && ${4:-} == --value ]]; then
-  printf '%s\n' "${FAKE_MAIN_PID:-731}"
+if [[ ${1:-} == show && ${2:-} == --property && ${3:-} == MainPID ]]; then
+  [[ ${4:-} != --value ]] || exit 64
+  printf 'MainPID=%s\n' "${FAKE_MAIN_PID:-731}"
   exit 0
 fi
-if [[ ${1:-} == show && ${2:-} == --property && ${3:-} == ExecStart && ${4:-} == --value ]]; then
-  printf '{ path=%s ; argv[]=%s ; }\n' "${FAKE_EXEC_START:-/unexpected}" "${FAKE_EXEC_START:-/unexpected}"
+if [[ ${1:-} == show && ${2:-} == --property && ${3:-} == ExecStart ]]; then
+  [[ ${4:-} != --value ]] || exit 64
+  printf 'ExecStart={ path=%s ; argv[]=%s ; }\n' "${FAKE_EXEC_START:-/unexpected}" "${FAKE_EXEC_START:-/unexpected}"
   exit 0
 fi
 exit 2

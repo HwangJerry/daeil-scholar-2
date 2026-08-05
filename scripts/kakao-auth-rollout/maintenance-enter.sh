@@ -30,6 +30,14 @@ fail() {
   exit 1
 }
 
+systemctl_property() {
+  local property=$1 service=$2 output
+  output=$(systemctl show --property "$property" "$service") || return 1
+  [[ $(grep -c "^${property}=" <<< "$output") == 1 ]] || return 1
+  [[ $output == "${property}="* && $output != *$'\n'* ]] || return 1
+  printf '%s' "${output#*=}"
+}
+
 [[ ${MAINTENANCE_ENTER_APPROVED:-0} == 1 ]] || fail approval_required
 [[ ${MAINTENANCE_HTTPD_RESTART_APPROVED:-0} == 1 ]] || fail httpd_restart_approval_required
 [[ $SENTINEL == /* ]] || fail sentinel_path_must_be_absolute
@@ -57,12 +65,12 @@ backend_stopped=1
 if systemctl is-active --quiet "$SERVICE"; then
   fail backend_service_still_active
 fi
-main_pid=$(systemctl show --property MainPID --value "$SERVICE") || fail backend_main_pid_unavailable
+main_pid=$(systemctl_property MainPID "$SERVICE") || fail backend_main_pid_unavailable
 [[ $main_pid =~ ^[0-9]+$ && $main_pid == 0 ]] || fail backend_process_not_drained
 
 systemctl stop "$HTTPD_SERVICE" || fail httpd_stop_failed
 httpd_stopped=1
-httpd_main_pid=$(systemctl show --property MainPID --value "$HTTPD_SERVICE") || fail httpd_main_pid_unavailable
+httpd_main_pid=$(systemctl_property MainPID "$HTTPD_SERVICE") || fail httpd_main_pid_unavailable
 [[ $httpd_main_pid =~ ^[0-9]+$ && $httpd_main_pid == 0 ]] || fail legacy_php_process_not_drained
 
 install -d -m 0755 "$(dirname "$SENTINEL")"

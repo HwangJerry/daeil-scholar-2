@@ -46,6 +46,14 @@ file_identity() {
 	stat -L -c '%d:%i' "$1" 2>/dev/null || stat -L -f '%d:%i' "$1"
 }
 
+systemctl_property() {
+	local property=$1 service=$2 output
+	output=$(systemctl show --property "$property" "$service") || return 1
+	[[ $(grep -c "^${property}=" <<< "$output") == 1 ]] || return 1
+	[[ $output == "${property}="* && $output != *$'\n'* ]] || return 1
+	printf '%s' "${output#*=}"
+}
+
 has_exact_line_once() {
   local path=$1 expected=$2 count
   count=$(grep -Fxc "$expected" "$path" || true)
@@ -104,9 +112,9 @@ runtime_matches_deployment_evidence() {
 	artifact_sha=$(sed -n 's/^artifact_sha256=//p' "$path")
 	[[ $recorded_pid =~ ^[1-9][0-9]*$ && $artifact_sha =~ ^[a-f0-9]{64}$ ]] || return 1
 	[[ $BINARY == /* && -f $BINARY && ! -L $BINARY && -x $BINARY ]] || return 1
-	current_pid=$(systemctl show --property MainPID --value "$SERVICE") || return 1
+	current_pid=$(systemctl_property MainPID "$SERVICE") || return 1
 	[[ $current_pid == "$recorded_pid" ]] || return 1
-	exec_start=$(systemctl show --property ExecStart --value "$SERVICE") || return 1
+	exec_start=$(systemctl_property ExecStart "$SERVICE") || return 1
 	[[ " $exec_start " == *" path=$BINARY ;"* ]] || return 1
 	running_executable="$PROC_ROOT/$current_pid/exe"
 	[[ -e $running_executable ]] || return 1

@@ -37,6 +37,14 @@ file_owner_uid() {
   stat -c '%u' "$1" 2>/dev/null || stat -f '%u' "$1"
 }
 
+systemctl_property() {
+  local property=$1 service=$2 output
+  output=$(systemctl show --property "$property" "$service") || return 1
+  [[ $(grep -c "^${property}=" <<< "$output") == 1 ]] || return 1
+  [[ $output == "${property}="* && $output != *$'\n'* ]] || return 1
+  printf '%s' "${output#*=}"
+}
+
 [[ ${MAINTENANCE_DEPLOY_EVIDENCE_APPROVED:-0} == 1 ]] || fail approval_required
 [[ $SENTINEL == /* && $BINARY == /* && $ROLLBACK_PATH == /* && $EVIDENCE_OUTPUT == /* ]] || fail paths_must_be_absolute
 expected_owner_uid=$(id -u)
@@ -66,9 +74,9 @@ actual_sha256=$(sha256_file "$BINARY") || fail backend_artifact_digest_failed
 rollback_sha256=$(sha256_file "$ROLLBACK_PATH") || fail rollback_artifact_digest_failed
 [[ $rollback_sha256 =~ ^[a-f0-9]{64}$ ]] || fail rollback_artifact_digest_invalid
 systemctl is-active --quiet "$SERVICE" || fail backend_service_not_active
-main_pid=$(systemctl show --property MainPID --value "$SERVICE") || fail backend_main_pid_unavailable
+main_pid=$(systemctl_property MainPID "$SERVICE") || fail backend_main_pid_unavailable
 [[ $main_pid =~ ^[0-9]+$ && $main_pid -gt 0 ]] || fail backend_main_pid_invalid
-exec_start=$(systemctl show --property ExecStart --value "$SERVICE") || fail backend_exec_start_unavailable
+exec_start=$(systemctl_property ExecStart "$SERVICE") || fail backend_exec_start_unavailable
 [[ " $exec_start " == *" path=$BINARY ;"* ]] || fail backend_exec_start_mismatch
 running_executable="$PROC_ROOT/$main_pid/exe"
 [[ -e $running_executable ]] || fail backend_running_executable_unavailable

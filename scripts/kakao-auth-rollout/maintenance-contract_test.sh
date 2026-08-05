@@ -116,19 +116,21 @@ if [[ ${1:-} == is-active ]]; then
   [[ ${FAKE_SERVICE_ACTIVE:-0} == 1 ]] && exit 0
   exit 3
 fi
-if [[ ${1:-} == show && ${2:-} == --property && ${3:-} == MainPID && ${4:-} == --value ]]; then
+if [[ ${1:-} == show && ${2:-} == --property && ${3:-} == MainPID ]]; then
+  [[ ${4:-} != --value ]] || exit 64
   if [[ ${FAKE_SENTINEL_MUST_BE_ABSENT:-0} == 1 && -e ${FAKE_SENTINEL_PATH:-} ]]; then
     exit 4
   fi
   if [[ -n ${FAKE_MAIN_PID_FILE:-} ]]; then
-    cat "$FAKE_MAIN_PID_FILE"
+    printf 'MainPID=%s\n' "$(<"$FAKE_MAIN_PID_FILE")"
   else
-    printf '%s\n' "${FAKE_MAIN_PID:-0}"
+    printf 'MainPID=%s\n' "${FAKE_MAIN_PID:-0}"
   fi
   exit 0
 fi
-if [[ ${1:-} == show && ${2:-} == --property && ${3:-} == ExecStart && ${4:-} == --value ]]; then
-  printf '{ path=%s ; argv[]=%s ; }\n' "${FAKE_EXEC_START:-/unexpected}" "${FAKE_EXEC_START:-/unexpected}"
+if [[ ${1:-} == show && ${2:-} == --property && ${3:-} == ExecStart ]]; then
+  [[ ${4:-} != --value ]] || exit 64
+  printf 'ExecStart={ path=%s ; argv[]=%s ; }\n' "${FAKE_EXEC_START:-/unexpected}" "${FAKE_EXEC_START:-/unexpected}"
   exit 0
 fi
 exit 2
@@ -225,7 +227,7 @@ grep -Fq 'file_mode "$SENTINEL") == 644' "$RECORDER" ||
 grep -Fq 'expected_owner_uid=0' "$RECORDER" ||
   fail "deployment recorder does not require root-owned canonical sentinel"
 grep -Fxq 'stop httpd' "$SYSTEMCTL_LOG" || fail "maintenance enter did not stop Apache to drain PHP"
-grep -Fxq 'show --property MainPID --value httpd' "$SYSTEMCTL_LOG" || fail "maintenance enter did not verify Apache process drain"
+grep -Fxq 'show --property MainPID httpd' "$SYSTEMCTL_LOG" || fail "maintenance enter did not verify Apache process drain"
 grep -Fxq 'start httpd' "$SYSTEMCTL_LOG" || fail "maintenance enter did not restart Apache gate"
 GENERATION=$(sed -n 's/^generation=//p' "$SENTINEL")
 [[ $GENERATION =~ ^[a-f0-9]{32}$ ]] || fail "maintenance enter did not create a generation ID"
