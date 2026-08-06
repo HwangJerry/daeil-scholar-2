@@ -95,6 +95,21 @@ ssh_remote() {
   fi
 }
 
+parse_backend_rollback_result() {
+  local response=$1
+  if [[ $response == 'NONE NONE' ]]; then
+    BACKEND_ROLLBACK_PATH=NONE
+    BACKEND_ROLLBACK_SHA256=NONE
+    return 0
+  fi
+  if [[ $response =~ ^(/app/backend/\.server\.rollback\.[A-Za-z0-9]+)\ ([a-f0-9]{64})$ ]]; then
+    BACKEND_ROLLBACK_PATH=${BASH_REMATCH[1]}
+    BACKEND_ROLLBACK_SHA256=${BASH_REMATCH[2]}
+    return 0
+  fi
+  return 1
+}
+
 verify_remote_maintenance_active() {
   local target=$1
   ssh_remote "$target" 'bash -s' <<'REMOTE_MAINTENANCE_GUARD'
@@ -161,7 +176,7 @@ if [[ $RECORD_MAINTENANCE_DEPLOY_EVIDENCE == 1 ]]; then
     echo "✗ Current source revision does not match the approved revision." >&2
     exit 1
   }
-  [[ -z $(git status --porcelain) ]] || {
+  [[ $PREFLIGHT_ONLY == true || -z $(git status --porcelain) ]] || {
     echo "✗ Evidence-enabled deployment requires a clean worktree." >&2
     exit 1
   }
@@ -508,6 +523,8 @@ if [[ $RECORD_MAINTENANCE_DEPLOY_EVIDENCE == 1 ]]; then
   }
 fi
 
+BACKEND_ROLLBACK_PATH=NONE
+BACKEND_ROLLBACK_SHA256=NONE
 if [[ "${BUILD_BACKEND}" == "true" ]]; then
   echo "=== Uploading Go binary ==="
   BACKEND_ARTIFACT_SHA256=$(shasum -a 256 dist/server | cut -d ' ' -f 1)
@@ -526,32 +543,45 @@ if [[ "${BUILD_BACKEND}" == "true" ]]; then
        trap 'rm -f \"\$staged\"' EXIT; cat > \"\$staged\"; chmod 0755 \"\$staged\"; \
        mv -fT \"\$staged\" /app/backend/backfill; trap - EXIT" < dist/backfill
   fi
-  BACKEND_ROLLBACK_PATH=$(
+  BACKEND_ROLLBACK_RESULT=$(
     ssh "${SSH_OPTS[@]}" "${TARGET}" \
       "set -euo pipefail; umask 077; \
        if [[ ${RECORD_MAINTENANCE_DEPLOY_EVIDENCE} == 1 ]]; then \
          sentinel=/run/alumni/maintenance; mode=\$(stat -c '%a' \"\$sentinel\" 2>/dev/null) || { echo maintenance_guard_failed_before_backend_replace >&2; exit 1; }; \
          owner=\$(stat -c '%u' \"\$sentinel\" 2>/dev/null) || { echo maintenance_guard_failed_before_backend_replace >&2; exit 1; }; \
          [[ -f \"\$sentinel\" && ! -L \"\$sentinel\" && \"\$mode\" == 644 && \"\$owner\" == 0 && \$(grep -Fxc 'state=active' \"\$sentinel\" || true) == 1 && \$(grep -Ec '^generation=[a-f0-9]{32}$' \"\$sentinel\" || true) == 1 ]] || { echo maintenance_guard_failed_before_backend_replace >&2; exit 1; }; \
+         ! sudo systemctl is-active --quiet alumni-backend || { echo backend_guard_failed_before_backend_replace >&2; exit 1; }; \
+         backend_pid_output=\$(sudo systemctl show --property MainPID alumni-backend) || { echo backend_guard_failed_before_backend_replace >&2; exit 1; }; \
+         [[ \$backend_pid_output == MainPID=0 && \$backend_pid_output != *\$'\n'* ]] || { echo backend_guard_failed_before_backend_replace >&2; exit 1; }; \
        fi; \
        staged=\$(mktemp /app/backend/.server.new.XXXXXX); \
        trap 'rm -f \"\$staged\"' EXIT; cat > \"\$staged\"; \
        actual=\$(sha256sum \"\$staged\" | cut -d ' ' -f 1); \
        [[ \"\$actual\" == '${BACKEND_ARTIFACT_SHA256}' ]] || exit 41; \
-       rollback=NONE; \
+       rollback=NONE; rollback_sha=NONE; \
        if [[ -e /app/backend/server ]]; then \
          [[ -f /app/backend/server && ! -L /app/backend/server ]] || exit 42; \
          rollback=\$(mktemp /app/backend/.server.rollback.XXXXXX); \
          cp -p -- /app/backend/server \"\$rollback\"; \
+         rollback_sha=\$(sha256sum \"\$rollback\" | cut -d ' ' -f 1); \
+         [[ \$rollback_sha =~ ^[a-f0-9]{64}$ ]] || exit 43; \
        fi; \
-       chmod 0755 \"\$staged\"; mv -fT \"\$staged\" /app/backend/server; \
-       trap - EXIT; printf '%s\\n' \"\$rollback\"" < dist/server
+       chmod 0755 \"\$staged\"; \
+       if [[ ${RECORD_MAINTENANCE_DEPLOY_EVIDENCE} == 1 ]]; then \
+         sentinel=/run/alumni/maintenance; mode=\$(stat -c '%a' \"\$sentinel\" 2>/dev/null) || { echo maintenance_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
+         owner=\$(stat -c '%u' \"\$sentinel\" 2>/dev/null) || { echo maintenance_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
+         [[ -f \"\$sentinel\" && ! -L \"\$sentinel\" && \"\$mode\" == 644 && \"\$owner\" == 0 && \$(grep -Fxc 'state=active' \"\$sentinel\" || true) == 1 && \$(grep -Ec '^generation=[a-f0-9]{32}$' \"\$sentinel\" || true) == 1 ]] || { echo maintenance_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
+         ! sudo systemctl is-active --quiet alumni-backend || { echo backend_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
+         backend_pid_output=\$(sudo systemctl show --property MainPID alumni-backend) || { echo backend_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
+         [[ \$backend_pid_output == MainPID=0 && \$backend_pid_output != *\$'\n'* ]] || { echo backend_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
+       fi; \
+       mv -fT \"\$staged\" /app/backend/server; \
+       trap - EXIT; printf '%s %s\\n' \"\$rollback\" \"\$rollback_sha\"" < dist/server
   )
-  [[ $BACKEND_ROLLBACK_PATH == NONE ||
-     $BACKEND_ROLLBACK_PATH =~ ^/app/backend/\.server\.rollback\.[A-Za-z0-9]+$ ]] || {
+  if ! parse_backend_rollback_result "$BACKEND_ROLLBACK_RESULT"; then
     echo "✗ Remote backend rollback artifact is invalid." >&2
     exit 1
-  }
+  fi
 fi
 
 restore_backend_without_restart() {
@@ -560,9 +590,13 @@ restore_backend_without_restart() {
     "set -euo pipefail; \
      sudo systemctl stop alumni-backend; \
      [[ -f '${BACKEND_ROLLBACK_PATH}' && ! -L '${BACKEND_ROLLBACK_PATH}' ]]; \
+     actual_rollback=\$(sha256sum '${BACKEND_ROLLBACK_PATH}' | cut -d ' ' -f 1); \
+     [[ \$actual_rollback == '${BACKEND_ROLLBACK_SHA256}' ]] || { echo rollback_checksum_mismatch >&2; exit 1; }; \
      mv -fT '${BACKEND_ROLLBACK_PATH}' /app/backend/server; chmod 0755 /app/backend/server; \
      ! sudo systemctl is-active --quiet alumni-backend; \
-     pid=\$(sudo systemctl show --property MainPID --value alumni-backend); [[ \$pid == 0 ]]"
+     pid_output=\$(sudo systemctl show --property MainPID alumni-backend); \
+     [[ \$pid_output == MainPID=* && \$pid_output != *\$'\n'* ]]; \
+     pid=\${pid_output#MainPID=}; [[ \$pid == 0 ]]"
 }
 
 restore_backend_for_failed_restart() {
@@ -620,7 +654,7 @@ fi
 if [[ $RECORD_MAINTENANCE_DEPLOY_EVIDENCE == 1 ]]; then
   echo "=== Recording generation-bound backend deployment evidence ==="
   if ! ssh "${SSH_OPTS[@]}" "${TARGET}" \
-    "sudo env MAINTENANCE_DEPLOY_EVIDENCE_APPROVED=1 BACKEND_EXPECTED_SHA256=${BACKEND_ARTIFACT_SHA256} BACKEND_ROLLBACK_PATH=${BACKEND_ROLLBACK_PATH} /bin/bash -s" \
+    "sudo env MAINTENANCE_DEPLOY_EVIDENCE_APPROVED=1 BACKEND_EXPECTED_SHA256=${BACKEND_ARTIFACT_SHA256} BACKEND_ROLLBACK_PATH=${BACKEND_ROLLBACK_PATH} BACKEND_ROLLBACK_EXPECTED_SHA256=${BACKEND_ROLLBACK_SHA256} /bin/bash -s" \
     < scripts/kakao-auth-rollout/maintenance-record-deployment.sh; then
     if ! restore_backend_without_restart; then
       echo "✗ Backend evidence and rollback recovery both failed; backend state is uncertain and maintenance must remain active." >&2

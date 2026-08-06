@@ -10,6 +10,33 @@ fail() {
   exit 1
 }
 
+ROLLBACK_PARSER=$(sed -n '/^parse_backend_rollback_result()/,/^}/p' "$DEPLOY")
+[[ -n $ROLLBACK_PARSER ]] || fail "backend rollback response parser is missing"
+eval "$ROLLBACK_PARSER"
+
+parse_backend_rollback_result 'NONE NONE' || fail "canonical no-rollback response was rejected"
+[[ $BACKEND_ROLLBACK_PATH == NONE && $BACKEND_ROLLBACK_SHA256 == NONE ]] ||
+  fail "canonical no-rollback response parsed incorrectly"
+VALID_ROLLBACK_PATH=/app/backend/.server.rollback.Abc123
+VALID_ROLLBACK_SHA=$(printf 'a%.0s' {1..64})
+parse_backend_rollback_result "$VALID_ROLLBACK_PATH $VALID_ROLLBACK_SHA" ||
+  fail "canonical rollback response was rejected"
+[[ $BACKEND_ROLLBACK_PATH == "$VALID_ROLLBACK_PATH" && $BACKEND_ROLLBACK_SHA256 == "$VALID_ROLLBACK_SHA" ]] ||
+  fail "canonical rollback response parsed incorrectly"
+for malformed in \
+  ' NONE NONE' \
+  'NONE NONE ' \
+  'NONE  NONE' \
+  $'NONE\tNONE' \
+  $'NONE NONE\nNONE NONE' \
+  'NONE NONE EXTRA' \
+  "/app/backend/.server.rollback.Abc123  $VALID_ROLLBACK_SHA" \
+  "/app/backend/.server.rollback.Abc123 $VALID_ROLLBACK_SHA "; do
+  if parse_backend_rollback_result "$malformed"; then
+    fail "noncanonical rollback response was accepted"
+  fi
+done
+
 if grep -Eq 'UNIT_CONTENT|DB_PASS_VAL|Environment=\\?"?DB_PASSWORD' "$DEPLOY"; then
   fail "deploy.sh still parses inline unit credentials or stores DB password locally"
 fi
@@ -78,6 +105,22 @@ if ! grep -Fq 'mv -fT' "$DEPLOY" || ! grep -Fq '/app/backend/server' "$DEPLOY"; 
 fi
 grep -Fq 'restore_backend_without_restart' "$DEPLOY" ||
   fail "backend failure path does not use the stopped rollback helper"
+grep -Fq 'BACKEND_ROLLBACK_SHA256' "$DEPLOY" ||
+  fail "backend rollback artifact is not bound to its creation-time SHA-256"
+if grep -Fq 'read -r BACKEND_ROLLBACK_PATH' "$DEPLOY"; then
+  fail "backend rollback result uses permissive IFS parsing"
+fi
+grep -Fq 'rollback_checksum_mismatch' "$DEPLOY" ||
+  fail "backend rollback recovery does not authenticate rollback bytes before restore"
+if grep -Fq -- 'systemctl show --property MainPID --value' "$DEPLOY"; then
+  fail "backend rollback recovery uses unsupported old-systemd --value filtering"
+fi
+# shellcheck disable=SC2016 # Match the literal remote-shell command substitution in deploy.sh.
+grep -Fq 'pid_output=\$(sudo systemctl show --property MainPID alumni-backend)' "$DEPLOY" ||
+  fail "backend rollback recovery does not read unfiltered MainPID metadata"
+# shellcheck disable=SC2016 # Match the literal escaped remote-shell variables in deploy.sh.
+grep -Fq '[[ \$pid_output == MainPID=* && \$pid_output != *\$' "$DEPLOY" ||
+  fail "backend rollback recovery does not require exactly one MainPID property line"
 grep -Fq 'restore_backend_for_failed_restart' "$DEPLOY" ||
   fail "ordinary deployment restart failure no longer restores service availability"
 grep -Fq "if [[ \$RECORD_MAINTENANCE_DEPLOY_EVIDENCE == 1 ]]" "$DEPLOY" ||
@@ -94,6 +137,25 @@ FIRST_UPLOAD_LINE=$(grep -n '=== Uploading' "$DEPLOY" | head -1 | cut -d: -f1)
   fail "evidence deploy does not verify maintenance before its first upload"
 grep -Fq 'maintenance_guard_failed_before_backend_replace' "$DEPLOY" ||
   fail "backend replacement is not coupled to a current maintenance guard"
+grep -Fq 'backend_guard_failed_before_backend_replace' "$DEPLOY" ||
+  fail "evidence deployment does not require a stopped backend immediately before replacement"
+BACKEND_GUARD_LINE=$(grep -nF 'backend_guard_failed_before_backend_replace' "$DEPLOY" | head -n 1 | cut -d: -f1)
+# shellcheck disable=SC2016 # Match the literal escaped remote-shell staging command in deploy.sh.
+SERVER_STAGE_REMOTE_LINE=$(grep -nF 'staged=\$(mktemp /app/backend/.server.new.XXXXXX)' "$DEPLOY" | head -n 1 | cut -d: -f1)
+[[ -n $BACKEND_GUARD_LINE && -n $SERVER_STAGE_REMOTE_LINE && $BACKEND_GUARD_LINE -lt $SERVER_STAGE_REMOTE_LINE ]] ||
+  fail "backend stopped-state guard does not precede server upload staging"
+grep -Fq 'backend_guard_failed_immediately_before_backend_replace' "$DEPLOY" ||
+  fail "backend stopped-state is not rechecked immediately before replacement"
+SECOND_BACKEND_GUARD_LINE=$(grep -nF 'backend_guard_failed_immediately_before_backend_replace' "$DEPLOY" | head -n 1 | cut -d: -f1)
+ROLLBACK_COPY_LINE=$(grep -nF 'cp -p -- /app/backend/server' "$DEPLOY" | head -n 1 | cut -d: -f1)
+# shellcheck disable=SC2016 # Match the literal remote $staged variable.
+STAGED_CHMOD_LINE=$(grep -nF 'chmod 0755 \"\$staged\"' "$DEPLOY" | tail -n 1 | cut -d: -f1)
+# shellcheck disable=SC2016 # Contract intentionally matches the literal remote $staged variable.
+SERVER_REPLACE_LINE=$(grep -nF 'mv -fT \"\$staged\" /app/backend/server' "$DEPLOY" | head -n 1 | cut -d: -f1)
+[[ -n $SECOND_BACKEND_GUARD_LINE && -n $ROLLBACK_COPY_LINE && -n $STAGED_CHMOD_LINE && -n $SERVER_REPLACE_LINE &&
+   $ROLLBACK_COPY_LINE -lt $STAGED_CHMOD_LINE && $STAGED_CHMOD_LINE -lt $SECOND_BACKEND_GUARD_LINE &&
+   $SECOND_BACKEND_GUARD_LINE -lt $SERVER_REPLACE_LINE ]] ||
+  fail "second backend guard is not immediate between rollback copy and replacement"
 RESTART_BLOCK=$(sed -n '/if ! ssh .*systemctl restart alumni-backend/,/fi/p' "$DEPLOY")
 [[ $(grep -Fc 'systemctl restart alumni-backend' <<< "$RESTART_BLOCK") == 1 ]] ||
   fail "backend restart failure can restart a sentinel-unaware rollback binary"
@@ -165,6 +227,21 @@ MIGRATION_LIST="$TMP/migrations.txt"
   cd "$ROOT/backend/migrations"
   printf '%s\n' [0-9][0-9][0-9]_*.sql | sort
 ) > "$MIGRATION_LIST"
+
+set +e
+EVIDENCE_PREFLIGHT_OUTPUT=$(
+  PATH="$TMP/bin:$PATH" \
+  FAKE_MIGRATION_LIST_FILE="$MIGRATION_LIST" \
+  RECORD_MAINTENANCE_DEPLOY_EVIDENCE=1 \
+  APPROVED_SOURCE_REVISION=$(git rev-parse HEAD) \
+  APPROVED_BACKEND_ARTIFACT_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  bash "$DEPLOY" fake-target --backend=true --frontend=false --preflight-only 2>&1
+)
+EVIDENCE_PREFLIGHT_STATUS=$?
+set -e
+[[ $EVIDENCE_PREFLIGHT_STATUS -eq 0 &&
+   $EVIDENCE_PREFLIGHT_OUTPUT == *'Preflight complete; no build, upload, restart, or reload performed'* ]] ||
+  fail "read-only evidence preflight is blocked by operational-root dirtiness"
 
 set +e
 INVALID_TARGET_OUTPUT=$(

@@ -7,6 +7,7 @@ CANONICAL_SENTINEL=/run/alumni/maintenance
 BINARY=${BACKEND_BINARY_PATH:-/app/backend/server}
 EXPECTED_SHA256=${BACKEND_EXPECTED_SHA256:-}
 ROLLBACK_PATH=${BACKEND_ROLLBACK_PATH:-}
+ROLLBACK_EXPECTED_SHA256=${BACKEND_ROLLBACK_EXPECTED_SHA256:-}
 EVIDENCE_OUTPUT=${BACKEND_DEPLOY_EVIDENCE_OUTPUT:-/run/alumni/backend-deployment.pass}
 SERVICE=${BACKEND_SERVICE:-alumni-backend}
 HEALTH_URL=${BACKEND_HEALTH_URL:-http://127.0.0.1:8080/api/health}
@@ -58,6 +59,7 @@ fi
 [[ -f $BINARY && ! -L $BINARY && -x $BINARY ]] || fail backend_binary_invalid
 [[ -f $ROLLBACK_PATH && ! -L $ROLLBACK_PATH && -x $ROLLBACK_PATH ]] || fail rollback_binary_invalid
 [[ $EXPECTED_SHA256 =~ ^[a-f0-9]{64}$ ]] || fail expected_artifact_digest_invalid
+[[ $ROLLBACK_EXPECTED_SHA256 =~ ^[a-f0-9]{64}$ ]] || fail expected_rollback_digest_invalid
 [[ $HEALTH_URL =~ ^http://(127\.0\.0\.1|localhost):[0-9]{1,5}/[A-Za-z0-9._~/-]+$ ]] || fail loopback_health_url_required
 [[ $EVIDENCE_OUTPUT != "$SENTINEL" && $EVIDENCE_OUTPUT != "$BINARY" &&
    $EVIDENCE_OUTPUT != "$ROLLBACK_PATH" && $ROLLBACK_PATH != "$BINARY" ]] || fail evidence_output_conflicts_with_input
@@ -73,6 +75,7 @@ actual_sha256=$(sha256_file "$BINARY") || fail backend_artifact_digest_failed
 [[ $actual_sha256 == "$EXPECTED_SHA256" ]] || fail backend_artifact_digest_mismatch
 rollback_sha256=$(sha256_file "$ROLLBACK_PATH") || fail rollback_artifact_digest_failed
 [[ $rollback_sha256 =~ ^[a-f0-9]{64}$ ]] || fail rollback_artifact_digest_invalid
+[[ $rollback_sha256 == "$ROLLBACK_EXPECTED_SHA256" ]] || fail rollback_artifact_digest_mismatch
 systemctl is-active --quiet "$SERVICE" || fail backend_service_not_active
 main_pid=$(systemctl_property MainPID "$SERVICE") || fail backend_main_pid_unavailable
 [[ $main_pid =~ ^[0-9]+$ && $main_pid -gt 0 ]] || fail backend_main_pid_invalid

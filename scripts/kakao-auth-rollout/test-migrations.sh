@@ -11,16 +11,38 @@ POSTCHECK_FILE="${ROOT_DIR}/scripts/kakao-auth-rollout/postcheck.sql"
 CASE="${1:-037-production-shape}"
 CONTAINER="hermes-kakao-migrations-${$}"
 DATABASE="kakao_auth_test"
+PASS_CASE=
 
-cleanup() {
+cleanup_resources() {
+  local status=0
+  local matches=
+  matches=$(docker ps -aq --filter "name=^/${CONTAINER}$") || return 125
+  if [[ -n ${matches} ]]; then
+    docker rm -f "${CONTAINER}" >/dev/null 2>&1 || status=1
+  fi
+  matches=$(docker ps -aq --filter "name=^/${CONTAINER}$") || return 125
+  if [[ -n ${matches} ]]; then
+    status=1
+  fi
+  return "${status}"
+}
+
+on_exit() {
   local status=$?
+  local cleanup_status=0
+  trap - EXIT INT TERM
   if [[ ${status} -ne 0 ]]; then
     docker logs --tail 80 "${CONTAINER}" >&2 2>/dev/null || true
   fi
-  docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
-  return "${status}"
+  cleanup_resources || cleanup_status=$?
+  if [[ ${cleanup_status} -ne 0 ]]; then
+    exit 125
+  fi
+  exit "${status}"
 }
-trap cleanup EXIT INT TERM
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 trap 'printf "FAIL line=%s command=%s\n" "${LINENO}" "${BASH_COMMAND}" >&2' ERR
 
 fail() {
@@ -121,7 +143,7 @@ test_037_production_shape() {
   assert_query "InnoDB" "SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER_SOCIAL'"
   assert_query "2" "SELECT COUNT(*) FROM WEO_MEMBER_SOCIAL"
 
-  printf 'PASS case=037-production-shape mariadb=%s\n' "$(mysql_exec -e 'SELECT VERSION()')"
+  PASS_CASE="037-production-shape mariadb=$(mysql_exec -e 'SELECT VERSION()')"
 }
 
 test_038_reapply_warnings() {
@@ -130,7 +152,7 @@ test_038_reapply_warnings() {
   mysql_file "${DATABASE}" "${MIGRATIONS_DIR}/037_harden_member_social_links.sql"
   mysql_file "${DATABASE}" "${MIGRATIONS_DIR}/038_create_auth_principal_tables.sql"
   assert_no_warnings_file "${DATABASE}" "${MIGRATIONS_DIR}/038_create_auth_principal_tables.sql"
-  printf 'PASS case=038-reapply-warnings warnings=zero\n'
+  PASS_CASE='038-reapply-warnings warnings=zero'
 }
 
 test_all() {
@@ -191,7 +213,7 @@ test_all() {
   assert_query "enum('Y','N')" "SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER_SOCIAL' AND COLUMN_NAME='NMS_STATUS'"
   assert_query "0" "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_ADMIN_ROLE'"
 
-  printf 'PASS case=all clean=036-039 reapply=036-039 rollback=atomic fail_closed=037 postcheck=zero\n'
+  PASS_CASE='all clean=036-039 reapply=036-039 rollback=atomic fail_closed=037 postcheck=zero'
 }
 
 case "${CASE}" in
@@ -200,3 +222,9 @@ case "${CASE}" in
   all) test_all ;;
   *) fail "unknown case: ${CASE}" ;;
 esac
+
+cleanup_status=0
+cleanup_resources || cleanup_status=$?
+trap - EXIT INT TERM
+[[ ${cleanup_status} -eq 0 ]] || exit 125
+printf 'PASS case=%s\n' "${PASS_CASE}"
