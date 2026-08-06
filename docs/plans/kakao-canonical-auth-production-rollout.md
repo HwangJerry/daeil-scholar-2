@@ -12,6 +12,8 @@
 > Post-generation Whole-Seed approval recorded at: `2026-08-04T07:36:50+09:00`
 > Supplemental decisions: `~/.ouroboros/decisions/interview_20260803_050358.md`
 
+> **2026-08-06 T90 approval amendment:** 사용자는 T90 production 실행을 `read-only preflight → backend deployment → controlled smoke → maintenance release` 네 단계로 분리하고, 각 단계가 이전 단계 PASS와 별도의 exact-command 명시 승인을 요구하도록 확정했다. 이 amendment는 아래의 single-gate/automatic-release 표현을 대체한다. Deployment 또는 smoke PASS만으로 다음 단계가 자동 승인되지 않으며, release는 deployment와 full smoke가 모두 PASS한 뒤에도 별도 승인을 받아야 한다.
+
 ## 0. 문서 사용 규칙
 
 이 문서는 production push/outbox를 보존하면서 Kakao mobile auth를 canonical 계약으로 전환하는 전체 실행 기준이다. 이 문서의 존재는 DB mutation, commit, deployment 또는 mobile channel upload 승인이 아니다.
@@ -60,8 +62,10 @@ unlinked identity
 - Clean commit 기반 artifact와 deployment manifest의 provenance/checksum 검증 PASS.
 - Full logical DB dump, checksum, off-host 보호 사본, 격리 restore 검증 PASS.
 - 별도 승인 후 production migration `036 → 037 → 038 → 039`와 단계별 post-check PASS.
-- 별도 승인 후 backend deployment와 server-side smoke PASS.
-- Deployment와 smoke가 모두 PASS한 경우에만 maintenance write 차단 자동 해제.
+- 별도 승인된 production read-only preflight PASS.
+- 별도 승인 후 backend deployment PASS.
+- 별도 승인 후 server-side smoke PASS.
+- Deployment와 smoke가 모두 PASS하고 별도 release 승인을 받은 경우에만 maintenance write 차단 해제.
 - 별도 승인 후 Play Console 내부 테스트 Android release와 TestFlight iOS release E2E PASS.
 - Maintenance 해제 직후 시작한 24시간 push/outbox 관찰 PASS.
 - Rollout 기인 데이터 유실, 중복 발송, stuck `PROCESSING`, 예기치 않은 `DEAD`, worker 중단, 구조적 Android/iOS push 실패가 0건.
@@ -179,7 +183,7 @@ DB에는 raw continuation token 또는 provider access token을 저장하지 않
 | T60 | [Immutable artifacts](#t60) | Review, approved clean commits, checksums |
 | T70 | [Backup/restore](#t70) | Production preflight와 isolated restore |
 | T80 | [DB migration](#t80) | 승인된 036→039 production apply |
-| T90 | [Backend rollout](#t90) | Deploy, smoke, automatic maintenance release |
+| T90 | [Backend rollout](#t90) | Separately approved preflight, deploy, smoke, maintenance release |
 | T100 | [Android E2E](#t100) | Play internal final acceptance |
 | T110 | [iOS E2E](#t110) | TestFlight final acceptance |
 | T120 | [24h observation](#t120) | Push/outbox final observation |
@@ -213,8 +217,14 @@ T20 + T30 + T60(B) + production read-only preflight
  → T80 production migration
 
 T80 PASS + T60(B) immutable artifact 재검증
- → G3 backend deployment 승인
- → T90 backend deployment/server smoke/automatic release
+ → G3-P 승인
+ → T90 read-only preflight 실행/PASS
+ → G3-D 승인
+ → T90 backend deployment 실행/PASS
+ → G3-S 승인
+ → T90 controlled server-side smoke/cleanup 실행/PASS
+ → G3-R 승인
+ → T90 maintenance release 실행/PASS
 
 T60(A) + T90
  → G4 Android Play 내부 테스트 배포 승인
@@ -629,7 +639,7 @@ Controlled smoke:
   일반 production row는 변경하지 않음
 
 Maintenance OFF:
-  deployment PASS AND full server-side smoke PASS인 경우에만 자동 해제
+  deployment PASS AND full server-side smoke PASS AND 별도 release 승인인 경우에만 해제
   background jobs/worker 재개 확인
 ```
 
@@ -657,7 +667,7 @@ Maintenance OFF:
 - Valid controlled smoke만 허용.
 - Legacy PHP mutating request도 Apache에서 차단.
 - Paused worker가 production row를 claim하지 않음.
-- Auto release 후 일반 writes와 jobs가 재개.
+- 별도 G3-R 승인된 release 후 일반 writes와 jobs가 재개.
 
 ---
 
@@ -1032,22 +1042,29 @@ Migration PASS만으로 backend를 배포하지 않는다.
 ---
 
 <a id="t90"></a>
-## 14. T90 — Backend deployment, server-side smoke, automatic release
+## 14. T90 — Separately approved backend deployment, server-side smoke, and release
 
 > **Task contract**
-> - **Goal/Scope:** G3 승인된 immutable backend를 배포하고 full smoke 후에만 maintenance를 자동 해제한다.
+> - **Goal/Scope:** 단계별 별도 승인으로 immutable backend를 배포하고 full smoke를 검증한 뒤, 별도 release 승인 후에만 maintenance를 해제한다.
 > - **Explicit exclusions:** Android/iOS channel upload, production dump restore, unapproved artifact deploy를 하지 않는다.
 > - **Repository/files:** Backend artifact, deploy/systemd/Apache/smoke/release scripts와 production runtime.
-> - **Dependencies:** T80 PASS, T60(B) checksum revalidation, G3 명시 승인.
+> - **Dependencies:** T80 PASS, T60(B) checksum revalidation, G3-P/G3-D/G3-S/G3-R 각각의 명시 승인과 선행 단계 PASS.
 > - **API/DB/platform impact:** Production backend/runtime 전환과 controlled test writes; 일반 writes는 smoke 종료까지 차단한다.
-> - **Implementation steps:** Rollback artifact, atomic deploy, readiness, full smoke, AND-gated release 순으로 수행한다.
+> - **Implementation steps:** Read-only preflight, rollback artifact, atomic deploy, readiness, full smoke, AND-gated release를 순서대로 수행하되 각 단계 시작 전에 별도 exact-command 승인을 받는다.
 > - **Test steps:** Canonical/authz/social-link/refresh/logout/outbox/log scan과 release idempotency를 검증한다.
-> - **Acceptance criteria:** Deployment+smoke+release postcheck PASS, jobs 재개, T120 timer 시작 evidence.
+> - **Acceptance criteria:** G3-P/D/S/R 네 approval record, read-only preflight PASS evidence, deployment+smoke+cleanup+release postcheck PASS, jobs 재개, T120 timer 시작 evidence.
 > - **Read before starting:** §0–§4, §6–§8, §11–§14, §17–§19.
 
-### Gate G3 — Backend deployment approval
+### Gate G3 — Four separate production approvals
 
-Migration postcheck, immutable binary checksum, previous backend artifact, rollback command, maintenance 상태를 제시하고 별도 승인을 받는다.
+- **G3-P read-only preflight:** local authority/artifact checksums와 production read-only state query의 exact command를 승인받는다. Production mutation은 금지한다.
+- **G3-D backend deployment:** G3-P PASS evidence SHA-256, immutable binary checksum, previous backend artifact, rollback command, maintenance 상태와 exact deployment command를 제시하고 별도 승인을 받는다.
+- **G3-S controlled smoke:** G3-D PASS 뒤 test run ID, 허용된 writer/proof 범위, exact smoke/cleanup commands와 실패 시 maintenance 유지 조건을 제시하고 별도 승인을 받는다.
+- **G3-R maintenance release:** G3-D와 G3-S가 모두 PASS한 뒤 release command, generation binding, worker/job 재개 postcheck를 제시하고 별도 승인을 받는다.
+
+어느 단계의 PASS도 다음 단계 승인이 아니다. 각 approval bit는 해당 exact command와 reviewed evidence에만 유효하다.
+
+각 G3-P/G3-D/G3-S/G3-R approval bit는 single-use이며 reviewed evidence SHA-256과 exact command bytes에 결속된다. Approval은 첫 execution attempt 시작과 동시에 성공/실패와 무관하게 consumed된다. 같은 stage retry 또는 whole-T90 replay에서는 re-executed stage마다 갱신된 evidence를 검토하고 새 applicable approval을 받아야 한다.
 
 ### Deployment
 
@@ -1087,9 +1104,9 @@ Migration postcheck, immutable binary checksum, previous backend artifact, rollb
 - Existing member/social-link/device/outbox row는 cleanup 대상이 아니다.
 - 정리 postcheck에서 unconsumed continuation, active smoke session, test device registration, nonterminal test outbox가 0건이어야 한다. 보존이 필요한 audit row는 test marker와 retention 근거를 남긴다.
 
-### Automatic maintenance release
+### Separately approved maintenance release
 
-다음 AND가 참일 때만 `release-maintenance.sh`를 자동 실행한다.
+다음 AND와 별도 G3-R exact-command 승인이 모두 참일 때만 `release-maintenance.sh`를 실행한다.
 
 ```text
 backend deployment PASS
@@ -1184,7 +1201,7 @@ Platform-local 실패면 backend를 유지하고 iOS release만 차단·수정�
 > - **Acceptance criteria:** 연속 24시간 rollout 기인 failure 0건 및 T100/T110 PASS.
 > - **Read before starting:** §0–§5, §14–§19.
 
-시작 시점은 maintenance 자동 해제 직후다. Android/iOS channel E2E와 병행할 수 있지만 둘 중 하나라도 남아 있으면 최종 완료가 아니다.
+시작 시점은 별도 승인된 maintenance 해제 직후다. Android/iOS channel E2E와 병행할 수 있지만 둘 중 하나라도 남아 있으면 최종 완료가 아니다.
 
 ### 관찰 항목
 
@@ -1206,11 +1223,13 @@ Rollout 기인 유실, 중복, stuck, worker 중단, 구조적 mobile push 실�
 Rollout 기인 이상이 한 건이라도 확인되면:
 
 ```text
-write 재차단
+→ write 재차단
 → 영향/정합성 확인
 → 수정 또는 backend rollback
+→ 갱신된 evidence와 exact smoke/cleanup commands로 새 G3-S 승인
 → full server-side smoke 재실행
-→ PASS 후 maintenance 자동 해제
+→ PASS 후 갱신된 evidence와 exact release command로 새 G3-R 승인
+→ maintenance 해제
 → 24시간 timer를 0시간부터 재시작
 ```
 
@@ -1221,14 +1240,15 @@ write 재차단
 | Failure | Immediate action | DB policy | Resume condition |
 |---|---|---|---|
 | Preflight/backup/restore 실패 | 중단, write block 유지 또는 안전하게 원복 | Mutation 없음 | 원인 수정 후 T70 재실행 |
+| Read-only preflight 실패 | Production mutation 없이 중단; consumed G3-P 재사용 금지 | Mutation 없음 | 갱신된 closure/state evidence와 exact command로 새 G3-P 승인 |
 | 036–039 단계 실패 | 다음 migration 금지, partial schema 조사 | DDL 자동 rollback 가정 금지, 우선 forward-fix | 해당 단계 postcheck PASS |
 | Backfill/data integrity 손상 | write block 유지 | 안전한 forward-fix 불가 시에만 별도 승인 후 full dump restore | Restore/정합성 재검증 |
-| Backend upload/restart 실패 | 이전 immutable binary 복구 | Additive DB schema 유지 | 이전 health PASS 또는 수정 artifact 승인 |
-| Server-side smoke 실패 | 자동 release 금지 | 실패 유형별 forward-fix; data damage면 restore 후보 | Full smoke PASS |
-| Release script 실패 | fail-closed 유지 | DB 변경 없음 | Idempotent release postcheck PASS |
+| Backend upload/restart 실패 | 이전 immutable binary 복구; consumed G3-D 재사용 및 새 G3-D 승인 전 deployment retry 금지 | Additive DB schema 유지 | 갱신된 preflight/deployment evidence와 exact command로 새 G3-D 승인; 이전 health PASS 또는 수정 artifact 승인 |
+| Server-side smoke 실패 | release 금지; 갱신된 evidence와 exact commands로 새 G3-S 승인 전 재실행 금지 | 실패 유형별 forward-fix; data damage면 restore 후보 | 새 G3-S 승인으로 Full smoke/cleanup PASS 후 별도 G3-R 승인 |
+| Release script 실패 | fail-closed 유지; 갱신된 failure evidence와 exact command로 새 G3-R 승인 전 retry 금지 | DB 변경 없음 | 새 G3-R 승인으로 idempotent release postcheck PASS |
 | Android-only 실패 | Android channel만 차단 | Backend/DB 유지 | Android 재검증 PASS |
 | iOS-only 실패 | iOS channel만 차단 | Backend/DB 유지 | iOS 재검증 PASS |
-| Shared contract/security 문제 | write 재차단 | Backend rollback 또는 forward-fix; DB restore는 별도 승인 | T90 전체 재실행 |
+| Shared contract/security 문제 | write 재차단 | Backend rollback 또는 forward-fix; DB restore는 별도 승인 | T90 전체 재실행 시 G3-P부터 re-executed stage별 새 approval |
 | 24h rollout 기인 outbox 이상 | write 재차단 | 영향별 rollback/forward-fix | Smoke + 새 24h PASS |
 
 ### Gate GR — Destructive production restore approval
@@ -1298,7 +1318,8 @@ Fresh session/subagent는 다음 범위만 읽고 작업한다.
 | Pending/rejected/approved와 legacy eligibility fail-closed | T10, T20 | T90 authz smoke, T100/T110 routing |
 | MariaDB 10.1.38 migration 036–039 | T20, T70, T80 | Fixture, production postcheck |
 | Full dump, off-host copy, isolated restore | T30, T70 | Backup/restore validation artifact |
-| DB/backend/Play/TestFlight/restore 별도 승인 | G2, G3, G4, G5, GR | Approval evidence + manifests |
+| DB/backend/Play/TestFlight/restore 별도 승인 | G2, G3-P, G3-D, G3-S, G3-R, G4, G5, GR | Approval evidence + manifests |
+| T90 four-gate exact-command approval amendment | G3-P, G3-D, G3-S, G3-R, T90 | Four approval records + ordered PASS evidence; prior PASS is not next-stage approval |
 | Dirty production provenance 보완 | T00, T60 | Baseline and deployment manifest |
 | Maintenance all-writer freeze와 smoke-only exception | T30, T70, T90 | Writer-zero and release postcheck |
 | Android Play/iOS TestFlight actual-device acceptance | T40, T50, T100, T110 | Channel E2E artifacts |
@@ -1320,10 +1341,10 @@ Fresh session/subagent는 다음 범위만 읽고 작업한다.
 | C08 mobile credential non-disclosure | T05, T40, T50 | Secret/log/artifact scan |
 | C09 strict vertical TDD | §0, T10, T20, T30, T40, T50 | RED/GREEN/regression evidence |
 | C10 pre-mutation backup/restore/preflight/manifest/review | T20, T60(B), T70 | G2 evidence bundle |
-| C11 independent DB/backend/Play/TestFlight approvals | G2, G3, G4, G5 | Approval records |
+| C11 independent DB/backend/Play/TestFlight approvals | G2, G3-P, G3-D, G3-S, G3-R, G4, G5 | Exact-command approval records |
 | C12 no unapproved git mutation/history operation | §0, T60 | Git status + approval record |
 | C13 clean immutable production artifact | G1B, G1A, G1I, T60 | Commit/artifact checksums |
-| C14 maintenance write block/smoke-only/automatic release | T30, T70, T90 | Writer-zero + release evidence |
+| C14 maintenance write block/smoke-only/four separate approvals | T30, T70, G3-P, G3-D, G3-S, G3-R, T90 | Writer-zero + four approval records + ordered PASS/release evidence |
 | C15 ordered 036→039 stop-on-failure | T20, T80 | Per-step postchecks |
 | C16 destructive restore only after separate approval | GR, §18 | Restore approval + re-entry evidence |
 | C17 Play/TestFlight production-signed acceptance | T100, T110 | Channel-installed device E2E |
@@ -1380,8 +1401,105 @@ for index, task in enumerate(ids):
         assert positions.get(dependency, s.index(f'<a id="{dependency.lower()}"></a>')) < start
 
 assert set(re.findall(r'\bT\d+\b', s)) <= id_set
-allowed_gates = {'G0','G1B','G1A','G1I','G2','G3','G4','G5','GR'}
-assert set(re.findall(r'\bG(?:\d+[A-Z]?|R)\b', s)) <= allowed_gates
+def validate_t90_gate_contract(document):
+    policy = document.split('## 21. Plan artifact verification', 1)[0]
+    allowed_gates = {'G0','G1B','G1A','G1I','G2','G3','G3-P','G3-D','G3-S','G3-R','G4','G5','GR'}
+    observed_gates = set(re.findall(r'(?<![A-Za-z0-9-])(?:G\d+[A-Za-z0-9-]*|GR)(?![A-Za-z0-9-])', policy))
+    assert observed_gates <= allowed_gates
+    required_t90_gates = {'G3-P', 'G3-D', 'G3-S', 'G3-R'}
+    assert required_t90_gates <= observed_gates
+    bare_g3_lines = [line for line in policy.splitlines() if re.search(r'(?<![A-Za-z0-9-])G3(?![A-Za-z0-9-])', line)]
+    assert bare_g3_lines == ['### Gate G3 — Four separate production approvals']
+
+    expected_graph = '''T80 PASS + T60(B) immutable artifact 재검증
+ → G3-P 승인
+ → T90 read-only preflight 실행/PASS
+ → G3-D 승인
+ → T90 backend deployment 실행/PASS
+ → G3-S 승인
+ → T90 controlled server-side smoke/cleanup 실행/PASS
+ → G3-R 승인
+ → T90 maintenance release 실행/PASS'''
+    graph = policy.split('T80 PASS + T60(B) immutable artifact 재검증', 1)[1].split('T60(A) + T90', 1)[0]
+    graph = 'T80 PASS + T60(B) immutable artifact 재검증' + graph
+    assert graph.strip() == expected_graph
+
+    expected_gate = '''### Gate G3 — Four separate production approvals
+
+- **G3-P read-only preflight:** local authority/artifact checksums와 production read-only state query의 exact command를 승인받는다. Production mutation은 금지한다.
+- **G3-D backend deployment:** G3-P PASS evidence SHA-256, immutable binary checksum, previous backend artifact, rollback command, maintenance 상태와 exact deployment command를 제시하고 별도 승인을 받는다.
+- **G3-S controlled smoke:** G3-D PASS 뒤 test run ID, 허용된 writer/proof 범위, exact smoke/cleanup commands와 실패 시 maintenance 유지 조건을 제시하고 별도 승인을 받는다.
+- **G3-R maintenance release:** G3-D와 G3-S가 모두 PASS한 뒤 release command, generation binding, worker/job 재개 postcheck를 제시하고 별도 승인을 받는다.
+
+어느 단계의 PASS도 다음 단계 승인이 아니다. 각 approval bit는 해당 exact command와 reviewed evidence에만 유효하다.
+
+각 G3-P/G3-D/G3-S/G3-R approval bit는 single-use이며 reviewed evidence SHA-256과 exact command bytes에 결속된다. Approval은 첫 execution attempt 시작과 동시에 성공/실패와 무관하게 consumed된다. 같은 stage retry 또는 whole-T90 replay에서는 re-executed stage마다 갱신된 evidence를 검토하고 새 applicable approval을 받아야 한다.'''
+    gate = policy.split('### Gate G3 — Four separate production approvals', 1)[1].split('### Deployment', 1)[0]
+    gate = '### Gate G3 — Four separate production approvals' + gate
+    assert gate.strip() == expected_gate
+
+    expected_release = '''### Separately approved maintenance release
+
+다음 AND와 별도 G3-R exact-command 승인이 모두 참일 때만 `release-maintenance.sh`를 실행한다.
+
+```text
+backend deployment PASS
+AND full server-side smoke PASS
+```
+
+Release script는 sentinel을 제거하고 일반 background jobs/worker를 재개하며 idempotent postcheck를 수행한다. Release 실패 시 write block을 유지하고 성공으로 보고하지 않는다.
+
+Maintenance 해제 즉시 T120의 24시간 timer를 시작한다.'''
+    release = policy.split('### Separately approved maintenance release', 1)[1].split('\n---', 1)[0]
+    release = '### Separately approved maintenance release' + release
+    assert release.strip() == expected_release
+
+    expected_recovery = '''## 18. Rollback / forward-fix matrix
+
+| Failure | Immediate action | DB policy | Resume condition |
+|---|---|---|---|
+| Preflight/backup/restore 실패 | 중단, write block 유지 또는 안전하게 원복 | Mutation 없음 | 원인 수정 후 T70 재실행 |
+| Read-only preflight 실패 | Production mutation 없이 중단; consumed G3-P 재사용 금지 | Mutation 없음 | 갱신된 closure/state evidence와 exact command로 새 G3-P 승인 |
+| 036–039 단계 실패 | 다음 migration 금지, partial schema 조사 | DDL 자동 rollback 가정 금지, 우선 forward-fix | 해당 단계 postcheck PASS |
+| Backfill/data integrity 손상 | write block 유지 | 안전한 forward-fix 불가 시에만 별도 승인 후 full dump restore | Restore/정합성 재검증 |
+| Backend upload/restart 실패 | 이전 immutable binary 복구; consumed G3-D 재사용 및 새 G3-D 승인 전 deployment retry 금지 | Additive DB schema 유지 | 갱신된 preflight/deployment evidence와 exact command로 새 G3-D 승인; 이전 health PASS 또는 수정 artifact 승인 |
+| Server-side smoke 실패 | release 금지; 갱신된 evidence와 exact commands로 새 G3-S 승인 전 재실행 금지 | 실패 유형별 forward-fix; data damage면 restore 후보 | 새 G3-S 승인으로 Full smoke/cleanup PASS 후 별도 G3-R 승인 |
+| Release script 실패 | fail-closed 유지; 갱신된 failure evidence와 exact command로 새 G3-R 승인 전 retry 금지 | DB 변경 없음 | 새 G3-R 승인으로 idempotent release postcheck PASS |
+| Android-only 실패 | Android channel만 차단 | Backend/DB 유지 | Android 재검증 PASS |
+| iOS-only 실패 | iOS channel만 차단 | Backend/DB 유지 | iOS 재검증 PASS |
+| Shared contract/security 문제 | write 재차단 | Backend rollback 또는 forward-fix; DB restore는 별도 승인 | T90 전체 재실행 시 G3-P부터 re-executed stage별 새 approval |
+| 24h rollout 기인 outbox 이상 | write 재차단 | 영향별 rollback/forward-fix | Smoke + 새 24h PASS |'''
+    recovery = policy.split('## 18. Rollback / forward-fix matrix', 1)[1].split('### Gate GR', 1)[0]
+    recovery = '## 18. Rollback / forward-fix matrix' + recovery
+    assert recovery.strip() == expected_recovery
+
+    assert '> - **Dependencies:** T80 PASS, T60(B) checksum revalidation, G3-P/G3-D/G3-S/G3-R 각각의 명시 승인과 선행 단계 PASS.' in policy
+    assert '> - **Acceptance criteria:** G3-P/D/S/R 네 approval record, read-only preflight PASS evidence, deployment+smoke+cleanup+release postcheck PASS, jobs 재개, T120 timer 시작 evidence.' in policy
+
+validate_t90_gate_contract(s)
+policy = s.split('## 21. Plan artifact verification', 1)[0]
+def replace_once(document, old, new):
+    assert document.count(old) == 1
+    return document.replace(old, new, 1)
+
+invalid_t90_gate_fixtures = [
+    replace_once(policy, '- **G3-P read-only preflight:**', '- **G3-X1 read-only preflight:**'),
+    replace_once(policy, '- **G3-P read-only preflight:**', '- **G3-x read-only preflight:**'),
+    replace_once(policy, 'Production mutation은 금지한다.', 'Production mutation을 허용한다.'),
+    replace_once(policy, 'backend deployment PASS\nAND full server-side smoke PASS',
+                 'backend deployment PASS\nOR full server-side smoke PASS'),
+    replace_once(policy, '새 applicable approval을 받아야 한다.', '새 applicable approval을 받아야 한다. 단 G3-R approval은 재사용할 수 있다.'),
+    replace_once(policy, ' → G3-D 승인\n → T90 backend deployment 실행/PASS\n → G3-S 승인\n → T90 controlled server-side smoke/cleanup 실행/PASS',
+                 ' → G3-S 승인\n → T90 controlled server-side smoke/cleanup 실행/PASS\n → G3-D 승인\n → T90 backend deployment 실행/PASS'),
+    replace_once(policy, '새 G3-D 승인 전 deployment retry 금지', 'deployment retry 허용'),
+]
+for invalid_document in invalid_t90_gate_fixtures:
+    try:
+        validate_t90_gate_contract(invalid_document)
+    except (AssertionError, ValueError, IndexError):
+        pass
+    else:
+        raise AssertionError('invalid T90 gate fixture unexpectedly passed')
 
 # Every Seed constraint and semantic acceptance key must have a stable traceability row.
 constraint_block = seed_text.split('constraints:', 1)[1].split('acceptance_criteria:', 1)[0]
@@ -1436,6 +1554,13 @@ existing_paths = {
         'backend/migrations/037_harden_member_social_links.sql',
         'backend/migrations/038_create_auth_principal_tables.sql',
         'backend/migrations/039_create_social_link_continuation.sql', 'backend/migrations/apply_all.sql',
+        'scripts/kakao-auth-rollout/preflight.sql', 'scripts/kakao-auth-rollout/postcheck.sql',
+        'scripts/kakao-auth-rollout/apply-migrations.sh', 'scripts/kakao-auth-rollout/test-migrations.sh',
+        'backend/migrations/testdata/kakao_auth_028_035_fixture.sql',
+        'backend/migrations/testdata/kakao_auth_edge_cases.sql',
+        'backend/migrations/testdata/mariadb-10.1.38.image', 'backend/migrations/kakao-auth-036-039.sha256',
+        'backend/internal/maintenance/gate.go', 'backend/internal/middleware/maintenance_write.go',
+        'backend/internal/middleware/maintenance_write_test.go',
     },
     'android': {
         'app/build.gradle.kts', 'app/src/main/AndroidManifest.xml',
@@ -1471,13 +1596,6 @@ existing_paths = {
 candidate_paths = {
     'backend': {
         'backend/internal/service/login_eligibility_test.go',
-        'scripts/kakao-auth-rollout/preflight.sql', 'scripts/kakao-auth-rollout/postcheck.sql',
-        'scripts/kakao-auth-rollout/apply-migrations.sh', 'scripts/kakao-auth-rollout/test-migrations.sh',
-        'backend/migrations/testdata/kakao_auth_028_035_fixture.sql',
-        'backend/migrations/testdata/kakao_auth_edge_cases.sql',
-        'backend/migrations/testdata/mariadb-10.1.38.image', 'backend/migrations/kakao-auth-036-039.sha256',
-        'backend/internal/maintenance/gate.go', 'backend/internal/middleware/maintenance_write.go',
-        'backend/internal/middleware/maintenance_write_test.go',
         'scripts/kakao-auth-rollout/enter-maintenance.sh', 'scripts/kakao-auth-rollout/server-smoke.sh',
         'scripts/kakao-auth-rollout/release-maintenance.sh', 'scripts/kakao-auth-rollout/writer-zero.sql',
         'scripts/kakao-auth-rollout/dispose-backup.sh',
@@ -1506,7 +1624,7 @@ required = [
     '036', '037', '038', '039', 'MariaDB `10.1.38`',
     'authenticated', 'linkRequired', 'pending', 'rejected', 'approved',
     'Play Console', 'TestFlight', 'PROCESSING', 'DEAD', '0시간',
-    'G1B', 'G1A', 'G1I', 'G2', 'G3', 'G4', 'G5', 'GR',
+    'G1B', 'G1A', 'G1I', 'G2', 'G3-P', 'G3-D', 'G3-S', 'G3-R', 'G4', 'G5', 'GR',
 ]
 assert all(item in s for item in required)
 assert ('TO' + 'DO') not in s and ('TB' + 'D') not in s
