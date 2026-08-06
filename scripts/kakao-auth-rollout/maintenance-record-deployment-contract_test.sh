@@ -2,12 +2,20 @@
 # maintenance-record-deployment-contract_test.sh — Verify deployment evidence provenance.
 set -euo pipefail
 
-ROOT=$(git rev-parse --show-toplevel)
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 RECORDER="$ROOT/scripts/kakao-auth-rollout/maintenance-record-deployment.sh"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
   exit 1
+}
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  else
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  fi
 }
 
 [[ -x $RECORDER ]] || fail "deployment evidence recorder is missing or not executable"
@@ -54,8 +62,8 @@ printf 'fixture backend artifact\n' > "$BINARY"
 printf 'fixture rollback artifact\n' > "$ROLLBACK_BINARY"
 chmod 0755 "$BINARY"
 chmod 0755 "$ROLLBACK_BINARY"
-EXPECTED_SHA=$(shasum -a 256 "$BINARY" | cut -d ' ' -f 1)
-ROLLBACK_SHA=$(shasum -a 256 "$ROLLBACK_BINARY" | cut -d ' ' -f 1)
+EXPECTED_SHA=$(sha256_file "$BINARY")
+ROLLBACK_SHA=$(sha256_file "$ROLLBACK_BINARY")
 PROC_ROOT="$TMP/proc"
 mkdir -p "$PROC_ROOT/731"
 
@@ -113,6 +121,22 @@ set -e
 rm "$PROC_ROOT/731/exe"
 ln -s "$BINARY" "$PROC_ROOT/731/exe"
 
+printf 'state=PASS\nkind=deployment\ngeneration=foreign\n' > "$EVIDENCE"
+PREEXISTING_EVIDENCE_SHA=$(sha256_file "$EVIDENCE")
+set +e
+PREEXISTING_OUTPUT=$(PATH="$TMP/bin:$PATH" FAKE_EXEC_START="$BINARY" \
+  MAINTENANCE_DEPLOY_EVIDENCE_APPROVED=1 MAINTENANCE_SENTINEL_PATH="$SENTINEL" \
+  BACKEND_BINARY_PATH="$BINARY" BACKEND_EXPECTED_SHA256="$EXPECTED_SHA" \
+  BACKEND_DEPLOY_EVIDENCE_OUTPUT="$EVIDENCE" BACKEND_ROLLBACK_PATH="$ROLLBACK_BINARY" \
+  BACKEND_ROLLBACK_EXPECTED_SHA256="$ROLLBACK_SHA" BACKEND_PROC_ROOT="$PROC_ROOT" \
+  BACKEND_HEALTH_URL=http://127.0.0.1:8080/api/health "$RECORDER" 2>&1)
+PREEXISTING_STATUS=$?
+set -e
+[[ $PREEXISTING_STATUS -ne 0 && $PREEXISTING_OUTPUT == *'evidence_already_exists'* &&
+   $(sha256_file "$EVIDENCE") == "$PREEXISTING_EVIDENCE_SHA" ]] ||
+  fail "deployment evidence publication is not atomic no-overwrite"
+rm "$EVIDENCE"
+
 printf 'state=STARTED\ngeneration=%s\n' "$GENERATION" > "$SENTINEL"
 chmod 0644 "$SENTINEL"
 set +e
@@ -156,7 +180,11 @@ grep -Fxq "generation=$GENERATION" "$EVIDENCE" || fail "deployment evidence gene
 grep -Fxq "artifact_sha256=$EXPECTED_SHA" "$EVIDENCE" || fail "deployment evidence artifact digest is missing"
 grep -Fxq "rollback_path=$ROLLBACK_BINARY" "$EVIDENCE" || fail "deployment evidence rollback path is missing"
 grep -Fxq "rollback_sha256=$ROLLBACK_SHA" "$EVIDENCE" || fail "deployment evidence rollback digest is missing"
-MODE=$(stat -f '%Lp' "$EVIDENCE" 2>/dev/null || stat -c '%a' "$EVIDENCE")
+if MODE=$(stat -c '%a' "$EVIDENCE" 2>/dev/null); then
+  :
+else
+  MODE=$(stat -f '%Lp' "$EVIDENCE")
+fi
 [[ $MODE == 600 ]] || fail "deployment evidence mode is not 0600"
 
 printf 'PASS: generation-bound deployment evidence producer\n'

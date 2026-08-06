@@ -86,10 +86,9 @@ if [[ -n $SSH_PORT ]]; then
   fi
 fi
 
+RSYNC_SSH_COMMAND=ssh
 if [[ -n "${SSH_PORT}" ]]; then
-  SSH_OPTS=(-p "${SSH_PORT}")
-else
-  SSH_OPTS=()
+  printf -v RSYNC_SSH_COMMAND 'ssh -p %q' "$SSH_PORT"
 fi
 
 ssh_remote() {
@@ -219,6 +218,7 @@ if [[ "${BUILD_FRONTEND}" == "false" && -z "${PATCH_MODE}" ]]; then
   echo "=== patch-mode is forced false because frontend build is disabled ==="
 fi
 echo "=== build targets: backend=${BUILD_BACKEND}, frontend=${BUILD_FRONTEND} ==="
+
 
 # =============================================================================
 # DATABASE MIGRATIONS — MANUAL STEP REQUIRED
@@ -583,7 +583,7 @@ if [[ "${BUILD_BACKEND}" == "true" ]]; then
     exit 1
   fi
   if [[ $BUILD_BACKFILL_ARTIFACT == 1 ]]; then
-    ssh "${SSH_OPTS[@]}" "${TARGET}" \
+    ssh_remote "${TARGET}" \
       "set -euo pipefail; umask 077; staged=\$(mktemp /app/backend/.backfill.new.XXXXXX); \
        trap 'rm -f \"\$staged\"' EXIT; cat > \"\$staged\"; chmod 0755 \"\$staged\"; \
        mv -fT \"\$staged\" /app/backend/backfill; trap - EXIT" < dist/backfill
@@ -592,8 +592,10 @@ if [[ "${BUILD_BACKEND}" == "true" ]]; then
   printf -v APPROVED_PREDEPLOY_BINARY_SHA256_Q '%q' "$APPROVED_PREDEPLOY_BINARY_SHA256"
   printf -v APPROVED_PREDEPLOY_BINARY_SIZE_Q '%q' "$APPROVED_PREDEPLOY_BINARY_SIZE"
   BACKEND_ROLLBACK_RESULT=$(
-    ssh "${SSH_OPTS[@]}" "${TARGET}" \
+    ssh_remote "${TARGET}" \
       "set -euo pipefail; umask 077; \
+       staged=; rollback=NONE; rollback_sha=NONE; \
+       trap 'if [[ -n \"\${staged:-}\" ]]; then rm -f \"\$staged\"; fi; if [[ \"\${rollback:-NONE}\" != NONE ]]; then rm -f \"\$rollback\"; fi' EXIT; \
        if [[ ${RECORD_MAINTENANCE_DEPLOY_EVIDENCE} == 1 ]]; then \
          sentinel=/run/alumni/maintenance; mode=\$(stat -c '%a' \"\$sentinel\" 2>/dev/null) || { echo maintenance_guard_failed_before_backend_replace >&2; exit 1; }; \
          owner=\$(stat -c '%u' \"\$sentinel\" 2>/dev/null) || { echo maintenance_guard_failed_before_backend_replace >&2; exit 1; }; \
@@ -603,9 +605,8 @@ if [[ "${BUILD_BACKEND}" == "true" ]]; then
          backend_pid_output=\$(sudo systemctl show --property MainPID alumni-backend) || { echo backend_guard_failed_before_backend_replace >&2; exit 1; }; \
          [[ \$backend_pid_output == MainPID=0 && \$backend_pid_output != *\$'\n'* ]] || { echo backend_guard_failed_before_backend_replace >&2; exit 1; }; \
        fi; \
-       rollback=NONE; rollback_sha=NONE; \
        staged=\$(mktemp /app/backend/.server.new.XXXXXX); \
-       trap 'rm -f \"\$staged\"; if [[ \"\${rollback:-NONE}\" != NONE ]]; then rm -f \"\$rollback\"; fi' EXIT; cat > \"\$staged\"; \
+       cat > \"\$staged\"; \
        actual=\$(sha256sum \"\$staged\" | cut -d ' ' -f 1); \
        [[ \"\$actual\" == '${BACKEND_ARTIFACT_SHA256}' ]] || exit 41; \
        if [[ ${RECORD_MAINTENANCE_DEPLOY_EVIDENCE} == 1 ]]; then \
@@ -631,6 +632,9 @@ if [[ "${BUILD_BACKEND}" == "true" ]]; then
          ! sudo systemctl is-active --quiet alumni-backend || { echo backend_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
          backend_pid_output=\$(sudo systemctl show --property MainPID alumni-backend) || { echo backend_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
          [[ \$backend_pid_output == MainPID=0 && \$backend_pid_output != *\$'\n'* ]] || { echo backend_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
+         current_sha=\$(sha256sum /app/backend/server | cut -d ' ' -f 1); current_size=\$(stat -c '%s' /app/backend/server); \
+         [[ \"\$current_sha\" == ${APPROVED_PREDEPLOY_BINARY_SHA256_Q} && \"\$current_sha\" == \"\$rollback_sha\" && \"\$current_size\" == ${APPROVED_PREDEPLOY_BINARY_SIZE_Q} ]] || { echo current_binary_identity_changed_immediately_before_backend_replace >&2; exit 44; }; \
+         [[ ! -e /run/alumni/backend-deployment.pass && ! -L /run/alumni/backend-deployment.pass ]] || { echo deployment_evidence_appeared_before_backend_replace >&2; exit 46; }; \
        fi; \
        mv -fT \"\$staged\" /app/backend/server; \
        trap - EXIT; printf '%s %s\\n' \"\$rollback\" \"\$rollback_sha\"" < dist/server
@@ -641,9 +645,59 @@ if [[ "${BUILD_BACKEND}" == "true" ]]; then
   fi
 fi
 
+
+verify_remote_deployment_evidence() {
+  ssh_remote "${TARGET}" \
+    "sudo env EXPECTED_GENERATION=${APPROVED_MAINTENANCE_GENERATION} EXPECTED_ARTIFACT=${BACKEND_ARTIFACT_SHA256} EXPECTED_ROLLBACK_PATH=${BACKEND_ROLLBACK_PATH} EXPECTED_ROLLBACK_SHA=${BACKEND_ROLLBACK_SHA256} /bin/bash -s" <<'REMOTE_VERIFY_DEPLOYMENT_EVIDENCE'
+set -euo pipefail
+evidence=/run/alumni/backend-deployment.pass
+binary=/app/backend/server
+[[ -f $evidence && ! -L $evidence && $(stat -c '%u:%a' "$evidence") == 0:600 ]]
+[[ $(wc -l < "$evidence" | tr -d ' ') == 8 ]]
+for line in 'state=PASS' 'kind=deployment' "generation=$EXPECTED_GENERATION" \
+  "artifact_sha256=$EXPECTED_ARTIFACT" "rollback_path=$EXPECTED_ROLLBACK_PATH" \
+  "rollback_sha256=$EXPECTED_ROLLBACK_SHA"; do
+  [[ $(grep -Fxc "$line" "$evidence" || true) == 1 ]]
+done
+[[ $(grep -Ec '^main_pid=[1-9][0-9]*$' "$evidence" || true) == 1 ]]
+[[ $(grep -Ec '^recorded_at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$evidence" || true) == 1 ]]
+[[ -f $binary && ! -L $binary && $(sha256sum "$binary" | cut -d ' ' -f 1) == "$EXPECTED_ARTIFACT" ]]
+systemctl is-active --quiet alumni-backend
+pid_output=$(systemctl show --property MainPID alumni-backend)
+[[ $pid_output == MainPID=* && $pid_output != *$'\n'* ]]
+pid=${pid_output#MainPID=}
+[[ $pid =~ ^[1-9][0-9]*$ ]]
+grep -Fxq "main_pid=$pid" "$evidence"
+REMOTE_VERIFY_DEPLOYMENT_EVIDENCE
+}
+
+cleanup_deployment_evidence_for_rollback() {
+  [[ $RECORD_MAINTENANCE_DEPLOY_EVIDENCE == 1 ]] || return 0
+  ssh_remote "${TARGET}" \
+    "sudo env EXPECTED_GENERATION=${APPROVED_MAINTENANCE_GENERATION} EXPECTED_ARTIFACT=${BACKEND_ARTIFACT_SHA256} EXPECTED_ROLLBACK_PATH=${BACKEND_ROLLBACK_PATH} EXPECTED_ROLLBACK_SHA=${BACKEND_ROLLBACK_SHA256} /bin/bash -s" <<'REMOTE_CLEANUP_DEPLOYMENT_EVIDENCE'
+set -euo pipefail
+evidence=/run/alumni/backend-deployment.pass
+if [[ ! -e $evidence && ! -L $evidence ]]; then
+  exit 0
+fi
+[[ -f $evidence && ! -L $evidence && $(stat -c '%u:%a' "$evidence") == 0:600 ]]
+[[ $(wc -l < "$evidence" | tr -d ' ') == 8 ]]
+for line in 'state=PASS' 'kind=deployment' "generation=$EXPECTED_GENERATION" \
+  "artifact_sha256=$EXPECTED_ARTIFACT" "rollback_path=$EXPECTED_ROLLBACK_PATH" \
+  "rollback_sha256=$EXPECTED_ROLLBACK_SHA"; do
+  [[ $(grep -Fxc "$line" "$evidence" || true) == 1 ]]
+done
+[[ $(grep -Ec '^main_pid=[1-9][0-9]*$' "$evidence" || true) == 1 ]]
+[[ $(grep -Ec '^recorded_at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$evidence" || true) == 1 ]]
+rm -f "$evidence"
+[[ ! -e $evidence && ! -L $evidence ]]
+REMOTE_CLEANUP_DEPLOYMENT_EVIDENCE
+}
+
 restore_backend_without_restart() {
   [[ ${BACKEND_ROLLBACK_PATH:-NONE} != NONE ]] || return 1
-  ssh "${SSH_OPTS[@]}" "${TARGET}" \
+  cleanup_deployment_evidence_for_rollback || return 1
+  ssh_remote "${TARGET}" \
     "set -euo pipefail; \
      sudo systemctl stop alumni-backend; \
      [[ -f '${BACKEND_ROLLBACK_PATH}' && ! -L '${BACKEND_ROLLBACK_PATH}' ]]; \
@@ -659,42 +713,68 @@ restore_backend_without_restart() {
 restore_backend_for_failed_restart() {
   restore_backend_without_restart || return 1
   if [[ $RECORD_MAINTENANCE_DEPLOY_EVIDENCE != 1 ]]; then
-    ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl restart alumni-backend'
+    ssh_remote "${TARGET}" 'sudo systemctl restart alumni-backend'
+  fi
+}
+
+record_and_verify_deployment_evidence() {
+  if ! ssh_remote "${TARGET}" \
+    "sudo env MAINTENANCE_DEPLOY_EVIDENCE_APPROVED=1 BACKEND_EXPECTED_SHA256=${BACKEND_ARTIFACT_SHA256} BACKEND_ROLLBACK_PATH=${BACKEND_ROLLBACK_PATH} BACKEND_ROLLBACK_EXPECTED_SHA256=${BACKEND_ROLLBACK_SHA256} /bin/bash -s" \
+    < scripts/kakao-auth-rollout/maintenance-record-deployment.sh; then
+    if verify_remote_deployment_evidence; then
+      echo "=== Recorder acknowledgment was lost; authenticated remote PASS evidence is authoritative ==="
+    else
+      if ! restore_backend_without_restart; then
+        echo "✗ Backend evidence and rollback recovery both failed; backend state is uncertain and maintenance must remain active." >&2
+        return 1
+      fi
+      echo "✗ Backend evidence failed; previous binary was restored and left stopped." >&2
+      return 1
+    fi
+  fi
+  if ! verify_remote_deployment_evidence; then
+    if ! restore_backend_without_restart; then
+      echo "✗ Backend evidence readback and rollback recovery both failed; backend state is uncertain and maintenance must remain active." >&2
+      return 1
+    fi
+    echo "✗ Backend evidence readback failed; previous binary was restored and left stopped." >&2
+    return 1
   fi
 }
 
 # BEGIN_FRONTEND_DEPLOY_SIDE_EFFECTS
 if [[ "${BUILD_FRONTEND}" == "true" ]]; then
   echo "=== Uploading User SPA ==="
-  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" frontend/dist/ "${TARGET}:/var/www/app/"
+  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "$RSYNC_SSH_COMMAND" frontend/dist/ "${TARGET}:/var/www/app/"
 
   echo "=== Uploading Admin SPA ==="
-  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" admin/dist/ "${TARGET}:/var/www/admin/"
+  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "$RSYNC_SSH_COMMAND" admin/dist/ "${TARGET}:/var/www/admin/"
 
   echo "=== Installing Apache httpd config ==="
-  ssh "${SSH_OPTS[@]}" "${TARGET}" 'set -euo pipefail; umask 077; incoming=$(mktemp /tmp/alumni-httpd.XXXXXX); backup=$(mktemp /tmp/alumni-httpd-backup.XXXXXX); trap '\''rm -f "$incoming" "$backup"'\'' EXIT; cat > "$incoming"; had_previous=0; if sudo test -f /etc/httpd/conf.d/alumni.conf; then sudo cp -p -- /etc/httpd/conf.d/alumni.conf "$backup"; had_previous=1; fi; sudo install -o root -g root -m 0644 "$incoming" /etc/httpd/conf.d/alumni.conf; if ! sudo httpd -t; then if [[ $had_previous == 1 ]]; then sudo install -o root -g root -m 0644 "$backup" /etc/httpd/conf.d/alumni.conf; else sudo rm -f /etc/httpd/conf.d/alumni.conf; fi; exit 43; fi' < deploy/httpd-alumni.conf
+  # shellcheck disable=SC2016 # Remote shell expands the quoted variables.
+  ssh_remote "${TARGET}" 'set -euo pipefail; umask 077; incoming=$(mktemp /tmp/alumni-httpd.XXXXXX); backup=$(mktemp /tmp/alumni-httpd-backup.XXXXXX); trap '\''rm -f "$incoming" "$backup"'\'' EXIT; cat > "$incoming"; had_previous=0; if sudo test -f /etc/httpd/conf.d/alumni.conf; then sudo cp -p -- /etc/httpd/conf.d/alumni.conf "$backup"; had_previous=1; fi; sudo install -o root -g root -m 0644 "$incoming" /etc/httpd/conf.d/alumni.conf; if ! sudo httpd -t; then if [[ $had_previous == 1 ]]; then sudo install -o root -g root -m 0644 "$backup" /etc/httpd/conf.d/alumni.conf; else sudo rm -f /etc/httpd/conf.d/alumni.conf; fi; exit 43; fi' < deploy/httpd-alumni.conf
 
   echo "=== Installing legacy PHP compat shims ==="
   for shim in _set_docroot.php _maintenance_gate.php _legacy_docroot.php _legacy_url_rewriter.php; do
-    ssh "${SSH_OPTS[@]}" "${TARGET}" \
+    ssh_remote "${TARGET}" \
       "set -euo pipefail; umask 077; incoming=\$(mktemp /tmp/alumni-shim.XXXXXX); \
        trap 'rm -f \"\$incoming\"' EXIT; cat > \"\$incoming\"; \
        sudo install -o root -g root -m 0644 \"\$incoming\" '/var/www/html/${shim}'" < "deploy/${shim}"
   done
 
   echo "=== Reloading Apache httpd ==="
-  ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl reload httpd'
+  ssh_remote "${TARGET}" 'sudo systemctl reload httpd'
 
   echo "=== Verifying /old/ legacy routing ==="
   SMOKE_HOST="daeilfoundation.or.kr"
-  ssh "${SSH_OPTS[@]}" "${TARGET}" \
+  ssh_remote "${TARGET}" \
     "status=\$(curl --disable --noproxy '*' --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' --resolve ${SMOKE_HOST}:443:127.0.0.1 https://${SMOKE_HOST}/old/index.php); [[ \$status == 200 || \$status == 503 ]]"
 fi
 # END_FRONTEND_DEPLOY_SIDE_EFFECTS
 
 if [[ "${BUILD_BACKEND}" == "true" ]]; then
   echo "=== Reloading systemd and restarting backend ==="
-  if ! ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'; then
+  if ! ssh_remote "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'; then
     if ! restore_backend_for_failed_restart; then
       echo "✗ Backend restart and rollback recovery both failed; backend remains fail-closed." >&2
       exit 1
@@ -710,14 +790,7 @@ fi
 
 if [[ $RECORD_MAINTENANCE_DEPLOY_EVIDENCE == 1 ]]; then
   echo "=== Recording generation-bound backend deployment evidence ==="
-  if ! ssh "${SSH_OPTS[@]}" "${TARGET}" \
-    "sudo env MAINTENANCE_DEPLOY_EVIDENCE_APPROVED=1 BACKEND_EXPECTED_SHA256=${BACKEND_ARTIFACT_SHA256} BACKEND_ROLLBACK_PATH=${BACKEND_ROLLBACK_PATH} BACKEND_ROLLBACK_EXPECTED_SHA256=${BACKEND_ROLLBACK_SHA256} /bin/bash -s" \
-    < scripts/kakao-auth-rollout/maintenance-record-deployment.sh; then
-    if ! restore_backend_without_restart; then
-      echo "✗ Backend evidence and rollback recovery both failed; backend state is uncertain and maintenance must remain active." >&2
-      exit 1
-    fi
-    echo "✗ Backend evidence failed; previous binary was restored and left stopped." >&2
+  if ! record_and_verify_deployment_evidence; then
     exit 1
   fi
 fi

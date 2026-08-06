@@ -94,7 +94,10 @@ trap 'rm -f "$evidence_tmp"' EXIT
 printf 'state=PASS\nkind=deployment\ngeneration=%s\nartifact_sha256=%s\nrollback_path=%s\nrollback_sha256=%s\nmain_pid=%s\nrecorded_at=%s\n' \
   "$generation" "$actual_sha256" "$ROLLBACK_PATH" "$rollback_sha256" "$main_pid" "$recorded_at" > "$evidence_tmp"
 chmod 0600 "$evidence_tmp"
-mv -f "$evidence_tmp" "$EVIDENCE_OUTPUT"
+if ! ln "$evidence_tmp" "$EVIDENCE_OUTPUT" 2>/dev/null; then
+  fail evidence_already_exists
+fi
+rm -f "$evidence_tmp"
 trap - EXIT
 
 printf 'PASS maintenance_deployment_evidence generation=current artifact=verified service=healthy\n'

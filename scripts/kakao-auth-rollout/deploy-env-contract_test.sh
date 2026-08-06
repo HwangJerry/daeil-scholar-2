@@ -170,15 +170,25 @@ for quoted_binding in APPROVED_MAINTENANCE_GENERATION_Q APPROVED_PREDEPLOY_BINAR
 done
 grep -Fq 'current_binary_missing_before_backend_replace' "$DEPLOY" ||
   fail "evidence deployment does not reject an absent or dangling preflight binary"
+grep -Fq 'current_binary_identity_changed_immediately_before_backend_replace' "$DEPLOY" ||
+  fail "active production binary is not rehashed at the final mutation boundary"
+grep -Fq 'deployment_evidence_appeared_before_backend_replace' "$DEPLOY" ||
+  fail "racing deployment evidence is not rejected at the final mutation boundary"
+grep -Fq 'verify_remote_deployment_evidence' "$DEPLOY" ||
+  fail "deployment does not resolve recorder acknowledgment ambiguity by authenticated readback"
+grep -Fq 'cleanup_deployment_evidence_for_rollback' "$DEPLOY" ||
+  fail "rollback does not invalidate exact deployment PASS evidence"
 grep -Fq 'if [[ ${RECORD_MAINTENANCE_DEPLOY_EVIDENCE} == 1 ]]; then' "$DEPLOY" ||
   fail "predeploy identity check is not scoped to evidence deployment"
-grep -Fq 'rm -f \"\$staged\"; if [[ \"\${rollback:-NONE}\" != NONE ]]; then rm -f \"\$rollback\"; fi' "$DEPLOY" ||
+grep -Fq 'if [[ -n \"\${staged:-}\" ]]; then rm -f \"\$staged\"; fi; if [[ \"\${rollback:-NONE}\" != NONE ]]; then rm -f \"\$rollback\"; fi' "$DEPLOY" ||
   fail "remote transaction does not clean staged and rollback temporary artifacts on failure"
-RESTART_BLOCK=$(sed -n '/if ! ssh .*systemctl restart alumni-backend/,/fi/p' "$DEPLOY")
-[[ $(grep -Fc 'systemctl restart alumni-backend' <<< "$RESTART_BLOCK") == 1 ]] ||
+[[ $(grep -Fc 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend' "$DEPLOY") == 1 ]] ||
   fail "backend restart failure can restart a sentinel-unaware rollback binary"
 grep -Fq 'Backend evidence failed; previous binary was restored and left stopped' "$DEPLOY" ||
   fail "deployment evidence failure does not restore the previous binary safely"
+if grep -Fq 'ssh "${SSH_OPTS[@]}"' "$DEPLOY"; then
+  fail "raw SSH invocation still expands an empty option array under Bash 3.2 nounset"
+fi
 if grep -Fq 'restore_backend_without_restart || true' "$DEPLOY"; then
   fail "deployment evidence failure ignores rollback recovery failure"
 fi
@@ -204,7 +214,7 @@ set -e
 [[ $SKIP_STATUS -ne 0 && $SKIP_OUTPUT == *'does not allow SKIP_* bypasses'* ]] ||
   fail "evidence-enabled deployment accepted or misclassified preflight bypasses"
 RESTART_LINE=$(grep -nF 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend' "$DEPLOY" | head -n 1 | cut -d: -f1)
-EVIDENCE_LINE=$(grep -nF 'maintenance-record-deployment.sh' "$DEPLOY" | tail -n 1 | cut -d: -f1)
+EVIDENCE_LINE=$(grep -nF 'record_and_verify_deployment_evidence' "$DEPLOY" | tail -n 1 | cut -d: -f1)
 [[ -n $RESTART_LINE && -n $EVIDENCE_LINE && $EVIDENCE_LINE -gt $RESTART_LINE ]] ||
   fail "deployment evidence is not recorded after backend restart"
 HTTPD_RELOAD_LINE=$(grep -nF 'sudo systemctl reload httpd' "$DEPLOY" | tail -n 1 | cut -d: -f1)
@@ -218,6 +228,10 @@ mkdir -p "$TMP/bin"
 cat > "$TMP/bin/ssh" <<'FAKE_SSH'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n ${FAKE_CAPTURE_ARGS_FILE:-} ]]; then
+  printf '%s\n' "$@" > "$FAKE_CAPTURE_ARGS_FILE"
+  exit 0
+fi
 payload=$(cat)
 case "$payload" in
   *ENV_VALIDATOR_PROTOCOL=1*)
@@ -239,6 +253,80 @@ case "$payload" in
 esac
 FAKE_SSH
 chmod +x "$TMP/bin/ssh"
+
+SSH_REMOTE_FUNCTION=$(sed -n '/^ssh_remote()/,/^}/p' "$DEPLOY")
+[[ -n $SSH_REMOTE_FUNCTION ]] || fail "ssh_remote helper is missing"
+eval "$SSH_REMOTE_FUNCTION"
+SSH_ARGS="$TMP/ssh-args.txt"
+SSH_PORT=
+PATH="$TMP/bin:$PATH" FAKE_CAPTURE_ARGS_FILE="$SSH_ARGS" ssh_remote fake-target 'printf no-port'
+[[ $(sed -n '1p' "$SSH_ARGS") == fake-target && $(sed -n '2p' "$SSH_ARGS") == 'printf no-port' &&
+   $(wc -l < "$SSH_ARGS" | tr -d ' ') == 2 ]] ||
+  fail "Bash 3.2 no-port ssh_remote argv is invalid"
+SSH_PORT=2222
+PATH="$TMP/bin:$PATH" FAKE_CAPTURE_ARGS_FILE="$SSH_ARGS" ssh_remote fake-target 'printf explicit-port'
+[[ $(sed -n '1p' "$SSH_ARGS") == -p && $(sed -n '2p' "$SSH_ARGS") == 2222 &&
+   $(sed -n '3p' "$SSH_ARGS") == fake-target && $(sed -n '4p' "$SSH_ARGS") == 'printf explicit-port' &&
+   $(wc -l < "$SSH_ARGS" | tr -d ' ') == 4 ]] ||
+  fail "Bash 3.2 explicit-port ssh_remote argv is invalid"
+grep -Fq 'RSYNC_SSH_COMMAND=ssh' "$DEPLOY" || fail "frontend rsync no-port transport is not explicit"
+if grep -Fq 'SSH_OPTS' "$DEPLOY"; then
+  fail "deploy still depends on Bash empty-array SSH options"
+fi
+
+EVIDENCE_ORCHESTRATOR=$(sed -n '/^record_and_verify_deployment_evidence()/,/^}/p' "$DEPLOY")
+[[ -n $EVIDENCE_ORCHESTRATOR ]] || fail "deployment evidence orchestrator is missing"
+(
+  eval "$EVIDENCE_ORCHESTRATOR"
+  TARGET=fake-target
+  BACKEND_ARTIFACT_SHA256=$(printf 'a%.0s' {1..64})
+  BACKEND_ROLLBACK_PATH=/app/backend/.server.rollback.fixture
+  BACKEND_ROLLBACK_SHA256=$(printf 'b%.0s' {1..64})
+  EVENTS="$TMP/ack-lost-events"
+  ssh_remote() { printf 'recorder_failed\n' >> "$EVENTS"; return 1; }
+  verify_remote_deployment_evidence() { printf 'verified\n' >> "$EVENTS"; return 0; }
+  restore_backend_without_restart() { printf 'restored\n' >> "$EVENTS"; return 0; }
+  record_and_verify_deployment_evidence >/dev/null
+  [[ $(grep -Fxc recorder_failed "$EVENTS") == 1 && $(grep -Fxc verified "$EVENTS") == 2 &&
+     $(grep -Fxc restored "$EVENTS" || true) == 0 ]] ||
+    fail "lost recorder acknowledgment rolls back authenticated PASS evidence"
+)
+(
+  eval "$EVIDENCE_ORCHESTRATOR"
+  TARGET=fake-target
+  BACKEND_ARTIFACT_SHA256=$(printf 'a%.0s' {1..64})
+  BACKEND_ROLLBACK_PATH=/app/backend/.server.rollback.fixture
+  BACKEND_ROLLBACK_SHA256=$(printf 'b%.0s' {1..64})
+  EVENTS="$TMP/no-evidence-events"
+  ssh_remote() { printf 'recorder_failed\n' >> "$EVENTS"; return 1; }
+  verify_remote_deployment_evidence() { printf 'verify_failed\n' >> "$EVENTS"; return 1; }
+  restore_backend_without_restart() { printf 'restored\n' >> "$EVENTS"; return 0; }
+  set +e
+  record_and_verify_deployment_evidence >/dev/null 2>&1
+  STATUS=$?
+  set -e
+  [[ $STATUS -ne 0 && $(grep -Fxc verify_failed "$EVENTS") == 1 &&
+     $(grep -Fxc restored "$EVENTS") == 1 ]] ||
+    fail "recorder failure without valid evidence does not restore the previous binary"
+)
+(
+  eval "$EVIDENCE_ORCHESTRATOR"
+  TARGET=fake-target
+  BACKEND_ARTIFACT_SHA256=$(printf 'a%.0s' {1..64})
+  BACKEND_ROLLBACK_PATH=/app/backend/.server.rollback.fixture
+  BACKEND_ROLLBACK_SHA256=$(printf 'b%.0s' {1..64})
+  EVENTS="$TMP/readback-failed-events"
+  ssh_remote() { printf 'recorder_ok\n' >> "$EVENTS"; return 0; }
+  verify_remote_deployment_evidence() { printf 'verify_failed\n' >> "$EVENTS"; return 1; }
+  restore_backend_without_restart() { printf 'restored\n' >> "$EVENTS"; return 0; }
+  set +e
+  record_and_verify_deployment_evidence >/dev/null 2>&1
+  STATUS=$?
+  set -e
+  [[ $STATUS -ne 0 && $(grep -Fxc verify_failed "$EVENTS") == 1 &&
+     $(grep -Fxc restored "$EVENTS") == 1 ]] ||
+    fail "acknowledged recorder output bypasses authenticated evidence readback"
+)
 
 MIGRATION_LIST="$TMP/migrations.txt"
 (
