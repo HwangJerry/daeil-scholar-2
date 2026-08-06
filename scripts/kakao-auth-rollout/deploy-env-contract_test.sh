@@ -76,9 +76,14 @@ grep -Fq 'RECORD_MAINTENANCE_DEPLOY_EVIDENCE' "$DEPLOY" ||
   fail "deploy.sh does not expose generation-bound deployment evidence recording"
 grep -Fq 'maintenance-record-deployment.sh' "$DEPLOY" ||
   fail "deploy.sh does not invoke the deployment evidence producer"
-for deployment_binding in APPROVED_SOURCE_REVISION APPROVED_BACKEND_ARTIFACT_SHA256 ACTIVE_UNIT_PROTOCOL BACKEND_ROLLBACK_PATH; do
+for deployment_binding in APPROVED_SOURCE_REVISION APPROVED_BACKEND_ARTIFACT_SHA256 APPROVED_MAINTENANCE_GENERATION APPROVED_PREDEPLOY_BINARY_SHA256 APPROVED_PREDEPLOY_BINARY_SIZE ACTIVE_UNIT_PROTOCOL BACKEND_ROLLBACK_PATH; do
   grep -Fq "$deployment_binding" "$DEPLOY" || fail "deploy.sh is missing ${deployment_binding} binding"
 done
+for external_binding in APPROVED_EXTERNAL_GO_MOD_SHA256 APPROVED_EXTERNAL_KAKAO_CLIENT_SHA256; do
+  grep -Fq "$external_binding" "$DEPLOY" || fail "deploy.sh is missing ${external_binding} binding"
+done
+[[ $(grep -Fc 'verify_approved_external_inputs' "$DEPLOY") -ge 3 ]] ||
+  fail "bundle-local external inputs are not checked before and after backend build"
 # shellcheck disable=SC2016 # Match the literal command substitution in deploy.sh.
 grep -Fq '[[ $(GOTOOLCHAIN=local go env GOVERSION) == go1.25.2 ]]' "$DEPLOY" ||
   fail "deploy does not pin the approved Go toolchain before building"
@@ -148,14 +153,27 @@ grep -Fq 'backend_guard_failed_immediately_before_backend_replace' "$DEPLOY" ||
   fail "backend stopped-state is not rechecked immediately before replacement"
 SECOND_BACKEND_GUARD_LINE=$(grep -nF 'backend_guard_failed_immediately_before_backend_replace' "$DEPLOY" | head -n 1 | cut -d: -f1)
 ROLLBACK_COPY_LINE=$(grep -nF 'cp -p -- /app/backend/server' "$DEPLOY" | head -n 1 | cut -d: -f1)
+PREDEPLOY_IDENTITY_LINE=$(grep -nF 'predeploy_binary_identity_changed_before_backend_replace' "$DEPLOY" | head -n 1 | cut -d: -f1)
 # shellcheck disable=SC2016 # Match the literal remote $staged variable.
 STAGED_CHMOD_LINE=$(grep -nF 'chmod 0755 \"\$staged\"' "$DEPLOY" | tail -n 1 | cut -d: -f1)
 # shellcheck disable=SC2016 # Contract intentionally matches the literal remote $staged variable.
 SERVER_REPLACE_LINE=$(grep -nF 'mv -fT \"\$staged\" /app/backend/server' "$DEPLOY" | head -n 1 | cut -d: -f1)
-[[ -n $SECOND_BACKEND_GUARD_LINE && -n $ROLLBACK_COPY_LINE && -n $STAGED_CHMOD_LINE && -n $SERVER_REPLACE_LINE &&
-   $ROLLBACK_COPY_LINE -lt $STAGED_CHMOD_LINE && $STAGED_CHMOD_LINE -lt $SECOND_BACKEND_GUARD_LINE &&
+[[ -n $SECOND_BACKEND_GUARD_LINE && -n $ROLLBACK_COPY_LINE && -n $PREDEPLOY_IDENTITY_LINE && -n $STAGED_CHMOD_LINE && -n $SERVER_REPLACE_LINE &&
+   $ROLLBACK_COPY_LINE -lt $PREDEPLOY_IDENTITY_LINE && $PREDEPLOY_IDENTITY_LINE -lt $STAGED_CHMOD_LINE && $STAGED_CHMOD_LINE -lt $SECOND_BACKEND_GUARD_LINE &&
    $SECOND_BACKEND_GUARD_LINE -lt $SERVER_REPLACE_LINE ]] ||
-  fail "second backend guard is not immediate between rollback copy and replacement"
+  fail "approved predeploy identity and second backend guard are not enforced before replacement"
+[[ $(grep -Fc 'maintenance_generation_changed_before_backend_replace' "$DEPLOY") -ge 2 ]] ||
+  fail "approved maintenance generation is not checked initially and immediately before replacement"
+for quoted_binding in APPROVED_MAINTENANCE_GENERATION_Q APPROVED_PREDEPLOY_BINARY_SHA256_Q APPROVED_PREDEPLOY_BINARY_SIZE_Q; do
+  grep -Fq "printf -v $quoted_binding '%q'" "$DEPLOY" ||
+    fail "remote approval binding ${quoted_binding} is not shell-quoted"
+done
+grep -Fq 'current_binary_missing_before_backend_replace' "$DEPLOY" ||
+  fail "evidence deployment does not reject an absent or dangling preflight binary"
+grep -Fq 'if [[ ${RECORD_MAINTENANCE_DEPLOY_EVIDENCE} == 1 ]]; then' "$DEPLOY" ||
+  fail "predeploy identity check is not scoped to evidence deployment"
+grep -Fq 'rm -f \"\$staged\"; if [[ \"\${rollback:-NONE}\" != NONE ]]; then rm -f \"\$rollback\"; fi' "$DEPLOY" ||
+  fail "remote transaction does not clean staged and rollback temporary artifacts on failure"
 RESTART_BLOCK=$(sed -n '/if ! ssh .*systemctl restart alumni-backend/,/fi/p' "$DEPLOY")
 [[ $(grep -Fc 'systemctl restart alumni-backend' <<< "$RESTART_BLOCK") == 1 ]] ||
   fail "backend restart failure can restart a sentinel-unaware rollback binary"

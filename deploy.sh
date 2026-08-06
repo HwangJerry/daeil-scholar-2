@@ -21,6 +21,11 @@ PREFLIGHT_ONLY=false
 RECORD_MAINTENANCE_DEPLOY_EVIDENCE=${RECORD_MAINTENANCE_DEPLOY_EVIDENCE:-0}
 APPROVED_SOURCE_REVISION=${APPROVED_SOURCE_REVISION:-}
 APPROVED_BACKEND_ARTIFACT_SHA256=${APPROVED_BACKEND_ARTIFACT_SHA256:-}
+APPROVED_MAINTENANCE_GENERATION=${APPROVED_MAINTENANCE_GENERATION:-}
+APPROVED_PREDEPLOY_BINARY_SHA256=${APPROVED_PREDEPLOY_BINARY_SHA256:-}
+APPROVED_PREDEPLOY_BINARY_SIZE=${APPROVED_PREDEPLOY_BINARY_SIZE:-}
+APPROVED_EXTERNAL_GO_MOD_SHA256=${APPROVED_EXTERNAL_GO_MOD_SHA256:-}
+APPROVED_EXTERNAL_KAKAO_CLIENT_SHA256=${APPROVED_EXTERNAL_KAKAO_CLIENT_SHA256:-}
 BUILD_BACKFILL_ARTIFACT=1
 if [[ $RECORD_MAINTENANCE_DEPLOY_EVIDENCE == 1 ]]; then
   BUILD_BACKFILL_ARTIFACT=0
@@ -110,6 +115,15 @@ parse_backend_rollback_result() {
   return 1
 }
 
+verify_approved_external_inputs() {
+  local external_root=../dflh-social-auth
+  local go_mod="$external_root/go.mod"
+  local kakao_client="$external_root/kakao/client.go"
+  [[ -f $go_mod && ! -L $go_mod && -f $kakao_client && ! -L $kakao_client ]] || return 1
+  [[ $(shasum -a 256 "$go_mod" | cut -d' ' -f1) == "$APPROVED_EXTERNAL_GO_MOD_SHA256" ]] || return 1
+  [[ $(shasum -a 256 "$kakao_client" | cut -d' ' -f1) == "$APPROVED_EXTERNAL_KAKAO_CLIENT_SHA256" ]] || return 1
+}
+
 verify_remote_maintenance_active() {
   local target=$1
   ssh_remote "$target" 'bash -s' <<'REMOTE_MAINTENANCE_GUARD'
@@ -180,6 +194,25 @@ if [[ $RECORD_MAINTENANCE_DEPLOY_EVIDENCE == 1 ]]; then
     echo "✗ Evidence-enabled deployment requires a clean worktree." >&2
     exit 1
   }
+  if [[ $PREFLIGHT_ONLY == false ]]; then
+    [[ $APPROVED_MAINTENANCE_GENERATION =~ ^[a-f0-9]{32}$ ]] || {
+      echo "✗ APPROVED_MAINTENANCE_GENERATION must be an exact generation." >&2
+      exit 1
+    }
+    [[ $APPROVED_PREDEPLOY_BINARY_SHA256 =~ ^[a-f0-9]{64}$ ]] || {
+      echo "✗ APPROVED_PREDEPLOY_BINARY_SHA256 must be an exact SHA-256." >&2
+      exit 1
+    }
+    [[ $APPROVED_PREDEPLOY_BINARY_SIZE =~ ^[0-9]+$ ]] || {
+      echo "✗ APPROVED_PREDEPLOY_BINARY_SIZE must be decimal bytes." >&2
+      exit 1
+    }
+    [[ $APPROVED_EXTERNAL_GO_MOD_SHA256 =~ ^[a-f0-9]{64}$ &&
+       $APPROVED_EXTERNAL_KAKAO_CLIENT_SHA256 =~ ^[a-f0-9]{64}$ ]] || {
+      echo "✗ Approved external source hashes must be exact SHA-256 values." >&2
+      exit 1
+    }
+  fi
 fi
 if [[ "${BUILD_FRONTEND}" == "false" && -z "${PATCH_MODE}" ]]; then
   PATCH_MODE="false"
@@ -472,6 +505,12 @@ if [[ "${BUILD_BACKEND}" == "true" ]]; then
     echo "✗ Backend artifact build requires local Go 1.25.2." >&2
     exit 1
   }
+  if [[ $RECORD_MAINTENANCE_DEPLOY_EVIDENCE == 1 ]]; then
+    verify_approved_external_inputs || {
+      echo "✗ External backend build inputs changed before build." >&2
+      exit 1
+    }
+  fi
   cd backend
   GOWORK=off GOFLAGS='' GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -o ../dist/server ./cmd/server
   chmod 755 ../dist/server
@@ -480,6 +519,12 @@ if [[ "${BUILD_BACKEND}" == "true" ]]; then
     chmod 755 ../dist/backfill
   fi
   cd ..
+  if [[ $RECORD_MAINTENANCE_DEPLOY_EVIDENCE == 1 ]]; then
+    verify_approved_external_inputs || {
+      echo "✗ External backend build inputs changed during build." >&2
+      exit 1
+    }
+  fi
 fi
 
 if [[ "${BUILD_FRONTEND}" == "true" ]]; then
@@ -543,6 +588,9 @@ if [[ "${BUILD_BACKEND}" == "true" ]]; then
        trap 'rm -f \"\$staged\"' EXIT; cat > \"\$staged\"; chmod 0755 \"\$staged\"; \
        mv -fT \"\$staged\" /app/backend/backfill; trap - EXIT" < dist/backfill
   fi
+  printf -v APPROVED_MAINTENANCE_GENERATION_Q '%q' "$APPROVED_MAINTENANCE_GENERATION"
+  printf -v APPROVED_PREDEPLOY_BINARY_SHA256_Q '%q' "$APPROVED_PREDEPLOY_BINARY_SHA256"
+  printf -v APPROVED_PREDEPLOY_BINARY_SIZE_Q '%q' "$APPROVED_PREDEPLOY_BINARY_SIZE"
   BACKEND_ROLLBACK_RESULT=$(
     ssh "${SSH_OPTS[@]}" "${TARGET}" \
       "set -euo pipefail; umask 077; \
@@ -550,27 +598,36 @@ if [[ "${BUILD_BACKEND}" == "true" ]]; then
          sentinel=/run/alumni/maintenance; mode=\$(stat -c '%a' \"\$sentinel\" 2>/dev/null) || { echo maintenance_guard_failed_before_backend_replace >&2; exit 1; }; \
          owner=\$(stat -c '%u' \"\$sentinel\" 2>/dev/null) || { echo maintenance_guard_failed_before_backend_replace >&2; exit 1; }; \
          [[ -f \"\$sentinel\" && ! -L \"\$sentinel\" && \"\$mode\" == 644 && \"\$owner\" == 0 && \$(grep -Fxc 'state=active' \"\$sentinel\" || true) == 1 && \$(grep -Ec '^generation=[a-f0-9]{32}$' \"\$sentinel\" || true) == 1 ]] || { echo maintenance_guard_failed_before_backend_replace >&2; exit 1; }; \
+         generation=\$(sed -n 's/^generation=//p' \"\$sentinel\"); [[ \"\$generation\" == ${APPROVED_MAINTENANCE_GENERATION_Q} ]] || { echo maintenance_generation_changed_before_backend_replace >&2; exit 1; }; \
          ! sudo systemctl is-active --quiet alumni-backend || { echo backend_guard_failed_before_backend_replace >&2; exit 1; }; \
          backend_pid_output=\$(sudo systemctl show --property MainPID alumni-backend) || { echo backend_guard_failed_before_backend_replace >&2; exit 1; }; \
          [[ \$backend_pid_output == MainPID=0 && \$backend_pid_output != *\$'\n'* ]] || { echo backend_guard_failed_before_backend_replace >&2; exit 1; }; \
        fi; \
+       rollback=NONE; rollback_sha=NONE; \
        staged=\$(mktemp /app/backend/.server.new.XXXXXX); \
-       trap 'rm -f \"\$staged\"' EXIT; cat > \"\$staged\"; \
+       trap 'rm -f \"\$staged\"; if [[ \"\${rollback:-NONE}\" != NONE ]]; then rm -f \"\$rollback\"; fi' EXIT; cat > \"\$staged\"; \
        actual=\$(sha256sum \"\$staged\" | cut -d ' ' -f 1); \
        [[ \"\$actual\" == '${BACKEND_ARTIFACT_SHA256}' ]] || exit 41; \
-       rollback=NONE; rollback_sha=NONE; \
+       if [[ ${RECORD_MAINTENANCE_DEPLOY_EVIDENCE} == 1 ]]; then \
+         [[ -f /app/backend/server && ! -L /app/backend/server ]] || { echo current_binary_missing_before_backend_replace >&2; exit 42; }; \
+       fi; \
        if [[ -e /app/backend/server ]]; then \
          [[ -f /app/backend/server && ! -L /app/backend/server ]] || exit 42; \
          rollback=\$(mktemp /app/backend/.server.rollback.XXXXXX); \
          cp -p -- /app/backend/server \"\$rollback\"; \
          rollback_sha=\$(sha256sum \"\$rollback\" | cut -d ' ' -f 1); \
          [[ \$rollback_sha =~ ^[a-f0-9]{64}$ ]] || exit 43; \
+         if [[ ${RECORD_MAINTENANCE_DEPLOY_EVIDENCE} == 1 ]]; then \
+           rollback_size=\$(stat -c '%s' \"\$rollback\"); \
+           if [[ \"\$rollback_sha\" != ${APPROVED_PREDEPLOY_BINARY_SHA256_Q} || \"\$rollback_size\" != ${APPROVED_PREDEPLOY_BINARY_SIZE_Q} ]]; then echo predeploy_binary_identity_changed_before_backend_replace >&2; exit 44; fi; \
+         fi; \
        fi; \
        chmod 0755 \"\$staged\"; \
        if [[ ${RECORD_MAINTENANCE_DEPLOY_EVIDENCE} == 1 ]]; then \
          sentinel=/run/alumni/maintenance; mode=\$(stat -c '%a' \"\$sentinel\" 2>/dev/null) || { echo maintenance_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
          owner=\$(stat -c '%u' \"\$sentinel\" 2>/dev/null) || { echo maintenance_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
          [[ -f \"\$sentinel\" && ! -L \"\$sentinel\" && \"\$mode\" == 644 && \"\$owner\" == 0 && \$(grep -Fxc 'state=active' \"\$sentinel\" || true) == 1 && \$(grep -Ec '^generation=[a-f0-9]{32}$' \"\$sentinel\" || true) == 1 ]] || { echo maintenance_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
+         generation=\$(sed -n 's/^generation=//p' \"\$sentinel\"); [[ \"\$generation\" == ${APPROVED_MAINTENANCE_GENERATION_Q} ]] || { echo maintenance_generation_changed_before_backend_replace >&2; exit 1; }; \
          ! sudo systemctl is-active --quiet alumni-backend || { echo backend_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
          backend_pid_output=\$(sudo systemctl show --property MainPID alumni-backend) || { echo backend_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
          [[ \$backend_pid_output == MainPID=0 && \$backend_pid_output != *\$'\n'* ]] || { echo backend_guard_failed_immediately_before_backend_replace >&2; exit 1; }; \
