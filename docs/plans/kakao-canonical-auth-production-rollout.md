@@ -1057,14 +1057,14 @@ Migration PASS만으로 backend를 배포하지 않는다.
 
 ### Gate G3 — Four separate production approvals
 
-- **G3-P read-only preflight:** local authority/artifact checksums와 production read-only state query의 exact command를 승인받는다. Production mutation은 금지한다.
-- **G3-D backend deployment:** G3-P PASS evidence SHA-256, immutable binary checksum, previous backend artifact, rollback command, maintenance 상태와 exact deployment command를 제시하고 별도 승인을 받는다.
+- **G3-P read-only preflight:** local authority/artifact checksums, reviewed closure SHA-256, 64-hex attempt nonce와 production read-only state query의 exact command를 승인받는다. PASS evidence에는 approved closure, maintenance generation, current backend SHA-256/size와 consumed attempt ID를 기록한다. Production mutation은 금지한다.
+- **G3-D backend deployment:** 같은 closure에 결속된 G3-P PASS evidence SHA-256, 동일 maintenance generation, immutable binary checksum, preflight-observed backend SHA-256/size, 64-hex attempt nonce, rollback command와 exact deployment command를 제시하고 별도 승인을 받는다. Build window 이후 rollback copy의 hash/size와 maintenance generation을 final replacement 전에 재검증하며 drift면 replacement/restart 없이 fail closed한다.
 - **G3-S controlled smoke:** G3-D PASS 뒤 test run ID, 허용된 writer/proof 범위, exact smoke/cleanup commands와 실패 시 maintenance 유지 조건을 제시하고 별도 승인을 받는다.
 - **G3-R maintenance release:** G3-D와 G3-S가 모두 PASS한 뒤 release command, generation binding, worker/job 재개 postcheck를 제시하고 별도 승인을 받는다.
 
 어느 단계의 PASS도 다음 단계 승인이 아니다. 각 approval bit는 해당 exact command와 reviewed evidence에만 유효하다.
 
-각 G3-P/G3-D/G3-S/G3-R approval bit는 single-use이며 reviewed evidence SHA-256과 exact command bytes에 결속된다. Approval은 첫 execution attempt 시작과 동시에 성공/실패와 무관하게 consumed된다. 같은 stage retry 또는 whole-T90 replay에서는 re-executed stage마다 갱신된 evidence를 검토하고 새 applicable approval을 받아야 한다.
+각 G3-P/G3-D/G3-S/G3-R approval bit는 single-use이며 reviewed evidence SHA-256과 exact command bytes에 결속된다. Approval은 첫 execution attempt 시작과 동시에 성공/실패와 무관하게 consumed된다. 같은 stage retry 또는 whole-T90 replay에서는 re-executed stage마다 갱신된 evidence를 검토하고 새 applicable approval을 받아야 한다. 각 stage launcher는 approved command에 포함된 64-hex attempt nonce로 canonical payload를 derive하고 trusted local `0600` no-overwrite consumed record를 첫 attempt 전에 생성하며, 동일 record가 이미 있으면 fail closed한다. T90-D1 launcher는 G3-P/G3-D에 이를 강제하고, G3-S/G3-R launcher도 해당 stage 승인 요청 전에 같은 contract를 구현·검증해야 한다.
 
 ### Deployment
 
@@ -1426,14 +1426,14 @@ def validate_t90_gate_contract(document):
 
     expected_gate = '''### Gate G3 — Four separate production approvals
 
-- **G3-P read-only preflight:** local authority/artifact checksums와 production read-only state query의 exact command를 승인받는다. Production mutation은 금지한다.
-- **G3-D backend deployment:** G3-P PASS evidence SHA-256, immutable binary checksum, previous backend artifact, rollback command, maintenance 상태와 exact deployment command를 제시하고 별도 승인을 받는다.
+- **G3-P read-only preflight:** local authority/artifact checksums, reviewed closure SHA-256, 64-hex attempt nonce와 production read-only state query의 exact command를 승인받는다. PASS evidence에는 approved closure, maintenance generation, current backend SHA-256/size와 consumed attempt ID를 기록한다. Production mutation은 금지한다.
+- **G3-D backend deployment:** 같은 closure에 결속된 G3-P PASS evidence SHA-256, 동일 maintenance generation, immutable binary checksum, preflight-observed backend SHA-256/size, 64-hex attempt nonce, rollback command와 exact deployment command를 제시하고 별도 승인을 받는다. Build window 이후 rollback copy의 hash/size와 maintenance generation을 final replacement 전에 재검증하며 drift면 replacement/restart 없이 fail closed한다.
 - **G3-S controlled smoke:** G3-D PASS 뒤 test run ID, 허용된 writer/proof 범위, exact smoke/cleanup commands와 실패 시 maintenance 유지 조건을 제시하고 별도 승인을 받는다.
 - **G3-R maintenance release:** G3-D와 G3-S가 모두 PASS한 뒤 release command, generation binding, worker/job 재개 postcheck를 제시하고 별도 승인을 받는다.
 
 어느 단계의 PASS도 다음 단계 승인이 아니다. 각 approval bit는 해당 exact command와 reviewed evidence에만 유효하다.
 
-각 G3-P/G3-D/G3-S/G3-R approval bit는 single-use이며 reviewed evidence SHA-256과 exact command bytes에 결속된다. Approval은 첫 execution attempt 시작과 동시에 성공/실패와 무관하게 consumed된다. 같은 stage retry 또는 whole-T90 replay에서는 re-executed stage마다 갱신된 evidence를 검토하고 새 applicable approval을 받아야 한다.'''
+각 G3-P/G3-D/G3-S/G3-R approval bit는 single-use이며 reviewed evidence SHA-256과 exact command bytes에 결속된다. Approval은 첫 execution attempt 시작과 동시에 성공/실패와 무관하게 consumed된다. 같은 stage retry 또는 whole-T90 replay에서는 re-executed stage마다 갱신된 evidence를 검토하고 새 applicable approval을 받아야 한다. 각 stage launcher는 approved command에 포함된 64-hex attempt nonce로 canonical payload를 derive하고 trusted local `0600` no-overwrite consumed record를 첫 attempt 전에 생성하며, 동일 record가 이미 있으면 fail closed한다. T90-D1 launcher는 G3-P/G3-D에 이를 강제하고, G3-S/G3-R launcher도 해당 stage 승인 요청 전에 같은 contract를 구현·검증해야 한다.'''
     gate = policy.split('### Gate G3 — Four separate production approvals', 1)[1].split('### Deployment', 1)[0]
     gate = '### Gate G3 — Four separate production approvals' + gate
     assert gate.strip() == expected_gate
