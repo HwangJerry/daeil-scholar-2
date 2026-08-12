@@ -63,7 +63,7 @@ func TestMemberBlockRepositoryBlockIsIdempotentWithoutChangingTimestamp(t *testi
 	repo, mock, closeDB := newMemberBlockRepoMock(t)
 	defer closeDB()
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT STATUS[\s\S]*FROM ALUMNI_VERIFICATION[\s\S]*WHERE USR_SEQ = \?[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT v.STATUS[\s\S]*FROM ALUMNI_VERIFICATION v[\s\S]*JOIN WEO_MEMBER m[\s\S]*v.USR_SEQ = \?[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)[\s\S]*FOR UPDATE`).
 		WithArgs(202).
 		WillReturnRows(sqlmock.NewRows([]string{"STATUS"}).AddRow("approved"))
 	insert := regexp.QuoteMeta(`
@@ -94,7 +94,7 @@ func TestMemberBlockRepositoryRollsBackUnapprovedTargetWithoutInsert(t *testing.
 	repo, mock, closeDB := newMemberBlockRepoMock(t)
 	defer closeDB()
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT STATUS[\s\S]*FROM ALUMNI_VERIFICATION[\s\S]*WHERE USR_SEQ = \?[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT v.STATUS[\s\S]*FROM ALUMNI_VERIFICATION v[\s\S]*JOIN WEO_MEMBER m[\s\S]*v.USR_SEQ = \?[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)[\s\S]*FOR UPDATE`).
 		WithArgs(202).
 		WillReturnRows(sqlmock.NewRows([]string{"STATUS"}).AddRow("pending"))
 	mock.ExpectRollback()
@@ -130,7 +130,7 @@ func TestMemberBlockRepositoryUnblockIsIdempotent(t *testing.T) {
 func TestMemberBlockRepositoryChecksCanonicalApprovedTarget(t *testing.T) {
 	repo, mock, closeDB := newMemberBlockRepoMock(t)
 	defer closeDB()
-	mock.ExpectQuery(`SELECT EXISTS\([\s\S]*FROM ALUMNI_VERIFICATION[\s\S]*USR_SEQ = \?[\s\S]*STATUS = 'approved'`).
+	mock.ExpectQuery(`SELECT EXISTS\([\s\S]*FROM ALUMNI_VERIFICATION v[\s\S]*JOIN WEO_MEMBER m[\s\S]*v.USR_SEQ = \?[\s\S]*v.STATUS = 'approved'[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)`).
 		WithArgs(202).
 		WillReturnRows(sqlmock.NewRows([]string{"approved"}).AddRow(true))
 

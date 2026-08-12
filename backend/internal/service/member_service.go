@@ -19,6 +19,8 @@ var ErrIDTaken = errors.New("user ID already taken")
 // ErrPhoneTaken is returned when the phone number is already registered.
 var ErrPhoneTaken = errors.New("phone number already taken")
 
+var ErrInvalidPhone = errors.New("phone number is invalid")
+
 // ErrEmailTaken is returned when the email address is already registered.
 var ErrEmailTaken = errors.New("email already taken")
 

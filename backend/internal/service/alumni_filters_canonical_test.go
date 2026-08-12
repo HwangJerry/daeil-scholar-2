@@ -23,15 +23,15 @@ func TestGetAlumniFiltersReturnsCanonicalApprovedOptions(t *testing.T) {
 		cache.New(time.Minute, time.Minute),
 	)
 
-	mock.ExpectQuery(`SELECT DISTINCT v.GRADUATION_YEAR[\s\S]*v.STATUS = 'approved'[\s\S]*ORDER BY v.GRADUATION_YEAR DESC`).
+	mock.ExpectQuery(`SELECT DISTINCT v.GRADUATION_YEAR[\s\S]*JOIN WEO_MEMBER m[\s\S]*v.STATUS = 'approved'[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)[\s\S]*ORDER BY v.GRADUATION_YEAR DESC`).
 		WillReturnRows(sqlmock.NewRows([]string{"GRADUATION_YEAR"}).AddRow(2004).AddRow(2003))
-	mock.ExpectQuery(`SELECT DISTINCT v.COHORT[\s\S]*v.STATUS = 'approved'[\s\S]*REGEXP`).
+	mock.ExpectQuery(`SELECT DISTINCT v.COHORT[\s\S]*JOIN WEO_MEMBER m[\s\S]*v.STATUS = 'approved'[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)[\s\S]*REGEXP`).
 		WillReturnRows(sqlmock.NewRows([]string{"COHORT"}).AddRow("18").AddRow("19"))
-	mock.ExpectQuery(`SELECT DISTINCT v.DEPARTMENT[\s\S]*v.STATUS = 'approved'[\s\S]*ORDER BY v.DEPARTMENT ASC`).
+	mock.ExpectQuery(`SELECT DISTINCT v.DEPARTMENT[\s\S]*JOIN WEO_MEMBER m[\s\S]*v.STATUS = 'approved'[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)[\s\S]*ORDER BY v.DEPARTMENT ASC`).
 		WillReturnRows(sqlmock.NewRows([]string{"DEPARTMENT"}).AddRow("독일어").AddRow("영어"))
 	mock.ExpectQuery(`FROM ALUMNI_JOB_CATEGORY[\s\S]*OPEN_YN = 'Y'[\s\S]*ORDER BY AJC_INDX ASC`).
 		WillReturnRows(sqlmock.NewRows([]string{"AJC_SEQ", "AJC_NAME"}).AddRow(3, "교육"))
-	mock.ExpectQuery(`SELECT DISTINCT m.USR_POSITION[\s\S]*JOIN ALUMNI_VERIFICATION v[\s\S]*v.STATUS = 'approved'[\s\S]*ORDER BY m.USR_POSITION ASC`).
+	mock.ExpectQuery(`SELECT DISTINCT m.USR_POSITION[\s\S]*JOIN ALUMNI_VERIFICATION v[\s\S]*v.STATUS = 'approved'[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)[\s\S]*ORDER BY m.USR_POSITION ASC`).
 		WillReturnRows(sqlmock.NewRows([]string{"USR_POSITION"}).AddRow("교사").AddRow("연구원"))
 
 	filters, err := alumniService.GetFilters()

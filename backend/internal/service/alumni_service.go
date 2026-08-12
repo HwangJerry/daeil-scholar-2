@@ -83,13 +83,9 @@ func (s *AlumniService) GetDetail(viewerSeq, userSeq int) (*model.AlumniDetail, 
 	}, nil
 }
 
-const widgetPreviewCacheKey = "alumni:widget:preview"
-
-// GetWidgetPreview returns a cached minimal approved-alumni list and total count.
+// GetWidgetPreview reads current eligibility on every request so a suspended or
+// withdrawn member is never served from stale member-identifying cache data.
 func (s *AlumniService) GetWidgetPreview() (*model.AlumniWidgetResponse, error) {
-	if cached, found := s.cache.Get(widgetPreviewCacheKey); found {
-		return cached.(*model.AlumniWidgetResponse), nil
-	}
 	names, total, err := s.repo.GetWidgetPreview()
 	if err != nil {
 		return nil, err
@@ -99,7 +95,6 @@ func (s *AlumniService) GetWidgetPreview() (*model.AlumniWidgetResponse, error) 
 		items = append(items, model.AlumniWidgetItem{FmName: name})
 	}
 	result := &model.AlumniWidgetResponse{Items: items, TotalCount: total}
-	s.cache.Set(widgetPreviewCacheKey, result, 10*time.Minute)
 	return result, nil
 }
 
@@ -119,16 +114,10 @@ func (s *AlumniService) GetJobCategories() ([]model.JobCategory, error) {
 }
 
 func (s *AlumniService) GetFilters() (*model.AlumniFilters, error) {
-	if cached, found := s.cache.Get("alumni_filters"); found {
-		if filters, ok := cached.(*model.AlumniFilters); ok {
-			return filters, nil
-		}
-	}
 	filters, err := s.repo.GetFilters()
 	if err != nil {
 		return nil, err
 	}
-	s.cache.Set("alumni_filters", filters, time.Hour)
 	return filters, nil
 }
 

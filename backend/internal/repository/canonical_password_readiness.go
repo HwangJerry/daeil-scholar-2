@@ -2,7 +2,30 @@ package repository
 
 import "github.com/jmoiron/sqlx"
 
-const canonicalPasswordRequiredTableCount = 5
+const canonicalPasswordRequiredTableCount = 6
+
+func PhoneClaimsWriteReady(db *sqlx.DB) (bool, error) {
+	var tableCount int
+	if err := db.Get(&tableCount, `
+		SELECT COUNT(*)
+		FROM information_schema.TABLES
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME IN ('AUTH_PHONE_CLAIM', '_migration_history')
+	`); err != nil {
+		return false, err
+	}
+	if tableCount != 2 {
+		return false, nil
+	}
+	var historyCount int
+	if err := db.Get(&historyCount, `
+		SELECT COUNT(*) FROM _migration_history
+		WHERE filename = '044_enforce_account_lifecycle_invariants.sql'
+	`); err != nil {
+		return false, err
+	}
+	return historyCount == 1, nil
+}
 
 // CanonicalPasswordWriteReady prevents application cutover before the
 // canonical schema and a conflict-free, fully journaled backfill exist.
@@ -17,6 +40,7 @@ func CanonicalPasswordWriteReady(db *sqlx.DB) (bool, error) {
 		    'AUTH_PASSWORD_CREDENTIAL',
 		    'AUTH_IDENTITY_MIGRATION_RUN',
 		    'AUTH_IDENTITY_MIGRATION_JOURNAL',
+		    'AUTH_PHONE_CLAIM',
 		    '_migration_history'
 		  )
 	`); err != nil {
@@ -53,6 +77,10 @@ func CanonicalPasswordWriteReady(db *sqlx.DB) (bool, error) {
 		  AND EXISTS (
 			SELECT 1 FROM _migration_history
 			WHERE filename = '043_finalize_identity_authority.sql'
+		  )
+		  AND EXISTS (
+			SELECT 1 FROM _migration_history
+			WHERE filename = '044_enforce_account_lifecycle_invariants.sql'
 		  )
 		  AND NOT EXISTS (
 			SELECT 1

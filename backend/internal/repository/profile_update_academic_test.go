@@ -15,14 +15,19 @@ func TestUpdateProfileDoesNotWriteAcademicFields(t *testing.T) {
 	}
 	defer db.Close()
 	repository := NewProfileRepository(sqlx.NewDb(db, "sqlmock"))
+	repository.EnablePhoneClaims()
 	jobCategory := 3
 
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_PHONE[\s\S]*FOR UPDATE`).WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_PHONE"}).AddRow("01012345678"))
 	mock.ExpectExec(`SET USR_NAME = \?, USR_PHONE = \?, USR_EMAIL = \?,`).
 		WithArgs(
 			"홍길동", "01012345678", "user@example.com",
 			"회사", "소개", "주소", "직무", jobCategory, "Y", "N", 42,
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	err = repository.UpdateProfile(42, model.ProfileUpdateRequest{
 		USRName:        "홍길동",

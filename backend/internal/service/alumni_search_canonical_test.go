@@ -20,9 +20,9 @@ func TestSearchAlumniUsesApprovedVerificationAndCanonicalResponse(t *testing.T) 
 	defer db.Close()
 	alumniService := NewAlumniService(repository.NewAlumniRepository(sqlx.NewDb(db, "sqlmock")), nil)
 
-	mock.ExpectQuery(`JOIN ALUMNI_VERIFICATION v[\s\S]*v.STATUS = 'approved'`).
+	mock.ExpectQuery(`JOIN ALUMNI_VERIFICATION v[\s\S]*v.STATUS = 'approved'[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)`).
 		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(1))
-	mock.ExpectQuery(`JOIN ALUMNI_VERIFICATION v[\s\S]*v.STATUS = 'approved'[\s\S]*ORDER BY m.USR_NAME ASC, m.USR_SEQ ASC`).
+	mock.ExpectQuery(`JOIN ALUMNI_VERIFICATION v[\s\S]*v.STATUS = 'approved'[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)[\s\S]*ORDER BY m.USR_NAME ASC, m.USR_SEQ ASC`).
 		WithArgs(20, 0).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"USR_SEQ", "USR_NAME", "USR_PHOTO", "GRADUATION_YEAR", "COHORT", "DEPARTMENT", "AJC_NAME", "USR_POSITION",

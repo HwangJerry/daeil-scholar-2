@@ -184,6 +184,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusConflict, "ID_TAKEN", "이미 사용 중인 아이디입니다")
 		case errors.Is(err, service.ErrPhoneTaken):
 			respondError(w, http.StatusConflict, "PHONE_TAKEN", "이미 등록된 전화번호입니다")
+		case errors.Is(err, service.ErrInvalidPhone):
+			respondError(w, http.StatusBadRequest, "INVALID_PHONE", "유효한 전화번호를 입력해주세요")
 		case errors.Is(err, service.ErrEmailTaken):
 			respondError(w, http.StatusConflict, "EMAIL_TAKEN", "이미 등록된 이메일입니다")
 		case errors.Is(err, service.ErrTagContainsWhitespace):
@@ -221,6 +223,10 @@ func (h *AuthHandler) CheckPhone(w http.ResponseWriter, r *http.Request) {
 	}
 	available, err := h.registerSvc.IsPhoneAvailable(phone)
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidPhone) {
+			respondError(w, http.StatusBadRequest, "INVALID_PHONE", "유효한 전화번호를 입력해주세요")
+			return
+		}
 		h.logger.Error().Err(err).Msg("check-phone: db error")
 		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "전화번호 중복 확인에 실패했습니다")
 		return

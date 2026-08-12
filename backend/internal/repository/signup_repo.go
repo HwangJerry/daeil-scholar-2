@@ -33,6 +33,9 @@ func (r *SignupRepository) CreatePasswordAccount(request model.RegisterRequest, 
 	if err != nil {
 		return 0, err
 	}
+	if err := claimPhoneTx(tx, request.Phone, accountSeq); err != nil {
+		return 0, err
+	}
 	if err := insertActiveAccountStateTx(tx, accountSeq); err != nil {
 		return 0, err
 	}

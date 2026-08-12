@@ -24,8 +24,10 @@ func (r *MemberBlockRepository) IsApprovedAlumni(userSeq int) (bool, error) {
 	if err := r.DB.Get(&approved, `
 		SELECT EXISTS(
 			SELECT 1
-			FROM ALUMNI_VERIFICATION
-			WHERE USR_SEQ = ? AND STATUS = 'approved'
+			FROM ALUMNI_VERIFICATION v
+			JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
+			WHERE v.USR_SEQ = ? AND v.STATUS = 'approved'
+			  AND m.USR_STATUS IN ('CCC','ZZZ')
 		)
 	`, userSeq); err != nil {
 		return false, err
@@ -84,9 +86,11 @@ func (r *MemberBlockRepository) Block(blockerSeq, blockedSeq int) (*model.Member
 
 	var status string
 	if err := tx.Get(&status, `
-		SELECT STATUS
-		FROM ALUMNI_VERIFICATION
-		WHERE USR_SEQ = ?
+		SELECT v.STATUS
+		FROM ALUMNI_VERIFICATION v
+		JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
+		WHERE v.USR_SEQ = ?
+		  AND m.USR_STATUS IN ('CCC','ZZZ')
 		FOR UPDATE
 	`, blockedSeq); err != nil {
 		if err == sql.ErrNoRows {

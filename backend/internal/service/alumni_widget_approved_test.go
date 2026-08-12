@@ -21,9 +21,9 @@ func TestGetAlumniWidgetUsesApprovedVerificationSource(t *testing.T) {
 		cache.New(time.Minute, time.Minute),
 	)
 
-	mock.ExpectQuery(`COUNT\(\*\)[\s\S]*JOIN ALUMNI_VERIFICATION v[\s\S]*v.STATUS = 'approved'`).
+	mock.ExpectQuery(`COUNT\(\*\)[\s\S]*JOIN ALUMNI_VERIFICATION v[\s\S]*v.STATUS = 'approved'[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)`).
 		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(1))
-	mock.ExpectQuery(`SELECT m.USR_NAME[\s\S]*JOIN ALUMNI_VERIFICATION v[\s\S]*v.STATUS = 'approved'`).
+	mock.ExpectQuery(`SELECT m.USR_NAME[\s\S]*JOIN ALUMNI_VERIFICATION v[\s\S]*v.STATUS = 'approved'[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)`).
 		WillReturnRows(sqlmock.NewRows([]string{"USR_NAME"}).AddRow("예시 동문"))
 
 	response, err := alumniService.GetWidgetPreview()

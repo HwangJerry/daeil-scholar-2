@@ -42,12 +42,21 @@ func (s *ProfileService) SubmitAlumniVerification(usrSeq int, req model.AlumniVe
 }
 
 func (s *ProfileService) UpdateProfile(usrSeq int, req model.ProfileUpdateRequest) error {
+	if !model.NormalizePhoneNumber(req.USRPhone).Valid() {
+		return ErrInvalidPhone
+	}
 	if req.Tags != nil {
 		if err := ValidateTags(req.Tags); err != nil {
 			return err
 		}
 	}
 	if err := s.repo.UpdateProfile(usrSeq, req); err != nil {
+		if errors.Is(err, repository.ErrInvalidPhone) {
+			return ErrInvalidPhone
+		}
+		if errors.Is(err, repository.ErrPhoneAlreadyClaimed) {
+			return ErrPhoneTaken
+		}
 		return err
 	}
 	if req.Tags != nil {

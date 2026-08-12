@@ -15,11 +15,18 @@ func TestUpdateProfileIgnoresLegacyAcademicFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	service := NewProfileService(repository.NewProfileRepository(sqlx.NewDb(db, "sqlmock")))
+	profileRepository := repository.NewProfileRepository(sqlx.NewDb(db, "sqlmock"))
+	profileRepository.EnablePhoneClaims()
+	service := NewProfileService(profileRepository)
 
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_PHONE[\s\S]*FOR UPDATE`).
+		WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_PHONE"}).AddRow("01012345678"))
 	mock.ExpectExec(`UPDATE WEO_MEMBER`).
 		WithArgs("홍길동", "01012345678", "user@example.com", "", "", "", "직무", 0, "Y", "Y", 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	err = service.UpdateProfile(42, model.ProfileUpdateRequest{
 		USRName:  "홍길동",

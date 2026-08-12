@@ -59,10 +59,17 @@ var ErrAccountMergeNotSupported = errors.New("account merge not supported")
 // which has already confirmed with the user via the signup form.
 // Returns the resolved user, whether a new member was created, or an error.
 func (s *AuthService) LinkSocialAccount(params SocialLinkParams, memberSvc *MemberService) (*model.User, bool, error) {
-	params.Phone = model.NormalizePhoneNumber(params.Phone).String()
 	mode := params.Mode
 	if mode == "" {
 		mode = SocialLinkModeNew
+	}
+	requiresPhone := mode == SocialLinkModeNew || (mode == SocialLinkModeMerge && params.ExistingEmail == "")
+	if requiresPhone {
+		canonicalPhone := model.NormalizePhoneNumber(params.Phone)
+		if !canonicalPhone.Valid() {
+			return nil, false, ErrInvalidPhone
+		}
+		params.Phone = canonicalPhone.String()
 	}
 
 	switch mode {
@@ -169,6 +176,12 @@ func (s *AuthService) createNewSocialAccount(params SocialLinkParams, memberSvc 
 		ProfileImageURL:     params.ProfileImageURL,
 		EncryptedCredential: params.EncryptedCredential,
 	})
+	if errors.Is(err, repository.ErrPhoneAlreadyClaimed) {
+		return nil, false, ErrPhoneAlreadyRegistered
+	}
+	if errors.Is(err, repository.ErrInvalidPhone) {
+		return nil, false, ErrInvalidPhone
+	}
 	if err != nil {
 		return nil, false, err
 	}

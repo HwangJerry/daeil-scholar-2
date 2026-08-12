@@ -89,6 +89,14 @@ func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.UpdateProfile(user.USRSeq, req); err != nil {
+		if errors.Is(err, service.ErrInvalidPhone) {
+			respondError(w, http.StatusBadRequest, "INVALID_PHONE", "유효한 전화번호를 입력해주세요")
+			return
+		}
+		if errors.Is(err, service.ErrPhoneTaken) {
+			respondError(w, http.StatusConflict, "PHONE_TAKEN", "이미 등록된 전화번호입니다")
+			return
+		}
 		if errors.Is(err, service.ErrTagContainsWhitespace) {
 			respondError(w, http.StatusBadRequest, "INVALID_TAG", "태그에 공백을 포함할 수 없습니다")
 			return

@@ -139,10 +139,10 @@ func TestAccountConnectionsReturnsOnlyTypedProvidersAndPasswordState(t *testing.
 	defer db.Close()
 	repo := NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
 
-	mock.ExpectQuery(`SELECT CASE WHEN IFNULL\(USR_PWD, ''\)`).
+	mock.ExpectQuery(`FROM AUTH_IDENTITY i[\s\S]*AUTH_PASSWORD_CREDENTIAL c[\s\S]*i.STATUS = 'ACTIVE'[\s\S]*c.STATUS = 'ACTIVE'`).
 		WithArgs(42).
 		WillReturnRows(sqlmock.NewRows([]string{"HAS_PASSWORD"}).AddRow(true))
-	mock.ExpectQuery(`SELECT NMS_GATE`).
+	mock.ExpectQuery(`SELECT NMS_GATE[\s\S]*NMS_STATUS = 'ACTIVE'`).
 		WithArgs(42).
 		WillReturnRows(sqlmock.NewRows([]string{"NMS_GATE"}).
 			AddRow("KT").

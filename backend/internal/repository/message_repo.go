@@ -86,8 +86,12 @@ func (r *MessageRepository) IsApprovedAlumni(usrSeq int) (bool, error) {
 	var exists bool
 	if err := r.DB.Get(&exists, `
 		SELECT EXISTS(
-			SELECT 1 FROM ALUMNI_VERIFICATION
-			WHERE USR_SEQ = ? AND STATUS = 'approved'
+			SELECT 1
+			FROM ALUMNI_VERIFICATION v
+			JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
+			WHERE v.USR_SEQ = ?
+			  AND v.STATUS = 'approved'
+			  AND m.USR_STATUS IN ('CCC','ZZZ')
 		)
 	`, usrSeq); err != nil {
 		return false, err

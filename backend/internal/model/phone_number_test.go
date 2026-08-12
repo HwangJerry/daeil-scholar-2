@@ -17,3 +17,19 @@ func TestNormalizePhoneNumberKeepsOnlyASCIIDigits(t *testing.T) {
 		}
 	}
 }
+
+func TestCanonicalPhoneNumberValidRequiresSevenToFifteenDigits(t *testing.T) {
+	for _, testCase := range []struct {
+		value string
+		valid bool
+	}{
+		{value: "123456", valid: false},
+		{value: "0100000", valid: true},
+		{value: "123456789012345", valid: true},
+		{value: "1234567890123456", valid: false},
+	} {
+		if actual := CanonicalPhoneNumber(testCase.value).Valid(); actual != testCase.valid {
+			t.Fatalf("CanonicalPhoneNumber(%q).Valid() = %v, want %v", testCase.value, actual, testCase.valid)
+		}
+	}
+}

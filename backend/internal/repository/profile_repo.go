@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"errors"
+	"sync/atomic"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/go-sql-driver/mysql"
@@ -10,7 +11,9 @@ import (
 )
 
 type ProfileRepository struct {
-	DB *sqlx.DB
+	DB                      *sqlx.DB
+	phoneClaimsReady        atomic.Bool
+	phoneClaimAutoDetection atomic.Bool
 }
 
 type alumniVerificationAcademicRecord struct {
@@ -22,6 +25,14 @@ type alumniVerificationAcademicRecord struct {
 
 func NewProfileRepository(db *sqlx.DB) *ProfileRepository {
 	return &ProfileRepository{DB: db}
+}
+
+func (r *ProfileRepository) EnablePhoneClaims() {
+	r.phoneClaimsReady.Store(true)
+}
+
+func (r *ProfileRepository) EnablePhoneClaimAutoDetection() {
+	r.phoneClaimAutoDetection.Store(true)
 }
 
 func (r *ProfileRepository) GetProfile(usrSeq int) (*model.UserProfile, error) {
@@ -211,6 +222,84 @@ func (r *ProfileRepository) GetUserTags(usrSeq int) ([]string, error) {
 }
 
 func (r *ProfileRepository) UpdateProfile(usrSeq int, req model.ProfileUpdateRequest) error {
+	canonicalPhone := model.NormalizePhoneNumber(req.USRPhone)
+	if !canonicalPhone.Valid() {
+		return ErrInvalidPhone
+	}
+	req.USRPhone = canonicalPhone.String()
+	phoneClaimsReady := r.phoneClaimsReady.Load()
+	autoDetect := r.phoneClaimAutoDetection.Load()
+	if !phoneClaimsReady && !autoDetect {
+		if len(canonicalPhone) > model.LegacyPhoneDigitsLimit {
+			return ErrInvalidPhone
+		}
+		return r.updateProfileWithoutPhoneClaim(usrSeq, req)
+	}
+
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if !phoneClaimsReady {
+		phoneClaimsReady, err = detectPhoneClaimsInWriteTransaction(tx)
+		if err != nil {
+			return err
+		}
+		if phoneClaimsReady {
+			r.phoneClaimsReady.Store(true)
+		}
+	}
+	if !phoneClaimsReady {
+		if len(canonicalPhone) > model.LegacyPhoneDigitsLimit {
+			return ErrInvalidPhone
+		}
+		if err := updateProfileFields(tx, usrSeq, req); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+
+	var currentPhone string
+	if err := tx.Get(&currentPhone, `
+		SELECT USR_PHONE FROM WEO_MEMBER WHERE USR_SEQ = ? FOR UPDATE
+	`, usrSeq); err != nil {
+		return err
+	}
+	currentCanonicalPhone := model.NormalizePhoneNumber(currentPhone).String()
+	if req.USRPhone != currentCanonicalPhone {
+		result, err := tx.Exec(`
+			UPDATE AUTH_PHONE_CLAIM
+			SET CANONICAL_PHONE = ?
+			WHERE ACCOUNT_ID = ?
+		`, req.USRPhone, usrSeq)
+		if err != nil {
+			return classifyPhoneClaimError(err)
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if affected == 0 {
+			if _, err := tx.Exec(`
+				INSERT INTO AUTH_PHONE_CLAIM (CANONICAL_PHONE, ACCOUNT_ID, CREATED_AT)
+				VALUES (?, ?, NOW())
+			`, req.USRPhone, usrSeq); err != nil {
+				return classifyPhoneClaimError(err)
+			}
+		}
+	}
+	if err := updateProfileFields(tx, usrSeq, req); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+type profileExecer interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
+func updateProfileFields(execer profileExecer, usrSeq int, req model.ProfileUpdateRequest) error {
 	jobCat := 0
 	if req.JobCat != nil {
 		jobCat = *req.JobCat
@@ -223,7 +312,7 @@ func (r *ProfileRepository) UpdateProfile(usrSeq int, req model.ProfileUpdateReq
 	if emailPublic == "" {
 		emailPublic = "Y"
 	}
-	_, err := r.DB.Exec(`
+	_, err := execer.Exec(`
 		UPDATE WEO_MEMBER
 		SET USR_NAME = ?, USR_PHONE = ?, USR_EMAIL = ?,
 			USR_BIZ_NAME = ?, USR_BIZ_DESC = ?, USR_BIZ_ADDR = ?,
@@ -234,6 +323,18 @@ func (r *ProfileRepository) UpdateProfile(usrSeq int, req model.ProfileUpdateReq
 	`, req.USRName, req.USRPhone, req.USREmail,
 		req.BizName, req.BizDesc, req.BizAddr,
 		req.Position, jobCat, phonePublic, emailPublic, usrSeq)
+	return err
+}
+
+func (r *ProfileRepository) updateProfileWithoutPhoneClaim(usrSeq int, req model.ProfileUpdateRequest) error {
+	return updateProfileFields(r.DB, usrSeq, req)
+}
+
+func classifyPhoneClaimError(err error) error {
+	var mysqlErr *mysql.MySQLError
+	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+		return ErrPhoneAlreadyClaimed
+	}
 	return err
 }
 

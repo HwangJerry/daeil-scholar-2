@@ -2,6 +2,8 @@
 package service
 
 import (
+	"errors"
+
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 )
@@ -57,7 +59,11 @@ func (s *RegistrationService) IsIDAvailable(usrID string) (bool, error) {
 
 // IsPhoneAvailable returns true if the phone number is not yet registered.
 func (s *RegistrationService) IsPhoneAvailable(phone string) (bool, error) {
-	exists, err := s.memberRepo.CheckPhoneExists(model.NormalizePhoneNumber(phone).String())
+	canonicalPhone := model.NormalizePhoneNumber(phone)
+	if !canonicalPhone.Valid() {
+		return false, ErrInvalidPhone
+	}
+	exists, err := s.memberRepo.CheckPhoneExists(canonicalPhone.String())
 	if err != nil {
 		return false, err
 	}
@@ -85,7 +91,11 @@ func (s *RegistrationService) SaveInitialTags(usrSeq int, tags []string) error {
 // Register validates uniqueness, creates the member, and persists any signup-time tags.
 // Returns the created user or ErrIDTaken / ErrPhoneTaken on conflict.
 func (s *RegistrationService) Register(req model.RegisterRequest) (*model.User, error) {
-	req.Phone = model.NormalizePhoneNumber(req.Phone).String()
+	canonicalPhone := model.NormalizePhoneNumber(req.Phone)
+	if !canonicalPhone.Valid() {
+		return nil, ErrInvalidPhone
+	}
+	req.Phone = canonicalPhone.String()
 	idExists, err := s.memberRepo.CheckIDExists(req.UsrID)
 	if err != nil {
 		return nil, err
@@ -126,12 +136,21 @@ func (s *RegistrationService) Register(req model.RegisterRequest) (*model.User, 
 		}
 		usrSeq, err := s.signupRepo.CreatePasswordAccount(req, hashed, credential)
 		if err != nil {
+			if errors.Is(err, repository.ErrPhoneAlreadyClaimed) {
+				return nil, ErrPhoneTaken
+			}
 			return nil, err
 		}
 		return s.memberRepo.GetMemberBySeq(usrSeq)
 	}
 	usrSeq, err := s.memberRepo.InsertMemberWithPwd(req, hashed)
 	if err != nil {
+		if errors.Is(err, repository.ErrInvalidPhone) {
+			return nil, ErrInvalidPhone
+		}
+		if errors.Is(err, repository.ErrPhoneAlreadyClaimed) {
+			return nil, ErrPhoneTaken
+		}
 		return nil, err
 	}
 	if s.credentials != nil {

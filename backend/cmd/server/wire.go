@@ -73,6 +73,17 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	if err != nil {
 		return nil, err
 	}
+	phoneClaimsReady, err := repository.PhoneClaimsWriteReady(db)
+	if err != nil {
+		return nil, err
+	}
+	if phoneClaimsReady {
+		authRepo.EnablePhoneClaims()
+		profileRepo.EnablePhoneClaims()
+	} else {
+		authRepo.EnablePhoneClaimAutoDetection()
+		profileRepo.EnablePhoneClaimAutoDetection()
+	}
 
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
 	socialLinkTokens := service.NewSocialLinkTokenStore(cacheStore)

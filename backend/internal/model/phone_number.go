@@ -7,6 +7,12 @@ import "strings"
 // must use the same representation regardless of display punctuation.
 type CanonicalPhoneNumber string
 
+const (
+	MinCanonicalPhoneDigits = 7
+	MaxCanonicalPhoneDigits = 15
+	LegacyPhoneDigitsLimit  = 11
+)
+
 func NormalizePhoneNumber(value string) CanonicalPhoneNumber {
 	var normalized strings.Builder
 	normalized.Grow(len(value))
@@ -20,4 +26,9 @@ func NormalizePhoneNumber(value string) CanonicalPhoneNumber {
 
 func (p CanonicalPhoneNumber) String() string {
 	return string(p)
+}
+
+func (p CanonicalPhoneNumber) Valid() bool {
+	length := len(p)
+	return length >= MinCanonicalPhoneDigits && length <= MaxCanonicalPhoneDigits
 }

@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 	"errors"
-	"sync"
 
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/repository"
 )
 
 const (
@@ -13,14 +13,13 @@ const (
 	revocationActionDelete     = "ACCOUNT_DELETE"
 )
 
-var ErrLastLoginMethod = errors.New("cannot disconnect the last login method")
+var ErrLastLoginMethod = repository.ErrLastLoginMethod
 
 type SocialAccountLifecycleService struct {
-	auth         *AuthService
-	apple        *AppleIdentityVerifier
-	vault        *SocialCredentialVault
-	vaultErr     error
-	disconnectMu sync.Mutex
+	auth     *AuthService
+	apple    *AppleIdentityVerifier
+	vault    *SocialCredentialVault
+	vaultErr error
 }
 
 type AccountDeletionResult struct {
@@ -83,23 +82,21 @@ func (s *SocialAccountLifecycleService) Disconnect(
 	usrSeq int,
 	provider model.SocialProvider,
 ) (model.SocialDisconnectResult, error) {
-	s.disconnectMu.Lock()
-	defer s.disconnectMu.Unlock()
-
-	connections, err := s.Connections(usrSeq)
+	connections, phase, err := s.auth.repo.ReserveSocialDisconnect(usrSeq, provider)
 	if err != nil {
 		return model.SocialDisconnectResult{}, err
 	}
-	if !connections.HasProvider(provider) {
+	if phase == repository.SocialDisconnectNotConnected {
 		return model.SocialDisconnectResult{
 			Status:      model.SocialDisconnectNotConnected,
 			Connections: connections,
 		}, nil
 	}
-	if !connections.HasAlternativeTo(provider) {
-		return model.SocialDisconnectResult{}, ErrLastLoginMethod
-	}
-	if err := s.disconnect(ctx, usrSeq, provider, revocationActionDisconnect); err != nil {
+	if phase == repository.SocialDisconnectFinalizePending {
+		if err := s.auth.repo.DeleteSocialConnection(usrSeq, string(provider)); err != nil {
+			return model.SocialDisconnectResult{}, err
+		}
+	} else if err := s.disconnect(ctx, usrSeq, provider, revocationActionDisconnect, phase == repository.SocialDisconnectRevokeFresh); err != nil {
 		return model.SocialDisconnectResult{}, err
 	}
 	updatedConnections, err := s.Connections(usrSeq)
@@ -113,24 +110,33 @@ func (s *SocialAccountLifecycleService) Disconnect(
 }
 
 func (s *SocialAccountLifecycleService) DeleteAccount(ctx context.Context, usrSeq int) (AccountDeletionResult, error) {
-	if err := s.auth.repo.UpdateMemberStatus(usrSeq, "AAA"); err != nil {
+	providers, err := s.auth.repo.AnonymizeAccountForDeletion(usrSeq)
+	if err != nil {
 		return AccountDeletionResult{}, err
 	}
 	result := AccountDeletionResult{}
-	if err := s.auth.repo.RevokeAllMobileSessions(usrSeq); err != nil {
-		result.RevocationPending = true
-	}
-	if err := s.auth.repo.DeleteLegacySessionsByUser(usrSeq); err != nil {
-		result.RevocationPending = true
-	}
-	providers, err := s.auth.repo.ListSocialProviders(usrSeq)
-	if err != nil {
-		result.RevocationPending = true
-		return result, nil
-	}
 	for _, rawProvider := range providers {
 		provider := model.SocialProvider(rawProvider)
-		if err := s.disconnect(ctx, usrSeq, provider, revocationActionDelete); err != nil {
+		credential, loadErr := s.loadCredential(usrSeq, provider)
+		if loadErr != nil || credential == "" {
+			failure := loadErr
+			if failure == nil {
+				failure = errors.New("provider revocation credential is unavailable")
+			}
+			if recordErr := s.auth.repo.RecordAccountDeletionRevocationFailure(usrSeq, rawProvider, failure); recordErr != nil {
+				return AccountDeletionResult{}, errors.Join(failure, recordErr)
+			}
+			result.RevocationPending = true
+			continue
+		}
+		if revokeErr := s.revoke(ctx, provider, credential); revokeErr != nil {
+			if recordErr := s.auth.repo.RecordAccountDeletionRevocationFailure(usrSeq, rawProvider, revokeErr); recordErr != nil {
+				return AccountDeletionResult{}, errors.Join(revokeErr, recordErr)
+			}
+			result.RevocationPending = true
+			continue
+		}
+		if completeErr := s.auth.repo.CompleteAccountDeletionRevocation(usrSeq, rawProvider); completeErr != nil {
 			result.RevocationPending = true
 		}
 	}
@@ -152,20 +158,12 @@ func (s *SocialAccountLifecycleService) ApplyAppleNotification(notification Appl
 		}
 		return s.auth.repo.DeleteSocialConnection(user.USRSeq, string(model.SocialProviderApple))
 	case "account-deleted":
-		if err := s.auth.repo.UpdateMemberStatus(user.USRSeq, "AAA"); err != nil {
-			return err
-		}
-		if err := s.auth.repo.RevokeAllMobileSessions(user.USRSeq); err != nil {
-			return err
-		}
-		if err := s.auth.repo.DeleteLegacySessionsByUser(user.USRSeq); err != nil {
-			return err
-		}
-		return s.auth.repo.DeleteSocialConnection(user.USRSeq, string(model.SocialProviderApple))
+		_, err := s.DeleteAccount(context.Background(), user.USRSeq)
+		return err
 	case "email-disabled":
-		return s.auth.repo.UpdateSocialProviderState(user.USRSeq, string(model.SocialProviderApple), "ACTIVE", false)
+		return s.auth.repo.UpdateSocialProviderEmailEnabled(user.USRSeq, string(model.SocialProviderApple), false)
 	case "email-enabled":
-		return s.auth.repo.UpdateSocialProviderState(user.USRSeq, string(model.SocialProviderApple), "ACTIVE", true)
+		return s.auth.repo.UpdateSocialProviderEmailEnabled(user.USRSeq, string(model.SocialProviderApple), true)
 	default:
 		return errors.New("unsupported apple notification event")
 	}
@@ -176,25 +174,36 @@ func (s *SocialAccountLifecycleService) disconnect(
 	usrSeq int,
 	provider model.SocialProvider,
 	action string,
+	restoreConnectionOnFailure bool,
 ) error {
 	if !provider.Valid() {
 		return errors.New("unsupported social provider")
 	}
 	credential, err := s.loadCredential(usrSeq, provider)
 	if err != nil {
-		_ = s.auth.repo.EnqueueSocialRevocation(usrSeq, string(provider), action, err)
-		return err
+		return s.recordRevocationFailure(usrSeq, provider, action, err, restoreConnectionOnFailure)
 	}
 	if credential == "" {
 		err := errors.New("provider revocation credential is unavailable")
-		_ = s.auth.repo.EnqueueSocialRevocation(usrSeq, string(provider), action, err)
-		return err
+		return s.recordRevocationFailure(usrSeq, provider, action, err, restoreConnectionOnFailure)
 	}
 	if err := s.revoke(ctx, provider, credential); err != nil {
-		_ = s.auth.repo.EnqueueSocialRevocation(usrSeq, string(provider), action, err)
-		return err
+		return s.recordRevocationFailure(usrSeq, provider, action, err, restoreConnectionOnFailure)
+	}
+	if action == revocationActionDisconnect {
+		if err := s.auth.repo.MarkSocialDisconnectRevoked(usrSeq, string(provider)); err != nil {
+			return err
+		}
 	}
 	return s.auth.repo.DeleteSocialConnection(usrSeq, string(provider))
+}
+
+func (s *SocialAccountLifecycleService) recordRevocationFailure(usrSeq int, provider model.SocialProvider, action string, failure error, restoreConnection bool) error {
+	if action != revocationActionDisconnect {
+		return errors.Join(failure, s.auth.repo.EnqueueSocialRevocation(usrSeq, string(provider), action, failure))
+	}
+	releaseErr := s.auth.repo.RecordSocialDisconnectFailure(usrSeq, string(provider), failure, restoreConnection)
+	return errors.Join(failure, releaseErr)
 }
 
 func (s *SocialAccountLifecycleService) loadCredential(usrSeq int, provider model.SocialProvider) (string, error) {

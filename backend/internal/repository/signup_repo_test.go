@@ -30,6 +30,7 @@ func TestSignupRepositoryCreatesPasswordAccountAtomically(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO WEO_MEMBER`).WillReturnResult(sqlmock.NewResult(42, 1))
+	mock.ExpectExec(`INSERT INTO AUTH_PHONE_CLAIM`).WithArgs(request.Phone, 42).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(`INSERT INTO AUTH_ACCOUNT_STATE`).WithArgs(42).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(`INSERT INTO ALUMNI_VERIFICATION`).WithArgs(42, model.VerificationUnsubmitted).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(`INSERT INTO AUTH_IDENTITY`).WithArgs(42, string(model.IdentityProviderLocalUsername), request.UsrID).WillReturnResult(sqlmock.NewResult(101, 1))
@@ -54,6 +55,7 @@ func TestSignupRepositoryRollsBackAfterCanonicalWriteFailures(t *testing.T) {
 		name        string
 		failPattern string
 	}{
+		{name: "phone_claim", failPattern: `INSERT INTO AUTH_PHONE_CLAIM`},
 		{name: "account_state", failPattern: `INSERT INTO AUTH_ACCOUNT_STATE`},
 		{name: "identity", failPattern: `INSERT INTO AUTH_IDENTITY`},
 		{name: "credential", failPattern: `INSERT INTO AUTH_PASSWORD_CREDENTIAL`},
@@ -71,9 +73,14 @@ func TestSignupRepositoryRollsBackAfterCanonicalWriteFailures(t *testing.T) {
 
 			mock.ExpectBegin()
 			mock.ExpectExec(`INSERT INTO WEO_MEMBER`).WillReturnResult(sqlmock.NewResult(42, 1))
-			if test.name == "account_state" {
+			if test.name == "phone_claim" {
 				mock.ExpectExec(test.failPattern).WillReturnError(errors.New("injected signup failure"))
 			} else {
+				mock.ExpectExec(`INSERT INTO AUTH_PHONE_CLAIM`).WillReturnResult(sqlmock.NewResult(1, 1))
+			}
+			if test.name == "account_state" {
+				mock.ExpectExec(test.failPattern).WillReturnError(errors.New("injected signup failure"))
+			} else if test.name != "phone_claim" {
 				mock.ExpectExec(`INSERT INTO AUTH_ACCOUNT_STATE`).WillReturnResult(sqlmock.NewResult(1, 1))
 				mock.ExpectExec(`INSERT INTO ALUMNI_VERIFICATION`).WillReturnResult(sqlmock.NewResult(1, 1))
 				if test.name == "identity" {

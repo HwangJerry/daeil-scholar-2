@@ -167,6 +167,8 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Error().Err(err).Str("provider", linkData.Provider).Str("mode", string(mode)).Msg("social link failed")
 		switch {
+		case errors.Is(err, service.ErrInvalidPhone):
+			respondError(w, http.StatusBadRequest, "INVALID_PHONE", "유효한 전화번호를 입력해주세요")
 		case errors.Is(err, service.ErrPhoneAlreadyRegistered):
 			respondError(w, http.StatusConflict, "PHONE_TAKEN", "이미 가입된 전화번호입니다. 통합 회원가입으로 진행해주세요.")
 		case errors.Is(err, service.ErrPhoneNotFound):
