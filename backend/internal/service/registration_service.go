@@ -10,13 +10,40 @@ import (
 // and optional initial tag setup (ProfileRepository). Each repository retains its own
 // single responsibility; this service owns only the signup orchestration.
 type RegistrationService struct {
-	memberRepo  *repository.AuthRepository
-	profileRepo *repository.ProfileRepository
+	memberRepo  registrationMemberRepository
+	profileRepo registrationProfileRepository
+	credentials passwordCredentialManager
+	signupRepo  passwordSignupRepository
+	hasher      *PasswordHasher
+}
+
+type registrationMemberRepository interface {
+	CheckIDExists(string) (bool, error)
+	CheckPhoneExists(string) (bool, error)
+	CheckEmailExists(string) (bool, error)
+	InsertMemberWithPwd(model.RegisterRequest, string) (int, error)
+	GetMemberBySeq(int) (*model.User, error)
+}
+
+type registrationProfileRepository interface {
+	SaveUserTags(int, []string) error
+}
+
+type passwordSignupRepository interface {
+	CreatePasswordAccount(model.RegisterRequest, string, model.PasswordCredential) (int, error)
 }
 
 // NewRegistrationService creates a RegistrationService.
 func NewRegistrationService(memberRepo *repository.AuthRepository, profileRepo *repository.ProfileRepository) *RegistrationService {
 	return &RegistrationService{memberRepo: memberRepo, profileRepo: profileRepo}
+}
+
+func NewRegistrationServiceWithPasswordCredentials(memberRepo registrationMemberRepository, profileRepo registrationProfileRepository, credentials passwordCredentialManager) *RegistrationService {
+	return &RegistrationService{memberRepo: memberRepo, profileRepo: profileRepo, credentials: credentials}
+}
+
+func NewTransactionalRegistrationService(memberRepo registrationMemberRepository, profileRepo registrationProfileRepository, signupRepo passwordSignupRepository) *RegistrationService {
+	return &RegistrationService{memberRepo: memberRepo, profileRepo: profileRepo, signupRepo: signupRepo, hasher: NewPasswordHasher()}
 }
 
 // IsIDAvailable returns true if the given user ID is not yet taken.
@@ -92,9 +119,25 @@ func (s *RegistrationService) Register(req model.RegisterRequest) (*model.User, 
 	}
 
 	hashed := MysqlNativePassword(req.Password)
+	if s.signupRepo != nil {
+		credential, err := s.newSignupPasswordCredential(req.Password)
+		if err != nil {
+			return nil, err
+		}
+		usrSeq, err := s.signupRepo.CreatePasswordAccount(req, hashed, credential)
+		if err != nil {
+			return nil, err
+		}
+		return s.memberRepo.GetMemberBySeq(usrSeq)
+	}
 	usrSeq, err := s.memberRepo.InsertMemberWithPwd(req, hashed)
 	if err != nil {
 		return nil, err
+	}
+	if s.credentials != nil {
+		if err := s.credentials.StoreIdentityPassword(model.IdentityProviderLocalUsername, req.UsrID, usrSeq, req.Password); err != nil {
+			return nil, err
+		}
 	}
 
 	if len(req.Tags) > 0 {
@@ -104,4 +147,8 @@ func (s *RegistrationService) Register(req model.RegisterRequest) (*model.User, 
 	}
 
 	return s.memberRepo.GetMemberBySeq(usrSeq)
+}
+
+func (s *RegistrationService) newSignupPasswordCredential(password string) (model.PasswordCredential, error) {
+	return s.hasher.NewCredential(0, model.IdentityProviderLocalUsername, password)
 }

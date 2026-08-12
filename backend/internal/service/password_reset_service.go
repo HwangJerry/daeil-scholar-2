@@ -3,9 +3,11 @@ package service
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
@@ -28,9 +30,42 @@ var (
 // PasswordResetService handles the password reset request and confirmation flow.
 type PasswordResetService struct {
 	repo        repository.PasswordResetQuerier
+	credentials passwordCredentialManager
+	atomicRepo  atomicPasswordResetRepository
+	hasher      *PasswordHasher
 	emailQueue  chan<- model.EmailMessage
 	logger      zerolog.Logger
 	siteBaseURL string
+}
+
+type atomicPasswordResetRepository interface {
+	repository.PasswordResetQuerier
+	FindPasswordResetAccountByVerifiedEmail(string) (*model.User, error)
+	ConfirmResetAtomically(string, string, string, model.PasswordCredential) error
+}
+
+func NewPasswordResetServiceWithPasswordCredentials(
+	repo repository.PasswordResetQuerier,
+	credentials passwordCredentialManager,
+	emailQueue chan<- model.EmailMessage,
+	logger zerolog.Logger,
+	siteBaseURL string,
+) *PasswordResetService {
+	service := NewPasswordResetService(repo, emailQueue, logger, siteBaseURL)
+	service.credentials = credentials
+	return service
+}
+
+func NewAtomicPasswordResetService(
+	repo atomicPasswordResetRepository,
+	emailQueue chan<- model.EmailMessage,
+	logger zerolog.Logger,
+	siteBaseURL string,
+) *PasswordResetService {
+	service := NewPasswordResetService(repo, emailQueue, logger, siteBaseURL)
+	service.atomicRepo = repo
+	service.hasher = NewPasswordHasher()
+	return service
 }
 
 // NewPasswordResetService creates a PasswordResetService with the given dependencies.
@@ -55,7 +90,13 @@ func (s *PasswordResetService) RequestReset(req model.PasswordResetRequest) erro
 		return errors.New("이메일을 입력해주세요")
 	}
 
-	user, err := s.repo.FindMemberByEmail(req.Email)
+	var user *model.User
+	var err error
+	if s.atomicRepo != nil {
+		user, err = s.atomicRepo.FindPasswordResetAccountByVerifiedEmail(strings.ToLower(strings.TrimSpace(req.Email)))
+	} else {
+		user, err = s.repo.FindMemberByEmail(req.Email)
+	}
 	if err != nil {
 		s.logger.Error().Err(err).Str("email", req.Email).Msg("password reset: email lookup failed")
 		return nil
@@ -73,7 +114,11 @@ func (s *PasswordResetService) RequestReset(req model.PasswordResetRequest) erro
 	token := hex.EncodeToString(tokenBytes)
 	expiresAt := time.Now().Add(resetTokenExpiry)
 
-	if err := s.repo.InsertToken(user.USRSeq, token, expiresAt); err != nil {
+	persistedToken := token
+	if s.atomicRepo != nil {
+		persistedToken = hashPasswordResetToken(token)
+	}
+	if err := s.repo.InsertToken(user.USRSeq, persistedToken, expiresAt); err != nil {
 		s.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Msg("password reset: token insert failed")
 		return nil
 	}
@@ -114,6 +159,26 @@ func (s *PasswordResetService) ConfirmReset(req model.PasswordResetConfirm) erro
 	if !pwHasLetter.MatchString(req.NewPassword) || !pwHasNumber.MatchString(req.NewPassword) || !pwHasSpecial.MatchString(req.NewPassword) {
 		return errors.New("비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다")
 	}
+	if s.atomicRepo != nil {
+		replacement, err := s.hasher.NewCredential(0, model.IdentityProviderLocalUsername, req.NewPassword)
+		if err != nil {
+			return errors.New("비밀번호 변경에 실패했습니다")
+		}
+		err = s.atomicRepo.ConfirmResetAtomically(
+			hashPasswordResetToken(req.Token),
+			req.Token,
+			MysqlNativePassword(req.NewPassword),
+			replacement,
+		)
+		if errors.Is(err, repository.ErrPasswordResetTokenInvalid) {
+			return errors.New("유효하지 않거나 만료된 링크입니다")
+		}
+		if err != nil {
+			s.logger.Error().Err(err).Msg("password reset: atomic confirmation failed")
+			return errors.New("비밀번호 변경에 실패했습니다")
+		}
+		return nil
+	}
 
 	tokenRow, err := s.repo.FindValidToken(req.Token)
 	if err != nil {
@@ -123,6 +188,12 @@ func (s *PasswordResetService) ConfirmReset(req model.PasswordResetConfirm) erro
 		return errors.New("유효하지 않거나 만료된 링크입니다")
 	}
 
+	if s.credentials != nil {
+		if err := s.credentials.ReplaceAccountPassword(tokenRow.USRSeq, req.NewPassword); err != nil {
+			s.logger.Error().Err(err).Int("usrSeq", tokenRow.USRSeq).Msg("password reset: canonical password update failed")
+			return errors.New("비밀번호 변경에 실패했습니다")
+		}
+	}
 	hashed := MysqlNativePassword(req.NewPassword)
 	if err := s.repo.UpdatePassword(tokenRow.USRSeq, hashed); err != nil {
 		s.logger.Error().Err(err).Int("usrSeq", tokenRow.USRSeq).Msg("password reset: password update failed")
@@ -142,7 +213,20 @@ func (s *PasswordResetService) ValidateToken(token string) (*model.ValidateToken
 		return &model.ValidateTokenResponse{Valid: false}, nil
 	}
 
-	tokenRow, err := s.repo.FindValidToken(token)
+	persistedToken := token
+	if s.atomicRepo != nil {
+		hashedToken := hashPasswordResetToken(token)
+		tokenRow, err := s.repo.FindValidToken(hashedToken)
+		if err != nil {
+			return nil, err
+		}
+		if tokenRow == nil {
+			persistedToken = token
+		} else {
+			persistedToken = hashedToken
+		}
+	}
+	tokenRow, err := s.repo.FindValidToken(persistedToken)
 	if err != nil {
 		return nil, err
 	}
@@ -156,4 +240,9 @@ func (s *PasswordResetService) ValidateToken(token string) (*model.ValidateToken
 	}
 
 	return &model.ValidateTokenResponse{Valid: true, Name: name}, nil
+}
+
+func hashPasswordResetToken(token string) string {
+	digest := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(digest[:])
 }

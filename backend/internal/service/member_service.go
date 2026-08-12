@@ -24,7 +24,16 @@ var ErrEmailTaken = errors.New("email already taken")
 
 // MemberService handles member lookup and creation, used by auth handlers.
 type MemberService struct {
-	repo *repository.AuthRepository
+	repo        memberRepository
+	credentials passwordCredentialManager
+}
+
+type memberRepository interface {
+	FindMemberByIDAndPwdAny(string, string) (*model.User, error)
+	FindMemberByEmailAndPwdAny(string, string) (*model.User, error)
+	GetMemberBySeq(int) (*model.User, error)
+	FindMemberByPhone(string) (*model.User, error)
+	InsertMember(string, string, string, string, string, string, *int, string, string, string, string, string, string, string) (int, error)
 }
 
 // NewMemberService creates a MemberService backed by the given repository.
@@ -32,9 +41,23 @@ func NewMemberService(repo *repository.AuthRepository) *MemberService {
 	return &MemberService{repo: repo}
 }
 
+func NewMemberServiceWithPasswordCredentials(repo memberRepository, credentials passwordCredentialManager) *MemberService {
+	return &MemberService{repo: repo, credentials: credentials}
+}
+
 // LoginWithPassword verifies credentials first, then applies the same status
 // policy used by social login and refresh.
 func (s *MemberService) LoginWithPassword(usrID, password string) (*model.User, error) {
+	if s.credentials != nil {
+		authentication, err := s.credentials.AuthenticateIdentity(model.IdentityProviderLocalUsername, usrID, password)
+		if err != nil {
+			return nil, err
+		}
+		if authentication.State != CanonicalPasswordAbsent {
+			return s.canonicalPasswordLogin(authentication)
+		}
+	}
+
 	hashed := MysqlNativePassword(password)
 	user, err := s.repo.FindMemberByIDAndPwdAny(usrID, hashed)
 	if err != nil {
@@ -42,6 +65,11 @@ func (s *MemberService) LoginWithPassword(usrID, password string) (*model.User, 
 	}
 	if user == nil {
 		return nil, nil
+	}
+	if s.credentials != nil {
+		if err := s.credentials.StoreIdentityPassword(model.IdentityProviderLocalUsername, usrID, user.USRSeq, password); err != nil {
+			return nil, err
+		}
 	}
 	if err := (LoginEligibilityPolicy{}).EnsureLoginAllowed(user); err != nil {
 		return nil, err
@@ -52,6 +80,16 @@ func (s *MemberService) LoginWithPassword(usrID, password string) (*model.User, 
 // LoginWithEmailPassword verifies a canonical email credential while keeping
 // alumni verification separate from account lifecycle eligibility.
 func (s *MemberService) LoginWithEmailPassword(email, password string) (*model.User, error) {
+	if s.credentials != nil {
+		authentication, err := s.credentials.AuthenticateIdentity(model.IdentityProviderEmail, email, password)
+		if err != nil {
+			return nil, err
+		}
+		if authentication.State != CanonicalPasswordAbsent {
+			return s.canonicalPasswordLogin(authentication)
+		}
+	}
+
 	hashed := MysqlNativePassword(password)
 	user, err := s.repo.FindMemberByEmailAndPwdAny(email, hashed)
 	if err != nil {
@@ -59,6 +97,25 @@ func (s *MemberService) LoginWithEmailPassword(email, password string) (*model.U
 	}
 	if user == nil {
 		return nil, nil
+	}
+	if s.credentials != nil {
+		if err := s.credentials.StoreIdentityPassword(model.IdentityProviderEmail, email, user.USRSeq, password); err != nil {
+			return nil, err
+		}
+	}
+	if err := (LoginEligibilityPolicy{}).EnsureLoginAllowed(user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (s *MemberService) canonicalPasswordLogin(authentication CanonicalPasswordAuthentication) (*model.User, error) {
+	if authentication.State != CanonicalPasswordAuthenticated {
+		return nil, nil
+	}
+	user, err := s.repo.GetMemberBySeq(authentication.AccountSeq)
+	if err != nil || user == nil {
+		return user, err
 	}
 	if err := (LoginEligibilityPolicy{}).EnsureLoginAllowed(user); err != nil {
 		return nil, err

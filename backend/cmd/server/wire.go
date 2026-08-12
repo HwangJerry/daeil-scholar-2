@@ -64,7 +64,15 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	memberBlockRepo := repository.NewMemberBlockRepository(db)
 	pushRepo := repository.NewPushRepository(db)
 	passwordResetRepo := repository.NewPasswordResetRepository(db)
+	identityRepo := repository.NewIdentityRepository(db)
+	credentialRepo := repository.NewCredentialRepository(db)
+	signupRepo := repository.NewSignupRepository(db)
+	passwordMutationRepo := repository.NewPasswordMutationRepository(db)
 	visitRepo := repository.NewVisitRepository(db)
+	canonicalPasswordReady, err := repository.CanonicalPasswordWriteReady(db)
+	if err != nil {
+		return nil, err
+	}
 
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
 	socialLinkTokens := service.NewSocialLinkTokenStore(cacheStore)
@@ -88,6 +96,11 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	authService := service.NewAuthService(authRepo, sessionRepo, cfg, cacheStore, logger)
 	memberService := service.NewMemberService(authRepo)
 	registrationService := service.NewRegistrationService(authRepo, profileRepo)
+	if canonicalPasswordReady {
+		canonicalPasswordService := service.NewCanonicalPasswordService(identityRepo, credentialRepo)
+		memberService = service.NewMemberServiceWithPasswordCredentials(authRepo, canonicalPasswordService)
+		registrationService = service.NewTransactionalRegistrationService(authRepo, profileRepo, signupRepo)
+	}
 	feedService := service.NewFeedService(feedRepo, adRepo, cacheStore)
 	ogService := service.NewOGService(feedRepo)
 	sitemapService := service.NewSitemapService(feedRepo, cacheStore)
@@ -131,6 +144,10 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	blockedMessageCleanup := job.NewBlockedMessageCleanupJob(memberBlockRepo, logger)
 	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
 	passwordChangeSvc := service.NewPasswordChangeService(profileRepo)
+	if canonicalPasswordReady {
+		passwordResetService = service.NewAtomicPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
+		passwordChangeSvc = service.NewAtomicPasswordChangeService(passwordMutationRepo)
+	}
 	subscriptionRepo := repository.NewSubscriptionRepository(db)
 	subscriptionActivator := service.NewSubscriptionActivator(subscriptionRepo)
 	donateService := service.NewDonateService(donateRepo, subscriptionActivator, easypayService, cacheStore, logger, pgAuditLogger)

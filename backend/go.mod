@@ -16,6 +16,7 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/yuin/goldmark v1.7.17
 	github.com/yuin/goldmark-highlighting/v2 v2.0.0-20230729083705-37449abec8cc
+	golang.org/x/crypto v0.50.0
 	golang.org/x/oauth2 v0.21.0
 	golang.org/x/text v0.38.0
 )
