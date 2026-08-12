@@ -1,0 +1,10 @@
+-- canonical_identity_runner_started_failure_fixture.sql — Leaves a durable DDL/DML witness before intentional failure.
+CREATE TABLE RUNNER_STARTED_FAILURE_WITNESS (
+    ID BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    CREATED_AT DATETIME NOT NULL,
+    PRIMARY KEY (ID)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO RUNNER_STARTED_FAILURE_WITNESS (CREATED_AT) VALUES (NOW());
+
+SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'intentional runner STARTED failure fixture';
