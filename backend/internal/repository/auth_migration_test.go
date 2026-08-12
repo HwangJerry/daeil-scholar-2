@@ -8,7 +8,7 @@ import (
 )
 
 func TestSocialAuthMigrationContracts(t *testing.T) {
-	path := filepath.Join("..", "..", "migrations", "028_social_auth_security.sql")
+	path := filepath.Join("..", "..", "migrations", "testdata", "current-branch-8dcba0b", "028_social_auth_security.sql")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -38,7 +38,7 @@ func TestSocialAuthMigrationContracts(t *testing.T) {
 }
 
 func TestCanonicalPhoneMigrationContracts(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "migrations", "029_canonical_member_phone.sql"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "migrations", "testdata", "current-branch-8dcba0b", "029_canonical_member_phone.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}

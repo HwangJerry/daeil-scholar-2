@@ -257,7 +257,16 @@ func mvpMigrationContracts() []migrationContract {
 
 func readMigrationFile(t *testing.T, name string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(canonicalMigrationDir(), name))
+	dir := canonicalMigrationDir()
+	switch name {
+	case "030_create_admin_role_and_alumni_verification.sql",
+		"031_create_member_block_and_message_retention.sql",
+		"032_create_push_device_and_preferences.sql",
+		"033_extend_weo_order_for_donation_ledger.sql",
+		"034_add_personal_data_retention_support.sql":
+		dir = filepath.Join(dir, "testdata", "current-branch-8dcba0b")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, name))
 	if err != nil {
 		t.Fatalf("read migration %s: %v", name, err)
 	}
