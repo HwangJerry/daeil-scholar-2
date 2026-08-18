@@ -14,6 +14,7 @@ type Config struct {
 	DB             DBConfig
 	Kakao          KakaoConfig
 	JWT            JWTConfig
+	Push           PushConfig
 	Upload         UploadConfig
 	EasyPay        EasyPayConfig
 	SMTP           SMTPConfig
@@ -104,6 +105,16 @@ type EasyPayConfig struct {
 	AutoTrCd          string // 자동결제 transaction code (v1 confirmed value: "00101000")
 }
 
+type PushConfig struct {
+	APNsKeyID         string
+	APNSTeamID        string
+	APNsBundleID      string
+	APNsKeyPath       string
+	APNsKeyValue      string
+	APNsUseSandbox    bool
+	APNsRequestTimeout time.Duration
+}
+
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
 	return &Config{
@@ -132,6 +143,15 @@ func Load() *Config {
 		JWT: JWTConfig{
 			Secret: getEnv("JWT_SECRET", "change-me-in-production"),
 			MaxAge: getDurationEnv("JWT_MAX_AGE", 24*time.Hour),
+		},
+		Push: PushConfig{
+			APNsKeyID:          getEnv("PUSH_APNS_KEY_ID", ""),
+			APNSTeamID:         getEnv("PUSH_APNS_TEAM_ID", ""),
+			APNsBundleID:       getEnv("PUSH_APNS_BUNDLE_ID", ""),
+			APNsKeyPath:        getEnv("PUSH_APNS_KEY_PATH", ""),
+			APNsKeyValue:       getEnv("PUSH_APNS_KEY_VALUE", ""),
+			APNsUseSandbox:     strings.EqualFold(getEnv("PUSH_APNS_USE_SANDBOX", "false"), "true"),
+			APNsRequestTimeout: getDurationEnv("PUSH_APNS_REQUEST_TIMEOUT", 5*time.Second),
 		},
 		Upload: UploadConfig{
 			BasePath:      getEnv("UPLOAD_BASE_PATH", "/var/www/uploads"),

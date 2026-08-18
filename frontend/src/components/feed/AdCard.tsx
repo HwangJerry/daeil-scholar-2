@@ -52,7 +52,7 @@ export function AdCard({ item }: { item: AdItem }) {
         >
           {sponsorLabel && <span>{sponsorLabel}</span>}
           {sponsorLabel && <FeedCard.MetaDot />}
-          <span className="text-[10px] uppercase tracking-wider font-medium">광고</span>
+          <span className="text-mini uppercase tracking-wider font-medium">광고</span>
           {item.regDate && (
             <>
               <FeedCard.MetaDot />

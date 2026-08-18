@@ -1,73 +1,47 @@
-# React + TypeScript + Vite
+# dflh-saf-v2 Web Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript + Vite frontend for `dflh-saf-v2`.
 
-Currently, two official plugins are available:
+## Design System Usage
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+The web frontend consumes the cross-platform design system from the workspace-level `design-system` package.
 
-## React Compiler
+- Full onboarding and lifecycle docs live in `../../design-system/docs/`.
+- Use `../../design-system/docs/WEB_ENGINEERING_GUIDE.md` as the platform guide.
+- Use `../../design-system/docs/VALIDATION_WORKFLOW.md` before merging UI changes.
+- Canonical tokens live in `../../design-system/tokens/design-tokens.json`.
+- Generated web tokens live in `../../design-system/platform/web/design-tokens.css`.
+- `src/index.css` imports the generated token CSS before Tailwind.
+- Shared screen contracts live in `../../design-system/contracts/component-contracts.json`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+When adding or changing UI:
 
-## Expanding the ESLint configuration
+- Use Tailwind classes backed by generated DS variables such as `text-text-primary`, `bg-surface`, `border-border`, `shadow-card`, and radius/spacing utilities mapped from tokens.
+- Do not introduce ad-hoc hex colors, one-off font stacks, or non-tokenized surface/radius choices in core screens.
+- For News Feed, Messages, and My Page, keep the implementation aligned with the contracts `screen.feed`, `screen.messages`, and `screen.myPage`.
+- If a web-only visual difference is intentional, document it in `../../design-system/verification/reports/accepted-deltas.json`.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Visual Parity Build
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Use the visual-check build when capturing design-system baselines. It bypasses the temporary WIP gate only for visual verification.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd ../../../
+npm run build-web-for-visual-check
+cd dflh-saf-v2/frontend
+npm run preview -- --host 127.0.0.1 --port 4173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Then from the workspace root:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run visual-check-web
 ```
+
+For baseline updates:
+
+```bash
+DFLH_WEB_BASE_URL=http://127.0.0.1:4173 DFLH_WEB_VISUAL_MODE=capture node design-system/scripts/visual-check-web.mjs
+```
+
+`visual-check-web.mjs` provides deterministic API fixtures by default so screenshots capture populated News Feed, Messages, and My Page states instead of backend-error skeletons.

@@ -11,6 +11,7 @@ import { useCheckEmail } from '../../hooks/useCheckEmail';
 import { checkPasswordStrength } from '../../hooks/usePasswordValidation';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { AuthField, AuthFieldMessage, AuthFormError } from './AuthFormPrimitives';
 
 const DEBOUNCE_MS = 500;
 
@@ -96,8 +97,7 @@ export function RegisterForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div>
-        <label className="mb-1 block text-sm font-medium text-text-muted">아이디 *</label>
+      <AuthField label="아이디 *">
         <Input
           type="text"
           value={usrId}
@@ -108,20 +108,19 @@ export function RegisterForm() {
           autoComplete="username"
         />
         {idCheck.status === 'checking' && (
-          <p className="mt-1 text-xs text-text-placeholder">확인 중...</p>
+          <AuthFieldMessage>확인 중...</AuthFieldMessage>
         )}
         {idCheck.status === 'available' && (
-          <p className="mt-1 text-xs text-success-text">사용 가능한 아이디입니다.</p>
+          <AuthFieldMessage tone="success">사용 가능한 아이디입니다.</AuthFieldMessage>
         )}
         {idCheck.status === 'unavailable' && (
-          <p className="mt-1 text-xs text-error-text">이미 사용 중인 아이디입니다.</p>
+          <AuthFieldMessage tone="error">이미 사용 중인 아이디입니다.</AuthFieldMessage>
         )}
         {idCheck.status === 'error' && (
-          <p className="mt-1 text-xs text-error-text">확인에 실패했습니다. 다시 시도해주세요.</p>
+          <AuthFieldMessage tone="error">확인에 실패했습니다. 다시 시도해주세요.</AuthFieldMessage>
         )}
-      </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-text-muted">비밀번호 *</label>
+      </AuthField>
+      <AuthField label="비밀번호 *">
         <Input
           type="password"
           value={password}
@@ -132,11 +131,10 @@ export function RegisterForm() {
           autoComplete="new-password"
         />
         {passwordError && (
-          <p className="mt-1 text-xs text-error-text">{passwordError}</p>
+          <AuthFieldMessage tone="error">{passwordError}</AuthFieldMessage>
         )}
-      </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-text-muted">비밀번호 확인 *</label>
+      </AuthField>
+      <AuthField label="비밀번호 확인 *">
         <Input
           type="password"
           value={passwordConfirm}
@@ -146,9 +144,9 @@ export function RegisterForm() {
           autoComplete="new-password"
         />
         {passwordMismatch && (
-          <p className="mt-1 text-xs text-error-text">비밀번호가 일치하지 않습니다.</p>
+          <AuthFieldMessage tone="error">비밀번호가 일치하지 않습니다.</AuthFieldMessage>
         )}
-      </div>
+      </AuthField>
 
       <ProfileFieldsSection
         values={profile}
@@ -157,7 +155,7 @@ export function RegisterForm() {
         emailCheck={emailCheck}
       />
 
-      {displayError && <p className="text-sm text-error-text">{displayError}</p>}
+      {displayError && <AuthFormError>{displayError}</AuthFormError>}
 
       <Button type="submit" disabled={submitting || passwordMismatch} className="w-full">
         {submitting ? '가입 신청 중...' : '가입 신청'}

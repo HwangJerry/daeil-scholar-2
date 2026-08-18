@@ -1,0 +1,103 @@
+name: Push PR Gate
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  push-pr-gate:
+    name: Validate Push PR Checklist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          node <<'NODE'
+          const body = (process.env.PR_BODY || "").trim();
+          const failures = [];
+          const forbidden = new Set(["", "-", "n/a", "na", "none", "null", "미기재", "미작성", "todo", "tbd", "해당사항 없음"]);
+
+          const requiredSections = [
+            "Contract Test",
+            "Security Scan",
+            "Unit/Integration",
+            "E2E",
+            "Monitoring/Dashboard",
+            "Runbook 대응 항목",
+          ];
+
+          function escapeRegExp(value) {
+            return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          }
+
+          function normalizeValue(v) {
+            return (v || "").trim().replace(/`/g, "").toLowerCase();
+          }
+
+          function isInvalidValue(v) {
+            const normalized = normalizeValue(v);
+            if (!normalized) return true;
+            return forbidden.has(normalized);
+          }
+
+          function getSectionValue(label) {
+            const regex = new RegExp(`^\\s*-\\s*${escapeRegExp(label)}\\s*:?\\s*(.*)$`, "im");
+            const match = body.match(regex);
+            return match ? match[1].trim() : "";
+          }
+
+          function ensureSectionFilled(label) {
+            const value = getSectionValue(label);
+            if (isInvalidValue(value)) {
+              failures.push(`${label} 링크/값 미기재`);
+            }
+          }
+
+          const concernDodMatch = body.match(/##\\s*Concern DoD[^\r\n]*[\r\n]([\s\S]*?)(?:[\r\n]##\\s|$)/i);
+          const concernDodSection = concernDodMatch ? concernDodMatch[1] : "";
+
+          const concernLines = [...body.matchAll(/^\s*-\s*\[[xX]\]\s*((?:10)|[1-9])\)/gm)];
+          const checkedConcerns = [...new Set(concernLines.map((m) => Number(m[1])))].sort((a, b) => a - b);
+
+          if (checkedConcerns.length === 0) {
+            failures.push("10개 고민 항목 1개 이상 체크");
+          }
+
+          function hasDodForConcern(concern) {
+            if (!concernDodSection) return false;
+
+            const lineRegex = new RegExp(`^\\s*[-*]?\\s*${concern}\\)\\s*(.*)$`, "gm");
+            const match = concernDodSection.match(lineRegex);
+            if (!match) return false;
+
+            const value = match[0].replace(new RegExp(`^\\s*[-*]?\\s*${concern}\\)\\s*`), "");
+            const hasNumeric = /\d+/.test(value);
+            const hasUnit = /(\d+\s*(초|분|시간|ms|건|개)\b|\d+%|p95)/i.test(value);
+            return hasNumeric && hasUnit && !isInvalidValue(value);
+          }
+
+          if (checkedConcerns.length > 0) {
+            for (const concern of checkedConcerns) {
+              if (!hasDodForConcern(concern)) {
+                failures.push(`Concern ${concern} 수치 DoD 미기재`);
+              }
+            }
+          }
+
+          requiredSections.forEach(ensureSectionFilled);
+
+          if (body.length < 200) {
+            failures.push("PR 본문 미작성(요약/증빙 미기입)");
+          }
+
+          if (failures.length) {
+            const uniq = [...new Set(failures)];
+            console.error(`Push PR Gate 검증 실패 (PR #${process.env.PR_NUMBER}):`);
+            console.error(uniq.map((item) => `- ${item}`).join("\n"));
+            process.exit(1);
+          }
+
+          console.log(`Push PR Gate pass (PR #${process.env.PR_NUMBER})`);
+          NODE

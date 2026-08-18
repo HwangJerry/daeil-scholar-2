@@ -12,6 +12,8 @@ export const buttonVariants = cva(
         secondary: "bg-primary-light text-primary hover:bg-primary-light",
         ghost: "hover:bg-background text-text-secondary",
         link: "underline-offset-4 hover:underline text-primary",
+        kakao: "bg-kakao text-kakao-text hover:opacity-90",
+        kakaoOutline: "border-2 border-kakao bg-white text-kakao-text hover:bg-kakao/10",
       },
       size: {
         default: "h-10 py-2 px-4",

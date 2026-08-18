@@ -54,7 +54,7 @@ export function ImageUploadSection({
 
   return (
     <div className="mb-4">
-      <p className="mb-2 text-[13px] font-medium text-text-tertiary">{label}</p>
+      <p className="mb-2 text-body-xs font-medium text-text-tertiary">{label}</p>
       <div className="flex items-end gap-3">
         <button
           type="button"

@@ -13,14 +13,20 @@ type MessageService struct {
 	repo        repository.MessageQuerier
 	profileRepo repository.ProfileQuerier
 	notifier    MessageNotifier
+	messagePush MessagePushNotifier
 }
 
 // NewMessageService creates a new MessageService.
-func NewMessageService(repo repository.MessageQuerier, profileRepo repository.ProfileQuerier, notifier MessageNotifier) *MessageService {
+func NewMessageService(repo repository.MessageQuerier, profileRepo repository.ProfileQuerier, notifier MessageNotifier, messagePush MessagePushNotifier) *MessageService {
 	if notifier == nil {
 		notifier = nopMessageNotifier{}
 	}
-	return &MessageService{repo: repo, profileRepo: profileRepo, notifier: notifier}
+	return &MessageService{
+		repo:        repo,
+		profileRepo: profileRepo,
+		notifier:    notifier,
+		messagePush: messagePush,
+	}
 }
 
 // SendMessage validates and sends a message, then triggers a notification.
@@ -52,6 +58,9 @@ func (s *MessageService) SendMessage(senderSeq int, senderName string, req model
 
 	s.notifier.NotifyMessageReceived(req.RecvrSeq, senderSeq, senderName)
 	s.notifier.NotifyMessageSent(senderSeq, req.RecvrSeq)
+	if s.messagePush != nil {
+		s.messagePush.NotifyMessageReceived(req.RecvrSeq, senderSeq, senderName, req.Content)
+	}
 
 	return nil
 }

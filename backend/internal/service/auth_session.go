@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
 )
@@ -70,6 +71,27 @@ func (s *AuthService) LoginWithBridge(user *model.User, w http.ResponseWriter, r
 	return s.repo.UpdateLastLogin(user.USRSeq)
 }
 
+// RecordMobileRefreshToken saves a refresh token state to allow one-time use enforcement.
+func (s *AuthService) RecordMobileRefreshToken(usrSeq int, sid string, jti string, expiresAt time.Time) error {
+	return s.repo.InsertMobileRefreshToken(usrSeq, sid, jti, expiresAt)
+}
+
+// ConsumeMobileRefreshToken revokes a refresh token JTI so it cannot be reused.
+// Returns true when one token row was revoked.
+func (s *AuthService) ConsumeMobileRefreshToken(usrSeq int, jti string) (bool, error) {
+	return s.repo.RevokeMobileRefreshToken(usrSeq, jti)
+}
+
+// RevokeAllMobileRefreshTokens logs out all active refresh tokens for a user.
+func (s *AuthService) RevokeAllMobileRefreshTokens(usrSeq int) {
+	if usrSeq <= 0 {
+		return
+	}
+	if err := s.repo.RevokeMobileRefreshTokensByUser(usrSeq); err != nil {
+		s.logger.Warn().Err(err).Int("usrSeq", usrSeq).Msg("failed to revoke mobile refresh tokens on logout")
+	}
+}
+
 // Logout invalidates the Kakao access token (if cached), clears all legacy DB sessions, then clears all session cookies.
 func (s *AuthService) Logout(w http.ResponseWriter, usrSeq int) {
 	if err := s.LogoutKakao(usrSeq); err != nil {
@@ -78,6 +100,7 @@ func (s *AuthService) Logout(w http.ResponseWriter, usrSeq int) {
 	if err := s.repo.DeleteLegacySessionsByUser(usrSeq); err != nil {
 		s.logger.Warn().Err(err).Int("usrSeq", usrSeq).Msg("failed to delete legacy sessions on logout")
 	}
+	s.RevokeAllMobileRefreshTokens(usrSeq)
 	secure := s.cfg.Server.IsSecure()
 	expire := func(name string) {
 		http.SetCookie(w, &http.Cookie{

@@ -3,20 +3,47 @@ set -euo pipefail
 
 # Deploy script — cross-compile, upload, and restart services
 # Usage: ./deploy.sh [user@host] [ssh_port] --patch-mode=true|false
+#       --backend=true|false --frontend=true|false
 #   ssh_port is optional; omit to use ~/.ssh/config or the default 22.
 #   --patch-mode is required (no default). Omit to be prompted interactively.
 #     true  → user SPA bundles VITE_WIP_ADMIN_CODE from frontend/.env (cover page ON)
 #     false → user SPA built with VITE_WIP_ADMIN_CODE="" forced (cover page OFF)
+#   --backend and --frontend control build targets.
+#     default: both true
+#     backend=false only builds/uploads frontend (user+admin SPA)
+#     frontend=false only builds/uploads backend binaries + restart backend
 
 POSITIONAL=()
 PATCH_MODE=""
+BUILD_BACKEND=true
+BUILD_FRONTEND=true
 for arg in "$@"; do
   case "$arg" in
     --patch-mode=true)  PATCH_MODE="true" ;;
     --patch-mode=false) PATCH_MODE="false" ;;
+    --backend=true)   BUILD_BACKEND=true ;;
+    --backend=false)  BUILD_BACKEND=false ;;
+    --frontend=true)  BUILD_FRONTEND=true ;;
+    --frontend=false) BUILD_FRONTEND=false ;;
     --patch-mode=*)
       echo "✗ Invalid --patch-mode value: '${arg#--patch-mode=}' (must be true or false)" >&2
       exit 1
+      ;;
+    --backend=*)
+      echo "✗ Invalid --backend value: '${arg#--backend=}' (must be true or false)" >&2
+      exit 1
+      ;;
+    --frontend=*)
+      echo "✗ Invalid --frontend value: '${arg#--frontend=}' (must be true or false)" >&2
+      exit 1
+      ;;
+    --backend-only)
+      BUILD_BACKEND=true
+      BUILD_FRONTEND=false
+      ;;
+    --frontend-only)
+      BUILD_BACKEND=false
+      BUILD_FRONTEND=true
       ;;
     --patch-mode)
       echo "✗ --patch-mode requires =true or =false (e.g. --patch-mode=true)" >&2
@@ -40,7 +67,7 @@ fi
 # Resolve --patch-mode interactively if it wasn't provided on the command line.
 # No default — the user must explicitly answer true or false (mirrors the
 # /dev/tty prompt pattern used by the migration drift check below).
-if [[ -z "${PATCH_MODE}" ]]; then
+if [[ "${BUILD_FRONTEND}" == "true" && -z "${PATCH_MODE}" ]]; then
   if [[ ! -e /dev/tty ]]; then
     echo "✗ Non-interactive shell — pass --patch-mode=true or --patch-mode=false." >&2
     exit 1
@@ -55,6 +82,16 @@ if [[ -z "${PATCH_MODE}" ]]; then
   done
 fi
 echo "=== patch-mode = ${PATCH_MODE} ==="
+
+if [[ "${BUILD_BACKEND}" == "false" && "${BUILD_FRONTEND}" == "false" ]]; then
+  echo "✗ both --backend=false and --frontend=false. Nothing to deploy."
+  exit 1
+fi
+if [[ "${BUILD_FRONTEND}" == "false" && -z "${PATCH_MODE}" ]]; then
+  PATCH_MODE="false"
+  echo "=== patch-mode is forced false because frontend build is disabled ==="
+fi
+echo "=== build targets: backend=${BUILD_BACKEND}, frontend=${BUILD_FRONTEND} ==="
 
 # =============================================================================
 # DATABASE MIGRATIONS — MANUAL STEP REQUIRED
@@ -126,16 +163,24 @@ placeholder_value() {
 
 # Read systemd unit once; reused by env validation AND migration drift check below.
 UNIT_CONTENT=""
-if [[ "${SKIP_ENV_CHECK:-0}" != "1" || "${SKIP_MIGRATION_CHECK:-0}" != "1" ]]; then
+if [[ "${BUILD_BACKEND}" == "true" && ("${SKIP_ENV_CHECK:-0}" != "1" || "${SKIP_MIGRATION_CHECK:-0}" != "1") ]]; then
   if ! UNIT_CONTENT=$(ssh "${SSH_OPTS[@]}" "${TARGET}" "cat ${SERVICE_PATH}" 2>&1); then
     echo "✗ Failed to read ${SERVICE_PATH}:" >&2
     echo "${UNIT_CONTENT}" | sed 's/^/    /' >&2
     echo "  Hint: ensure the service file exists and is world-readable (chmod 644)." >&2
     exit 1
   fi
+else
+  if [[ "${BUILD_BACKEND}" == "false" ]]; then
+    echo "=== Skipping systemd service read because backend build is disabled ==="
+  else
+    echo "=== Skipping systemd service read because both env/migration checks are disabled ==="
+  fi
 fi
 
-if [[ "${SKIP_ENV_CHECK:-0}" == "1" ]]; then
+if [[ "${BUILD_BACKEND}" == "false" ]]; then
+  echo "=== Skipping env var validation because backend build is disabled ==="
+elif [[ "${SKIP_ENV_CHECK:-0}" == "1" ]]; then
   echo "=== Skipping env var validation (SKIP_ENV_CHECK=1) ==="
 else
   echo "=== Validating production env vars on ${TARGET} ==="
@@ -190,7 +235,9 @@ fi
 # half-configured staging value never reaches production.
 # Skip with: SKIP_DEBUG_AGENT_CHECK=1 ./deploy.sh ...
 # =============================================================================
-if [[ "${SKIP_DEBUG_AGENT_CHECK:-0}" == "1" ]]; then
+if [[ "${BUILD_BACKEND}" == "false" ]]; then
+  echo "=== Skipping debug agent env validation because backend build is disabled ==="
+elif [[ "${SKIP_DEBUG_AGENT_CHECK:-0}" == "1" ]]; then
   echo "=== Skipping debug agent env validation (SKIP_DEBUG_AGENT_CHECK=1) ==="
 else
   echo "=== Validating debug agent env vars on ${TARGET} ==="
@@ -253,7 +300,9 @@ fi
 # unit content read above.
 # Skip with: SKIP_MIGRATION_CHECK=1 ./deploy.sh ...
 # =============================================================================
-if [[ "${SKIP_MIGRATION_CHECK:-0}" == "1" ]]; then
+if [[ "${BUILD_BACKEND}" == "false" ]]; then
+  echo "=== Skipping migration drift check because backend build is disabled ==="
+elif [[ "${SKIP_MIGRATION_CHECK:-0}" == "1" ]]; then
   echo "=== Skipping migration drift check (SKIP_MIGRATION_CHECK=1) ==="
 else
   echo "=== Checking migration drift on ${TARGET} ==="
@@ -343,52 +392,68 @@ else
   echo "✓ All ${TOTAL} migrations applied on remote"
 fi
 
-echo "=== Building Go backend (linux/amd64) ==="
-cd backend
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/server ./cmd/server
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/backfill ./cmd/backfill
-cd ..
-chmod 755 dist/server dist/backfill
-
-echo "=== Building User SPA (patch-mode=${PATCH_MODE}) ==="
-cd frontend
-npm ci
-if [[ "${PATCH_MODE}" == "true" ]]; then
-  # patch-mode=true requires a non-empty VITE_WIP_ADMIN_CODE in frontend/.env so
-  # the WipGate component (frontend/src/components/common/WipGate.tsx) is active.
-  WIP_CODE_VAL=$(sed -nE 's/^VITE_WIP_ADMIN_CODE=("?)([^"]*)\1[[:space:]]*$/\2/p' .env | head -n 1)
-  if [[ -z "${WIP_CODE_VAL}" ]]; then
-    echo "✗ patch-mode=true requires VITE_WIP_ADMIN_CODE to be non-empty in frontend/.env" >&2
-    echo "  Either set the code in frontend/.env or re-run with --patch-mode=false." >&2
-    exit 1
-  fi
-  npm run build
-else
-  # Force-empty so .env's value is overridden at build time. The repo .env stays untouched.
-  # Vite's loadEnv merges process.env over .env for VITE_*-prefixed vars, so this wins.
-  VITE_WIP_ADMIN_CODE="" npm run build
+if [[ "${BUILD_BACKEND}" == "true" ]]; then
+  echo "=== Building Go backend (linux/amd64) ==="
+  cd backend
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/server ./cmd/server
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/backfill ./cmd/backfill
+  cd ..
+  chmod 755 dist/server dist/backfill
 fi
-cd ..
 
-echo "=== Building Admin SPA ==="
-cd admin
-npm ci
-npm run build
-cd ..
+if [[ "${BUILD_FRONTEND}" == "true" ]]; then
+  echo "=== Building User SPA (patch-mode=${PATCH_MODE}) ==="
+  cd frontend
+  npm ci
+  if [[ "${PATCH_MODE}" == "true" ]]; then
+    # patch-mode=true requires a non-empty VITE_WIP_ADMIN_CODE in frontend/.env so
+    # the WipGate component (frontend/src/components/common/WipGate.tsx) is active.
+    WIP_CODE_VAL=""
+    if [[ -f .env.production ]]; then
+      WIP_CODE_VAL=$(grep -E '^VITE_WIP_ADMIN_CODE[[:space:]]*=' .env.production | tail -n 1 | sed -E 's/^VITE_WIP_ADMIN_CODE[[:space:]]*=[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/')
+    fi
+    if [[ -z "${WIP_CODE_VAL}" && -f .env ]]; then
+      WIP_CODE_VAL=$(grep -E '^VITE_WIP_ADMIN_CODE[[:space:]]*=' .env | tail -n 1 | sed -E 's/^VITE_WIP_ADMIN_CODE[[:space:]]*=[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/')
+    fi
+    if [[ -z "${WIP_CODE_VAL}" ]]; then
+      echo "✗ patch-mode=true requires VITE_WIP_ADMIN_CODE to be non-empty in frontend/.env.production (preferred) or frontend/.env" >&2
+      echo "  Either set the code in one of these files or re-run with --patch-mode=false." >&2
+      exit 1
+    fi
+    npm run build
+  else
+    # Force-empty so .env's value is overridden at build time. The repo .env stays untouched.
+    # Vite's loadEnv merges process.env over .env for VITE_*-prefixed vars, so this wins.
+    VITE_WIP_ADMIN_CODE="" npm run build
+  fi
+  cd ..
 
-echo "=== Uploading Go binary ==="
-scp "${SCP_OPTS[@]}" dist/server "${TARGET}:/app/backend/server.new"
-scp "${SCP_OPTS[@]}" dist/backfill "${TARGET}:/app/backend/backfill"
-ssh "${SSH_OPTS[@]}" "${TARGET}" 'mv /app/backend/server.new /app/backend/server && chmod 755 /app/backend/server /app/backend/backfill'
+  echo "=== Building Admin SPA ==="
+  cd admin
+  npm ci
+  npm run build
+  cd ..
+fi
 
-echo "=== Uploading User SPA ==="
-rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" frontend/dist/ "${TARGET}:/var/www/app/"
+if [[ "${BUILD_BACKEND}" == "true" ]]; then
+  echo "=== Uploading Go binary ==="
+  scp "${SCP_OPTS[@]}" dist/server "${TARGET}:/app/backend/server.new"
+  scp "${SCP_OPTS[@]}" dist/backfill "${TARGET}:/app/backend/backfill"
+  ssh "${SSH_OPTS[@]}" "${TARGET}" 'mv /app/backend/server.new /app/backend/server && chmod 755 /app/backend/server /app/backend/backfill'
+fi
 
-echo "=== Uploading Admin SPA ==="
-rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" admin/dist/ "${TARGET}:/var/www/admin/"
+if [[ "${BUILD_FRONTEND}" == "true" ]]; then
+  echo "=== Uploading User SPA ==="
+  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" frontend/dist/ "${TARGET}:/var/www/app/"
 
-echo "=== Reloading systemd and restarting backend ==="
-ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'
+  echo "=== Uploading Admin SPA ==="
+  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" admin/dist/ "${TARGET}:/var/www/admin/"
+fi
+
+if [[ "${BUILD_BACKEND}" == "true" ]]; then
+  echo "=== Reloading systemd and restarting backend ==="
+  ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'
+fi
 
 echo "=== Uploading Apache httpd config ==="
 scp "${SCP_OPTS[@]}" deploy/httpd-alumni.conf "${TARGET}:/tmp/alumni.conf.new"

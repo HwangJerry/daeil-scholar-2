@@ -1,15 +1,15 @@
 // ResetPasswordPage — Token-validated password reset form with confirmation
 import { useState, useEffect, useRef } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { validateResetToken, confirmPasswordReset } from '../api/passwordReset';
 import { ApiClientError } from '../api/client';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
 import { AlertDialog } from '../components/ui/AlertDialog';
 import { checkPasswordStrength } from '../hooks/usePasswordValidation';
 import { useBlockBack } from '../hooks/useBlockBack';
-
-const INPUT_CLASS =
-  'w-full rounded-lg border border-border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20';
+import { AuthField, AuthFieldMessage, AuthFormError } from '../components/auth/AuthFormPrimitives';
+import { AuthNotice, AuthScreen, AuthTextLink } from '../components/auth/AuthScreen';
 
 const MIN_PASSWORD_LENGTH = 8;
 const REDIRECT_DELAY_MS = 3_000;
@@ -111,99 +111,78 @@ export function ResetPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-[60vh] items-center justify-center animate-fade-in-up">
-      <div className="w-full max-w-sm">
-        <h1 className="mb-6 text-center text-xl font-bold text-text-primary">
-          비밀번호 재설정
-        </h1>
+    <AuthScreen title="비밀번호 재설정">
+      {tokenStatus === 'loading' && (
+        <p className="text-center text-body-xs text-text-muted">확인 중...</p>
+      )}
 
-        {tokenStatus === 'loading' && (
-          <p className="text-center text-sm text-text-muted">확인 중...</p>
-        )}
-
-        {tokenStatus === 'invalid' && (
-          <div className="space-y-4">
-            <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error-text">
-              유효하지 않거나 만료된 링크입니다.
-            </div>
-            <div className="text-center">
-              <Link
-                to="/forgot-password"
-                className="text-xs text-primary hover:text-primary/80 transition-colors"
-              >
-                비밀번호 재설정 다시 요청하기
-              </Link>
-            </div>
+      {tokenStatus === 'invalid' && (
+        <div className="space-y-4">
+          <AuthNotice tone="error">유효하지 않거나 만료된 링크입니다.</AuthNotice>
+          <div className="text-center">
+            <AuthTextLink to="/forgot-password">비밀번호 재설정 다시 요청하기</AuthTextLink>
           </div>
-        )}
+        </div>
+      )}
 
-        {tokenStatus === 'valid' && !success && (
-          <>
-            {userName && (
-              <p className="mb-4 text-center text-sm text-text-muted">
-                <span className="font-medium text-text-primary">{userName}</span>
-                님의 새 비밀번호를 입력해주세요.
-              </p>
-            )}
+      {tokenStatus === 'valid' && !success && (
+        <>
+          {userName && (
+            <p className="mb-4 text-center text-body-xs text-text-muted">
+              <span className="font-medium text-text-primary">{userName}</span>
+              님의 새 비밀번호를 입력해주세요.
+            </p>
+          )}
 
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-text-muted">
-                  새 비밀번호
-                </label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => handlePasswordChange(e.target.value)}
-                  onBlur={handlePasswordBlur}
-                  required
-                  className={INPUT_CLASS}
-                  placeholder={`${MIN_PASSWORD_LENGTH}자 이상, 영문+숫자+특수문자 포함`}
-                  autoComplete="new-password"
-                />
-                {passwordError && (
-                  <p className="mt-1 text-xs text-error-text">{passwordError}</p>
-                )}
-              </div>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <AuthField label="새 비밀번호">
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => handlePasswordChange(e.target.value)}
+                onBlur={handlePasswordBlur}
+                required
+                placeholder={`${MIN_PASSWORD_LENGTH}자 이상, 영문+숫자+특수문자 포함`}
+                autoComplete="new-password"
+              />
+              {passwordError && (
+                <AuthFieldMessage tone="error">{passwordError}</AuthFieldMessage>
+              )}
+            </AuthField>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-text-muted">
-                  비밀번호 확인
-                </label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      e.currentTarget.form?.requestSubmit();
-                    }
-                  }}
-                  required
-                  className={INPUT_CLASS}
-                  placeholder="비밀번호를 다시 입력하세요"
-                  autoComplete="new-password"
-                />
-              </div>
+            <AuthField label="비밀번호 확인">
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    e.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                required
+                placeholder="비밀번호를 다시 입력하세요"
+                autoComplete="new-password"
+              />
+            </AuthField>
 
-              {error && <p className="text-sm text-error-text">{error}</p>}
+            {error && <AuthFormError>{error}</AuthFormError>}
 
-              <Button type="submit" disabled={submitting} className="w-full">
-                {submitting ? '변경 중...' : '비밀번호 변경'}
-              </Button>
-            </form>
-          </>
-        )}
+            <Button type="submit" disabled={submitting} className="w-full">
+              {submitting ? '변경 중...' : '비밀번호 변경'}
+            </Button>
+          </form>
+        </>
+      )}
 
-        <AlertDialog
-          open={tokenStatus === 'valid' && success}
-          title="비밀번호 변경 완료"
-          message="비밀번호가 성공적으로 변경되었습니다."
-          confirmLabel="로그인하기"
-          onConfirm={() => navigate('/login/legacy', { replace: true })}
-        />
-      </div>
-    </div>
+      <AlertDialog
+        open={tokenStatus === 'valid' && success}
+        title="비밀번호 변경 완료"
+        message="비밀번호가 성공적으로 변경되었습니다."
+        confirmLabel="로그인하기"
+        onConfirm={() => navigate('/login/legacy', { replace: true })}
+      />
+    </AuthScreen>
   );
 }

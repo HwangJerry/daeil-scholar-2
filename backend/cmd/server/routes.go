@@ -54,6 +54,7 @@ type handlers struct {
 	adminSubscription *handler.AdminSubscriptionHandler
 	visit             *handler.VisitHandler
 	adminErrorReport  *handler.AdminErrorReportHandler
+	push              *handler.PushHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
@@ -108,7 +109,10 @@ func registerPublicRoutes(r chi.Router, h handlers, cacheStore *cache.Cache) {
 	r.Get("/api/donation/summary", h.donation.GetSummary)
 	r.Get("/api/auth/kakao", h.auth.KakaoLogin)
 	r.Get("/api/auth/kakao/callback", h.auth.KakaoCallback)
+	r.Post("/api/auth/kakao/mobile", h.auth.KakaoMobileLogin)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/login", h.auth.Login)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/mobile/login", h.auth.MobileLogin)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/refresh", h.auth.Refresh)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/register", h.auth.Register)
 	r.Get("/api/auth/check-id", h.auth.CheckID)
 	r.Get("/api/auth/check-phone", h.auth.CheckPhone)
@@ -160,6 +164,8 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Get("/api/messages/conversations", h.message.GetConversations)
 		r.Get("/api/messages/conversations/{userSeq}", h.message.GetConversationMessages)
 		r.Put("/api/messages/conversations/{userSeq}/read", h.message.MarkConversationRead)
+		r.Post("/api/push/device/register", h.push.RegisterDevice)
+		r.Post("/api/push/device/unregister", h.push.UnregisterDevice)
 		r.Get("/api/badges", h.badge.GetBadges)
 		r.Get("/api/messages/stream", h.realtime.Stream)
 	})

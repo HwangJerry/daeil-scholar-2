@@ -29,9 +29,11 @@ export function HeartButton({ liked, onToggle, count, dark = false }: HeartButto
     }
   };
 
-  const activeColor = dark ? '#ff6b8a' : 'var(--color-error)';
-  const idleColor = dark ? 'rgba(255,255,255,0.5)' : 'var(--color-text-placeholder)';
-  const heartColor = liked ? activeColor : idleColor;
+  const heartColorClass = liked
+    ? 'text-error'
+    : dark
+      ? 'text-white/50'
+      : 'text-text-placeholder';
 
   return (
     <button
@@ -41,13 +43,13 @@ export function HeartButton({ liked, onToggle, count, dark = false }: HeartButto
       aria-label={liked ? '좋아요 취소' : '좋아요'}
       aria-pressed={liked}
     >
-      <span className="relative inline-flex items-center justify-center">
+      <span className={cn('relative inline-flex items-center justify-center', heartColorClass)}>
         <svg
           width={13}
           height={13}
           viewBox="0 0 24 24"
-          fill={liked ? heartColor : 'none'}
-          stroke={heartColor}
+          fill={liked ? 'currentColor' : 'none'}
+          stroke="currentColor"
           strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -61,34 +63,22 @@ export function HeartButton({ liked, onToggle, count, dark = false }: HeartButto
 
         {anim === 'pop' && (
           <span
-            className="absolute animate-heart-ring rounded-full pointer-events-none"
-            style={{
-              width: 28,
-              height: 28,
-              border: `2px solid ${activeColor}`,
-              left: '50%',
-              top: '50%',
-            }}
+            className="absolute left-1/2 top-1/2 h-7 w-7 animate-heart-ring rounded-full border-2 border-current pointer-events-none"
           />
         )}
 
         {anim === 'pop' && DOT_ANGLES.map((deg) => (
           <span
             key={deg}
-            className="absolute animate-heart-dot rounded-full pointer-events-none"
+            className="absolute left-1/2 top-1/2 h-1 w-1 animate-heart-dot rounded-full bg-current pointer-events-none"
             style={{
-              width: 4,
-              height: 4,
-              background: activeColor,
-              left: '50%',
-              top: '50%',
               '--deg': `${deg}deg`,
             } as React.CSSProperties}
           />
         ))}
       </span>
 
-      <span className="text-xs" style={{ color: heartColor }}>
+      <span className={cn('text-xs', heartColorClass)}>
         {count}
       </span>
     </button>

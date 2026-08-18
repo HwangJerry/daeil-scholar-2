@@ -27,7 +27,7 @@ function MessagePageContent() {
     if (otherSeq) {
       // Fixed overlay above BottomNav (z-50) so the chat fills the full viewport
       return (
-        <div className="fixed inset-0 z-[60] flex flex-col bg-surface">
+        <div className="fixed inset-0 z-50 flex flex-col bg-surface">
           <ChatThread otherSeq={otherSeq} otherName={otherName} onBack={handleBack} />
         </div>
       );
@@ -45,7 +45,7 @@ function MessagePageContent() {
   // Desktop: negate Layout's md:pt-6 / md:pb-12 / md:px-6 so the split panel
   // fills exactly from the sticky TopNav (h-14 = 56px) to the bottom of the viewport.
   return (
-    <div className="flex -mt-6 -mb-12 -mx-6 h-[calc(100vh-56px)]">
+    <div className="flex -mt-6 -mb-12 -mx-6 h-[calc(100vh-var(--size-header-height-web))]">
       {/* Left panel — conversation list */}
       <div className="w-80 border-r border-border flex flex-col overflow-hidden">
         <div className="px-4 py-4 border-b border-border-subtle flex-shrink-0 flex items-center justify-between">

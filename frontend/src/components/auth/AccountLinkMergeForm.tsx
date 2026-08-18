@@ -9,6 +9,8 @@ import { useAccountLinkSubmit } from '../../hooks/useAccountLinkSubmit';
 import { SignupProfileImageEditor } from './SignupProfileImageEditor';
 import { Button } from '../ui/Button';
 import { isValidDepartment } from '../../constants/departments';
+import { AuthFormError, AuthSectionText } from './AuthFormPrimitives';
+import { AuthNotice } from './AuthScreen';
 
 const FN_REGEX = /^[0-9]+$/;
 
@@ -107,26 +109,28 @@ export function AccountLinkMergeForm({ token, initialPhone, initialEmail }: Acco
       <SignupProfileImageEditor token={token} imageUrl={photoUrl} onChange={handlePhotoChange} />
 
       {unmatched && (
-        <div className="mb-4 rounded-lg bg-error-subtle px-4 py-3 text-sm text-error-text">
+        <AuthNotice tone="error">
           입력하신 번호와 일치하는 기존 회원을 찾을 수 없습니다. 신규 가입으로 돌아가주세요.
-        </div>
+        </AuthNotice>
       )}
 
       {existing.isError && (
-        <div className="mb-4 rounded-lg bg-error-subtle px-4 py-3 text-sm text-error-text">
+        <AuthNotice tone="error">
           <p className="mb-2">회원 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.</p>
           <button
             type="button"
             onClick={() => existing.refetch()}
-            className="text-xs underline"
+            className="text-caption underline"
           >
             다시 시도
           </button>
-        </div>
+        </AuthNotice>
       )}
 
       {!showForm && !unmatched && !existing.isError ? (
-        <p className="py-8 text-center text-sm text-text-placeholder">회원 정보를 불러오는 중...</p>
+        <div className="py-8 text-center">
+          <AuthSectionText tone="muted">회원 정보를 불러오는 중...</AuthSectionText>
+        </div>
       ) : showForm ? (
         <ProfileFieldsSection
           values={profile}
@@ -135,7 +139,7 @@ export function AccountLinkMergeForm({ token, initialPhone, initialEmail }: Acco
         />
       ) : null}
 
-      {error && <p className="text-sm text-error-text">{error}</p>}
+      {error && <AuthFormError>{error}</AuthFormError>}
 
       <Button type="submit" disabled={submitting || !showForm} className="w-full">
         {submitting ? '처리 중...' : '통합 회원가입 완료'}

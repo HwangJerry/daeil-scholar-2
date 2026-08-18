@@ -130,7 +130,7 @@ export function ProfileEditForm({ onSuccess }: ProfileEditFormProps) {
 
   if (isLoading) {
     return (
-      <div className="space-y-4 rounded-[20px] bg-surface p-6 shadow-card border border-border">
+      <div className="space-y-4 rounded-xl bg-surface p-6 shadow-card border border-border">
         <div className="h-4 w-32 rounded skeleton-shimmer" />
         <div className="h-9 rounded skeleton-shimmer" />
         <div className="h-9 rounded skeleton-shimmer" />
@@ -143,10 +143,10 @@ export function ProfileEditForm({ onSuccess }: ProfileEditFormProps) {
 
   const inputClass =
     'w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/30 transition-shadow duration-150';
-  const labelClass = 'text-[13px] font-medium text-text-tertiary';
+  const labelClass = 'text-body-xs font-medium text-text-tertiary';
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-[20px] bg-surface p-6 shadow-card border border-border">
+    <form onSubmit={handleSubmit} className="rounded-xl bg-surface p-6 shadow-card border border-border">
       <h2 className="mb-4 text-lg font-semibold text-text-primary font-serif">프로필 수정</h2>
 
       {/* Profile photo upload */}

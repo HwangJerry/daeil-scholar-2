@@ -18,7 +18,7 @@ export function AdDetailModal() {
       <AdDetailContent
         adItem={adItem}
         onClose={() => navigate(-1)}
-        wrapperClassName="max-h-[85vh]"
+        wrapperClassName="max-h-dvh"
       />
     </Modal>
   );

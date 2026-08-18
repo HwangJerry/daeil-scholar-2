@@ -35,7 +35,7 @@ export function AccountActions() {
     <>
       <div className="px-4 space-y-3">
         {/* Account section */}
-        <div className="rounded-[20px] bg-surface shadow-card border border-border overflow-hidden">
+        <div className="rounded-xl bg-surface shadow-card border border-border overflow-hidden">
           <h3 className="px-5 py-3 text-sm font-semibold text-text-primary font-serif border-b border-border">
             계정
           </h3>
@@ -62,7 +62,7 @@ export function AccountActions() {
 
         {/* Member since */}
         {profile?.regDate && (
-          <p className="text-center text-[11px] text-text-tertiary pt-1">
+          <p className="text-center text-caption text-text-tertiary pt-1">
             Member since {profile.regDate}
           </p>
         )}

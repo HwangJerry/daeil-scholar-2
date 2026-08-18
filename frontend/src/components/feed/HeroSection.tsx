@@ -9,7 +9,7 @@ export function HeroSection() {
   const { data: hero, isLoading, isError } = useHeroNotice();
 
   if (isLoading) {
-    return <div className="min-h-[260px] rounded-[20px] skeleton-shimmer" />;
+    return <div className="min-h-[var(--size-feed-hero-height-max)] rounded-xl skeleton-shimmer" />;
   }
 
   if (isError || !hero) return null;
@@ -20,9 +20,9 @@ export function HeroSection() {
     <NoticeCardLink
       seq={hero.seq}
       className={cn(
-        'group relative block overflow-hidden rounded-[20px] animate-fade-in-up',
+        'group relative block overflow-hidden rounded-xl animate-fade-in-up',
         'bg-gradient-to-br from-hero-from via-hero-via to-hero-to',
-        'min-h-[260px]'
+        'min-h-[var(--size-feed-hero-height-max)]'
       )}
     >
       {/* Ambient glow decoration */}
@@ -41,7 +41,7 @@ export function HeroSection() {
       )}
 
       {/* Content */}
-      <div className="relative flex flex-col justify-end h-full min-h-[260px] p-6">
+      <div className="relative flex flex-col justify-end h-full min-h-[var(--size-feed-hero-height-max)] p-6">
         {/* Top label */}
         <div className="flex items-center gap-2 mb-auto pt-1">
           {isPinned ? (
@@ -63,7 +63,7 @@ export function HeroSection() {
             {hero.subject}
           </h2>
           {hero.summary && (
-            <p className="mb-3 line-clamp-2 text-[13px] text-white/55 leading-relaxed">{hero.summary}</p>
+            <p className="mb-3 line-clamp-2 text-body-xs text-white/55 leading-relaxed">{hero.summary}</p>
           )}
           <div className="flex items-center gap-3 text-xs text-white/40">
             <span>{formatRelativeDate(hero.regDate)}</span>

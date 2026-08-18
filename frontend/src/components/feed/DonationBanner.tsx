@@ -16,7 +16,7 @@ export function DonationBanner() {
   });
 
   if (isLoading) {
-    return <div className="h-48 rounded-[20px] skeleton-shimmer" />;
+    return <div className="h-[var(--size-feed-hero-height-min)] rounded-xl skeleton-shimmer" />;
   }
 
   if (isError || !data) return null;
@@ -25,8 +25,8 @@ export function DonationBanner() {
   const hasGoal = data.goalAmount > 0;
 
   return (
-    <div className="rounded-[20px] bg-surface border border-border p-7 shadow-card">
-      <p className="text-[10px] font-semibold text-text-placeholder tracking-widest uppercase mb-4">
+    <div className="rounded-xl bg-surface border border-border p-7 shadow-card">
+      <p className="text-mini font-semibold text-text-placeholder tracking-widest uppercase mb-4">
         기부 캠페인
       </p>
 
@@ -47,7 +47,7 @@ export function DonationBanner() {
           <div className="h-1.5 overflow-hidden rounded-full bg-border">
             <div
               className="h-full rounded-full bg-gradient-to-r from-primary to-hero-via animate-fill-bar"
-              style={{ width: `${rate}%` }}
+              style={{ '--donation-rate': `${rate}%` } as React.CSSProperties}
             />
           </div>
           <p className="mt-1.5 text-right text-xs text-text-placeholder">
