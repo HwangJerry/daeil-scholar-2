@@ -106,13 +106,18 @@ type EasyPayConfig struct {
 }
 
 type PushConfig struct {
-	APNsKeyID         string
-	APNSTeamID        string
-	APNsBundleID      string
-	APNsKeyPath       string
-	APNsKeyValue      string
-	APNsUseSandbox    bool
+	APNsKeyID          string
+	APNSTeamID         string
+	APNsBundleID       string
+	APNsKeyPath        string
+	APNsKeyValue       string
+	APNsEnvironment    string
+	APNsUseSandbox     bool
 	APNsRequestTimeout time.Duration
+	FCMProjectID       string
+	FCMCredentialsFile string
+	FCMCredentialsJSON string
+	FCMRequestTimeout  time.Duration
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -145,13 +150,18 @@ func Load() *Config {
 			MaxAge: getDurationEnv("JWT_MAX_AGE", 24*time.Hour),
 		},
 		Push: PushConfig{
-			APNsKeyID:          getEnv("PUSH_APNS_KEY_ID", ""),
-			APNSTeamID:         getEnv("PUSH_APNS_TEAM_ID", ""),
-			APNsBundleID:       getEnv("PUSH_APNS_BUNDLE_ID", ""),
-			APNsKeyPath:        getEnv("PUSH_APNS_KEY_PATH", ""),
-			APNsKeyValue:       getEnv("PUSH_APNS_KEY_VALUE", ""),
+			APNsKeyID:          getEnvWithFallback("APNS_KEY_ID", "PUSH_APNS_KEY_ID", ""),
+			APNSTeamID:         getEnvWithFallback("APNS_TEAM_ID", "PUSH_APNS_TEAM_ID", ""),
+			APNsBundleID:       getEnvWithFallback("APNS_BUNDLE_ID", "PUSH_APNS_BUNDLE_ID", ""),
+			APNsKeyPath:        getEnvWithFallback("APNS_PRIVATE_KEY_PATH", "PUSH_APNS_KEY_PATH", ""),
+			APNsKeyValue:       getEnvWithFallback("APNS_PRIVATE_KEY", "PUSH_APNS_KEY_VALUE", ""),
+			APNsEnvironment:    normalizePushEnvironment(getEnv("APNS_ENVIRONMENT", "")),
 			APNsUseSandbox:     strings.EqualFold(getEnv("PUSH_APNS_USE_SANDBOX", "false"), "true"),
-			APNsRequestTimeout: getDurationEnv("PUSH_APNS_REQUEST_TIMEOUT", 5*time.Second),
+			APNsRequestTimeout: getDurationEnvWithFallback("APNS_REQUEST_TIMEOUT", "PUSH_APNS_REQUEST_TIMEOUT", 5*time.Second),
+			FCMProjectID:       getEnvWithFallback("FCM_PROJECT_ID", "FIREBASE_PROJECT_ID", ""),
+			FCMCredentialsFile: getEnvWithFallback("FCM_CREDENTIALS_FILE", "FIREBASE_SERVICE_ACCOUNT_FILE", getEnv("GOOGLE_APPLICATION_CREDENTIALS", "")),
+			FCMCredentialsJSON: getEnvWithFallback("FCM_CREDENTIALS_JSON", "FIREBASE_SERVICE_ACCOUNT_JSON", ""),
+			FCMRequestTimeout:  getDurationEnvWithFallback("FCM_REQUEST_TIMEOUT", "FIREBASE_REQUEST_TIMEOUT", 5*time.Second),
 		},
 		Upload: UploadConfig{
 			BasePath:      getEnv("UPLOAD_BASE_PATH", "/var/www/uploads"),
@@ -201,6 +211,13 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+func getEnvWithFallback(primaryKey, fallbackKey, fallback string) string {
+	if v := getEnv(primaryKey, ""); v != "" {
+		return v
+	}
+	return getEnv(fallbackKey, fallback)
+}
+
 func getIntEnv(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		v = stripInlineComment(v)
@@ -219,4 +236,29 @@ func getDurationEnv(key string, fallback time.Duration) time.Duration {
 		}
 	}
 	return fallback
+}
+
+func getDurationEnvWithFallback(primaryKey, fallbackKey string, fallback time.Duration) time.Duration {
+	if v := os.Getenv(primaryKey); v != "" {
+		v = stripInlineComment(v)
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return getDurationEnv(fallbackKey, fallback)
+}
+
+func normalizePushEnvironment(env string) string {
+	env = strings.ToLower(strings.TrimSpace(env))
+	switch env {
+	case "sandbox", "development", "debug", "dev":
+		return "sandbox"
+	case "production", "prod", "release", "testflight", "appstore":
+		return "production"
+	default:
+		if strings.EqualFold(getEnv("PUSH_APNS_USE_SANDBOX", "false"), "true") {
+			return "sandbox"
+		}
+		return "production"
+	}
 }

@@ -1,7 +1,7 @@
 # Push Policy (dflh-saf-v2)
 
-Version: 1.0  
-Last Updated: 2026-06-11  
+Version: 1.1  
+Last Updated: 2026-07-02  
 Owner: Engineering Team (Backend + Mobile + QA + SRE)
 
 본 문서는 푸시 기능의 운영 정책을 정의한다.  
@@ -79,10 +79,15 @@ KPI:
 
 ## G. 운영 정책
 
+- APNs/FCM provider credentials are runtime configuration only.
+  - Firebase service-account JSON must never be committed.
+  - Backend FCM requires `FCM_CREDENTIALS_JSON` or `FCM_CREDENTIALS_FILE` and, when needed, `FCM_PROJECT_ID`.
+  - Missing local credentials may use backend no-op push behavior; configured but invalid production credentials must fail clearly before smoke/launch.
+- Android registration/provider support unblocks backend smoke, but physical-device validation still requires Firebase project config and a real device/emulator FCM registration token.
+
 - PR 승인 이전에 다음이 충족되어야 함:
   1. `docs/push/contract.md`와 일치
   2. 보안/테스트 실패 0
   3. 모니터링 룰 존재
   4. 런북 대응 시나리오 존재
 - 위반 시 PR 차단
-

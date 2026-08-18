@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/config"
@@ -72,11 +73,19 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	realtimeHub := realtime.NewHub(logger)
 	messageNotifier := service.NewRealtimeMessageNotifier(realtimeHub)
 	pushTokenRepo := repository.NewMobileDeviceTokenRepository(db)
-	var pushProvider service.MobilePushProvider
+	pushProviders := map[string]service.MobilePushProvider{}
 	if cfg.Push.APNsKeyID != "" && cfg.Push.APNSTeamID != "" && cfg.Push.APNsBundleID != "" &&
 		(cfg.Push.APNsKeyPath != "" || cfg.Push.APNsKeyValue != "") {
-		pushProvider = service.NewAPNsPushProvider(cfg.Push, logger)
+		pushProviders["ios"] = service.NewAPNsPushProvider(cfg.Push, logger)
 	}
+	if cfg.Push.FCMCredentialsJSON != "" || cfg.Push.FCMCredentialsFile != "" {
+		fcmProvider, err := service.NewFCMPushProvider(context.Background(), cfg.Push, logger)
+		if err != nil {
+			return nil, err
+		}
+		pushProviders["android"] = fcmProvider
+	}
+	pushProvider := service.NewPlatformPushProvider(logger, pushProviders)
 	pushService := service.NewMobilePushService(pushTokenRepo, pushProvider, logger)
 
 	// Email infrastructure

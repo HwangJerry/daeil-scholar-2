@@ -31,7 +31,7 @@ type FeedQuerier interface {
 
 // MessageQuerier defines the methods used by MessageService for messaging operations.
 type MessageQuerier interface {
-	InsertMessage(senderSeq int, recvrSeq int, content string) error
+	InsertMessage(senderSeq int, recvrSeq int, content string) (int, error)
 	GetInbox(usrSeq int, page int, size int) ([]model.Message, int, error)
 	GetOutbox(usrSeq int, page int, size int) ([]model.Message, int, error)
 	MarkAsRead(amSeq int, usrSeq int) (int, bool, error)

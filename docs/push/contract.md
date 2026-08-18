@@ -1,11 +1,11 @@
 # Push Contract (dflh-saf-v2)
 
-Version: 1.0  
-Last Updated: 2026-06-11  
+Version: 1.1  
+Last Updated: 2026-07-02  
 Owner: Backend Team / Mobile Team Lead  
 
 본 문서는 푸시 알림 파이프라인의 계약(Contract)을 고정한다.  
-`dflh-saf-v2-swift` 마이그레이션 및 운영에서 아래 규칙을 코드/DB/CI에서 강제한다.
+`dflh-saf-v2-swift` 및 `dflh-saf-v2-kotlin` 마이그레이션/운영에서 아래 규칙을 코드/DB/CI에서 강제한다.
 
 ## 1) 핵심 원칙
 
@@ -32,21 +32,26 @@ Owner: Backend Team / Mobile Team Lead
 ```json
 {
   "event_type": "message.new",
+  "event": "message.new",
   "event_id": "ulid-or-uuid",
-  "user_id": 1234,
+  "user_id": "1234",
   "template_key": "push.message.new",
   "template_version": 1,
   "ttl_sec": 86400,
   "collapse_key": "message",
   "args": {},
   "deep_link": "/messages",
-  "action_token": "base64url-jwt"
+  "sent_at": "2026-07-02T00:00:00Z"
 }
 ```
 
 - `user_id`는 수신자 식별용, 노출용 PII는 포함 금지.
-- `action_token`은 서명/짧은 유효시간(권장 10분) 사용.
-- `args`는 UI 메시지 렌더링에 필요한 최소 값만 포함하며, DM 본문/발신자 이름/발신자 식별자는 포함하지 않는다.
+- `event`는 Android/iOS 하위 호환 라우팅 alias이며 `event_type`과 같은 값을 사용한다.
+- `template_version`은 현재 `1`이다.
+- `args`는 라우팅에 필요한 최소 값만 포함하며, DM 본문/발신자 이름/전화번호/주소/개인식별 토큰은 포함하지 않는다.
+- 현재 지원 payload:
+  - `message.new`: `args.sender_seq`, `args.recvr_seq`, `deep_link=/messages/{senderSeq}`
+  - `admin.notice`: `args.post_seq`, `deep_link=/feed/{postSeq}`
 
 ## 4) 멱등성 규칙
 
@@ -64,11 +69,26 @@ Owner: Backend Team / Mobile Team Lead
 ## 6) 유효성 검사 (필수)
 
 다음 필드는 필수.
-- `event_type`, `event_id`, `user_id`, `template_key`, `ttl_sec`, `collapse_key`
+- `event_type`, `event`, `event_id`, `user_id`, `template_key`, `template_version`, `ttl_sec`, `collapse_key`, `args`, `deep_link`, `sent_at`
 필드 유효성:
 - `event_type`은 계약된 값만 허용.
+- `event`는 `event_type`과 같아야 함.
 - `ttl_sec`는 1 ~ 86400 범위.
 - `event_id`는 비어있지 않고 중복되지 않아야 함.
+
+## 6-1) Device Registration
+
+인증된 사용자는 아래 endpoint를 사용한다.
+
+- `POST /api/push/device/register`
+- `POST /api/push/device/unregister`
+
+등록 요청은 다음 플랫폼만 허용한다.
+
+- `ios`: APNs device token, `apnsEnvironment=sandbox|production`
+- `android`: FCM registration token
+
+Android 실제 smoke는 Firebase project, 앱 Firebase config, backend service-account credentials, 실제 FCM token이 모두 있어야 가능하다.
 
 ## 7) 에러/재시도 규칙
 
