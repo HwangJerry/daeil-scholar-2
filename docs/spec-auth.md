@@ -455,4 +455,13 @@ r.Use(middleware.AuthBridgeMiddleware(db))
   → 메인으로
 ```
 
+> **모바일(iOS/Android) 스코프 노트:** 위 계정 연결(`/login/link`, `POST /api/auth/kakao/link`, 그리고 모바일 대응
+> 경로인 `POST /api/auth/social/link`) 플로우는 **iOS/Android 앱 로그인 로직에서는 지원하지 않기로 결정**되었습니다.
+> 앱은 이미 웹에서 카카오 계정이 연동된 기존 회원의 로그인만 지원하며, 신규 카카오 계정으로 처음 로그인을 시도하면
+> `POST /api/auth/kakao/mobile`이 `202 linkRequired`를 반환하고, 앱은 이를 "카카오 계정이 연결되어 있지 않습니다.
+> 기존 아이디로 로그인해주세요" 안내로 처리합니다(계정 연결 UI를 앱에 새로 만들지 않음).
+>
+> 웹 쪽 계정 연결 플로우(§4.6 전체) 자체도 추후 제거될 예정이므로, 신규 기능 설계 시 이 플로우에 대한
+> 의존을 추가하지 않도록 주의하세요.
+
 ---
