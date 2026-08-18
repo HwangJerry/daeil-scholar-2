@@ -69,6 +69,7 @@ type AuthUser struct {
 	USRID     string `json:"usrId"`
 	USRName   string `json:"usrName"`
 	USRStatus string `json:"usrStatus"`
+	SessionID string `json:"-"`
 }
 
 // JWTClaims represents the JWT token claims.

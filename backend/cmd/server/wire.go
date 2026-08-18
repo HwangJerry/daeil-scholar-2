@@ -31,7 +31,7 @@ type deps struct {
 	emailQueue             chan model.EmailMessage
 	emailService           *service.EmailService
 	subscriptionBillingJob *job.SubscriptionBillingJob
-	visitJob          *job.VisitAggregationJob
+	visitJob               *job.VisitAggregationJob
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
@@ -61,6 +61,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	visitRepo := repository.NewVisitRepository(db)
 
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
+	socialLinkTokens := service.NewSocialLinkTokenStore(cacheStore)
 
 	realtimeHub := realtime.NewHub(logger)
 	messageNotifier := service.NewRealtimeMessageNotifier(realtimeHub)
@@ -126,38 +127,38 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	feedPresenter := presenter.NewFeedPresenter()
 
 	h := handlers{
-		health:         handler.NewHealthHandler(db),
-		auth:           handler.NewAuthHandler(authService, memberService, registrationService, profileService, cacheStore, cfg, logger),
-		feed:           handler.NewFeedHandler(feedService, likeService, feedPresenter),
-		like:           handler.NewLikeHandler(likeService),
-		comment:        handler.NewCommentHandler(commentService),
-		donation:       handler.NewDonationHandler(donationService),
-		alumni:         handler.NewAlumniHandler(alumniService),
-		profile:        handler.NewProfileHandler(profileService),
-		profileUpload:  handler.NewProfileUploadHandler(profileUploadService),
-		ad:             handler.NewAdHandler(adService),
-		adLike:         handler.NewAdLikeHandler(adLikeService),
-		adComment:      handler.NewAdCommentHandler(adCommentService),
-		adminNotice:     handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
-		adminDisclosure: handler.NewAdminDisclosureHandler(adminDisclosureSvc, feedPresenter),
-		disclosure:      handler.NewDisclosureHandler(disclosureSvc, feedPresenter),
-		adminAd:        handler.NewAdminAdHandler(adminAdSvc),
-		adminDonation:  handler.NewAdminDonationHandler(adminDonationOrchestrator),
-		adminMember:    handler.NewAdminMemberHandler(adminMemberSvc),
-		adminDashboard: handler.NewAdminDashboardHandler(adminDashboardSvc),
+		health:            handler.NewHealthHandler(db),
+		auth:              handler.NewAuthHandler(authService, memberService, registrationService, profileService, cacheStore, socialLinkTokens, cfg, logger),
+		feed:              handler.NewFeedHandler(feedService, likeService, feedPresenter),
+		like:              handler.NewLikeHandler(likeService),
+		comment:           handler.NewCommentHandler(commentService),
+		donation:          handler.NewDonationHandler(donationService),
+		alumni:            handler.NewAlumniHandler(alumniService),
+		profile:           handler.NewProfileHandler(profileService),
+		profileUpload:     handler.NewProfileUploadHandler(profileUploadService),
+		ad:                handler.NewAdHandler(adService),
+		adLike:            handler.NewAdLikeHandler(adLikeService),
+		adComment:         handler.NewAdCommentHandler(adCommentService),
+		adminNotice:       handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
+		adminDisclosure:   handler.NewAdminDisclosureHandler(adminDisclosureSvc, feedPresenter),
+		disclosure:        handler.NewDisclosureHandler(disclosureSvc, feedPresenter),
+		adminAd:           handler.NewAdminAdHandler(adminAdSvc),
+		adminDonation:     handler.NewAdminDonationHandler(adminDonationOrchestrator),
+		adminMember:       handler.NewAdminMemberHandler(adminMemberSvc),
+		adminDashboard:    handler.NewAdminDashboardHandler(adminDashboardSvc),
 		adminUpload:       handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
 		adminAttachUpload: handler.NewAdminAttachmentUploadHandler(attachmentUploadOrchestrator, cfg.Upload.MaxFileSizeMB),
-		socialLinkPhoto:   handler.NewSocialLinkPhotoHandler(uploadOrchestrator, cacheStore, logger),
-		myDonation:     handler.NewMyDonationHandler(myDonationService),
-		message:        handler.NewMessageHandler(messageService),
-		payment:        handler.NewPaymentHandler(donateService, cfg.EasyPay),
-		subscription:   handler.NewSubscriptionHandler(subscriptionService, cfg.EasyPay),
-		og:             handler.NewOGHandler(ogService, cfg.Server.SiteBaseURL),
-		sitemap:        handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
-		rss:            handler.NewRSSHandler(rssService, cfg.Server.SiteBaseURL),
-		passwordReset:  handler.NewPasswordResetHandler(passwordResetService, logger),
-		passwordChange: handler.NewPasswordChangeHandler(passwordChangeSvc),
-		badge:          handler.NewBadgeHandler(messageService, logger),
+		socialLinkPhoto:   handler.NewSocialLinkPhotoHandler(uploadOrchestrator, socialLinkTokens, logger),
+		myDonation:        handler.NewMyDonationHandler(myDonationService),
+		message:           handler.NewMessageHandler(messageService),
+		payment:           handler.NewPaymentHandler(donateService, cfg.EasyPay),
+		subscription:      handler.NewSubscriptionHandler(subscriptionService, cfg.EasyPay),
+		og:                handler.NewOGHandler(ogService, cfg.Server.SiteBaseURL),
+		sitemap:           handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
+		rss:               handler.NewRSSHandler(rssService, cfg.Server.SiteBaseURL),
+		passwordReset:     handler.NewPasswordResetHandler(passwordResetService, logger),
+		passwordChange:    handler.NewPasswordChangeHandler(passwordChangeSvc),
+		badge:             handler.NewBadgeHandler(messageService, logger),
 		adminJobCat:       handler.NewAdminJobCategoryHandler(adminJobCatSvc),
 		history:           handler.NewHistoryHandler(historySvc),
 		adminSubscription: handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
@@ -178,6 +179,6 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		emailQueue:             emailQueue,
 		emailService:           emailService,
 		subscriptionBillingJob: subscriptionBillingJob,
-		visitJob:          visitJob,
+		visitJob:               visitJob,
 	}, nil
 }

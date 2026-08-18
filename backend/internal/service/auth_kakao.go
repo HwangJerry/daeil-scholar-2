@@ -3,6 +3,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,11 +26,17 @@ type KakaoUserInfo struct {
 // and fetches the Kakao user profile. ProfileImageURL is empty when the user declined
 // the optional profile_image consent or is using Kakao's default avatar.
 func (s *AuthService) ExchangeKakaoToken(code string) (KakaoUserInfo, error) {
+	return s.ExchangeKakaoTokenWithRedirect(code, s.cfg.Kakao.RedirectURI)
+}
+
+// ExchangeKakaoTokenWithRedirect binds the code exchange to the exact redirect URI
+// that was validated by the caller.
+func (s *AuthService) ExchangeKakaoTokenWithRedirect(code string, redirectURI string) (KakaoUserInfo, error) {
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
 	form.Set("client_id", s.cfg.Kakao.ClientID)
 	form.Set("client_secret", s.cfg.Kakao.ClientSecret)
-	form.Set("redirect_uri", s.cfg.Kakao.RedirectURI)
+	form.Set("redirect_uri", redirectURI)
 	form.Set("code", code)
 	req, err := http.NewRequest(http.MethodPost, "https://kauth.kakao.com/oauth/token", bytes.NewBufferString(form.Encode()))
 	if err != nil {
@@ -42,8 +49,8 @@ func (s *AuthService) ExchangeKakaoToken(code string) (KakaoUserInfo, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return KakaoUserInfo{}, fmt.Errorf("kakao token exchange failed (status %d): %s", resp.StatusCode, string(body))
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return KakaoUserInfo{}, fmt.Errorf("kakao token exchange failed with status %d", resp.StatusCode)
 	}
 	var tokenResp struct {
 		AccessToken string `json:"access_token"`
@@ -51,19 +58,24 @@ func (s *AuthService) ExchangeKakaoToken(code string) (KakaoUserInfo, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
 		return KakaoUserInfo{}, err
 	}
+	return s.GetKakaoProfileByAccessToken(tokenResp.AccessToken)
+}
+
+// GetKakaoProfileByAccessToken validates the SDK-issued token against Kakao.
+func (s *AuthService) GetKakaoProfileByAccessToken(accessToken string) (KakaoUserInfo, error) {
 	userReq, err := http.NewRequest(http.MethodGet, "https://kapi.kakao.com/v2/user/me", nil)
 	if err != nil {
 		return KakaoUserInfo{}, err
 	}
-	userReq.Header.Set("Authorization", "Bearer "+tokenResp.AccessToken)
+	userReq.Header.Set("Authorization", "Bearer "+accessToken)
 	userResp, err := s.httpClient.Do(userReq)
 	if err != nil {
 		return KakaoUserInfo{}, err
 	}
 	defer userResp.Body.Close()
 	if userResp.StatusCode >= 400 {
-		body, _ := io.ReadAll(userResp.Body)
-		return KakaoUserInfo{}, errors.New(string(body))
+		_, _ = io.Copy(io.Discard, userResp.Body)
+		return KakaoUserInfo{}, errors.New("kakao profile verification failed")
 	}
 	var userPayload struct {
 		ID      int64 `json:"id"`
@@ -88,7 +100,7 @@ func (s *AuthService) ExchangeKakaoToken(code string) (KakaoUserInfo, error) {
 		Email:           userPayload.Account.Email,
 		Nickname:        userPayload.Account.Profile.Nickname,
 		ProfileImageURL: profileImageURL,
-		AccessToken:     tokenResp.AccessToken,
+		AccessToken:     accessToken,
 	}, nil
 }
 
@@ -123,9 +135,27 @@ func (s *AuthService) LogoutKakao(usrSeq int) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("kakao logout failed (status %d): %s", resp.StatusCode, string(body))
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return fmt.Errorf("kakao logout failed with status %d", resp.StatusCode)
 	}
 	s.logger.Info().Int("usrSeq", usrSeq).Msg("kakao access token invalidated")
+	return nil
+}
+
+func (s *AuthService) UnlinkKakaoToken(ctx context.Context, accessToken string) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://kapi.kakao.com/v1/user/unlink", nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Authorization", "Bearer "+accessToken)
+	response, err := s.httpClient.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	_, _ = io.Copy(io.Discard, response.Body)
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("kakao unlink failed with status %d", response.StatusCode)
+	}
 	return nil
 }

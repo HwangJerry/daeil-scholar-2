@@ -19,17 +19,54 @@ import (
 var fnDigitRegex = regexp.MustCompile(`^[0-9]+$`)
 
 type AuthHandler struct {
-	service     *service.AuthService
-	memberSvc   *service.MemberService
-	registerSvc *service.RegistrationService
-	profileSvc  *service.ProfileService
-	cache       *cache.Cache
-	cfg         *config.Config
-	logger      zerolog.Logger
+	service          *service.AuthService
+	mobileIssuer     *service.MobileSessionIssuer
+	socialAuth       *service.SocialAuthService
+	appleVerifier    *service.AppleIdentityVerifier
+	socialLifecycle  *service.SocialAccountLifecycleService
+	memberSvc        *service.MemberService
+	registerSvc      *service.RegistrationService
+	profileSvc       *service.ProfileService
+	cache            *cache.Cache
+	socialLinkTokens *service.SocialLinkTokenStore
+	cfg              *config.Config
+	logger           zerolog.Logger
 }
 
-func NewAuthHandler(svc *service.AuthService, memberSvc *service.MemberService, registerSvc *service.RegistrationService, profileSvc *service.ProfileService, cacheStore *cache.Cache, cfg *config.Config, logger zerolog.Logger) *AuthHandler {
-	return &AuthHandler{service: svc, memberSvc: memberSvc, registerSvc: registerSvc, profileSvc: profileSvc, cache: cacheStore, cfg: cfg, logger: logger}
+func NewAuthHandler(
+	svc *service.AuthService,
+	memberSvc *service.MemberService,
+	registerSvc *service.RegistrationService,
+	profileSvc *service.ProfileService,
+	cacheStore *cache.Cache,
+	socialLinkTokens *service.SocialLinkTokenStore,
+	cfg *config.Config,
+	logger zerolog.Logger,
+) *AuthHandler {
+	mobileIssuer := service.NewMobileSessionIssuer(svc)
+	appleVerifier := service.NewAppleIdentityVerifier(svc, cfg.Apple)
+	socialLifecycle := service.NewSocialAccountLifecycleService(svc, appleVerifier)
+	return &AuthHandler{
+		service:      svc,
+		mobileIssuer: mobileIssuer,
+		socialAuth: service.NewSocialAuthService(
+			svc,
+			mobileIssuer,
+			socialLinkTokens,
+			socialLifecycle,
+			service.NewKakaoIdentityVerifier(svc),
+			appleVerifier,
+		),
+		appleVerifier:    appleVerifier,
+		socialLifecycle:  socialLifecycle,
+		memberSvc:        memberSvc,
+		registerSvc:      registerSvc,
+		profileSvc:       profileSvc,
+		cache:            cacheStore,
+		socialLinkTokens: socialLinkTokens,
+		cfg:              cfg,
+		logger:           logger,
+	}
 }
 
 func (h *AuthHandler) KakaoLogin(w http.ResponseWriter, r *http.Request) {
@@ -50,11 +87,7 @@ func (h *AuthHandler) KakaoLogin(w http.ResponseWriter, r *http.Request) {
 	query.Set("response_type", "code")
 	query.Set("state", state)
 	authURL.RawQuery = query.Encode()
-	h.logger.Debug().
-		Str("client_id", h.cfg.Kakao.ClientID).
-		Str("redirect_uri", h.cfg.Kakao.RedirectURI).
-		Str("auth_url", authURL.String()).
-		Msg("kakao: redirecting to authorize")
+	h.logger.Debug().Msg("kakao: redirecting to authorize")
 	http.Redirect(w, r, authURL.String(), http.StatusFound)
 }
 
@@ -70,10 +103,7 @@ func (h *AuthHandler) KakaoCallback(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_CODE", "Missing code")
 		return
 	}
-	h.logger.Debug().
-		Str("code", code[:min(len(code), 8)]+"...").
-		Str("state", state).
-		Msg("kakao: callback received")
+	h.logger.Debug().Msg("kakao: callback received")
 	info, err := h.service.ExchangeKakaoToken(code)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("kakao: token exchange failed")
@@ -81,9 +111,7 @@ func (h *AuthHandler) KakaoCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.logger.Debug().
-		Str("kakao_id", info.KakaoID).
-		Str("email", info.Email).
-		Str("nickname", info.Nickname).
+		Bool("has_email", info.Email != "").
 		Bool("has_profile_image", info.ProfileImageURL != "").
 		Msg("kakao: token exchanged")
 	h.handleSocialCallback(w, r, "KT", info)
@@ -106,8 +134,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.memberSvc.LoginWithPassword(req.USRID, req.Password)
 	if err != nil {
-		if errors.Is(err, service.ErrPendingApproval) {
-			respondError(w, http.StatusForbidden, "PENDING_APPROVAL", "가입 신청이 접수된 계정입니다. 관리자 승인 후 로그인 가능합니다.")
+		if errors.Is(err, service.ErrLoginPending) || errors.Is(err, service.ErrLoginSuspended) || errors.Is(err, service.ErrLoginWithdrawn) {
+			respondError(w, http.StatusForbidden, service.LoginErrorCode(err), "이 계정은 현재 로그인할 수 없습니다.")
 			return
 		}
 		h.logger.Error().Err(err).Str("usrId", req.USRID).Msg("login: password verification failed")
@@ -193,7 +221,7 @@ func (h *AuthHandler) CheckPhone(w http.ResponseWriter, r *http.Request) {
 	}
 	available, err := h.registerSvc.IsPhoneAvailable(phone)
 	if err != nil {
-		h.logger.Error().Err(err).Str("phone", phone).Msg("check-phone: db error")
+		h.logger.Error().Err(err).Msg("check-phone: db error")
 		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "전화번호 중복 확인에 실패했습니다")
 		return
 	}
@@ -217,11 +245,33 @@ func (h *AuthHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetAuthUser(r.Context())
-	usrSeq := 0
-	if user != nil {
-		usrSeq = user.USRSeq
+	if user == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
+		return
 	}
-	h.service.Logout(w, usrSeq)
+	legacySessionID := ""
+	if cookie, err := r.Cookie("DDusrSession_id"); err == nil {
+		legacySessionID = cookie.Value
+	}
+	if err := h.service.LogoutCurrent(w, user, legacySessionID); err != nil {
+		h.logger.Warn().Err(err).Int("usrSeq", user.USRSeq).Msg("current session logout failed")
+		respondError(w, http.StatusServiceUnavailable, "LOGOUT_FAILED", "서버 세션 로그아웃에 실패했습니다.")
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *AuthHandler) LogoutAll(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetAuthUser(r.Context())
+	if user == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
+		return
+	}
+	if err := h.service.LogoutAll(w, user.USRSeq); err != nil {
+		h.logger.Warn().Err(err).Int("usrSeq", user.USRSeq).Msg("all session logout failed")
+		respondError(w, http.StatusServiceUnavailable, "LOGOUT_FAILED", "전체 세션 로그아웃에 실패했습니다.")
+		return
+	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -231,5 +281,10 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
 		return
 	}
-	respondJSON(w, http.StatusOK, user)
+	current, err := h.service.GetLoginAllowedUser(user.USRSeq)
+	if err != nil || current == nil {
+		respondError(w, http.StatusForbidden, service.LoginErrorCode(err), "이 계정은 현재 로그인할 수 없습니다.")
+		return
+	}
+	respondJSON(w, http.StatusOK, current)
 }

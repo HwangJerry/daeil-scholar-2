@@ -33,7 +33,7 @@ func (s *AuthService) InsertSocialLink(usrSeq int, gate string, socialID string,
 	return s.repo.InsertSocialLink(usrSeq, gate, socialID, email)
 }
 
-// UpdateProfilePhotoIfEmpty sets USR_PHOTO only when empty, used by auto-link to seed avatars without overwriting.
+// UpdateProfilePhotoIfEmpty seeds an avatar after an explicitly authenticated link without overwriting one.
 func (s *AuthService) UpdateProfilePhotoIfEmpty(usrSeq int, url string) error {
 	return s.repo.UpdateProfilePhotoIfEmpty(usrSeq, url)
 }

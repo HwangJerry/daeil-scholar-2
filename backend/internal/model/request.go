@@ -7,3 +7,21 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type KakaoMobileLoginRequest struct {
+	GrantType   string `json:"grantType"`
+	AccessToken string `json:"accessToken"`
+	Code        string `json:"code"`
+	RedirectURI string `json:"redirectUri"`
+}
+
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refreshToken"`
+}
+
+type AppleMobileLoginRequest struct {
+	ChallengeID       string `json:"challengeId"`
+	IdentityToken     string `json:"identityToken"`
+	AuthorizationCode string `json:"authorizationCode"`
+	GivenName         string `json:"givenName"`
+	FamilyName        string `json:"familyName"`
+}

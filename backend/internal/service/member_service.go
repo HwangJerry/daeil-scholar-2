@@ -2,14 +2,16 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 )
 
-// ErrPendingApproval is returned when a member exists but is awaiting admin approval (BBB status).
-var ErrPendingApproval = errors.New("member pending approval")
+// ErrPendingApproval remains as a compatibility alias for older handlers.
+var ErrPendingApproval = ErrLoginPending
 
 // ErrIDTaken is returned when the requested user ID is already in use.
 var ErrIDTaken = errors.New("user ID already taken")
@@ -30,41 +32,79 @@ func NewMemberService(repo *repository.AuthRepository) *MemberService {
 	return &MemberService{repo: repo}
 }
 
-// LoginWithPassword hashes the password and looks up an active member (status >= CCC).
-// Returns ErrPendingApproval if credentials match but the member is still awaiting approval.
+// LoginWithPassword verifies credentials first, then applies the same status
+// policy used by social login and refresh.
 func (s *MemberService) LoginWithPassword(usrID, password string) (*model.User, error) {
 	hashed := MysqlNativePassword(password)
-	user, err := s.repo.FindMemberByLogin(usrID, hashed)
+	user, err := s.repo.FindMemberByIDAndPwdAny(usrID, hashed)
 	if err != nil {
 		return nil, err
 	}
-	if user != nil {
-		return user, nil
+	if user == nil {
+		return nil, nil
 	}
-	// Check if credentials match a pending (BBB) account
-	anyUser, err := s.repo.FindMemberByIDAndPwdAny(usrID, hashed)
-	if err != nil {
+	if err := (LoginEligibilityPolicy{}).EnsureLoginAllowed(user); err != nil {
 		return nil, err
 	}
-	if anyUser != nil && anyUser.USRStatus == "BBB" {
-		return nil, ErrPendingApproval
-	}
-	return nil, nil
+	return user, nil
 }
 
 // FindMemberByPhone finds an active member by phone number.
 func (s *MemberService) FindMemberByPhone(phone string) (*model.User, error) {
-	return s.repo.FindMemberByPhone(phone)
+	return s.repo.FindMemberByPhone(model.NormalizePhoneNumber(phone).String())
 }
 
 // CreateMember inserts a new member with USR_ID = "K" + kakaoID and returns the created user.
 // profileImageURL seeds USR_PHOTO when provided by the social provider (Kakao profile_image_url);
 // pass an empty string when consent was declined.
 func (s *MemberService) CreateMember(kakaoID, name, phone, fn, email, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic, profileImageURL string) (*model.User, error) {
-	usrID := "K" + kakaoID
-	usrSeq, err := s.repo.InsertMember(usrID, name, phone, fn, email, fmDept, jobCat, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic, profileImageURL)
+	return s.CreateSocialMember(
+		model.SocialProviderKakao,
+		kakaoID,
+		name,
+		phone,
+		fn,
+		email,
+		fmDept,
+		jobCat,
+		bizName,
+		bizDesc,
+		bizAddr,
+		position,
+		usrPhonePublic,
+		usrEmailPublic,
+		profileImageURL,
+	)
+}
+
+func (s *MemberService) CreateSocialMember(provider model.SocialProvider, subject, name, phone, fn, email, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic, profileImageURL string) (*model.User, error) {
+	usrID := socialMemberID(provider, subject)
+	usrSeq, err := s.repo.InsertMember(
+		usrID,
+		name,
+		model.NormalizePhoneNumber(phone).String(),
+		fn,
+		email,
+		fmDept,
+		jobCat,
+		bizName,
+		bizDesc,
+		bizAddr,
+		position,
+		usrPhonePublic,
+		usrEmailPublic,
+		profileImageURL,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return s.repo.GetMemberBySeq(usrSeq)
+}
+
+func socialMemberID(provider model.SocialProvider, subject string) string {
+	if provider == model.SocialProviderKakao {
+		return "K" + subject
+	}
+	digest := sha256.Sum256([]byte(string(provider) + ":" + subject))
+	return "S" + string(provider) + hex.EncodeToString(digest[:])[:29]
 }

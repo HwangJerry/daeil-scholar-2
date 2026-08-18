@@ -9,6 +9,7 @@ type SocialLinkData struct {
 	Nickname        string
 	ProfileImageURL string // empty when the provider did not supply an image (e.g. consent declined)
 	AccessToken     string
+	RevocationToken string
 }
 
 // KakaoLinkData is kept as an alias for backward compatibility with cached data.
