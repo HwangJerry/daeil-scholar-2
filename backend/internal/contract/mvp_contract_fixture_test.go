@@ -81,10 +81,16 @@ func TestRestrictedAuthFixturesContainSessionAndVerification(t *testing.T) {
 	}
 }
 
-func TestPublicDonationSummaryContainsOnlyDisplayAmount(t *testing.T) {
+func TestPublicDonationSummaryContainsRestoredSnapshotContract(t *testing.T) {
 	fixture := readFixture(t, "donation-summary.json")
-	if !reflect.DeepEqual(sortedKeys(fixture), []string{"displayAmount"}) {
-		t.Fatalf("public donation keys = %v, want [displayAmount]", sortedKeys(fixture))
+	wantKeys := []string{"achievementRate", "displayAmount", "donorCount", "goalAmount", "snapshotDate", "tierThresholds"}
+	if !reflect.DeepEqual(sortedKeys(fixture), wantKeys) {
+		t.Fatalf("public donation keys = %v, want %v", sortedKeys(fixture), wantKeys)
+	}
+	tierThresholds := objectField(t, fixture, "tierThresholds")
+	wantTierKeys := []string{"blooming", "fruiting", "sapling", "sprout", "tree"}
+	if !reflect.DeepEqual(sortedKeys(tierThresholds), wantTierKeys) {
+		t.Fatalf("tier threshold keys = %v, want %v", sortedKeys(tierThresholds), wantTierKeys)
 	}
 }
 

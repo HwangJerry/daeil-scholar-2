@@ -750,13 +750,29 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
 `GET /api/donation/summary`
 
 ```json
-{ "displayAmount": 123456789 }
+{
+  "displayAmount": 123456789,
+  "goalAmount": 200000000,
+  "donorCount": 342,
+  "achievementRate": 61.7283945,
+  "snapshotDate": "2026-08-20",
+  "tierThresholds": {
+    "sprout": 1,
+    "sapling": 10000,
+    "tree": 50000,
+    "blooming": 100000,
+    "fruiting": 300000
+  }
+}
 ```
 
-- KRW 정수
-- `completed`와 `partially_refunded` 거래의 `netReceivedAmount` 합계
-- `scheduled`, `pending`, `cancelled`, `fully_refunded` 제외
-- donor count, donor rows, 이름, 익명/마스킹 이름, 목표액, 달성률을 반환하지 않는다.
+- `displayAmount`, `goalAmount`, 등급 임계값은 KRW 정수다.
+- 오늘 스냅샷이 있으면 사용하고, 없으면 최신 스냅샷을 사용한다. 스냅샷이 전혀 없을 때만 주문과 활성 설정으로 동일 값을 실시간 계산한다.
+- 일반 모드의 `displayAmount`는 스냅샷 합계와 수동 보정액의 합이다. 수동 덮어쓰기 모드에서는 수동 보정액 자체를 사용한다.
+- `donorCount`는 스냅샷 기부자 수이며, 수동 덮어쓰기 모드에서는 활성 설정의 수동 기부자 수다.
+- `achievementRate`는 목표액이 양수일 때 `displayAmount / goalAmount * 100`, 아니면 `0`이다.
+- `snapshotDate`는 계산 기준일의 `YYYY-MM-DD` 문자열이다.
+- donor rows, 이름, 익명/마스킹 이름은 반환하지 않는다.
 
 ## 12. 관리자 기부 원장·Excel
 
@@ -953,7 +969,7 @@ validation 실패 HTTP `422`:
 | SSE event ID·message ID 없음 | canonical event + `eventId` | reconnect/gap test 통과 |
 | push/block backend route 없음 | 본 문서 endpoint | Android/iOS fixture·integration 통과 |
 | push payload가 `event_type`, `event_id`, `args.*` 등 snake case 중심 | `type`, `eventId`, `messageId`, `conversationUserSeq` 공통 payload | Android/iOS parser와 provider adapter 동시 전환 |
-| 기부 summary에 donorCount·goal·rate | `displayAmount`만 | 공개 schema donor 필드 0개 |
+| 기부 summary가 `displayAmount`만 반환 | 스냅샷 기준 금액·목표·기부자 수·달성률·기준일·등급 임계값 | 공통 fixture와 플랫폼 decoder 통과 |
 | 관리자 거래 route 비활성 | 통합 원장 CRUD/import | RBAC·원자성 test 통과 |
 
 ## 17. canonical fixture 목록
