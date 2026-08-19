@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	ErrDonationOrderConflict = errors.New("donation order identity conflict")
-	ErrDonationOrderNotFound = errors.New("donation order not found")
+	ErrDonationOrderConflict   = errors.New("donation order identity conflict")
+	ErrDonationOrderNotFound   = errors.New("donation order not found")
+	ErrDonationAccountNotFound = errors.New("donation account not found")
 )
 
 type donationOrderRow struct {
@@ -47,7 +48,16 @@ func NewAdminDonationRepository(db *sqlx.DB) *AdminDonationRepository {
 }
 
 func (r *AdminDonationRepository) CreateDonationOrder(order model.NormalizedDonationOrder, operSeq int, ip string) (int64, error) {
-	result, err := r.DB.Exec(`
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if err := lockActiveDonationAccount(tx, order.AccountUsrSeq); err != nil {
+		return 0, err
+	}
+
+	result, err := tx.Exec(`
 		INSERT INTO WEO_ORDER (
 			USR_SEQ, O_ACCOUNT_USR_SEQ, O_SOURCE, O_TRANSACTION_NO, O_COMPOSITE_KEY, O_DONATION_DATE,
 			O_DONOR_NAME, O_DONOR_PHONE, O_DONOR_COHORT, O_DONOR_DEPARTMENT, O_GATE,
@@ -73,7 +83,33 @@ func (r *AdminDonationRepository) CreateDonationOrder(order model.NormalizedDona
 		}
 		return 0, err
 	}
-	return result.LastInsertId()
+	seq, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return seq, nil
+}
+
+// lockActiveDonationAccount serializes donation linking with account deletion,
+// which locks the same member row before unlinking donations and anonymizing it.
+func lockActiveDonationAccount(tx *sqlx.Tx, accountUsrSeq *int) error {
+	if accountUsrSeq == nil {
+		return nil
+	}
+	var lockedUsrSeq int
+	err := tx.Get(&lockedUsrSeq, `
+		SELECT USR_SEQ
+		FROM WEO_MEMBER
+		WHERE USR_SEQ = ? AND USR_STATUS != 'AAA'
+		FOR UPDATE
+	`, *accountUsrSeq)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrDonationAccountNotFound
+	}
+	return err
 }
 
 func (r *AdminDonationRepository) GetDonationOrder(seq int64) (*model.DonationOrder, error) {
@@ -312,7 +348,18 @@ func (r *AdminDonationRepository) GetDonationOrders(page, size int, search, stat
 }
 
 func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.NormalizedDonationOrder, operSeq int, ip string) error {
-	_, err := r.DB.Exec(`
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if order.AccountUsrSeqSet {
+		if err := lockActiveDonationAccount(tx, order.AccountUsrSeq); err != nil {
+			return err
+		}
+	}
+
+	_, err = tx.Exec(`
 		UPDATE WEO_ORDER SET
 			O_ACCOUNT_USR_SEQ = CASE WHEN ? THEN ? ELSE O_ACCOUNT_USR_SEQ END,
 			USR_SEQ = CASE WHEN ? THEN COALESCE(?, 0) ELSE USR_SEQ END,
@@ -345,5 +392,5 @@ func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.Nor
 		}
 		return err
 	}
-	return nil
+	return tx.Commit()
 }

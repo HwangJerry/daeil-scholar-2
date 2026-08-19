@@ -4,18 +4,11 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/repository"
+	"github.com/jmoiron/sqlx"
 )
-
-type donationAccountRepositoryStub struct {
-	exists     bool
-	checkedSeq int
-}
-
-func (s *donationAccountRepositoryStub) CheckUserExists(usrSeq int) (bool, error) {
-	s.checkedSeq = usrSeq
-	return s.exists, nil
-}
 
 func TestNormalizeDonationOrderInputPartiallyRefunded(t *testing.T) {
 	input := model.DonationOrderInput{
@@ -123,17 +116,16 @@ func TestNormalizeDonationOrderInputRejectsInvalidCanonicalFields(t *testing.T) 
 }
 
 func TestListOrdersRejectsUnknownCanonicalFilter(t *testing.T) {
-	service := NewAdminDonationService(nil, nil, nil)
+	service := NewAdminDonationService(nil, nil)
 	_, err := service.ListOrders(model.DonationOrderFilters{Source: "legacy"}, 1, 20)
 	if err == nil {
 		t.Fatal("ListOrders() error = nil, want validation error")
 	}
 }
 
-func TestCreateOrderRejectsMissingDonationAccount(t *testing.T) {
-	accountUsrSeq := 9999
-	accountRepo := &donationAccountRepositoryStub{exists: false}
-	service := NewAdminDonationService(nil, nil, accountRepo)
+func TestCreateOrderRejectsInvalidDonationAccountSequence(t *testing.T) {
+	accountUsrSeq := 0
+	service := NewAdminDonationService(nil, nil)
 
 	_, err := service.CreateOrder(model.DonationOrderInput{
 		Source:         "other",
@@ -147,18 +139,38 @@ func TestCreateOrderRejectsMissingDonationAccount(t *testing.T) {
 		PaymentMethod:  "admin",
 	}, 7, "192.0.2.1")
 
-	if !errors.Is(err, ErrDonationAccountNotFound) {
-		t.Fatalf("CreateOrder() error = %v, want ErrDonationAccountNotFound", err)
-	}
-	if accountRepo.checkedSeq != accountUsrSeq {
-		t.Fatalf("checked account = %d, want %d", accountRepo.checkedSeq, accountUsrSeq)
+	if !errors.Is(err, ErrInvalidDonationOrder) {
+		t.Fatalf("CreateOrder() error = %v, want ErrInvalidDonationOrder", err)
 	}
 }
 
-func TestUpdateOrderRejectsMissingDonationAccount(t *testing.T) {
+func TestCreateOrderRejectsMissingDonationAccount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	service := NewAdminDonationService(repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock")), nil)
 	accountUsrSeq := 9999
-	accountRepo := &donationAccountRepositoryStub{exists: false}
-	service := NewAdminDonationService(nil, nil, accountRepo)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_SEQ[\s\S]*USR_STATUS != 'AAA'[\s\S]*FOR UPDATE`).
+		WithArgs(accountUsrSeq).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ"}))
+	mock.ExpectRollback()
+
+	_, err = service.CreateOrder(validDonationOrderInput(&accountUsrSeq, true), 7, "192.0.2.1")
+	if !errors.Is(err, ErrDonationAccountNotFound) {
+		t.Fatalf("CreateOrder() error = %v, want ErrDonationAccountNotFound", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateOrderRejectsInvalidDonationAccountSequence(t *testing.T) {
+	accountUsrSeq := 0
+	service := NewAdminDonationService(nil, nil)
 
 	_, err := service.UpdateOrder(3001, model.DonationOrderInput{
 		Source:           "other",
@@ -173,10 +185,45 @@ func TestUpdateOrderRejectsMissingDonationAccount(t *testing.T) {
 		PaymentMethod:    "admin",
 	}, 7, "192.0.2.1")
 
+	if !errors.Is(err, ErrInvalidDonationOrder) {
+		t.Fatalf("UpdateOrder() error = %v, want ErrInvalidDonationOrder", err)
+	}
+}
+
+func TestUpdateOrderRejectsMissingDonationAccount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	service := NewAdminDonationService(repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock")), nil)
+	accountUsrSeq := 9999
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_SEQ[\s\S]*USR_STATUS != 'AAA'[\s\S]*FOR UPDATE`).
+		WithArgs(accountUsrSeq).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ"}))
+	mock.ExpectRollback()
+
+	_, err = service.UpdateOrder(3001, validDonationOrderInput(&accountUsrSeq, true), 7, "192.0.2.1")
 	if !errors.Is(err, ErrDonationAccountNotFound) {
 		t.Fatalf("UpdateOrder() error = %v, want ErrDonationAccountNotFound", err)
 	}
-	if accountRepo.checkedSeq != accountUsrSeq {
-		t.Fatalf("checked account = %d, want %d", accountRepo.checkedSeq, accountUsrSeq)
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func validDonationOrderInput(accountUsrSeq *int, accountUsrSeqSet bool) model.DonationOrderInput {
+	return model.DonationOrderInput{
+		Source:           "other",
+		AccountUsrSeq:    accountUsrSeq,
+		AccountUsrSeqSet: accountUsrSeqSet,
+		DonationDate:     "2026-07-28",
+		Donor:            model.DonationDonor{Name: "기부자", Cohort: "18", Department: "영어", Phone: "01000000000"},
+		DonationType:     "one_time",
+		GrossAmount:      100000,
+		Status:           "completed",
+		PaymentMethod:    "admin",
 	}
 }

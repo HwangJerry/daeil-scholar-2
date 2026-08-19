@@ -15,12 +15,8 @@ import (
 
 var (
 	ErrInvalidDonationOrder    = errors.New("invalid donation order")
-	ErrDonationAccountNotFound = errors.New("donation account not found")
+	ErrDonationAccountNotFound = repository.ErrDonationAccountNotFound
 )
-
-type donationAccountRepository interface {
-	CheckUserExists(usrSeq int) (bool, error)
-}
 
 func NormalizeDonationOrderInput(input model.DonationOrderInput) (normalized model.NormalizedDonationOrder, err error) {
 	defer func() {
@@ -131,15 +127,13 @@ func isASCII(value string) bool {
 type AdminDonationService struct {
 	repo         *repository.AdminDonationRepository
 	donationRepo *repository.DonationRepository
-	accountRepo  donationAccountRepository
 }
 
 func NewAdminDonationService(
 	repo *repository.AdminDonationRepository,
 	donationRepo *repository.DonationRepository,
-	accountRepo donationAccountRepository,
 ) *AdminDonationService {
-	return &AdminDonationService{repo: repo, donationRepo: donationRepo, accountRepo: accountRepo}
+	return &AdminDonationService{repo: repo, donationRepo: donationRepo}
 }
 
 func (s *AdminDonationService) GetConfig() (*model.DonationConfig, error) {
@@ -221,7 +215,7 @@ func (s *AdminDonationService) CreateOrder(input model.DonationOrderInput, operS
 	if err != nil {
 		return nil, err
 	}
-	if err := s.validateDonationAccount(normalized.AccountUsrSeq); err != nil {
+	if err := validateDonationAccountInput(normalized.AccountUsrSeq); err != nil {
 		return nil, err
 	}
 	seq, err := s.repo.CreateDonationOrder(normalized, operSeq, ip)
@@ -240,7 +234,7 @@ func (s *AdminDonationService) UpdateOrder(seq int64, input model.DonationOrderI
 		return nil, err
 	}
 	if normalized.AccountUsrSeqSet {
-		if err := s.validateDonationAccount(normalized.AccountUsrSeq); err != nil {
+		if err := validateDonationAccountInput(normalized.AccountUsrSeq); err != nil {
 			return nil, err
 		}
 	}
@@ -250,19 +244,12 @@ func (s *AdminDonationService) UpdateOrder(seq int64, input model.DonationOrderI
 	return s.repo.GetDonationOrder(seq)
 }
 
-func (s *AdminDonationService) validateDonationAccount(accountUsrSeq *int) error {
+func validateDonationAccountInput(accountUsrSeq *int) error {
 	if accountUsrSeq == nil {
 		return nil
 	}
 	if *accountUsrSeq <= 0 {
 		return fmt.Errorf("%w: invalid account user sequence", ErrInvalidDonationOrder)
-	}
-	exists, err := s.accountRepo.CheckUserExists(*accountUsrSeq)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return ErrDonationAccountNotFound
 	}
 	return nil
 }

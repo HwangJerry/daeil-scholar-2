@@ -39,6 +39,8 @@ func TestCreateDonationOrderPersistsCanonicalAndLegacyFields(t *testing.T) {
 		LegacyPayment:     "Y",
 	}
 
+	mock.ExpectBegin()
+	expectActiveDonationAccountLock(mock, accountUsrSeq)
 	mock.ExpectExec(`INSERT INTO WEO_ORDER \(\s*USR_SEQ, O_ACCOUNT_USR_SEQ`).
 		WithArgs(
 			accountUsrSeq, accountUsrSeq, "bank_transfer", nil, "composite-key", "2026-07-28",
@@ -47,6 +49,7 @@ func TestCreateDonationOrderPersistsCanonicalAndLegacyFields(t *testing.T) {
 			int64(100000), int64(80000), "BANK", "Y", "Y", 7, "192.0.2.1", 7, "192.0.2.1",
 		).
 		WillReturnResult(sqlmock.NewResult(3001, 1))
+	mock.ExpectCommit()
 
 	seq, err := repo.CreateDonationOrder(order, 7, "192.0.2.1")
 	if err != nil {
@@ -67,6 +70,7 @@ func TestCreateDonationOrderAllowsUnlinkedAccount(t *testing.T) {
 	}
 	defer db.Close()
 	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO WEO_ORDER \(\s*USR_SEQ, O_ACCOUNT_USR_SEQ`).
 		WithArgs(
 			0, nil, "", nil, "", "",
@@ -75,6 +79,7 @@ func TestCreateDonationOrderAllowsUnlinkedAccount(t *testing.T) {
 			int64(0), int64(0), "FREE", "", "", 7, "192.0.2.1", 7, "192.0.2.1",
 		).
 		WillReturnResult(sqlmock.NewResult(3002, 1))
+	mock.ExpectCommit()
 
 	seq, err := repo.CreateDonationOrder(model.NormalizedDonationOrder{}, 7, "192.0.2.1")
 	if err != nil {
@@ -95,12 +100,43 @@ func TestCreateDonationOrderClassifiesDuplicateIdentity(t *testing.T) {
 	}
 	defer db.Close()
 	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO WEO_ORDER`).
 		WillReturnError(&mysql.MySQLError{Number: 1062, Message: "duplicate"})
+	mock.ExpectRollback()
 
 	_, err = repo.CreateDonationOrder(model.NormalizedDonationOrder{}, 7, "192.0.2.1")
 	if !errors.Is(err, repository.ErrDonationOrderConflict) {
 		t.Fatalf("error = %v, want ErrDonationOrderConflict", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCreateDonationOrderRejectsInactiveOrMissingAccount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	accountUsrSeq := 9999
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_SEQ[\s\S]*USR_STATUS != 'AAA'[\s\S]*FOR UPDATE`).
+		WithArgs(accountUsrSeq).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ"}))
+	mock.ExpectRollback()
+
+	_, err = repo.CreateDonationOrder(model.NormalizedDonationOrder{
+		DonationOrderInput: model.DonationOrderInput{AccountUsrSeq: &accountUsrSeq},
+	}, 7, "192.0.2.1")
+	if !errors.Is(err, repository.ErrDonationAccountNotFound) {
+		t.Fatalf("error = %v, want ErrDonationAccountNotFound", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -153,6 +189,8 @@ func TestUpdateDonationOrderChangesLinkedAccountWhenProvided(t *testing.T) {
 		},
 		NetReceivedAmount: 50000, CompositeKey: "replacement-key", LegacyGate: "F", LegacyStatus: "Y", LegacyPayment: "Y",
 	}
+	mock.ExpectBegin()
+	expectActiveDonationAccountLock(mock, accountUsrSeq)
 	mock.ExpectExec(`(?s)O_ACCOUNT_USR_SEQ = CASE WHEN \? THEN \? ELSE O_ACCOUNT_USR_SEQ END.*USR_SEQ = CASE WHEN \? THEN COALESCE\(\?, 0\) ELSE USR_SEQ END.*O_ACCOUNT_UNLINKED_AT = CASE.*WHEN \? IS NULL THEN NOW\(\)`).
 		WithArgs(
 			true, accountUsrSeq, true, accountUsrSeq, true, accountUsrSeq,
@@ -161,6 +199,7 @@ func TestUpdateDonationOrderChangesLinkedAccountWhenProvided(t *testing.T) {
 			int64(50000), int64(50000), "ADMS", "Y", "Y", 7, "192.0.2.1", int64(3001),
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	if err := repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1"); err != nil {
 		t.Fatalf("UpdateDonationOrder() error = %v", err)
@@ -185,6 +224,7 @@ func TestUpdateDonationOrderPreservesLinkedAccountWhenOmitted(t *testing.T) {
 		},
 		NetReceivedAmount: 100000, CompositeKey: "composite", LegacyGate: "S", LegacyStatus: "Y", LegacyPayment: "Y",
 	}
+	mock.ExpectBegin()
 	mock.ExpectExec(`O_ACCOUNT_USR_SEQ = CASE WHEN \? THEN \? ELSE O_ACCOUNT_USR_SEQ END`).
 		WithArgs(
 			false, nil, false, nil, false, nil,
@@ -193,6 +233,7 @@ func TestUpdateDonationOrderPreservesLinkedAccountWhenOmitted(t *testing.T) {
 			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001),
 		).
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
 
 	if err := repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1"); err != nil {
 		t.Fatalf("UpdateDonationOrder() unchanged replacement error = %v", err)
@@ -217,6 +258,7 @@ func TestUpdateDonationOrderClearsLinkedAccountWhenNullProvided(t *testing.T) {
 		},
 		NetReceivedAmount: 100000, CompositeKey: "composite", LegacyGate: "S", LegacyStatus: "Y", LegacyPayment: "Y",
 	}
+	mock.ExpectBegin()
 	mock.ExpectExec(`(?s)O_ACCOUNT_USR_SEQ = CASE WHEN \? THEN \? ELSE O_ACCOUNT_USR_SEQ END.*USR_SEQ = CASE WHEN \? THEN COALESCE\(\?, 0\) ELSE USR_SEQ END.*O_ACCOUNT_UNLINKED_AT = CASE.*WHEN \? IS NULL THEN NOW\(\)`).
 		WithArgs(
 			true, nil, true, nil, true, nil,
@@ -225,6 +267,7 @@ func TestUpdateDonationOrderClearsLinkedAccountWhenNullProvided(t *testing.T) {
 			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001),
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	if err := repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1"); err != nil {
 		t.Fatalf("UpdateDonationOrder() error = %v", err)
@@ -232,6 +275,41 @@ func TestUpdateDonationOrderClearsLinkedAccountWhenNullProvided(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestUpdateDonationOrderRejectsInactiveOrMissingAccount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	accountUsrSeq := 9999
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_SEQ[\s\S]*USR_STATUS != 'AAA'[\s\S]*FOR UPDATE`).
+		WithArgs(accountUsrSeq).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ"}))
+	mock.ExpectRollback()
+
+	err = repo.UpdateDonationOrder(3001, model.NormalizedDonationOrder{
+		DonationOrderInput: model.DonationOrderInput{
+			AccountUsrSeq:    &accountUsrSeq,
+			AccountUsrSeqSet: true,
+		},
+	}, 7, "192.0.2.1")
+	if !errors.Is(err, repository.ErrDonationAccountNotFound) {
+		t.Fatalf("error = %v, want ErrDonationAccountNotFound", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func expectActiveDonationAccountLock(mock sqlmock.Sqlmock, accountUsrSeq int) {
+	mock.ExpectQuery(`SELECT USR_SEQ[\s\S]*USR_STATUS != 'AAA'[\s\S]*FOR UPDATE`).
+		WithArgs(accountUsrSeq).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ"}).AddRow(accountUsrSeq))
 }
 
 func TestListDonationOrdersAppliesCanonicalFiltersAndStablePagination(t *testing.T) {
