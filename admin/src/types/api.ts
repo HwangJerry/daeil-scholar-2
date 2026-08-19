@@ -287,26 +287,80 @@ export interface DashboardAdStats {
 
 // --- Donation Order ---
 
-export interface AdminDonationOrderItem {
-  oSeq: number;
-  usrSeq: number;
-  usrName: string;
-  amount: number;
-  payType: string;
-  payment: string;
-  payDate: string;
-  gate: string;
-  regDate: string;
+export type DonationSource = 'happy_nanum' | 'bank_transfer' | 'other';
+
+export type DonationType = 'recurring' | 'one_time' | 'sponsorship';
+
+export type DonationStatus =
+  | 'scheduled'
+  | 'pending'
+  | 'completed'
+  | 'partially_refunded'
+  | 'cancelled'
+  | 'fully_refunded';
+
+export type DonationPaymentMethod =
+  | 'card'
+  | 'bank'
+  | 'virtual_bank'
+  | 'mobile'
+  | 'admin'
+  | 'other';
+
+export interface DonationDonor {
+  name: string;
+  cohort: string;
+  department: string;
+  phone: string;
 }
 
-export interface AdminDonationOrderListResponse {
-  items: AdminDonationOrderItem[];
+export interface DonationOrderInput {
+  source: DonationSource;
+  accountUsrSeq: number | null;
+  transactionNumber: string | null;
+  donationDate: string;
+  donor: DonationDonor;
+  donationType: DonationType;
+  grossAmount: number;
+  refundedAmount: number;
+  status: DonationStatus;
+  paymentMethod: DonationPaymentMethod;
+  memo: string | null;
+}
+
+export interface DonationOrder {
+  orderSeq: number;
+  accountUsrSeq: number | null;
+  source: DonationSource;
+  transactionNumber: string | null;
+  donationDate: string;
+  donor: DonationDonor;
+  donationType: DonationType;
+  grossAmount: number;
+  refundedAmount: number;
+  netReceivedAmount: number;
+  status: DonationStatus;
+  paymentMethod: DonationPaymentMethod;
+  memo: string | null;
+  lastEditedBy: number;
+  lastEditedAt: string;
+  lastEditedIp: string;
+}
+
+export interface DonationOrderFilters {
+  name: string;
+  phone: string;
+  transactionNumber: string;
+  source: DonationSource | '';
+  status: DonationStatus | '';
+  donationType: DonationType | '';
+}
+
+export interface DonationOrderPage {
+  items: DonationOrder[];
   total: number;
-}
-
-export interface AdminDonationOrderUpdateRequest {
-  payment: string;
-  amount: number;
+  page: number;
+  size: number;
 }
 
 // --- Donation Import ---
