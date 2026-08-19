@@ -12,12 +12,14 @@ import (
 )
 
 var (
-	ErrDonationOrderConflict = errors.New("donation order identity conflict")
-	ErrDonationOrderNotFound = errors.New("donation order not found")
+	ErrDonationOrderConflict   = errors.New("donation order identity conflict")
+	ErrDonationOrderNotFound   = errors.New("donation order not found")
+	ErrDonationAccountNotFound = errors.New("donation account not found")
 )
 
 type donationOrderRow struct {
 	OrderSeq          int64          `db:"ORDER_SEQ"`
+	AccountUsrSeq     sql.NullInt64  `db:"ACCOUNT_USR_SEQ"`
 	Source            string         `db:"SOURCE"`
 	TransactionNumber sql.NullString `db:"TRANSACTION_NUMBER"`
 	DonationDate      string         `db:"DONATION_DATE"`
@@ -46,19 +48,28 @@ func NewAdminDonationRepository(db *sqlx.DB) *AdminDonationRepository {
 }
 
 func (r *AdminDonationRepository) CreateDonationOrder(order model.NormalizedDonationOrder, operSeq int, ip string) (int64, error) {
-	result, err := r.DB.Exec(`
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if err := lockActiveDonationAccount(tx, order.AccountUsrSeq); err != nil {
+		return 0, err
+	}
+
+	result, err := tx.Exec(`
 		INSERT INTO WEO_ORDER (
-			USR_SEQ, O_SOURCE, O_TRANSACTION_NO, O_COMPOSITE_KEY, O_DONATION_DATE,
+			USR_SEQ, O_ACCOUNT_USR_SEQ, O_SOURCE, O_TRANSACTION_NO, O_COMPOSITE_KEY, O_DONATION_DATE,
 			O_DONOR_NAME, O_DONOR_PHONE, O_DONOR_COHORT, O_DONOR_DEPARTMENT, O_GATE,
 			O_GROSS_AMOUNT, O_REFUNDED_AMOUNT, O_NET_RECEIVED_AMOUNT, O_LIFECYCLE_STATUS,
 			O_PAYMENT_METHOD, O_MEMO, O_PRICE, O_PAY, O_PAY_TYPE, O_STATUS, O_PAYMENT,
 			O_TYPE, O_REGDATE, REG_OPER, REG_DATE, REG_IPADDR, EDT_OPER, EDT_DATE, EDT_IPADDR
 		) VALUES (
-			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			'A', NOW(), ?, NOW(), ?, ?, NOW(), ?
 		)
 	`,
-		0, order.Source, order.TransactionNumber, nullableCompositeKey(order), order.DonationDate,
+		accountUsrSeqOrZero(order.AccountUsrSeq), order.AccountUsrSeq, order.Source, order.TransactionNumber, nullableCompositeKey(order), order.DonationDate,
 		order.Donor.Name, order.Donor.Phone, order.Donor.Cohort, order.Donor.Department, order.LegacyGate,
 		order.GrossAmount, order.RefundedAmount, order.NetReceivedAmount, order.Status,
 		order.PaymentMethod, order.Memo, order.GrossAmount, order.NetReceivedAmount,
@@ -72,7 +83,33 @@ func (r *AdminDonationRepository) CreateDonationOrder(order model.NormalizedDona
 		}
 		return 0, err
 	}
-	return result.LastInsertId()
+	seq, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return seq, nil
+}
+
+// lockActiveDonationAccount serializes donation linking with account deletion,
+// which locks the same member row before unlinking donations and anonymizing it.
+func lockActiveDonationAccount(tx *sqlx.Tx, accountUsrSeq *int) error {
+	if accountUsrSeq == nil {
+		return nil
+	}
+	var lockedUsrSeq int
+	err := tx.Get(&lockedUsrSeq, `
+		SELECT USR_SEQ
+		FROM WEO_MEMBER
+		WHERE USR_SEQ = ? AND USR_STATUS != 'AAA'
+		FOR UPDATE
+	`, *accountUsrSeq)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrDonationAccountNotFound
+	}
+	return err
 }
 
 func (r *AdminDonationRepository) GetDonationOrder(seq int64) (*model.DonationOrder, error) {
@@ -80,6 +117,7 @@ func (r *AdminDonationRepository) GetDonationOrder(seq int64) (*model.DonationOr
 	err := r.DB.Get(&row, `
 		SELECT
 			o.O_SEQ AS ORDER_SEQ,
+			o.O_ACCOUNT_USR_SEQ AS ACCOUNT_USR_SEQ,
 			COALESCE(o.O_SOURCE, 'other') AS SOURCE,
 			o.O_TRANSACTION_NO AS TRANSACTION_NUMBER,
 			DATE_FORMAT(o.O_DONATION_DATE, '%Y-%m-%d') AS DONATION_DATE,
@@ -147,7 +185,8 @@ func (r *AdminDonationRepository) ListDonationOrders(filters model.DonationOrder
 	var rows []donationOrderRow
 	err := r.DB.Select(&rows, `
 		SELECT
-			o.O_SEQ AS ORDER_SEQ, COALESCE(o.O_SOURCE, 'other') AS SOURCE,
+			o.O_SEQ AS ORDER_SEQ, o.O_ACCOUNT_USR_SEQ AS ACCOUNT_USR_SEQ,
+			COALESCE(o.O_SOURCE, 'other') AS SOURCE,
 			o.O_TRANSACTION_NO AS TRANSACTION_NUMBER, DATE_FORMAT(o.O_DONATION_DATE, '%Y-%m-%d') AS DONATION_DATE,
 			COALESCE(o.O_DONOR_NAME, m.USR_NAME, '') AS DONOR_NAME,
 			COALESCE(o.O_DONOR_COHORT, m.USR_FN, '') AS DONOR_COHORT,
@@ -178,6 +217,11 @@ func (r *AdminDonationRepository) ListDonationOrders(filters model.DonationOrder
 }
 
 func donationOrderFromRow(row donationOrderRow) *model.DonationOrder {
+	var accountUsrSeq *int
+	if row.AccountUsrSeq.Valid {
+		value := int(row.AccountUsrSeq.Int64)
+		accountUsrSeq = &value
+	}
 	var transactionNumber, memo *string
 	if row.TransactionNumber.Valid {
 		value := row.TransactionNumber.String
@@ -188,7 +232,7 @@ func donationOrderFromRow(row donationOrderRow) *model.DonationOrder {
 		memo = &value
 	}
 	return &model.DonationOrder{
-		OrderSeq: row.OrderSeq, Source: row.Source, TransactionNumber: transactionNumber,
+		OrderSeq: row.OrderSeq, AccountUsrSeq: accountUsrSeq, Source: row.Source, TransactionNumber: transactionNumber,
 		DonationDate: row.DonationDate,
 		Donor:        model.DonationDonor{Name: row.DonorName, Cohort: row.DonorCohort, Department: row.DonorDepartment, Phone: row.DonorPhone},
 		DonationType: row.DonationType, GrossAmount: row.GrossAmount, RefundedAmount: row.RefundedAmount,
@@ -202,6 +246,13 @@ func nullableCompositeKey(order model.NormalizedDonationOrder) interface{} {
 		return nil
 	}
 	return order.CompositeKey
+}
+
+func accountUsrSeqOrZero(accountUsrSeq *int) int {
+	if accountUsrSeq == nil {
+		return 0
+	}
+	return *accountUsrSeq
 }
 
 func legacyDonationPayType(paymentMethod string) string {
@@ -297,8 +348,26 @@ func (r *AdminDonationRepository) GetDonationOrders(page, size int, search, stat
 }
 
 func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.NormalizedDonationOrder, operSeq int, ip string) error {
-	_, err := r.DB.Exec(`
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if order.AccountUsrSeqSet {
+		if err := lockActiveDonationAccount(tx, order.AccountUsrSeq); err != nil {
+			return err
+		}
+	}
+
+	_, err = tx.Exec(`
 		UPDATE WEO_ORDER SET
+			O_ACCOUNT_USR_SEQ = CASE WHEN ? THEN ? ELSE O_ACCOUNT_USR_SEQ END,
+			USR_SEQ = CASE WHEN ? THEN COALESCE(?, 0) ELSE USR_SEQ END,
+			O_ACCOUNT_UNLINKED_AT = CASE
+				WHEN NOT ? THEN O_ACCOUNT_UNLINKED_AT
+				WHEN ? IS NULL THEN NOW()
+				ELSE NULL
+			END,
 			O_SOURCE = ?, O_TRANSACTION_NO = ?, O_COMPOSITE_KEY = ?, O_DONATION_DATE = ?,
 			O_DONOR_NAME = ?, O_DONOR_PHONE = ?, O_DONOR_COHORT = ?, O_DONOR_DEPARTMENT = ?, O_GATE = ?,
 			O_GROSS_AMOUNT = ?, O_REFUNDED_AMOUNT = ?, O_NET_RECEIVED_AMOUNT = ?, O_LIFECYCLE_STATUS = ?,
@@ -306,6 +375,9 @@ func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.Nor
 			EDT_OPER = ?, EDT_DATE = NOW(), EDT_IPADDR = ?
 		WHERE O_SEQ = ? AND O_TYPE = 'A'
 	`,
+		order.AccountUsrSeqSet, order.AccountUsrSeq,
+		order.AccountUsrSeqSet, order.AccountUsrSeq,
+		order.AccountUsrSeqSet, order.AccountUsrSeq,
 		order.Source, order.TransactionNumber, nullableCompositeKey(order), order.DonationDate,
 		order.Donor.Name, order.Donor.Phone, order.Donor.Cohort, order.Donor.Department, order.LegacyGate,
 		order.GrossAmount, order.RefundedAmount, order.NetReceivedAmount, order.Status,
@@ -320,5 +392,5 @@ func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.Nor
 		}
 		return err
 	}
-	return nil
+	return tx.Commit()
 }

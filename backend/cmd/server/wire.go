@@ -59,7 +59,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	adminDonationRepo := repository.NewAdminDonationRepository(db)
 	adminMemberRepo := repository.NewAdminMemberRepository(db)
 	donateRepo := repository.NewDonateRepository(db)
-	myDonationRepo := repository.NewMyDonationRepository(db)
+	personalDonationRepo := repository.NewPersonalDonationRepository(db)
 	likeRepo := repository.NewLikeRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 	messageRepo := repository.NewMessageRepository(db)
@@ -157,7 +157,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 
 	likeService := service.NewLikeService(likeRepo, feedRepo)
 	commentService := service.NewCommentService(commentRepo)
-	myDonationService := service.NewMyDonationService(myDonationRepo)
+	personalDonationService := service.NewPersonalDonationService(personalDonationRepo)
 	messageService := service.NewMessageService(messageRepo, profileRepo, messageNotifier)
 	memberBlockService := service.NewMemberBlockService(memberBlockRepo)
 	pushService := service.NewPushService(pushRepo)
@@ -204,7 +204,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		adminUpload:       handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
 		adminAttachUpload: handler.NewAdminAttachmentUploadHandler(attachmentUploadOrchestrator, cfg.Upload.MaxFileSizeMB),
 		socialLinkPhoto:   handler.NewSocialLinkPhotoHandler(uploadOrchestrator, socialLinkTokens, logger),
-		myDonation:        handler.NewMyDonationHandler(myDonationService),
+		personalDonation:  handler.NewPersonalDonationHandler(personalDonationService),
 		message:           handler.NewMessageHandler(messageService),
 		memberBlock:       handler.NewMemberBlockHandler(memberBlockService),
 		push:              handler.NewPushHandler(pushService),

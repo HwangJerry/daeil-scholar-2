@@ -149,6 +149,25 @@ func (f *nullableDonationString) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type nullableDonationInt struct {
+	value *int
+	set   bool
+}
+
+func (f *nullableDonationInt) UnmarshalJSON(data []byte) error {
+	f.set = true
+	if string(data) == "null" {
+		f.value = nil
+		return nil
+	}
+	var value int
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	f.value = &value
+	return nil
+}
+
 type donationDonorRequest struct {
 	Name       *string `json:"name"`
 	Cohort     *string `json:"cohort"`
@@ -158,6 +177,7 @@ type donationDonorRequest struct {
 
 type donationOrderRequest struct {
 	Source            *string                `json:"source"`
+	AccountUsrSeq     nullableDonationInt    `json:"accountUsrSeq"`
 	TransactionNumber nullableDonationString `json:"transactionNumber"`
 	DonationDate      *string                `json:"donationDate"`
 	Donor             *donationDonorRequest  `json:"donor"`
@@ -183,6 +203,8 @@ func decodeDonationOrderInput(r *http.Request) (model.DonationOrderInput, error)
 	}
 	return model.DonationOrderInput{
 		Source:            *request.Source,
+		AccountUsrSeq:     request.AccountUsrSeq.value,
+		AccountUsrSeqSet:  request.AccountUsrSeq.set,
 		TransactionNumber: request.TransactionNumber.value,
 		DonationDate:      *request.DonationDate,
 		Donor: model.DonationDonor{
@@ -228,6 +250,8 @@ func respondDonationOrderError(w http.ResponseWriter, err error) {
 		respondError(w, http.StatusNotFound, "DONATION_ORDER_NOT_FOUND", "기부 거래를 찾을 수 없습니다.")
 	case errors.Is(err, repository.ErrDonationOrderConflict):
 		respondError(w, http.StatusConflict, "DONATION_ORDER_CONFLICT", "이미 존재하는 기부 거래입니다.")
+	case errors.Is(err, service.ErrDonationAccountNotFound):
+		respondError(w, http.StatusNotFound, "DONATION_ACCOUNT_NOT_FOUND", "연결할 회원 계정을 찾을 수 없습니다.")
 	case errors.Is(err, service.ErrInvalidDonationOrder):
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "요청 값이 올바르지 않습니다.")
 	default:

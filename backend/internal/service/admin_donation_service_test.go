@@ -1,9 +1,13 @@
 package service
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/repository"
+	"github.com/jmoiron/sqlx"
 )
 
 func TestNormalizeDonationOrderInputPartiallyRefunded(t *testing.T) {
@@ -116,5 +120,110 @@ func TestListOrdersRejectsUnknownCanonicalFilter(t *testing.T) {
 	_, err := service.ListOrders(model.DonationOrderFilters{Source: "legacy"}, 1, 20)
 	if err == nil {
 		t.Fatal("ListOrders() error = nil, want validation error")
+	}
+}
+
+func TestCreateOrderRejectsInvalidDonationAccountSequence(t *testing.T) {
+	accountUsrSeq := 0
+	service := NewAdminDonationService(nil, nil)
+
+	_, err := service.CreateOrder(model.DonationOrderInput{
+		Source:         "other",
+		AccountUsrSeq:  &accountUsrSeq,
+		DonationDate:   "2026-07-28",
+		Donor:          model.DonationDonor{Name: "기부자", Cohort: "18", Department: "영어", Phone: "01000000000"},
+		DonationType:   "one_time",
+		GrossAmount:    100000,
+		RefundedAmount: 0,
+		Status:         "completed",
+		PaymentMethod:  "admin",
+	}, 7, "192.0.2.1")
+
+	if !errors.Is(err, ErrInvalidDonationOrder) {
+		t.Fatalf("CreateOrder() error = %v, want ErrInvalidDonationOrder", err)
+	}
+}
+
+func TestCreateOrderRejectsMissingDonationAccount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	service := NewAdminDonationService(repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock")), nil)
+	accountUsrSeq := 9999
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_SEQ[\s\S]*USR_STATUS != 'AAA'[\s\S]*FOR UPDATE`).
+		WithArgs(accountUsrSeq).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ"}))
+	mock.ExpectRollback()
+
+	_, err = service.CreateOrder(validDonationOrderInput(&accountUsrSeq, true), 7, "192.0.2.1")
+	if !errors.Is(err, ErrDonationAccountNotFound) {
+		t.Fatalf("CreateOrder() error = %v, want ErrDonationAccountNotFound", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateOrderRejectsInvalidDonationAccountSequence(t *testing.T) {
+	accountUsrSeq := 0
+	service := NewAdminDonationService(nil, nil)
+
+	_, err := service.UpdateOrder(3001, model.DonationOrderInput{
+		Source:           "other",
+		AccountUsrSeq:    &accountUsrSeq,
+		AccountUsrSeqSet: true,
+		DonationDate:     "2026-07-28",
+		Donor:            model.DonationDonor{Name: "기부자", Cohort: "18", Department: "영어", Phone: "01000000000"},
+		DonationType:     "one_time",
+		GrossAmount:      100000,
+		RefundedAmount:   0,
+		Status:           "completed",
+		PaymentMethod:    "admin",
+	}, 7, "192.0.2.1")
+
+	if !errors.Is(err, ErrInvalidDonationOrder) {
+		t.Fatalf("UpdateOrder() error = %v, want ErrInvalidDonationOrder", err)
+	}
+}
+
+func TestUpdateOrderRejectsMissingDonationAccount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	service := NewAdminDonationService(repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock")), nil)
+	accountUsrSeq := 9999
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_SEQ[\s\S]*USR_STATUS != 'AAA'[\s\S]*FOR UPDATE`).
+		WithArgs(accountUsrSeq).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ"}))
+	mock.ExpectRollback()
+
+	_, err = service.UpdateOrder(3001, validDonationOrderInput(&accountUsrSeq, true), 7, "192.0.2.1")
+	if !errors.Is(err, ErrDonationAccountNotFound) {
+		t.Fatalf("UpdateOrder() error = %v, want ErrDonationAccountNotFound", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func validDonationOrderInput(accountUsrSeq *int, accountUsrSeqSet bool) model.DonationOrderInput {
+	return model.DonationOrderInput{
+		Source:           "other",
+		AccountUsrSeq:    accountUsrSeq,
+		AccountUsrSeqSet: accountUsrSeqSet,
+		DonationDate:     "2026-07-28",
+		Donor:            model.DonationDonor{Name: "기부자", Cohort: "18", Department: "영어", Phone: "01000000000"},
+		DonationType:     "one_time",
+		GrossAmount:      100000,
+		Status:           "completed",
+		PaymentMethod:    "admin",
 	}
 }

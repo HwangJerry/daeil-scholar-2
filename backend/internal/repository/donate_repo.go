@@ -13,6 +13,11 @@ func NewDonateRepository(db *sqlx.DB) *DonateRepository {
 	return &DonateRepository{DB: db}
 }
 
+// InsertOrder is a legacy-field-only EasyPay/in-app writer. Its entry routes and
+// billing triggers are disabled (backend/cmd/server/routes.go:79, :158, :262 and
+// backend/cmd/server/main.go:94). Before re-enabling them, make this writer populate
+// the canonical donation fields used by personal_donation_repo.go, including
+// O_ACCOUNT_USR_SEQ, O_LIFECYCLE_STATUS, and O_NET_RECEIVED_AMOUNT.
 func (r *DonateRepository) InsertOrder(usrSeq int, gate string, payType string, price int, ip string) (int64, error) {
 	result, err := r.DB.Exec(`
 		INSERT INTO WEO_ORDER (USR_SEQ, O_GATE, O_PAY_TYPE, O_TYPE, O_REGDATE, O_PRICE, O_PAYMENT, REG_DATE, REG_IPADDR)
@@ -36,9 +41,13 @@ func (r *DonateRepository) InsertOrder(usrSeq int, gate string, payType string, 
 	return id, nil
 }
 
-// InsertOrderTx creates a new WEO_ORDER row within an existing tx.
-// Used by the subscription billing job so order creation + PG approval + status update
-// all live in a single transaction per subscription charge.
+// InsertOrderTx creates a new WEO_ORDER row within an existing tx. It is a
+// legacy-field-only writer for the currently disabled subscription billing flow
+// (backend/cmd/server/main.go:94 and backend/cmd/server/routes.go:262). Before
+// re-enabling that flow, make this writer populate the canonical donation fields used
+// by personal_donation_repo.go, including O_ACCOUNT_USR_SEQ, O_LIFECYCLE_STATUS, and
+// O_NET_RECEIVED_AMOUNT. Order creation, PG approval, and status update then remain in
+// a single transaction per subscription charge.
 func (r *DonateRepository) InsertOrderTx(tx *sqlx.Tx, usrSeq int, gate, payType string, price int, ip string) (int64, error) {
 	result, err := tx.Exec(`
 		INSERT INTO WEO_ORDER (USR_SEQ, O_GATE, O_PAY_TYPE, O_TYPE, O_REGDATE, O_PRICE, O_PAYMENT, REG_DATE, REG_IPADDR)
@@ -73,6 +82,11 @@ func (r *DonateRepository) InsertPGDataTx(tx *sqlx.Tx, data *model.PGData) (int6
 	return result.LastInsertId()
 }
 
+// UpdateOrderPayment is a legacy-field-only EasyPay/in-app writer. Its entry routes
+// and billing triggers are disabled (backend/cmd/server/routes.go:79, :158, :262 and
+// backend/cmd/server/main.go:94). Before re-enabling them, make this writer populate
+// the canonical donation fields used by personal_donation_repo.go, including
+// O_ACCOUNT_USR_SEQ, O_LIFECYCLE_STATUS, and O_NET_RECEIVED_AMOUNT.
 func (r *DonateRepository) UpdateOrderPayment(orderSeq int, amount int, pgSeq int64, ip string) (int64, error) {
 	result, err := r.DB.Exec(`
 		UPDATE WEO_ORDER
@@ -86,7 +100,13 @@ func (r *DonateRepository) UpdateOrderPayment(orderSeq int, amount int, pgSeq in
 	return result.RowsAffected()
 }
 
-// UpdateOrderPaymentTx marks an order as paid within an existing transaction.
+// UpdateOrderPaymentTx marks an order as paid within an existing transaction. It is a
+// legacy-field-only writer used by the currently disabled EasyPay/in-app and
+// subscription flows (backend/cmd/server/routes.go:79, :158, :262 and
+// backend/cmd/server/main.go:94). Before re-enabling those flows, make this writer and
+// subscription_billing.go populate the canonical donation fields used by
+// personal_donation_repo.go, including O_ACCOUNT_USR_SEQ, O_LIFECYCLE_STATUS, and
+// O_NET_RECEIVED_AMOUNT.
 func (r *DonateRepository) UpdateOrderPaymentTx(tx *sqlx.Tx, orderSeq int, amount int, pgSeq int64, ip string) (int64, error) {
 	result, err := tx.Exec(`
 		UPDATE WEO_ORDER
