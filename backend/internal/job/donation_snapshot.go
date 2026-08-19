@@ -4,7 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
+	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
 )
 
@@ -20,7 +22,7 @@ func NewDonationSnapshotJob(repo *repository.DonationRepository, logger zerolog.
 
 func (j *DonationSnapshotJob) Start() {
 	if exists, err := j.repo.HasSnapshotForDate(time.Now()); err == nil && !exists {
-		if err := j.createSnapshot(); err != nil {
+		if err := j.createSnapshot(nil); err != nil {
 			j.logger.Error().Err(err).Msg("startup snapshot backfill failed")
 		} else {
 			j.logger.Info().Msg("startup snapshot backfill completed")
@@ -42,7 +44,7 @@ func (j *DonationSnapshotJob) Start() {
 				j.logger.Info().Msg("donation snapshot job stopped")
 				return
 			case <-time.After(time.Until(next)):
-				if err := j.createSnapshot(); err != nil {
+				if err := j.createSnapshot(nil); err != nil {
 					j.logger.Error().Err(err).Msg("donation snapshot failed")
 				} else {
 					j.logger.Info().Msg("donation snapshot created")
@@ -61,15 +63,19 @@ func (j *DonationSnapshotJob) Stop() {
 // CreateSnapshotNow immediately recomputes and upserts today's snapshot.
 // Used by admin config updates to reflect changes without waiting for the nightly job.
 func (j *DonationSnapshotJob) CreateSnapshotNow() error {
-	return j.createSnapshot()
+	return j.createSnapshot(nil)
 }
 
-func (j *DonationSnapshotJob) createSnapshot() error {
-	total, donorCount, err := j.repo.GetReceivedDonationAggregate()
+func (j *DonationSnapshotJob) CreateSnapshotTx(tx *sqlx.Tx) error {
+	return j.createSnapshot(tx)
+}
+
+func (j *DonationSnapshotJob) createSnapshot(tx *sqlx.Tx) error {
+	total, donorCount, err := j.receivedDonationAggregate(tx)
 	if err != nil {
 		return err
 	}
-	config, err := j.repo.GetActiveConfig()
+	config, err := j.activeConfig(tx)
 	if err != nil {
 		return err
 	}
@@ -86,5 +92,22 @@ func (j *DonationSnapshotJob) createSnapshot() error {
 			donorCount = config.ManualDonorCnt
 		}
 	}
+	if tx != nil {
+		return j.repo.UpsertSnapshotTx(tx, time.Now(), total, manualAdj, donorCount, goal, overwrite)
+	}
 	return j.repo.UpsertSnapshot(time.Now(), total, manualAdj, donorCount, goal, overwrite)
+}
+
+func (j *DonationSnapshotJob) receivedDonationAggregate(tx *sqlx.Tx) (int64, int, error) {
+	if tx != nil {
+		return j.repo.GetReceivedDonationAggregateTx(tx)
+	}
+	return j.repo.GetReceivedDonationAggregate()
+}
+
+func (j *DonationSnapshotJob) activeConfig(tx *sqlx.Tx) (*model.DonationConfig, error) {
+	if tx != nil {
+		return j.repo.GetActiveConfigTx(tx)
+	}
+	return j.repo.GetActiveConfig()
 }

@@ -70,7 +70,15 @@ func (r *DonationRepository) HasSnapshotForDate(date time.Time) (bool, error) {
 }
 
 func (r *DonationRepository) UpsertSnapshot(date time.Time, total int64, manualAdj int64, donorCnt int, goal int64, overwrite string) error {
-	_, err := r.DB.Exec(`
+	return upsertDonationSnapshot(r.DB, date, total, manualAdj, donorCnt, goal, overwrite)
+}
+
+func (r *DonationRepository) UpsertSnapshotTx(tx *sqlx.Tx, date time.Time, total int64, manualAdj int64, donorCnt int, goal int64, overwrite string) error {
+	return upsertDonationSnapshot(tx, date, total, manualAdj, donorCnt, goal, overwrite)
+}
+
+func upsertDonationSnapshot(execer sqlx.Execer, date time.Time, total int64, manualAdj int64, donorCnt int, goal int64, overwrite string) error {
+	_, err := execer.Exec(`
 		INSERT INTO DONATION_SNAPSHOT
 			(DS_DATE, DS_TOTAL, DS_MANUAL_ADJ, DS_DONOR_CNT, DS_GOAL, DS_OVERWRITE, REG_DATE)
 		VALUES (DATE(?), ?, ?, ?, ?, ?, NOW())
@@ -85,11 +93,19 @@ func (r *DonationRepository) UpsertSnapshot(date time.Time, total int64, manualA
 }
 
 func (r *DonationRepository) GetReceivedDonationAggregate() (int64, int, error) {
+	return getReceivedDonationAggregate(r.DB)
+}
+
+func (r *DonationRepository) GetReceivedDonationAggregateTx(tx *sqlx.Tx) (int64, int, error) {
+	return getReceivedDonationAggregate(tx)
+}
+
+func getReceivedDonationAggregate(queryer sqlx.Queryer) (int64, int, error) {
 	var aggregate struct {
 		TotalAmount int64 `db:"TOTAL_AMOUNT"`
 		DonorCount  int   `db:"DONOR_COUNT"`
 	}
-	err := r.DB.Get(&aggregate, `
+	err := sqlx.Get(queryer, &aggregate, `
 		SELECT
 			CAST(COALESCE(SUM(O_NET_RECEIVED_AMOUNT), 0) AS SIGNED) AS TOTAL_AMOUNT,
 			CAST(COUNT(DISTINCT CASE
@@ -111,8 +127,16 @@ func (r *DonationRepository) GetReceivedDonationAggregate() (int64, int, error) 
 }
 
 func (r *DonationRepository) GetActiveConfig() (*model.DonationConfig, error) {
+	return getActiveDonationConfig(r.DB)
+}
+
+func (r *DonationRepository) GetActiveConfigTx(tx *sqlx.Tx) (*model.DonationConfig, error) {
+	return getActiveDonationConfig(tx)
+}
+
+func getActiveDonationConfig(queryer sqlx.Queryer) (*model.DonationConfig, error) {
 	var cfg model.DonationConfig
-	err := r.DB.Get(&cfg, `
+	err := sqlx.Get(queryer, &cfg, `
 		SELECT DC_SEQ, DC_GOAL, DC_MANUAL_ADJ,
 		       IFNULL(DC_MANUAL_DONOR_CNT,0) AS DC_MANUAL_DONOR_CNT,
 		       DC_TIER_SPROUT_MIN, DC_TIER_SAPLING_MIN, DC_TIER_TREE_MIN,

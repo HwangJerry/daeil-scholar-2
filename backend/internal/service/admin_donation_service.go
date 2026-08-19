@@ -162,14 +162,34 @@ type DonationConfigUpdate struct {
 }
 
 func (s *AdminDonationService) UpdateConfig(update DonationConfigUpdate, operSeq int) error {
+	config, err := normalizeDonationConfigUpdate(update)
+	if err != nil {
+		return err
+	}
+	return s.repo.UpdateConfig(config, operSeq)
+}
+
+func (s *AdminDonationService) UpdateConfigTx(tx *sqlx.Tx, update DonationConfigUpdate, operSeq int) error {
+	config, err := normalizeDonationConfigUpdate(update)
+	if err != nil {
+		return err
+	}
+	return s.repo.UpdateConfigTx(tx, config, operSeq)
+}
+
+func (s *AdminDonationService) RunInTransaction(operation func(*sqlx.Tx) error) error {
+	return s.repo.RunInTransaction(operation)
+}
+
+func normalizeDonationConfigUpdate(update DonationConfigUpdate) (model.DonationConfig, error) {
 	if !validDonationTierThresholds(update) {
-		return ErrInvalidTierThresholds
+		return model.DonationConfig{}, ErrInvalidTierThresholds
 	}
-	ov := "N"
+	overwrite := "N"
 	if update.Overwrite {
-		ov = "Y"
+		overwrite = "Y"
 	}
-	return s.repo.UpdateConfig(model.DonationConfig{
+	return model.DonationConfig{
 		Goal:            update.Goal,
 		ManualAdj:       update.ManualAdj,
 		ManualDonorCnt:  update.ManualDonorCnt,
@@ -179,8 +199,8 @@ func (s *AdminDonationService) UpdateConfig(update DonationConfigUpdate, operSeq
 		TierBloomingMin: update.TierBloomingMin,
 		TierFruitingMin: update.TierFruitingMin,
 		Note:            update.Note,
-		Overwrite:       ov,
-	}, operSeq)
+		Overwrite:       overwrite,
+	}, nil
 }
 
 func validDonationTierThresholds(update DonationConfigUpdate) bool {

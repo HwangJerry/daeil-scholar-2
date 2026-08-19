@@ -50,6 +50,18 @@ func NewAdminDonationRepository(db *sqlx.DB) *AdminDonationRepository {
 	return &AdminDonationRepository{DB: db}
 }
 
+func (r *AdminDonationRepository) RunInTransaction(operation func(*sqlx.Tx) error) error {
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := operation(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (r *AdminDonationRepository) CreateDonationOrder(order model.NormalizedDonationOrder, operSeq int, ip string) (int64, error) {
 	tx, err := r.DB.Beginx()
 	if err != nil {
@@ -407,7 +419,15 @@ func legacyDonationGate(donationType string) string {
 }
 
 func (r *AdminDonationRepository) UpdateConfig(config model.DonationConfig, operSeq int) error {
-	_, err := r.DB.Exec(`
+	return updateDonationConfig(r.DB, config, operSeq)
+}
+
+func (r *AdminDonationRepository) UpdateConfigTx(tx *sqlx.Tx, config model.DonationConfig, operSeq int) error {
+	return updateDonationConfig(tx, config, operSeq)
+}
+
+func updateDonationConfig(execer sqlx.Execer, config model.DonationConfig, operSeq int) error {
+	_, err := execer.Exec(`
 		UPDATE DONATION_CONFIG
 		SET DC_GOAL = ?, DC_MANUAL_ADJ = ?, DC_MANUAL_DONOR_CNT = ?,
 		    DC_TIER_SPROUT_MIN = ?, DC_TIER_SAPLING_MIN = ?, DC_TIER_TREE_MIN = ?,

@@ -6,11 +6,13 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/dflh-saf/backend/internal/job"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/jmoiron/sqlx"
 	"github.com/patrickmn/go-cache"
+	"github.com/rs/zerolog"
 )
 
 type snapshotCreatorStub struct {
@@ -19,6 +21,11 @@ type snapshotCreatorStub struct {
 }
 
 func (s *snapshotCreatorStub) CreateSnapshotNow() error {
+	s.calls++
+	return s.err
+}
+
+func (s *snapshotCreatorStub) CreateSnapshotTx(_ *sqlx.Tx) error {
 	s.calls++
 	return s.err
 }
@@ -122,6 +129,46 @@ func TestSnapshotRefreshFailureForcesCanonicalLiveSummary(t *testing.T) {
 	}
 	if summary.DisplayAmount != 70000 || summary.DonorCount != 1 {
 		t.Fatalf("live summary = %+v", summary)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDonationConfigUpdateRollsBackWhenSnapshotUpsertFails(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	donationRepo := repository.NewDonationRepository(sqlxDB)
+	adminService := service.NewAdminDonationService(repository.NewAdminDonationRepository(sqlxDB), donationRepo)
+	donationService := service.NewDonationService(donationRepo, cache.New(5*time.Minute, 10*time.Minute))
+	snapshotJob := job.NewDonationSnapshotJob(donationRepo, zerolog.Nop())
+	orchestrator := service.NewDonationConfigOrchestrator(adminService, donationService, snapshotJob)
+	update := service.DonationConfigUpdate{
+		Goal: 500000, ManualAdj: 20000, ManualDonorCnt: 4,
+		TierSproutMin: 1, TierSaplingMin: 10000, TierTreeMin: 50000,
+		TierBloomingMin: 100000, TierFruitingMin: 300000,
+		Note: "atomic update",
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`(?s)UPDATE DONATION_CONFIG.*WHERE IS_ACTIVE = 'Y'`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*COUNT\(DISTINCT CASE.*O_TYPE = 'A'`).
+		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(180000), 3))
+	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("N", 0))
+	snapshotErr := errors.New("snapshot write failed")
+	mock.ExpectExec(`(?s)INSERT INTO DONATION_SNAPSHOT.*ON DUPLICATE KEY UPDATE`).
+		WillReturnError(snapshotErr)
+	mock.ExpectRollback()
+
+	err = orchestrator.UpdateConfig(update, 7)
+	if !errors.Is(err, snapshotErr) {
+		t.Fatalf("UpdateConfig() error = %v, want snapshot failure", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

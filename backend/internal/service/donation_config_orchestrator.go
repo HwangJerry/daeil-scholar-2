@@ -5,11 +5,13 @@ import (
 	"fmt"
 
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/jmoiron/sqlx"
 )
 
 // snapshotCreator is satisfied by job.DonationSnapshotJob.
 type snapshotCreator interface {
 	CreateSnapshotNow() error
+	CreateSnapshotTx(tx *sqlx.Tx) error
 }
 
 // DonationConfigOrchestrator is the single service the admin donation handler calls.
@@ -40,12 +42,22 @@ func (o *DonationConfigOrchestrator) GetConfig() (*model.DonationConfig, error) 
 
 // UpdateConfig persists the config, refreshes today's snapshot, and invalidates the cache.
 func (o *DonationConfigOrchestrator) UpdateConfig(update DonationConfigUpdate, operSeq int) error {
-	if err := o.adminSvc.UpdateConfig(update, operSeq); err != nil {
-		return err
+	if !validDonationTierThresholds(update) {
+		return ErrInvalidTierThresholds
 	}
-	if err := o.RefreshDonationSummary(); err != nil {
-		return fmt.Errorf("config saved but snapshot refresh failed: %w", err)
+	err := o.adminSvc.RunInTransaction(func(tx *sqlx.Tx) error {
+		if err := o.adminSvc.UpdateConfigTx(tx, update, operSeq); err != nil {
+			return err
+		}
+		if err := o.snapshotJob.CreateSnapshotTx(tx); err != nil {
+			return fmt.Errorf("snapshot refresh: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("config and snapshot update failed: %w", err)
 	}
+	o.donationSvc.MarkSnapshotFresh()
 	return nil
 }
 
