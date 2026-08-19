@@ -5,6 +5,16 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// personalDonationWhere intentionally recognizes only the canonical donation fields,
+// including O_ACCOUNT_USR_SEQ and O_LIFECYCLE_STATUS (and its queries consume
+// O_NET_RECEIVED_AMOUNT). The legacy EasyPay/in-app and subscription writers in
+// donate_repo.go (InsertOrder*, UpdateOrderPayment*) do not populate those fields,
+// but those flows are currently unreachable: the PG callback registration and order
+// route are disabled in backend/cmd/server/routes.go:79 and :158, the billing job is
+// disabled in backend/cmd/server/main.go:94, and its manual trigger is disabled in
+// backend/cmd/server/routes.go:262. Before re-enabling any of those paths, update
+// donate_repo.go and subscription_billing.go to write O_ACCOUNT_USR_SEQ,
+// O_LIFECYCLE_STATUS, O_NET_RECEIVED_AMOUNT, and the other canonical donation fields.
 const personalDonationWhere = `
 	WHERE O_ACCOUNT_USR_SEQ = ?
 	  AND O_TYPE = 'A'
