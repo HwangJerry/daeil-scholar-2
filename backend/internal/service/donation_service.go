@@ -27,7 +27,21 @@ func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
 	if err != nil {
 		return nil, err
 	}
+	config, err := s.repo.GetActiveConfig()
+	if err != nil {
+		return nil, err
+	}
 	summary := &model.DonationSummary{DisplayAmount: total}
+	if config != nil {
+		summary.GoalAmount = config.Goal
+		summary.TierThresholds = model.DonationTierThresholds{
+			Sprout:   config.TierSproutMin,
+			Sapling:  config.TierSaplingMin,
+			Tree:     config.TierTreeMin,
+			Blooming: config.TierBloomingMin,
+			Fruiting: config.TierFruitingMin,
+		}
+	}
 	s.cache.Set("donation_summary", summary, 5*time.Minute)
 	return summary, nil
 }
