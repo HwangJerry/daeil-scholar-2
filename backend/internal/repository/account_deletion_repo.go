@@ -180,7 +180,7 @@ func (r *AuthRepository) CompleteAccountDeletionRevocation(usrSeq int, provider 
 	if _, err := tx.Exec(`
 		UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX
 		SET STATUS = 'DELIVERED', UPDATED_AT = NOW(), LAST_ERROR = NULL
-		WHERE USR_SEQ = ? AND PROVIDER = ? AND ACTION = ? AND STATUS IN ('PENDING','PROCESSING')
+		WHERE USR_SEQ = ? AND PROVIDER = ? AND ACTION = ? AND STATUS IN ('PENDING','PROCESSING','REVOKED')
 	`, usrSeq, provider, revocationActionAccountDelete); err != nil {
 		return err
 	}

@@ -36,6 +36,7 @@ type deps struct {
 	visitJob               *job.VisitAggregationJob
 	blockedMessageCleanup  *job.BlockedMessageCleanupJob
 	pushDelivery           *service.PushDeliveryNotifier
+	socialRevocationWorker *job.SocialRevocationWorker
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
@@ -105,6 +106,13 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	emailService := service.NewEmailService(cfg.SMTP, logger)
 
 	authService := service.NewAuthService(authRepo, sessionRepo, cfg, cacheStore, logger)
+	socialRevocationAppleVerifier := service.NewAppleIdentityVerifier(authService, cfg.Apple)
+	socialRevocationVault, socialRevocationVaultErr := service.NewSocialCredentialVault(cfg.Apple.CredentialEncryptionKey)
+	// TODO: make the poll interval configurable; 1 minute is a reasonable default for now.
+	socialRevocationWorker := job.NewSocialRevocationWorker(
+		authRepo, authService, socialRevocationAppleVerifier, socialRevocationVault, socialRevocationVaultErr,
+		time.Minute, logger,
+	)
 	memberService := service.NewMemberService(authRepo)
 	registrationService := service.NewRegistrationService(authRepo, profileRepo)
 	if canonicalPasswordReady {
@@ -230,5 +238,6 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		visitJob:               visitJob,
 		blockedMessageCleanup:  blockedMessageCleanup,
 		pushDelivery:           pushDelivery,
+		socialRevocationWorker: socialRevocationWorker,
 	}, nil
 }

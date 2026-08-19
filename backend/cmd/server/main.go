@@ -96,6 +96,8 @@ func main() {
 	visitJob.Start()
 	blockedMessageCleanup := d.blockedMessageCleanup
 	blockedMessageCleanup.Start()
+	socialRevocationWorker := d.socialRevocationWorker
+	socialRevocationWorker.Start()
 	if d.pushDelivery != nil {
 		d.pushDelivery.Start()
 	}
@@ -110,6 +112,7 @@ func main() {
 	// subscriptionBillingJob.Stop()
 	visitJob.Stop()
 	blockedMessageCleanup.Stop()
+	socialRevocationWorker.Stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()

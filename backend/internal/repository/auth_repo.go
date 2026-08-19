@@ -590,7 +590,7 @@ func (r *AuthRepository) DeleteSocialConnection(usrSeq int, provider string) err
 		UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX
 		SET STATUS = 'DELIVERED', UPDATED_AT = NOW(), LAST_ERROR = NULL
 		WHERE USR_SEQ = ? AND PROVIDER = ? AND ACTION = 'DISCONNECT'
-		  AND STATUS IN ('PENDING','PROCESSING')
+		  AND STATUS IN ('PENDING','PROCESSING','REVOKED')
 	`, usrSeq, provider); err != nil {
 		return err
 	}
