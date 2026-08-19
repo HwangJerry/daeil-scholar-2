@@ -301,6 +301,53 @@ export interface AdminDonationOrderUpdateRequest {
   amount: number;
 }
 
+// --- Donation Import ---
+
+export interface ExcelDonationRow {
+  rowIndex: number;
+  donorName: string;
+  donorPhone: string;
+  amount: number;
+  donationDate: string;
+  transactionNo: string;
+}
+
+export type DonationImportRowStatus =
+  | 'matched'
+  | 'ambiguous'
+  | 'unmatched'
+  | 'duplicate';
+
+export interface DonationImportPreviewRow extends ExcelDonationRow {
+  status: DonationImportRowStatus;
+  matchedUsrSeq: number | null;
+  matchedName: string;
+  note: string;
+}
+
+export interface DonationImportPreviewResult {
+  rows: DonationImportPreviewRow[];
+  matchedCount: number;
+  ambiguousCount: number;
+  unmatchedCount: number;
+  duplicateCount: number;
+}
+
+export interface DonationImportCommitRow extends ExcelDonationRow {
+  accountUsrSeq: number | null;
+}
+
+export interface DonationImportCommitRowResult {
+  rowIndex: number;
+  success: boolean;
+  orderSeq: number | null;
+  errorMessage: string;
+}
+
+export interface DonationImportCommitResult {
+  rows: DonationImportCommitRowResult[];
+}
+
 // --- Job Category ---
 
 export interface AdminJobCategory {
