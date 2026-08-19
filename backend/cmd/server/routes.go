@@ -14,48 +14,51 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const defaultMaxBodySizeBytes int64 = 2 << 20
+
 // handlers holds all HTTP handler instances for route registration.
 type handlers struct {
-	health            *handler.HealthHandler
-	auth              *handler.AuthHandler
-	feed              *handler.FeedHandler
-	like              *handler.LikeHandler
-	comment           *handler.CommentHandler
-	donation          *handler.DonationHandler
-	alumni            *handler.AlumniHandler
-	profile           *handler.ProfileHandler
-	profileUpload     *handler.ProfileUploadHandler
-	ad                *handler.AdHandler
-	adLike            *handler.AdLikeHandler
-	adComment         *handler.AdCommentHandler
-	adminNotice       *handler.AdminNoticeHandler
-	adminDisclosure   *handler.AdminDisclosureHandler
-	disclosure        *handler.DisclosureHandler
-	adminAd           *handler.AdminAdHandler
-	adminDonation     *handler.AdminDonationHandler
-	adminMember       *handler.AdminMemberHandler
-	adminDashboard    *handler.AdminDashboardHandler
-	adminUpload       *handler.AdminUploadHandler
-	adminAttachUpload *handler.AdminAttachmentUploadHandler
-	socialLinkPhoto   *handler.SocialLinkPhotoHandler
-	personalDonation  *handler.PersonalDonationHandler
-	message           *handler.MessageHandler
-	memberBlock       *handler.MemberBlockHandler
-	push              *handler.PushHandler
-	payment           *handler.PaymentHandler
-	subscription      *handler.SubscriptionHandler
-	og                *handler.OGHandler
-	sitemap           *handler.SitemapHandler
-	rss               *handler.RSSHandler
-	passwordReset     *handler.PasswordResetHandler
-	passwordChange    *handler.PasswordChangeHandler
-	badge             *handler.BadgeHandler
-	adminJobCat       *handler.AdminJobCategoryHandler
-	history           *handler.HistoryHandler
-	realtime          *handler.RealtimeHandler
-	adminSubscription *handler.AdminSubscriptionHandler
-	visit             *handler.VisitHandler
-	adminErrorReport  *handler.AdminErrorReportHandler
+	health              *handler.HealthHandler
+	auth                *handler.AuthHandler
+	feed                *handler.FeedHandler
+	like                *handler.LikeHandler
+	comment             *handler.CommentHandler
+	donation            *handler.DonationHandler
+	alumni              *handler.AlumniHandler
+	profile             *handler.ProfileHandler
+	profileUpload       *handler.ProfileUploadHandler
+	ad                  *handler.AdHandler
+	adLike              *handler.AdLikeHandler
+	adComment           *handler.AdCommentHandler
+	adminNotice         *handler.AdminNoticeHandler
+	adminDisclosure     *handler.AdminDisclosureHandler
+	disclosure          *handler.DisclosureHandler
+	adminAd             *handler.AdminAdHandler
+	adminDonation       *handler.AdminDonationHandler
+	adminDonationImport *handler.AdminDonationImportHandler
+	adminMember         *handler.AdminMemberHandler
+	adminDashboard      *handler.AdminDashboardHandler
+	adminUpload         *handler.AdminUploadHandler
+	adminAttachUpload   *handler.AdminAttachmentUploadHandler
+	socialLinkPhoto     *handler.SocialLinkPhotoHandler
+	personalDonation    *handler.PersonalDonationHandler
+	message             *handler.MessageHandler
+	memberBlock         *handler.MemberBlockHandler
+	push                *handler.PushHandler
+	payment             *handler.PaymentHandler
+	subscription        *handler.SubscriptionHandler
+	og                  *handler.OGHandler
+	sitemap             *handler.SitemapHandler
+	rss                 *handler.RSSHandler
+	passwordReset       *handler.PasswordResetHandler
+	passwordChange      *handler.PasswordChangeHandler
+	badge               *handler.BadgeHandler
+	adminJobCat         *handler.AdminJobCategoryHandler
+	history             *handler.HistoryHandler
+	realtime            *handler.RealtimeHandler
+	adminSubscription   *handler.AdminSubscriptionHandler
+	visit               *handler.VisitHandler
+	adminErrorReport    *handler.AdminErrorReportHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
@@ -64,7 +67,6 @@ func registerRoutes(h handlers, authService *service.AuthService, cacheStore *ca
 	router.Use(mw.Recoverer(logger, debugHook))
 	router.Use(mw.RequestLogger(logger))
 	router.Use(mw.CORSMiddleware(allowedOrigins))
-	router.Use(mw.MaxBodySize(2 << 20))
 
 	// Static file servers (dev: proxied from Vite/Nginx; prod: handled by Nginx alias)
 	router.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.Upload.BasePath))))
@@ -94,12 +96,23 @@ func registerPGRoutes(router chi.Router, h handlers) {
 // registerAPIRoutes registers all /api/* routes with CSRF protection.
 func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config) {
 	router.Group(func(r chi.Router) {
+		r.Use(mw.MaxBodySize(defaultMaxBodySizeBytes))
 		r.Use(mw.CSRFMiddleware(allowedOrigins))
 
 		registerPublicRoutes(r, h, cacheStore)
 		registerAuthRoutes(r, h, authService)
 		registerOptionalAuthRoutes(r, h, authService)
 		registerAdminRoutes(r, h, authService, cfg)
+	})
+
+	// The preview handler applies the configured upload limit with MaxBytesReader.
+	// Keep it outside the default API body limit so only this upload endpoint can
+	// accept a body larger than 2 MiB.
+	router.Group(func(r chi.Router) {
+		r.Use(mw.CSRFMiddleware(allowedOrigins))
+		r.Use(mw.AuthMiddleware(authService))
+		r.Use(mw.AdminAuthMiddleware)
+		registerAdminDonationImportPreviewRoute(r, h.adminDonationImport)
 	})
 }
 
@@ -234,7 +247,7 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Put("/donation/config", h.adminDonation.UpdateConfig)
 		r.Get("/donation/history", h.adminDonation.History)
 		r.Route("/donation", func(donationRouter chi.Router) {
-			registerAdminDonationRoutes(donationRouter, h.adminDonation)
+			registerAdminDonationRoutes(donationRouter, h.adminDonation, h.adminDonationImport)
 		})
 		r.Get("/member", h.adminMember.List)
 		r.Get("/member/{seq}", h.adminMember.Detail)
@@ -264,9 +277,14 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 	})
 }
 
-func registerAdminDonationRoutes(router chi.Router, donationHandler *handler.AdminDonationHandler) {
+func registerAdminDonationRoutes(router chi.Router, donationHandler *handler.AdminDonationHandler, importHandler *handler.AdminDonationImportHandler) {
 	router.Get("/orders", donationHandler.ListOrders)
 	router.Get("/orders/{orderSeq}", donationHandler.GetOrder)
 	router.Post("/orders", donationHandler.CreateOrder)
 	router.Put("/orders/{orderSeq}", donationHandler.UpdateOrder)
+	router.Post("/import/commit", importHandler.Commit)
+}
+
+func registerAdminDonationImportPreviewRoute(router chi.Router, importHandler *handler.AdminDonationImportHandler) {
+	router.Post("/api/admin/donation/import/preview", importHandler.Preview)
 }

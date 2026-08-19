@@ -57,6 +57,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	disclosureRepo := repository.NewDisclosureRepository(db)
 	adminAdRepo := repository.NewAdminAdRepository(db)
 	adminDonationRepo := repository.NewAdminDonationRepository(db)
+	donationImportRepo := repository.NewDonationImportRepository(db)
 	adminMemberRepo := repository.NewAdminMemberRepository(db)
 	donateRepo := repository.NewDonateRepository(db)
 	personalDonationRepo := repository.NewPersonalDonationRepository(db)
@@ -136,6 +137,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	disclosureSvc := service.NewDisclosureService(disclosureRepo)
 	adminAdSvc := service.NewAdminAdService(adminAdRepo)
 	adminDonationSvc := service.NewAdminDonationService(adminDonationRepo, donationRepo)
+	donationImportSvc := service.NewDonationImportService(donationImportRepo, adminDonationSvc, cfg.JWT.Secret, donationService)
 	donationJob := job.NewDonationSnapshotJob(donationRepo, logger)
 	adminDonationOrchestrator := service.NewDonationConfigOrchestrator(adminDonationSvc, donationService, donationJob)
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
@@ -182,46 +184,47 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	feedPresenter := presenter.NewFeedPresenter()
 
 	h := handlers{
-		health:            handler.NewHealthHandler(db),
-		auth:              handler.NewAuthHandler(authService, memberService, registrationService, profileService, cacheStore, socialLinkTokens, cfg, logger),
-		feed:              handler.NewFeedHandler(feedService, likeService, feedPresenter),
-		like:              handler.NewLikeHandler(likeService),
-		comment:           handler.NewCommentHandler(commentService),
-		donation:          handler.NewDonationHandler(donationService),
-		alumni:            handler.NewAlumniHandler(alumniService),
-		profile:           handler.NewProfileHandler(profileService),
-		profileUpload:     handler.NewProfileUploadHandler(profileUploadService),
-		ad:                handler.NewAdHandler(adService),
-		adLike:            handler.NewAdLikeHandler(adLikeService),
-		adComment:         handler.NewAdCommentHandler(adCommentService),
-		adminNotice:       handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
-		adminDisclosure:   handler.NewAdminDisclosureHandler(adminDisclosureSvc, feedPresenter),
-		disclosure:        handler.NewDisclosureHandler(disclosureSvc, feedPresenter),
-		adminAd:           handler.NewAdminAdHandler(adminAdSvc),
-		adminDonation:     handler.NewAdminDonationHandler(adminDonationOrchestrator),
-		adminMember:       handler.NewAdminMemberHandler(adminMemberSvc),
-		adminDashboard:    handler.NewAdminDashboardHandler(adminDashboardSvc),
-		adminUpload:       handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
-		adminAttachUpload: handler.NewAdminAttachmentUploadHandler(attachmentUploadOrchestrator, cfg.Upload.MaxFileSizeMB),
-		socialLinkPhoto:   handler.NewSocialLinkPhotoHandler(uploadOrchestrator, socialLinkTokens, logger),
-		personalDonation:  handler.NewPersonalDonationHandler(personalDonationService),
-		message:           handler.NewMessageHandler(messageService),
-		memberBlock:       handler.NewMemberBlockHandler(memberBlockService),
-		push:              handler.NewPushHandler(pushService),
-		payment:           handler.NewPaymentHandler(donateService, cfg.EasyPay),
-		subscription:      handler.NewSubscriptionHandler(subscriptionService, cfg.EasyPay),
-		og:                handler.NewOGHandler(ogService, cfg.Server.SiteBaseURL),
-		sitemap:           handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
-		rss:               handler.NewRSSHandler(rssService, cfg.Server.SiteBaseURL),
-		passwordReset:     handler.NewPasswordResetHandler(passwordResetService, logger),
-		passwordChange:    handler.NewPasswordChangeHandler(passwordChangeSvc),
-		badge:             handler.NewBadgeHandler(messageService, logger),
-		adminJobCat:       handler.NewAdminJobCategoryHandler(adminJobCatSvc),
-		history:           handler.NewHistoryHandler(historySvc),
-		adminSubscription: handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
-		realtime:          handler.NewRealtimeHandler(realtimeHub, logger),
-		visit:             handler.NewVisitHandler(visitService, logger, cfg.Server.IsSecure()),
-		adminErrorReport:  handler.NewAdminErrorReportHandler(logger, debugHook),
+		health:              handler.NewHealthHandler(db),
+		auth:                handler.NewAuthHandler(authService, memberService, registrationService, profileService, cacheStore, socialLinkTokens, cfg, logger),
+		feed:                handler.NewFeedHandler(feedService, likeService, feedPresenter),
+		like:                handler.NewLikeHandler(likeService),
+		comment:             handler.NewCommentHandler(commentService),
+		donation:            handler.NewDonationHandler(donationService),
+		alumni:              handler.NewAlumniHandler(alumniService),
+		profile:             handler.NewProfileHandler(profileService),
+		profileUpload:       handler.NewProfileUploadHandler(profileUploadService),
+		ad:                  handler.NewAdHandler(adService),
+		adLike:              handler.NewAdLikeHandler(adLikeService),
+		adComment:           handler.NewAdCommentHandler(adCommentService),
+		adminNotice:         handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
+		adminDisclosure:     handler.NewAdminDisclosureHandler(adminDisclosureSvc, feedPresenter),
+		disclosure:          handler.NewDisclosureHandler(disclosureSvc, feedPresenter),
+		adminAd:             handler.NewAdminAdHandler(adminAdSvc),
+		adminDonation:       handler.NewAdminDonationHandler(adminDonationOrchestrator),
+		adminDonationImport: handler.NewAdminDonationImportHandler(donationImportSvc, cfg.Upload.MaxFileSizeMB),
+		adminMember:         handler.NewAdminMemberHandler(adminMemberSvc),
+		adminDashboard:      handler.NewAdminDashboardHandler(adminDashboardSvc),
+		adminUpload:         handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
+		adminAttachUpload:   handler.NewAdminAttachmentUploadHandler(attachmentUploadOrchestrator, cfg.Upload.MaxFileSizeMB),
+		socialLinkPhoto:     handler.NewSocialLinkPhotoHandler(uploadOrchestrator, socialLinkTokens, logger),
+		personalDonation:    handler.NewPersonalDonationHandler(personalDonationService),
+		message:             handler.NewMessageHandler(messageService),
+		memberBlock:         handler.NewMemberBlockHandler(memberBlockService),
+		push:                handler.NewPushHandler(pushService),
+		payment:             handler.NewPaymentHandler(donateService, cfg.EasyPay),
+		subscription:        handler.NewSubscriptionHandler(subscriptionService, cfg.EasyPay),
+		og:                  handler.NewOGHandler(ogService, cfg.Server.SiteBaseURL),
+		sitemap:             handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
+		rss:                 handler.NewRSSHandler(rssService, cfg.Server.SiteBaseURL),
+		passwordReset:       handler.NewPasswordResetHandler(passwordResetService, logger),
+		passwordChange:      handler.NewPasswordChangeHandler(passwordChangeSvc),
+		badge:               handler.NewBadgeHandler(messageService, logger),
+		adminJobCat:         handler.NewAdminJobCategoryHandler(adminJobCatSvc),
+		history:             handler.NewHistoryHandler(historySvc),
+		adminSubscription:   handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
+		realtime:            handler.NewRealtimeHandler(realtimeHub, logger),
+		visit:               handler.NewVisitHandler(visitService, logger, cfg.Server.IsSecure()),
+		adminErrorReport:    handler.NewAdminErrorReportHandler(logger, debugHook),
 	}
 
 	return &deps{

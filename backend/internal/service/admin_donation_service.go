@@ -11,6 +11,7 @@ import (
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
+	"github.com/jmoiron/sqlx"
 )
 
 var (
@@ -252,4 +253,57 @@ func validateDonationAccountInput(accountUsrSeq *int) error {
 		return fmt.Errorf("%w: invalid account user sequence", ErrInvalidDonationOrder)
 	}
 	return nil
+}
+
+func importedDonationOrderInput(row model.ImportedDonationRow, accountUsrSeq *int) model.DonationOrderInput {
+	return model.DonationOrderInput{
+		Source:            "happy_nanum",
+		AccountUsrSeq:     accountUsrSeq,
+		AccountUsrSeqSet:  true,
+		TransactionNumber: nil,
+		DonationDate:      row.DonationDate,
+		Donor: model.DonationDonor{
+			Name:       row.DonorName,
+			Cohort:     row.DonorCohort,
+			Department: row.DonorDepartment,
+			Phone:      row.DonorPhone,
+		},
+		DonationType:   "one_time",
+		GrossAmount:    row.Amount,
+		RefundedAmount: 0,
+		Status:         "completed",
+		PaymentMethod:  "other",
+	}
+}
+
+func normalizeImportedDonationOrder(row model.ImportedDonationRow, accountUsrSeq *int) (model.NormalizedDonationOrder, error) {
+	return NormalizeDonationOrderInput(importedDonationOrderInput(row, accountUsrSeq))
+}
+
+// CreateImportedOrderTx intentionally follows the same normalization and
+// repository writer as the ordinary administrator create path.
+func (s *AdminDonationService) CreateImportedOrderTx(tx *sqlx.Tx, row model.ImportedDonationRow, accountUsrSeq *int, operSeq int, ip string) (int64, error) {
+	normalized, err := normalizeImportedDonationOrder(row, accountUsrSeq)
+	if err != nil {
+		return 0, err
+	}
+	if err := validateDonationAccountInput(normalized.AccountUsrSeq); err != nil {
+		return 0, err
+	}
+	return s.repo.CreateDonationOrderTx(tx, normalized, operSeq, ip)
+}
+
+func (s *AdminDonationService) CreateImportedOrdersTx(tx *sqlx.Tx, orders []model.ImportedDonationOrder, operSeq int, ip string) ([]int64, error) {
+	normalizedOrders := make([]model.NormalizedDonationOrder, 0, len(orders))
+	for _, order := range orders {
+		normalized, err := normalizeImportedDonationOrder(order.ImportedDonationRow, order.AccountUsrSeq)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateDonationAccountInput(normalized.AccountUsrSeq); err != nil {
+			return nil, err
+		}
+		normalizedOrders = append(normalizedOrders, normalized)
+	}
+	return s.repo.CreateDonationOrdersTx(tx, normalizedOrders, operSeq, ip)
 }

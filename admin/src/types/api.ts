@@ -3,6 +3,14 @@
 export interface APIError {
   code: string;
   message: string;
+  errors?: APIFieldError[];
+}
+
+export interface APIFieldError {
+  rowIndex: number;
+  field: string;
+  code: string;
+  message: string;
 }
 
 export interface AuthUser {
@@ -299,6 +307,61 @@ export interface AdminDonationOrderListResponse {
 export interface AdminDonationOrderUpdateRequest {
   payment: string;
   amount: number;
+}
+
+// --- Donation Import ---
+
+export interface ExcelDonationRow {
+  rowIndex: number;
+  donorName: string;
+  donorCohort: string;
+  donorDepartment: string;
+  donorPhone: string;
+  amount: number;
+}
+
+export type DonationImportRowStatus =
+  | 'matched'
+  | 'ambiguous'
+  | 'unmatched'
+  | 'duplicate';
+
+export interface DonationImportPreviewRow extends ExcelDonationRow {
+  donationDate: string;
+  status: DonationImportRowStatus;
+  matchedUsrSeq: number | null;
+  matchedName: string;
+  note: string;
+  previewToken: string;
+}
+
+export interface DonationImportPreviewResult {
+  rows: DonationImportPreviewRow[];
+  matchedCount: number;
+  ambiguousCount: number;
+  unmatchedCount: number;
+  duplicateCount: number;
+}
+
+export interface DonationImportCommitRow extends ExcelDonationRow {
+  accountUsrSeq: number | null;
+  previewToken: string;
+}
+
+export interface DonationImportCommitRequest {
+  donationDate: string;
+  rows: DonationImportCommitRow[];
+}
+
+export interface DonationImportCommitRowResult {
+  rowIndex: number;
+  success: boolean;
+  orderSeq: number | null;
+  errorMessage: string;
+}
+
+export interface DonationImportCommitResult {
+  rows: DonationImportCommitRowResult[];
 }
 
 // --- Job Category ---

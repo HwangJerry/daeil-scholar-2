@@ -1,15 +1,17 @@
 // Fetch-based API client with multipart upload support for admin operations
-import type { APIError } from '../types/api.ts';
+import type { APIError, APIFieldError } from '../types/api.ts';
 
 class ApiClientError extends Error {
   code: string;
   status: number;
+  details: APIFieldError[];
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, details: APIFieldError[] = []) {
     super(message);
     this.name = 'ApiClientError';
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -30,7 +32,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     } catch {
       // response body was not JSON
     }
-    throw new ApiClientError(res.status, apiError.code, apiError.message);
+    throw new ApiClientError(res.status, apiError.code, apiError.message, apiError.errors);
   }
 
   if (res.status === 204) {
@@ -74,7 +76,7 @@ export const api = {
       } catch {
         // not JSON
       }
-      throw new ApiClientError(res.status, apiError.code, apiError.message);
+      throw new ApiClientError(res.status, apiError.code, apiError.message, apiError.errors);
     }
 
     return res.json() as Promise<T>;
