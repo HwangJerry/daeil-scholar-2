@@ -58,6 +58,7 @@ type NormalizedDonationOrder struct {
 
 type DonationOrder struct {
 	OrderSeq          int64         `json:"orderSeq"`
+	AccountUsrSeq     *int          `json:"accountUsrSeq"`
 	Source            string        `json:"source"`
 	TransactionNumber *string       `json:"transactionNumber"`
 	DonationDate      string        `json:"donationDate"`

@@ -108,12 +108,12 @@ func TestGetDonationOrderReturnsCanonicalDetail(t *testing.T) {
 	mock.ExpectQuery(`FROM WEO_ORDER o`).
 		WithArgs(3001).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"ORDER_SEQ", "SOURCE", "TRANSACTION_NUMBER", "DONATION_DATE",
+			"ORDER_SEQ", "ACCOUNT_USR_SEQ", "SOURCE", "TRANSACTION_NUMBER", "DONATION_DATE",
 			"DONOR_NAME", "DONOR_COHORT", "DONOR_DEPARTMENT", "DONOR_PHONE", "DONATION_TYPE",
 			"GROSS_AMOUNT", "REFUNDED_AMOUNT", "NET_RECEIVED_AMOUNT", "STATUS", "PAYMENT_METHOD",
 			"MEMO", "LAST_EDITED_BY", "LAST_EDITED_AT", "LAST_EDITED_IP",
 		}).AddRow(
-			3001, "bank_transfer", nil, "2026-07-28",
+			3001, 42, "bank_transfer", nil, "2026-07-28",
 			"예시 동문", "18", "영어", "01000000000", "one_time",
 			int64(100000), int64(20000), int64(80000), "partially_refunded", "bank",
 			nil, 7, "2026-07-28T01:00:00Z", "192.0.2.1",
@@ -123,7 +123,7 @@ func TestGetDonationOrderReturnsCanonicalDetail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDonationOrder() error = %v", err)
 	}
-	if order.OrderSeq != 3001 || order.Donor.Phone != "01000000000" || order.NetReceivedAmount != 80000 {
+	if order.OrderSeq != 3001 || order.AccountUsrSeq == nil || *order.AccountUsrSeq != 42 || order.Donor.Phone != "01000000000" || order.NetReceivedAmount != 80000 {
 		t.Fatalf("unexpected order: %+v", order)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -147,9 +147,10 @@ func TestUpdateDonationOrderChangesLinkedAccountWhenProvided(t *testing.T) {
 		},
 		NetReceivedAmount: 50000, CompositeKey: "replacement-key", LegacyGate: "F", LegacyStatus: "Y", LegacyPayment: "Y",
 	}
-	mock.ExpectExec(`O_ACCOUNT_USR_SEQ = CASE WHEN \? THEN \? ELSE O_ACCOUNT_USR_SEQ END`).
+	mock.ExpectExec(`(?s)O_ACCOUNT_USR_SEQ = CASE WHEN \? THEN \? ELSE O_ACCOUNT_USR_SEQ END.*USR_SEQ = CASE WHEN \? THEN COALESCE\(\?, 0\) ELSE USR_SEQ END.*O_ACCOUNT_UNLINKED_AT = CASE.*WHEN \? IS NULL THEN NOW\(\)`).
 		WithArgs(
-			true, accountUsrSeq, "other", nil, "replacement-key", "2026-07-29", "기부자", "01011112222", "19", "중국어", "F",
+			true, accountUsrSeq, true, accountUsrSeq, true, accountUsrSeq,
+			"other", nil, "replacement-key", "2026-07-29", "기부자", "01011112222", "19", "중국어", "F",
 			int64(50000), int64(0), int64(50000), "completed", "admin", nil,
 			int64(50000), int64(50000), "ADMS", "Y", "Y", 7, "192.0.2.1", int64(3001),
 		).
@@ -180,7 +181,8 @@ func TestUpdateDonationOrderPreservesLinkedAccountWhenOmitted(t *testing.T) {
 	}
 	mock.ExpectExec(`O_ACCOUNT_USR_SEQ = CASE WHEN \? THEN \? ELSE O_ACCOUNT_USR_SEQ END`).
 		WithArgs(
-			false, nil, "bank_transfer", nil, "composite", "2026-07-28", "예시 동문", "01000000000", "18", "영어", "S",
+			false, nil, false, nil, false, nil,
+			"bank_transfer", nil, "composite", "2026-07-28", "예시 동문", "01000000000", "18", "영어", "S",
 			int64(100000), int64(0), int64(100000), "completed", "bank", nil,
 			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001),
 		).
@@ -209,9 +211,10 @@ func TestUpdateDonationOrderClearsLinkedAccountWhenNullProvided(t *testing.T) {
 		},
 		NetReceivedAmount: 100000, CompositeKey: "composite", LegacyGate: "S", LegacyStatus: "Y", LegacyPayment: "Y",
 	}
-	mock.ExpectExec(`O_ACCOUNT_USR_SEQ = CASE WHEN \? THEN \? ELSE O_ACCOUNT_USR_SEQ END`).
+	mock.ExpectExec(`(?s)O_ACCOUNT_USR_SEQ = CASE WHEN \? THEN \? ELSE O_ACCOUNT_USR_SEQ END.*USR_SEQ = CASE WHEN \? THEN COALESCE\(\?, 0\) ELSE USR_SEQ END.*O_ACCOUNT_UNLINKED_AT = CASE.*WHEN \? IS NULL THEN NOW\(\)`).
 		WithArgs(
-			true, nil, "bank_transfer", nil, "composite", "2026-07-28", "예시 동문", "01000000000", "18", "영어", "S",
+			true, nil, true, nil, true, nil,
+			"bank_transfer", nil, "composite", "2026-07-28", "예시 동문", "01000000000", "18", "영어", "S",
 			int64(100000), int64(0), int64(100000), "completed", "bank", nil,
 			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001),
 		).
@@ -240,12 +243,12 @@ func TestListDonationOrdersAppliesCanonicalFiltersAndStablePagination(t *testing
 	mock.ExpectQuery(`ORDER BY o.O_DONATION_DATE DESC, o.O_SEQ DESC`).
 		WithArgs(listArgs...).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"ORDER_SEQ", "SOURCE", "TRANSACTION_NUMBER", "DONATION_DATE",
+			"ORDER_SEQ", "ACCOUNT_USR_SEQ", "SOURCE", "TRANSACTION_NUMBER", "DONATION_DATE",
 			"DONOR_NAME", "DONOR_COHORT", "DONOR_DEPARTMENT", "DONOR_PHONE", "DONATION_TYPE",
 			"GROSS_AMOUNT", "REFUNDED_AMOUNT", "NET_RECEIVED_AMOUNT", "STATUS", "PAYMENT_METHOD",
 			"MEMO", "LAST_EDITED_BY", "LAST_EDITED_AT", "LAST_EDITED_IP",
 		}).AddRow(
-			3001, "bank_transfer", "TX-1", "2026-07-28", "예시 동문", "18", "영어", "01000000000", "one_time",
+			3001, 42, "bank_transfer", "TX-1", "2026-07-28", "예시 동문", "18", "영어", "01000000000", "one_time",
 			int64(100000), int64(0), int64(100000), "completed", "bank", nil, 7, "2026-07-28T01:00:00Z", "192.0.2.1",
 		))
 
@@ -255,7 +258,7 @@ func TestListDonationOrdersAppliesCanonicalFiltersAndStablePagination(t *testing
 	if err != nil {
 		t.Fatalf("ListDonationOrders() error = %v", err)
 	}
-	if total != 21 || len(orders) != 1 || orders[0].OrderSeq != 3001 {
+	if total != 21 || len(orders) != 1 || orders[0].OrderSeq != 3001 || orders[0].AccountUsrSeq == nil || *orders[0].AccountUsrSeq != 42 {
 		t.Fatalf("orders/total = %+v/%d", orders, total)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
