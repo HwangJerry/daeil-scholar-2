@@ -821,6 +821,24 @@ func (r *AuthRepository) RevokeAllMobileSessions(usrSeq int) error {
 	return err
 }
 
+// DeleteExpiredMobileRefreshTokens removes refresh token rows that are no
+// longer useful to retain: naturally expired (EXPIRES_AT in the past), or
+// revoked long enough ago (REVOKED_AT older than revokedBefore) that replay
+// detection no longer needs them. Rows that are merely CONSUMED (rotated to a
+// successor token) but not yet expired or revoked are never deleted - they
+// remain needed for replay detection until they naturally expire.
+func (r *AuthRepository) DeleteExpiredMobileRefreshTokens(revokedBefore time.Time) (int64, error) {
+	result, err := r.DB.Exec(`
+		DELETE FROM ALUMNI_MOBILE_REFRESH_TOKEN
+		WHERE EXPIRES_AT < NOW()
+		   OR (REVOKED_AT IS NOT NULL AND REVOKED_AT < ?)
+	`, revokedBefore)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 func (r *AuthRepository) DeletePushDevicesByUser(usrSeq int) error {
 	_, err := r.DB.Exec(`DELETE FROM ALUMNI_PUSH_DEVICE WHERE USR_SEQ = ?`, usrSeq)
 	return err

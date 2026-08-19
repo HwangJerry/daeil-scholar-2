@@ -86,7 +86,7 @@ func main() {
 	// Start()/Stop() pairs below.
 	// donationJob := d.donationJob
 	// donationJob.Start()
-	sessionJob := job.NewSessionCleanupJob(d.sessionRepo, d.passwordResetRepo, logger)
+	sessionJob := job.NewSessionCleanupJob(d.sessionRepo, d.passwordResetRepo, d.authRepo, logger)
 	sessionJob.Start()
 	emailWorker := job.NewEmailWorker(d.emailQueue, d.emailService, logger)
 	emailWorker.Start()

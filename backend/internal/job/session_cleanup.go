@@ -9,10 +9,16 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// SessionCleanupJob periodically removes expired sessions and password reset tokens.
+// mobileRefreshTokenRevokedRetention is how long a revoked refresh token row
+// is kept after revocation before cleanup, so recently-revoked tokens remain
+// available briefly for diagnostics/support before being purged.
+const mobileRefreshTokenRevokedRetention = 7 * 24 * time.Hour
+
+// SessionCleanupJob periodically removes expired sessions and tokens.
 type SessionCleanupJob struct {
 	sessionRepo       *repository.SessionRepository
 	passwordResetRepo *repository.PasswordResetRepository
+	authRepo          *repository.AuthRepository
 	logger            zerolog.Logger
 	cancel            context.CancelFunc
 }
@@ -21,11 +27,13 @@ type SessionCleanupJob struct {
 func NewSessionCleanupJob(
 	sessionRepo *repository.SessionRepository,
 	passwordResetRepo *repository.PasswordResetRepository,
+	authRepo *repository.AuthRepository,
 	logger zerolog.Logger,
 ) *SessionCleanupJob {
 	return &SessionCleanupJob{
 		sessionRepo:       sessionRepo,
 		passwordResetRepo: passwordResetRepo,
+		authRepo:          authRepo,
 		logger:            logger,
 	}
 }
@@ -50,6 +58,7 @@ func (j *SessionCleanupJob) Start() {
 			case <-ticker.C:
 				j.cleanSessions()
 				j.cleanExpiredTokens()
+				j.cleanMobileRefreshTokens()
 			}
 		}
 	}()
@@ -82,5 +91,18 @@ func (j *SessionCleanupJob) cleanExpiredTokens() {
 	}
 	if deleted > 0 {
 		j.logger.Info().Int64("count", deleted).Msg("expired password reset tokens cleaned")
+	}
+}
+
+func (j *SessionCleanupJob) cleanMobileRefreshTokens() {
+	deleted, err := j.authRepo.DeleteExpiredMobileRefreshTokens(
+		time.Now().Add(-mobileRefreshTokenRevokedRetention),
+	)
+	if err != nil {
+		j.logger.Error().Err(err).Msg("mobile refresh token cleanup failed")
+		return
+	}
+	if deleted > 0 {
+		j.logger.Info().Int64("count", deleted).Msg("expired mobile refresh tokens cleaned")
 	}
 }

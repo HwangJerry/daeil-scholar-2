@@ -29,6 +29,7 @@ type deps struct {
 	donationJob            *job.DonationSnapshotJob
 	sessionRepo            *repository.SessionRepository
 	passwordResetRepo      *repository.PasswordResetRepository
+	authRepo               *repository.AuthRepository
 	pgAuditLog             *service.PGAuditLogger
 	emailQueue             chan model.EmailMessage
 	emailService           *service.EmailService
@@ -231,6 +232,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		donationJob:            donationJob,
 		sessionRepo:            sessionRepo,
 		passwordResetRepo:      passwordResetRepo,
+		authRepo:               authRepo,
 		pgAuditLog:             pgAuditLogger,
 		emailQueue:             emailQueue,
 		emailService:           emailService,
