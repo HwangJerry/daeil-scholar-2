@@ -27,7 +27,10 @@ export interface DonationOrderFormValues {
 export type DonationOrderFormErrors = Partial<Record<keyof DonationOrderFormValues, string>>;
 
 const DONOR_PHONE_PATTERN = /^010(?:-[0-9]{4}-[0-9]{4}|[0-9]{8})$/;
-const ASCII_PATTERN = /^[\x00-\x7F]+$/;
+
+function isASCII(value: string) {
+  return [...value].every((character) => character.charCodeAt(0) <= 127);
+}
 
 function getToday() {
   const now = new Date();
@@ -71,13 +74,13 @@ export function validateDonationOrderForm(values: DonationOrderFormValues) {
     errors.accountUsrSeq = '회원 번호는 1 이상의 정수여야 합니다.';
   }
   const transactionNumber = values.transactionNumber.trim();
-  if (transactionNumber && (transactionNumber.length > 191 || !ASCII_PATTERN.test(transactionNumber))) {
+  if (transactionNumber && (transactionNumber.length > 191 || !isASCII(transactionNumber))) {
     errors.transactionNumber = '거래번호는 191자 이하의 영문, 숫자, 기호만 사용할 수 있습니다.';
   }
-  if (!Number.isInteger(grossAmount) || grossAmount < 0) {
+  if (values.grossAmount.trim() === '' || !Number.isInteger(grossAmount) || grossAmount < 0) {
     errors.grossAmount = '총액은 0 이상의 정수여야 합니다.';
   }
-  if (!Number.isInteger(refundedAmount) || refundedAmount < 0 || refundedAmount > grossAmount) {
+  if (values.refundedAmount.trim() === '' || !Number.isInteger(refundedAmount) || refundedAmount < 0 || refundedAmount > grossAmount) {
     errors.refundedAmount = '환불액은 총액 이하의 0 이상의 정수여야 합니다.';
   } else if (values.status === 'partially_refunded' && (
     refundedAmount === 0 || refundedAmount === grossAmount
