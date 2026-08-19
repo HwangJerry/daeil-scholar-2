@@ -146,6 +146,8 @@ On Go login (Kakao OAuth), the backend issues both JWT + legacy `DDusr*` cookies
 
 `/api/auth/kakao` → Kakao OAuth → `/api/auth/kakao/callback` → JWT issued. If the Kakao account isn't linked to an alumni member, a linking flow (`/api/auth/kakao/link`) is triggered.
 
+**Mobile app scope note:** the iOS/Android apps deliberately do NOT implement the account-linking flow (`/api/auth/kakao/link`, `/api/auth/social/link`). Mobile only supports Kakao login for accounts already linked via web — a first-time Kakao login on mobile gets a `202 linkRequired` from `POST /api/auth/kakao/mobile`, which the app surfaces as "sign in with your existing ID" rather than building a link UI. The web account-linking flow itself is also slated for removal, so don't add new dependencies on it. See `docs/spec-auth.md` §4.6.
+
 ### Admin Auth
 
 Admin endpoints (`/api/admin/*`) require both the standard auth middleware and an additional `AdminAuthMiddleware` that checks the user's operator status.

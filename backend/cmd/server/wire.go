@@ -69,6 +69,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		ClientSecret: cfg.Kakao.ClientSecret,
 		RedirectURI:  cfg.Kakao.RedirectURI,
 	})
+	socialLinkTokens := service.NewSocialLinkTokenStore(cacheStore)
 
 	realtimeHub := realtime.NewHub(logger)
 	messageNotifier := service.NewRealtimeMessageNotifier(realtimeHub)
@@ -150,7 +151,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 
 	h := handlers{
 		health:            handler.NewHealthHandler(db),
-		auth:              handler.NewAuthHandler(authService, memberService, registrationService, profileService, cacheStore, cfg, logger),
+		auth:              handler.NewAuthHandler(authService, memberService, registrationService, profileService, cacheStore, socialLinkTokens, cfg, logger),
 		feed:              handler.NewFeedHandler(feedService, likeService, feedPresenter),
 		like:              handler.NewLikeHandler(likeService),
 		comment:           handler.NewCommentHandler(commentService),
@@ -170,7 +171,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		adminDashboard:    handler.NewAdminDashboardHandler(adminDashboardSvc),
 		adminUpload:       handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
 		adminAttachUpload: handler.NewAdminAttachmentUploadHandler(attachmentUploadOrchestrator, cfg.Upload.MaxFileSizeMB),
-		socialLinkPhoto:   handler.NewSocialLinkPhotoHandler(uploadOrchestrator, cacheStore, logger),
+		socialLinkPhoto:   handler.NewSocialLinkPhotoHandler(uploadOrchestrator, socialLinkTokens, logger),
 		myDonation:        handler.NewMyDonationHandler(myDonationService),
 		message:           handler.NewMessageHandler(messageService),
 		payment:           handler.NewPaymentHandler(donateService, cfg.EasyPay),

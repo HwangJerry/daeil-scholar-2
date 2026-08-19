@@ -1,5 +1,5 @@
 -- =============================================================================
--- apply_all.sql — Consolidated migration script (001–023)
+-- apply_all.sql — Consolidated migration script (001–033)
 -- Target: MariaDB 10.1.38
 -- Safe to re-run: uses IF NOT EXISTS / procedure-based column checks
 -- =============================================================================
@@ -41,6 +41,26 @@ BEGIN
        AND INDEX_NAME = p_index;
     IF @idx_exists = 0 THEN
         SET @ddl = CONCAT('CREATE INDEX ', p_index, ' ON ', p_table, ' (', p_columns, ')');
+        PREPARE stmt FROM @ddl;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END //
+
+CREATE PROCEDURE IF NOT EXISTS _add_unique_index_if_not_exists(
+    IN p_table VARCHAR(64),
+    IN p_index VARCHAR(64),
+    IN p_columns TEXT
+)
+BEGIN
+    SET @idx_exists = 0;
+    SELECT COUNT(*) INTO @idx_exists
+      FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = p_table
+       AND INDEX_NAME = p_index;
+    IF @idx_exists = 0 THEN
+        SET @ddl = CONCAT('CREATE UNIQUE INDEX ', p_index, ' ON ', p_table, ' (', p_columns, ')');
         PREPARE stmt FROM @ddl;
         EXECUTE stmt;
         DEALLOCATE PREPARE stmt;
@@ -391,12 +411,65 @@ CREATE TABLE IF NOT EXISTS ALUMNI_MOBILE_REFRESH_TOKEN (
     INDEX IDX_REVOKED (MRT_REVOKED_AT)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- =============================================================================
+-- 032: Social account management and Sign in with Apple
+-- =============================================================================
+CALL _add_column_if_not_exists('WEO_MEMBER_SOCIAL', 'NMS_EMAIL', 'VARCHAR(255) NULL AFTER NMS_ID');
+CALL _add_column_if_not_exists('WEO_MEMBER_SOCIAL', 'NMS_STATUS', "VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' AFTER NMS_EMAIL");
+CALL _add_column_if_not_exists('WEO_MEMBER_SOCIAL', 'NMS_EMAIL_ENABLED', "ENUM('Y','N') NOT NULL DEFAULT 'Y' AFTER NMS_STATUS");
+CALL _add_unique_index_if_not_exists('WEO_MEMBER_SOCIAL', 'UK_USR_PROVIDER', 'USR_SEQ, NMS_GATE');
+
+CREATE TABLE IF NOT EXISTS ALUMNI_APPLE_NONCE_CHALLENGE (
+    CHALLENGE_ID VARCHAR(64) NOT NULL PRIMARY KEY,
+    NONCE_HASH CHAR(64) NOT NULL,
+    EXPIRES_AT DATETIME NOT NULL,
+    CONSUMED_AT DATETIME NULL,
+    CREATED_AT DATETIME NOT NULL,
+    INDEX IDX_ANC_EXPIRES (EXPIRES_AT)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ALUMNI_APPLE_CODE_REPLAY (
+    CODE_HASH CHAR(64) NOT NULL PRIMARY KEY,
+    CREATED_AT DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ALUMNI_SOCIAL_CREDENTIAL (
+    USR_SEQ INT NOT NULL,
+    PROVIDER VARCHAR(10) NOT NULL,
+    ENCRYPTED_CREDENTIAL TEXT NOT NULL,
+    UPDATED_AT DATETIME NOT NULL,
+    PRIMARY KEY (USR_SEQ, PROVIDER)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ALUMNI_SOCIAL_REVOCATION_OUTBOX (
+    OUTBOX_ID BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    USR_SEQ INT NOT NULL,
+    PROVIDER VARCHAR(10) NOT NULL,
+    ACTION VARCHAR(30) NOT NULL,
+    STATUS VARCHAR(20) NOT NULL,
+    ATTEMPT_COUNT INT NOT NULL DEFAULT 0,
+    NEXT_ATTEMPT_AT DATETIME NOT NULL,
+    LAST_ERROR VARCHAR(500) NULL,
+    CREATED_AT DATETIME NOT NULL,
+    UPDATED_AT DATETIME NOT NULL,
+    INDEX IDX_SRO_DUE (STATUS, NEXT_ATTEMPT_AT)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =============================================================================
+-- 033: Canonical member phone lookup
+-- =============================================================================
+UPDATE WEO_MEMBER
+SET USR_PHONE = REPLACE(REPLACE(TRIM(USR_PHONE), '-', ''), ' ', '')
+WHERE IFNULL(USR_PHONE, '') <> ''
+  AND USR_PHONE <> REPLACE(REPLACE(TRIM(USR_PHONE), '-', ''), ' ', '');
+CALL _add_index_if_not_exists('WEO_MEMBER', 'IDX_WEO_MEMBER_PHONE', 'USR_PHONE');
 
 -- =============================================================================
 -- Cleanup: Drop helper procedures
 -- =============================================================================
 DROP PROCEDURE IF EXISTS _add_column_if_not_exists;
 DROP PROCEDURE IF EXISTS _add_index_if_not_exists;
+DROP PROCEDURE IF EXISTS _add_unique_index_if_not_exists;
 
 
 -- =============================================================================
@@ -418,6 +491,18 @@ SELECT 'WEO_MEMBER.USR_PHOTO' AS chk, COUNT(*) AS found FROM information_schema.
 
 -- 007: Social table
 SELECT 'WEO_MEMBER_SOCIAL' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER_SOCIAL';
+
+-- 028: Social auth security
+SELECT 'WEO_MEMBER_SOCIAL.NMS_EMAIL' AS chk, COUNT(*) AS found FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER_SOCIAL' AND COLUMN_NAME='NMS_EMAIL';
+SELECT 'WEO_MEMBER_SOCIAL.UK_USR_PROVIDER' AS chk, COUNT(DISTINCT INDEX_NAME) AS found FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER_SOCIAL' AND INDEX_NAME='UK_USR_PROVIDER';
+SELECT 'ALUMNI_MOBILE_REFRESH_TOKEN' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_MOBILE_REFRESH_TOKEN';
+SELECT 'ALUMNI_APPLE_NONCE_CHALLENGE' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_APPLE_NONCE_CHALLENGE';
+SELECT 'ALUMNI_APPLE_CODE_REPLAY' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_APPLE_CODE_REPLAY';
+SELECT 'ALUMNI_SOCIAL_CREDENTIAL' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_SOCIAL_CREDENTIAL';
+SELECT 'ALUMNI_SOCIAL_REVOCATION_OUTBOX' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_SOCIAL_REVOCATION_OUTBOX';
+
+-- 029: Canonical member phone lookup
+SELECT 'WEO_MEMBER.IDX_WEO_MEMBER_PHONE' AS chk, COUNT(DISTINCT INDEX_NAME) AS found FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER' AND INDEX_NAME='IDX_WEO_MEMBER_PHONE';
 
 -- 008: Job categories
 SELECT 'ALUMNI_JOB_CATEGORY count' AS chk, COUNT(*) AS found FROM ALUMNI_JOB_CATEGORY;

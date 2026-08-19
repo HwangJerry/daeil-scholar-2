@@ -3,17 +3,14 @@ package handler
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/service"
 )
 
 // handleSocialCallback is the shared callback logic after a social OAuth token exchange.
-// Decision order:
-//  1. Existing social link (WEO_MEMBER_SOCIAL) → login as that member.
-//  2. Email match on WEO_MEMBER → insert social link + login (no form).
-//  3. No match → cache provider data and redirect to /login/link for the signup form.
+// Only an existing (provider, subject) link can log in immediately. Provider
+// email is display/prefill data and is never an account-linking credential.
 func (h *AuthHandler) handleSocialCallback(w http.ResponseWriter, r *http.Request, gate string, info service.KakaoUserInfo) {
 	user, err := h.service.FindMemberBySocialID(gate, info.KakaoID)
 	if err != nil {
@@ -25,46 +22,33 @@ func (h *AuthHandler) handleSocialCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if info.Email != "" {
-		matched, err := h.service.FindMemberByEmail(info.Email)
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, "LOOKUP_FAILED", "Failed to lookup member by email")
-			return
-		}
-		if matched != nil {
-			if err := h.service.InsertSocialLink(matched.USRSeq, gate, info.KakaoID, info.Email); err != nil {
-				h.logger.Error().Err(err).Int("usrSeq", matched.USRSeq).Msg("kakao: insert social link failed")
-				respondError(w, http.StatusInternalServerError, "LINK_FAILED", "Failed to link social account")
-				return
-			}
-			if info.ProfileImageURL != "" {
-				if err := h.service.UpdateProfilePhotoIfEmpty(matched.USRSeq, info.ProfileImageURL); err != nil {
-					h.logger.Warn().Err(err).Int("usrSeq", matched.USRSeq).Msg("kakao: optional photo update failed")
-				}
-			}
-			h.completeSocialLogin(w, r, gate, matched, info.AccessToken)
-			return
-		}
-	}
-
 	linkToken := h.service.GenerateSessionID()
-	h.cache.Set("social_link:"+linkToken, model.SocialLinkData{
+	if _, err := h.socialLinkTokens.Put(linkToken, model.SocialLinkData{
 		Provider:        gate,
 		SocialID:        info.KakaoID,
 		Email:           info.Email,
 		Nickname:        info.Nickname,
 		ProfileImageURL: info.ProfileImageURL,
 		AccessToken:     info.AccessToken,
-	}, 5*time.Minute)
+	}, service.SocialLinkTokenTTL); err != nil {
+		respondError(w, http.StatusInternalServerError, "LINK_TOKEN_FAILED", "Failed to start account linking")
+		return
+	}
 	http.Redirect(w, r, h.cfg.Server.AllowedOrigin+"/login/link?token="+linkToken, http.StatusFound)
 }
 
-// completeSocialLogin handles the final login step shared by "existing social link" and "email-matched" paths.
-// BBB (pending approval) accounts are redirected to the login page with an error flag.
+// completeSocialLogin applies the shared eligibility policy before issuing a web session.
 func (h *AuthHandler) completeSocialLogin(w http.ResponseWriter, r *http.Request, gate string, user *model.User, accessToken string) {
-	if user.USRStatus == "BBB" {
-		http.Redirect(w, r, h.cfg.Server.AllowedOrigin+"/login?error=pending_approval", http.StatusFound)
+	if err := (service.LoginEligibilityPolicy{}).EnsureLoginAllowed(user); err != nil {
+		http.Redirect(w, r, h.cfg.Server.AllowedOrigin+"/login?error="+service.LoginErrorCode(err), http.StatusFound)
 		return
+	}
+	if accessToken != "" {
+		if err := h.socialLifecycle.StoreCredential(user.USRSeq, model.SocialProvider(gate), accessToken); err != nil {
+			h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Str("provider", gate).Msg("social credential storage failed")
+			respondError(w, http.StatusServiceUnavailable, "CREDENTIAL_STORAGE_UNAVAILABLE", "소셜 로그인을 완료할 수 없습니다.")
+			return
+		}
 	}
 	if err := h.service.LoginWithBridge(user, w, r); err != nil {
 		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "Failed to login")

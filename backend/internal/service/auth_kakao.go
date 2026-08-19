@@ -4,6 +4,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 )
 
 // KakaoUserInfo aggregates the fields fetched from Kakao OAuth token exchange + /v2/user/me.
@@ -76,5 +78,26 @@ func (s *AuthService) LogoutKakao(usrSeq int) error {
 		return fmt.Errorf("kakao logout request failed: %w", err)
 	}
 	s.logger.Info().Int("usrSeq", usrSeq).Msg("kakao access token invalidated")
+	return nil
+}
+
+// UnlinkKakaoToken calls Kakao's unlink API to fully disconnect the app from the
+// user's Kakao account (distinct from Logout, which only invalidates the token).
+// Used when a member disconnects their Kakao social login connection.
+func (s *AuthService) UnlinkKakaoToken(ctx context.Context, accessToken string) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://kapi.kakao.com/v1/user/unlink", nil)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Authorization", "Bearer "+accessToken)
+	response, err := s.httpClient.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	_, _ = io.Copy(io.Discard, response.Body)
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("kakao unlink failed with status %d", response.StatusCode)
+	}
 	return nil
 }

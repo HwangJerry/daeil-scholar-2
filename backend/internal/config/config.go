@@ -13,6 +13,7 @@ type Config struct {
 	Server         ServerConfig
 	DB             DBConfig
 	Kakao          KakaoConfig
+	Apple          AppleConfig
 	JWT            JWTConfig
 	Push           PushConfig
 	Upload         UploadConfig
@@ -79,14 +80,33 @@ func (c DBConfig) DSN() string {
 }
 
 type KakaoConfig struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURI  string
+	ClientID            string
+	ClientSecret        string
+	RedirectURI         string
+	AllowedRedirectURIs []string
+}
+
+type AppleConfig struct {
+	TeamID                  string
+	KeyID                   string
+	ClientID                string
+	BundleID                string
+	PrivateKey              string
+	PrivateKeyPath          string
+	AllowedAudiences        []string
+	JWKSURL                 string
+	TokenURL                string
+	RevokeURL               string
+	ChallengeTTL            time.Duration
+	JWKSCacheTTL            time.Duration
+	CredentialEncryptionKey string
 }
 
 type JWTConfig struct {
-	Secret string
-	MaxAge time.Duration
+	Secret          string
+	MaxAge          time.Duration
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
 }
 
 type UploadConfig struct {
@@ -141,13 +161,34 @@ func Load() *Config {
 			ConnMaxIdleTime: getDurationEnv("DB_CONN_MAX_IDLE_TIME", 3*time.Minute),
 		},
 		Kakao: KakaoConfig{
-			ClientID:     getEnv("KAKAO_CLIENT_ID", ""),
-			ClientSecret: getEnv("KAKAO_CLIENT_SECRET", ""),
-			RedirectURI:  getEnv("KAKAO_REDIRECT_URI", "http://localhost:8000/api/auth/kakao/callback"),
+			ClientID:            getEnv("KAKAO_CLIENT_ID", ""),
+			ClientSecret:        getEnv("KAKAO_CLIENT_SECRET", ""),
+			RedirectURI:         getEnv("KAKAO_REDIRECT_URI", "http://localhost:8000/api/auth/kakao/callback"),
+			AllowedRedirectURIs: getCSVEnv("KAKAO_ALLOWED_REDIRECT_URIS", getEnv("KAKAO_REDIRECT_URI", "http://localhost:8000/api/auth/kakao/callback")),
+		},
+		Apple: AppleConfig{
+			TeamID:         getEnv("APPLE_TEAM_ID", ""),
+			KeyID:          getEnv("APPLE_KEY_ID", ""),
+			ClientID:       getEnv("APPLE_CLIENT_ID", ""),
+			BundleID:       getEnv("APPLE_BUNDLE_ID", ""),
+			PrivateKey:     getEnv("APPLE_PRIVATE_KEY", ""),
+			PrivateKeyPath: getEnv("APPLE_PRIVATE_KEY_PATH", ""),
+			AllowedAudiences: getCSVEnv(
+				"APPLE_ALLOWED_AUDIENCES",
+				getEnv("APPLE_BUNDLE_ID", getEnv("APPLE_CLIENT_ID", "")),
+			),
+			JWKSURL:                 getEnv("APPLE_JWKS_URL", "https://appleid.apple.com/auth/keys"),
+			TokenURL:                getEnv("APPLE_TOKEN_URL", "https://appleid.apple.com/auth/token"),
+			RevokeURL:               getEnv("APPLE_REVOKE_URL", "https://appleid.apple.com/auth/revoke"),
+			ChallengeTTL:            getDurationEnv("APPLE_CHALLENGE_TTL", 5*time.Minute),
+			JWKSCacheTTL:            getDurationEnv("APPLE_JWKS_CACHE_TTL", 6*time.Hour),
+			CredentialEncryptionKey: getEnv("SOCIAL_CREDENTIAL_ENCRYPTION_KEY", ""),
 		},
 		JWT: JWTConfig{
-			Secret: getEnv("JWT_SECRET", "change-me-in-production"),
-			MaxAge: getDurationEnv("JWT_MAX_AGE", 24*time.Hour),
+			Secret:          getEnv("JWT_SECRET", "change-me-in-production"),
+			MaxAge:          getDurationEnv("JWT_MAX_AGE", 24*time.Hour),
+			AccessTokenTTL:  getDurationEnv("ACCESS_TOKEN_TTL", 15*time.Minute),
+			RefreshTokenTTL: getDurationEnv("REFRESH_TOKEN_TTL", 30*24*time.Hour),
 		},
 		Push: PushConfig{
 			APNsKeyID:          getEnvWithFallback("APNS_KEY_ID", "PUSH_APNS_KEY_ID", ""),
@@ -261,4 +302,19 @@ func normalizePushEnvironment(env string) string {
 		}
 		return "production"
 	}
+}
+
+func getCSVEnv(key string, fallback string) []string {
+	raw := getEnv(key, fallback)
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
 }

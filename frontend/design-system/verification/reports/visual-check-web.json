@@ -1,0 +1,123 @@
+{
+  "baseUrl": "http://127.0.0.1:4173",
+  "runMode": "guard",
+  "generatedAt": "2026-06-12T10:36:31.706Z",
+  "acceptedDeltaSource": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/reports/accepted-deltas.json",
+  "checks": [
+    {
+      "route": "feed",
+      "path": "/",
+      "viewport": "mobile",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/feed-mobile.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/feed-mobile.png",
+      "hash": "70f8b2955ff9412318c464863c8f2510bd90b730d2e41728655410cdd191b8d8"
+    },
+    {
+      "route": "feed",
+      "path": "/",
+      "viewport": "tablet",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/feed-tablet.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/feed-tablet.png",
+      "hash": "4781e320ed49d3a9c3802c1b8cdb9ba123af446c4a115e182a881df804e83052"
+    },
+    {
+      "route": "feed",
+      "path": "/",
+      "viewport": "desktop",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/feed-desktop.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/feed-desktop.png",
+      "hash": "7a4cb9c0726b6242cdf01a05e2f371e11caf6b8c29940f3e55d6c852cb8f216d"
+    },
+    {
+      "route": "messages",
+      "path": "/messages",
+      "viewport": "mobile",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/messages-mobile.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/messages-mobile.png",
+      "hash": "70f8b2955ff9412318c464863c8f2510bd90b730d2e41728655410cdd191b8d8"
+    },
+    {
+      "route": "messages",
+      "path": "/messages",
+      "viewport": "tablet",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/messages-tablet.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/messages-tablet.png",
+      "hash": "4781e320ed49d3a9c3802c1b8cdb9ba123af446c4a115e182a881df804e83052"
+    },
+    {
+      "route": "messages",
+      "path": "/messages",
+      "viewport": "desktop",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/messages-desktop.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/messages-desktop.png",
+      "hash": "7a4cb9c0726b6242cdf01a05e2f371e11caf6b8c29940f3e55d6c852cb8f216d"
+    },
+    {
+      "route": "mypage",
+      "path": "/mypage",
+      "viewport": "mobile",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/mypage-mobile.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/mypage-mobile.png",
+      "hash": "70f8b2955ff9412318c464863c8f2510bd90b730d2e41728655410cdd191b8d8"
+    },
+    {
+      "route": "mypage",
+      "path": "/mypage",
+      "viewport": "tablet",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/mypage-tablet.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/mypage-tablet.png",
+      "hash": "4781e320ed49d3a9c3802c1b8cdb9ba123af446c4a115e182a881df804e83052"
+    },
+    {
+      "route": "mypage",
+      "path": "/mypage",
+      "viewport": "desktop",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/mypage-desktop.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/mypage-desktop.png",
+      "hash": "7a4cb9c0726b6242cdf01a05e2f371e11caf6b8c29940f3e55d6c852cb8f216d"
+    },
+    {
+      "route": "messages_thread",
+      "path": "/messages/1",
+      "viewport": "mobile",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/messages_thread-mobile.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/messages_thread-mobile.png",
+      "hash": "70f8b2955ff9412318c464863c8f2510bd90b730d2e41728655410cdd191b8d8"
+    },
+    {
+      "route": "messages_thread",
+      "path": "/messages/1",
+      "viewport": "tablet",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/messages_thread-tablet.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/messages_thread-tablet.png",
+      "hash": "4781e320ed49d3a9c3802c1b8cdb9ba123af446c4a115e182a881df804e83052"
+    },
+    {
+      "route": "messages_thread",
+      "path": "/messages/1",
+      "viewport": "desktop",
+      "status": "missing-baseline",
+      "screenshot": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/design/messages_thread-desktop.png",
+      "baseline": "/Users/jerryhwang/Workspace/03_daeil/dflh-saf-v2/frontend/design-system/verification/web-snapshots/baseline/messages_thread-desktop.png",
+      "hash": "7a4cb9c0726b6242cdf01a05e2f371e11caf6b8c29940f3e55d6c852cb8f216d"
+    }
+  ],
+  "summary": {
+    "totalChecks": 12,
+    "changedCount": 0,
+    "acceptedCount": 0,
+    "missingBaselineCount": 12,
+    "errorCount": 0
+  }
+}

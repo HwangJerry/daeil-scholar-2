@@ -23,6 +23,9 @@ func (s *AuthService) GenerateSessionID() string {
 
 // LoginWithBridge issues JWT + legacy PHP cookies and records the login event.
 func (s *AuthService) LoginWithBridge(user *model.User, w http.ResponseWriter, r *http.Request) error {
+	if err := (LoginEligibilityPolicy{}).EnsureLoginAllowed(user); err != nil {
+		return err
+	}
 	sessionID := s.GenerateSessionID()
 	if sessionID == "" {
 		return errors.New("failed to generate session id")
@@ -92,15 +95,48 @@ func (s *AuthService) RevokeAllMobileRefreshTokens(usrSeq int) {
 	}
 }
 
-// Logout invalidates the Kakao access token (if cached), clears all legacy DB sessions, then clears all session cookies.
-func (s *AuthService) Logout(w http.ResponseWriter, usrSeq int) {
+// LogoutCurrent revokes only the mobile session represented by the request
+// (this device's refresh tokens) plus the legacy PHP session, then clears cookies.
+func (s *AuthService) LogoutCurrent(w http.ResponseWriter, user *model.AuthUser, legacySessionID string) error {
+	var logoutErrors []error
+	if err := s.LogoutKakao(user.USRSeq); err != nil {
+		s.logger.Warn().Err(err).Int("usrSeq", user.USRSeq).Msg("kakao logout failed, proceeding with app logout")
+	}
+	if legacySessionID != "" {
+		if err := s.repo.DeleteLegacySession(legacySessionID); err != nil {
+			logoutErrors = append(logoutErrors, err)
+		}
+	}
+	if user != nil && user.SessionID != "" {
+		if err := s.repo.RevokeMobileRefreshTokensBySession(user.USRSeq, user.SessionID); err != nil {
+			logoutErrors = append(logoutErrors, err)
+		}
+	}
+	s.clearSessionCookies(w)
+	return errors.Join(logoutErrors...)
+}
+
+// LogoutAll invalidates the Kakao access token (if cached), clears all legacy DB
+// sessions, revokes every mobile refresh token for the user, then clears cookies.
+func (s *AuthService) LogoutAll(w http.ResponseWriter, usrSeq int) error {
+	var logoutErrors []error
 	if err := s.LogoutKakao(usrSeq); err != nil {
 		s.logger.Warn().Err(err).Int("usrSeq", usrSeq).Msg("kakao logout failed, proceeding with app logout")
 	}
 	if err := s.repo.DeleteLegacySessionsByUser(usrSeq); err != nil {
-		s.logger.Warn().Err(err).Int("usrSeq", usrSeq).Msg("failed to delete legacy sessions on logout")
+		logoutErrors = append(logoutErrors, err)
 	}
 	s.RevokeAllMobileRefreshTokens(usrSeq)
+	s.clearSessionCookies(w)
+	return errors.Join(logoutErrors...)
+}
+
+// Logout is retained for web callers compiled against the previous service API.
+func (s *AuthService) Logout(w http.ResponseWriter, usrSeq int) {
+	_ = s.LogoutAll(w, usrSeq)
+}
+
+func (s *AuthService) clearSessionCookies(w http.ResponseWriter) {
 	secure := s.cfg.Server.IsSecure()
 	expire := func(name string) {
 		http.SetCookie(w, &http.Cookie{
@@ -132,6 +168,18 @@ func (s *AuthService) GetCurrentUser(usrSeq int) (*model.AuthUser, error) {
 		USRName:   user.USRName,
 		USRStatus: user.USRStatus,
 	}, nil
+}
+
+func (s *AuthService) GetLoginAllowedUser(usrSeq int) (*model.AuthUser, error) {
+	user, err := s.repo.GetMemberBySeq(usrSeq)
+	if err != nil {
+		return nil, err
+	}
+	if err := (LoginEligibilityPolicy{}).EnsureLoginAllowed(user); err != nil {
+		return nil, err
+	}
+	authUser := authUserFromMember(user)
+	return &authUser, nil
 }
 
 // LookupLegacySession resolves a PHP DDusrSession_id cookie to an AuthUser.
