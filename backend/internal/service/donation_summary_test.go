@@ -66,8 +66,8 @@ func TestDonationSummaryFallsBackToLiveCalculationWithManualOverwrite(t *testing
 
 	mock.ExpectQuery(`(?s)FROM DONATION_SNAPSHOT.*WHERE DS_DATE`).WillReturnRows(donationSnapshotRows())
 	mock.ExpectQuery(`(?s)FROM DONATION_SNAPSHOT.*ORDER BY DS_DATE DESC`).WillReturnRows(donationSnapshotRows())
-	mock.ExpectQuery(`(?s)SUM\(O_PRICE\).*O_PAYMENT = 'Y'`).WillReturnRows(sqlmock.NewRows([]string{"TOTAL"}).AddRow(int64(180000)))
-	mock.ExpectQuery(`COUNT\(DISTINCT USR_SEQ\)`).WillReturnRows(sqlmock.NewRows([]string{"COUNT"}).AddRow(12))
+	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*COUNT\(DISTINCT CASE.*O_TYPE = 'A'.*O_LIFECYCLE_STATUS IN \('completed', 'partially_refunded'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(180000), 12))
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("Y", 25))
 
 	summary, err := donationService.GetSummary()

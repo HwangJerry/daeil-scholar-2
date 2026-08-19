@@ -84,11 +84,7 @@ func (s *DonationService) InvalidateCache() {
 }
 
 func (s *DonationService) computeLiveSummary() (*model.DonationSummary, error) {
-	total, err := s.repo.SumDonations()
-	if err != nil {
-		return nil, err
-	}
-	donorCount, err := s.repo.CountDonors()
+	total, donorCount, err := s.repo.GetReceivedDonationAggregate()
 	if err != nil {
 		return nil, err
 	}

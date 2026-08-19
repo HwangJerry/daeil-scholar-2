@@ -17,8 +17,7 @@ import (
 // O_LIFECYCLE_STATUS, O_NET_RECEIVED_AMOUNT, and the other canonical donation fields.
 const personalDonationWhere = `
 	WHERE O_ACCOUNT_USR_SEQ = ?
-	  AND O_TYPE = 'A'
-	  AND O_LIFECYCLE_STATUS IN ('completed', 'partially_refunded')`
+	  AND ` + canonicalReceivedDonationPredicate
 
 type PersonalDonationRepository struct {
 	DB *sqlx.DB

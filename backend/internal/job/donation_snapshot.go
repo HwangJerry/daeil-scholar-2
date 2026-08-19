@@ -65,11 +65,7 @@ func (j *DonationSnapshotJob) CreateSnapshotNow() error {
 }
 
 func (j *DonationSnapshotJob) createSnapshot() error {
-	total, err := j.repo.SumDonations()
-	if err != nil {
-		return err
-	}
-	donorCount, err := j.repo.CountDonors()
+	total, donorCount, err := j.repo.GetReceivedDonationAggregate()
 	if err != nil {
 		return err
 	}

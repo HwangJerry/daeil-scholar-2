@@ -12,6 +12,10 @@ type DonationRepository struct {
 	DB *sqlx.DB
 }
 
+const canonicalReceivedDonationPredicate = `
+	O_TYPE = 'A'
+	AND O_LIFECYCLE_STATUS IN ('completed', 'partially_refunded')`
+
 func NewDonationRepository(db *sqlx.DB) *DonationRepository {
 	return &DonationRepository{DB: db}
 }
@@ -80,43 +84,30 @@ func (r *DonationRepository) UpsertSnapshot(date time.Time, total int64, manualA
 	return err
 }
 
-func (r *DonationRepository) SumDonations() (int64, error) {
-	var total int64
-	err := r.DB.Get(&total, `
-		SELECT CAST(COALESCE(SUM(O_PRICE), 0) AS SIGNED)
-		FROM WEO_ORDER
-		WHERE O_PAYMENT = 'Y'
-	`)
-	if err != nil {
-		return 0, err
+func (r *DonationRepository) GetReceivedDonationAggregate() (int64, int, error) {
+	var aggregate struct {
+		TotalAmount int64 `db:"TOTAL_AMOUNT"`
+		DonorCount  int   `db:"DONOR_COUNT"`
 	}
-	return total, nil
-}
-
-func (r *DonationRepository) SumNetReceivedDonations() (int64, error) {
-	var total int64
-	err := r.DB.Get(&total, `
-		SELECT CAST(COALESCE(SUM(O_NET_RECEIVED_AMOUNT), 0) AS SIGNED)
+	err := r.DB.Get(&aggregate, `
+		SELECT
+			CAST(COALESCE(SUM(O_NET_RECEIVED_AMOUNT), 0) AS SIGNED) AS TOTAL_AMOUNT,
+			CAST(COUNT(DISTINCT CASE
+				WHEN O_ACCOUNT_USR_SEQ IS NOT NULL AND O_ACCOUNT_USR_SEQ > 0
+					THEN CONCAT('account:', O_ACCOUNT_USR_SEQ)
+				WHEN COALESCE(TRIM(O_DONOR_NAME), '') <> '' OR COALESCE(TRIM(O_DONOR_PHONE), '') <> ''
+					THEN CONCAT(
+						'unlinked:', HEX(TRIM(COALESCE(O_DONOR_NAME, ''))), ':',
+						REPLACE(TRIM(COALESCE(O_DONOR_PHONE, '')), '-', '')
+					)
+				ELSE CONCAT('order:', O_SEQ)
+			END) AS SIGNED) AS DONOR_COUNT
 		FROM WEO_ORDER
-		WHERE O_LIFECYCLE_STATUS IN ('completed', 'partially_refunded')
-	`)
+		WHERE `+canonicalReceivedDonationPredicate)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return total, nil
-}
-
-func (r *DonationRepository) CountDonors() (int, error) {
-	var count int
-	err := r.DB.Get(&count, `
-		SELECT CAST(COUNT(DISTINCT USR_SEQ) AS SIGNED)
-		FROM WEO_ORDER
-		WHERE O_PAYMENT = 'Y'
-	`)
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
+	return aggregate.TotalAmount, aggregate.DonorCount, nil
 }
 
 func (r *DonationRepository) GetActiveConfig() (*model.DonationConfig, error) {
