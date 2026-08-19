@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -39,7 +40,7 @@ func TestParseExcelDonationRowsUsesLegacyPositionsFromThirdRow(t *testing.T) {
 func TestParseExcelDonationRowsRejectsRowsWithMissingRequiredFields(t *testing.T) {
 	workbook := excelWorkbook(t, [][]interface{}{
 		{"제목"},
-		{"헤더"},
+		{"", "이름", "기수", "학과", "전화", "금액"},
 		{"", "", "1", "부서", "010-1111-1111", "10000"},
 		{"", "이름", "1", "부서", "", "10000"},
 	})
@@ -53,6 +54,45 @@ func TestParseExcelDonationRowsRejectsRowsWithMissingRequiredFields(t *testing.T
 	}
 	if validationErrors[1].RowIndex != 4 || validationErrors[1].Field != "donorPhone" || validationErrors[1].Code != "REQUIRED" {
 		t.Fatalf("second validation error = %+v", validationErrors[1])
+	}
+}
+
+func TestParseExcelDonationRowsRejectsInvalidHeader(t *testing.T) {
+	workbook := excelWorkbook(t, [][]interface{}{
+		{"제목"},
+		{"", "입금일", "기수", "학과", "전화", "금액"},
+		{"", "김동문", "11", "영어과", "010-1111-1111", "10000"},
+	})
+
+	rows, validationErrors, err := parseExcelDonationRows(workbook, "2026-08-19")
+	if rows != nil || validationErrors != nil || err == nil {
+		t.Fatalf("parseExcelDonationRows() = %+v, %+v, %v; want header rejection", rows, validationErrors, err)
+	}
+	if got, want := err.Error(), "2행 B열은 '이름' 헤더가 아닙니다"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+}
+
+func TestParseExcelDonationRowsRejectsMoreThanMaximumDataRows(t *testing.T) {
+	worksheetRows := make([][]interface{}, 0, donationImportMaxRows+3)
+	worksheetRows = append(worksheetRows,
+		[]interface{}{"제목"},
+		[]interface{}{"", "이름", "기수", "학과", "전화", "금액"},
+	)
+	for index := 0; index <= donationImportMaxRows; index++ {
+		worksheetRows = append(worksheetRows, []interface{}{"", fmt.Sprintf("기부자%d", index), "11", "영어과", "010-1111-1111", index + 1})
+	}
+
+	rows, validationErrors, err := parseExcelDonationRows(excelWorkbook(t, worksheetRows), "2026-08-19")
+	if err != nil {
+		t.Fatalf("parseExcelDonationRows() error = %v", err)
+	}
+	if len(rows) != donationImportMaxRows || len(validationErrors) != 1 {
+		t.Fatalf("row count = %d, validationErrors = %+v", len(rows), validationErrors)
+	}
+	rowError := validationErrors[0]
+	if rowError.RowIndex != donationImportMaxRows+3 || rowError.Code != "ROW_LIMIT_EXCEEDED" || !strings.Contains(rowError.Message, "500개") {
+		t.Fatalf("row limit error = %+v", rowError)
 	}
 }
 
@@ -157,7 +197,7 @@ func TestDonationImportCommitRollsBackWholeBatchOnFailure(t *testing.T) {
 	}
 }
 
-func TestDonationImportCommitRevalidatesAutomaticMatchAndInvalidatesCacheAfterSuccess(t *testing.T) {
+func TestDonationImportCommitRejectsChangedAutomaticMatchEvenWithManualOverride(t *testing.T) {
 	accountUsrSeq := 42
 	repo := &donationImportRepositoryStub{candidates: map[string][]model.MemberCandidate{
 		"변경|3": {{USRSeq: 99, Name: "변경"}},
@@ -179,8 +219,46 @@ func TestDonationImportCommitRevalidatesAutomaticMatchAndInvalidatesCacheAfterSu
 	repo.rolledBack = false
 	row.ManualOverride = true
 	result, err = service.Commit([]model.DonationImportCommitRow{row}, "2026-08-19", 9, "192.0.2.10")
+	if result != nil || err == nil || !repo.rolledBack || creator.calls != 0 || cache.calls != 0 {
+		t.Fatalf("override result=%+v err=%v rollback=%v creates=%d cache=%d", result, err, repo.rolledBack, creator.calls, cache.calls)
+	}
+	if !errors.As(err, &commitError) || commitError.RowError.Code != "MEMBER_MATCH_CHANGED" {
+		t.Fatalf("override commit error = %#v", err)
+	}
+}
+
+func TestDonationImportCommitAllowsManualAccountWhenServerCannotAutoMatch(t *testing.T) {
+	accountUsrSeq := 42
+	repo := &donationImportRepositoryStub{candidates: map[string][]model.MemberCandidate{
+		"모호|3": {{USRSeq: 21, Name: "모호"}, {USRSeq: 22, Name: "모호"}},
+	}}
+	creator := &donationImportOrderCreatorStub{sequences: map[string]int64{"모호": 7001}}
+	cache := &donationCacheInvalidatorStub{}
+	service := NewDonationImportService(repo, creator, cache)
+	row := commitRow(3, "모호", 20000, &accountUsrSeq)
+	row.ManualOverride = false
+
+	result, err := service.Commit([]model.DonationImportCommitRow{row}, "2026-08-19", 9, "192.0.2.10")
 	if err != nil || result == nil || len(result.Rows) != 1 || repo.rolledBack || creator.calls != 1 || cache.calls != 1 {
 		t.Fatalf("manual result=%+v err=%v rollback=%v creates=%d cache=%d", result, err, repo.rolledBack, creator.calls, cache.calls)
+	}
+}
+
+func TestDonationImportCommitRejectsMoreThanMaximumRows(t *testing.T) {
+	repo := &donationImportRepositoryStub{}
+	service := NewDonationImportService(repo, &donationImportOrderCreatorStub{})
+	rows := make([]model.DonationImportCommitRow, donationImportMaxRows+1)
+	for index := range rows {
+		rows[index] = commitRow(index+3, fmt.Sprintf("기부자%d", index), int64(index+1), nil)
+	}
+
+	result, err := service.Commit(rows, "2026-08-19", 9, "192.0.2.10")
+	if result != nil || err == nil {
+		t.Fatalf("Commit() = %+v, %v; want row limit rejection", result, err)
+	}
+	var commitError *DonationImportCommitError
+	if !errors.As(err, &commitError) || commitError.RowError.Code != "ROW_LIMIT_EXCEEDED" || !strings.Contains(commitError.RowError.Message, "500행") {
+		t.Fatalf("commit error = %#v", err)
 	}
 }
 

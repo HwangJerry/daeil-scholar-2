@@ -17,15 +17,31 @@ import (
 )
 
 const (
+	donationImportHeaderRowIndex    = 1
 	donationImportFirstDataRowIndex = 2
 	donationImportNameColumn        = 1
 	donationImportCohortColumn      = 2
 	donationImportDepartmentColumn  = 3
 	donationImportPhoneColumn       = 4
 	donationImportAmountColumn      = 5
-	donationImportMaxRows           = 5000
+	donationImportMaxRows           = 500
 	donationImportUnzipSizeLimit    = 50 << 20
 )
+
+type donationImportHeaderRule struct {
+	columnIndex int
+	columnName  string
+	wantLabel   string
+	keywords    []string
+}
+
+var donationImportHeaderRules = []donationImportHeaderRule{
+	{columnIndex: donationImportNameColumn, columnName: "B", wantLabel: "이름", keywords: []string{"이름", "성명", "회원명"}},
+	{columnIndex: donationImportCohortColumn, columnName: "C", wantLabel: "기수", keywords: []string{"기수", "회차"}},
+	{columnIndex: donationImportDepartmentColumn, columnName: "D", wantLabel: "학과 또는 부서", keywords: []string{"학과", "부서", "소속"}},
+	{columnIndex: donationImportPhoneColumn, columnName: "E", wantLabel: "전화 또는 연락처", keywords: []string{"전화", "연락처"}},
+	{columnIndex: donationImportAmountColumn, columnName: "F", wantLabel: "금액", keywords: []string{"금액", "후원금"}},
+}
 
 var (
 	ErrInvalidDonationImportFile = errors.New("invalid donation import file")
@@ -132,7 +148,7 @@ func (s *DonationImportService) Commit(rows []model.DonationImportCommitRow, don
 		return nil, newCommitError(0, "rows", "ROWS_REQUIRED", "반영할 행이 없습니다.")
 	}
 	if len(rows) > donationImportMaxRows {
-		return nil, newCommitError(0, "rows", "ROW_LIMIT_EXCEEDED", "한 번에 최대 5,000행까지 반영할 수 있습니다.")
+		return nil, newCommitError(0, "rows", "ROW_LIMIT_EXCEEDED", "한 번에 최대 500행까지 반영할 수 있습니다.")
 	}
 
 	normalizedRows := make([]model.DonationImportCommitRow, 0, len(rows))
@@ -166,15 +182,14 @@ func (s *DonationImportService) Commit(rows []model.DonationImportCommitRow, don
 				return newCommitError(row.RowIndex, "compositeKey", "ALREADY_IMPORTED", "이미 반영된 기부 거래입니다.")
 			}
 
-			if !row.ManualOverride {
-				candidates, matchErr := s.repo.FindMemberCandidatesByNameCohortPhoneTx(tx, row.DonorName, row.DonorCohort, row.DonorPhone)
-				if matchErr != nil {
-					return internalCommitFailure(row.RowIndex, "회원 재확인 중 오류가 발생했습니다.", matchErr)
-				}
-				valid := len(candidates) == 1 && row.AccountUsrSeq != nil && candidates[0].USRSeq == *row.AccountUsrSeq
-				if !valid {
-					return newCommitError(row.RowIndex, "accountUsrSeq", "MEMBER_MATCH_CHANGED", "미리보기 이후 회원 매칭 정보가 변경되었습니다. 다시 미리보기해 주세요.")
-				}
+			candidates, matchErr := s.repo.FindMemberCandidatesByNameCohortPhoneTx(tx, row.DonorName, row.DonorCohort, row.DonorPhone)
+			if matchErr != nil {
+				return internalCommitFailure(row.RowIndex, "회원 재확인 중 오류가 발생했습니다.", matchErr)
+			}
+			serverCanAutoMatch := len(candidates) == 1
+			clientConfirmedAutoMatch := serverCanAutoMatch && row.AccountUsrSeq != nil && candidates[0].USRSeq == *row.AccountUsrSeq
+			if serverCanAutoMatch && !clientConfirmedAutoMatch {
+				return newCommitError(row.RowIndex, "accountUsrSeq", "MEMBER_MATCH_CHANGED", "미리보기 이후 회원 매칭 정보가 변경되었습니다. 다시 미리보기해 주세요.")
 			}
 
 			orderSeq, createErr := s.orderCreator.CreateImportedOrderTx(tx, importedRow, row.AccountUsrSeq, adminUsrSeq, ip)
@@ -240,6 +255,9 @@ func parseExcelDonationRows(reader io.Reader, donationDate string) ([]model.Exce
 	if err != nil {
 		return nil, nil, fmt.Errorf("엑셀 행을 읽을 수 없습니다: %w", err)
 	}
+	if err := validateDonationImportHeaders(worksheetRows); err != nil {
+		return nil, nil, err
+	}
 
 	rows := make([]model.ExcelDonationRow, 0, min(donationImportMaxRows, max(0, len(worksheetRows)-donationImportFirstDataRowIndex)))
 	validationErrors := make([]model.DonationImportRowError, 0)
@@ -253,7 +271,7 @@ func parseExcelDonationRows(reader io.Reader, donationDate string) ([]model.Exce
 		dataRowCount++
 		rowIndex := index + 1
 		if dataRowCount > donationImportMaxRows {
-			validationErrors = append(validationErrors, model.DonationImportRowError{RowIndex: rowIndex, Field: "rows", Code: "ROW_LIMIT_EXCEEDED", Message: "데이터 행은 최대 5,000개까지 허용됩니다."})
+			validationErrors = append(validationErrors, model.DonationImportRowError{RowIndex: rowIndex, Field: "rows", Code: "ROW_LIMIT_EXCEEDED", Message: "데이터 행은 최대 500개까지 허용됩니다."})
 			break
 		}
 
@@ -285,6 +303,27 @@ func parseExcelDonationRows(reader io.Reader, donationDate string) ([]model.Exce
 		rows = append(rows, row)
 	}
 	return rows, validationErrors, nil
+}
+
+func validateDonationImportHeaders(worksheetRows [][]string) error {
+	var headerRow []string
+	if len(worksheetRows) > donationImportHeaderRowIndex {
+		headerRow = worksheetRows[donationImportHeaderRowIndex]
+	}
+	for _, rule := range donationImportHeaderRules {
+		header := strings.TrimSpace(cellAt(headerRow, rule.columnIndex))
+		matches := false
+		for _, keyword := range rule.keywords {
+			if strings.Contains(header, keyword) {
+				matches = true
+				break
+			}
+		}
+		if !matches {
+			return fmt.Errorf("2행 %s열은 '%s' 헤더가 아닙니다", rule.columnName, rule.wantLabel)
+		}
+	}
+	return nil
 }
 
 func validateExcelDonationFields(rowIndex int, name, cohort, department, phone, amount string) []model.DonationImportRowError {
