@@ -123,6 +123,76 @@ func TestListOrdersRejectsUnknownCanonicalFilter(t *testing.T) {
 	}
 }
 
+func TestUpdateConfigRejectsInvalidDonationTierThresholds(t *testing.T) {
+	tests := []struct {
+		name   string
+		update DonationConfigUpdate
+	}{
+		{
+			name: "negative",
+			update: DonationConfigUpdate{
+				TierSproutMin: -1, TierSaplingMin: 10000, TierTreeMin: 50000,
+				TierBloomingMin: 100000, TierFruitingMin: 300000,
+			},
+		},
+		{
+			name: "equal",
+			update: DonationConfigUpdate{
+				TierSproutMin: 1, TierSaplingMin: 10000, TierTreeMin: 50000,
+				TierBloomingMin: 50000, TierFruitingMin: 300000,
+			},
+		},
+		{
+			name: "descending",
+			update: DonationConfigUpdate{
+				TierSproutMin: 1, TierSaplingMin: 50000, TierTreeMin: 10000,
+				TierBloomingMin: 100000, TierFruitingMin: 300000,
+			},
+		},
+	}
+
+	service := NewAdminDonationService(nil, nil)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := service.UpdateConfig(tt.update, 7)
+			if !errors.Is(err, ErrInvalidTierThresholds) {
+				t.Fatalf("UpdateConfig() error = %v, want ErrInvalidTierThresholds", err)
+			}
+		})
+	}
+}
+
+func TestUpdateConfigPersistsValidDonationTierThresholds(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	service := NewAdminDonationService(repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock")), nil)
+	update := DonationConfigUpdate{
+		Goal: 250000000, ManualAdj: 5000, ManualDonorCnt: 12,
+		TierSproutMin: 10, TierSaplingMin: 20000, TierTreeMin: 60000,
+		TierBloomingMin: 120000, TierFruitingMin: 350000,
+		Note: "tier update", Overwrite: true,
+	}
+
+	mock.ExpectExec(`UPDATE DONATION_CONFIG`).
+		WithArgs(
+			update.Goal, update.ManualAdj, update.ManualDonorCnt,
+			update.TierSproutMin, update.TierSaplingMin, update.TierTreeMin,
+			update.TierBloomingMin, update.TierFruitingMin,
+			update.Note, "Y", 7,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := service.UpdateConfig(update, 7); err != nil {
+		t.Fatalf("UpdateConfig() error = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCreateOrderRejectsInvalidDonationAccountSequence(t *testing.T) {
 	accountUsrSeq := 0
 	service := NewAdminDonationService(nil, nil)
