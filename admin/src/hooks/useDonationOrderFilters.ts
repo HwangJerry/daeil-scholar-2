@@ -1,32 +1,31 @@
-// useDonationOrderFilters — filter state for donation order search (name, payment status, pay type)
-import { useState, useCallback } from 'react';
+// useDonationOrderFilters — canonical donation order filters with pagination reset
+import { useCallback, useState } from 'react';
+import type { DonationOrderFilters } from '../types/api.ts';
+
+const INITIAL_FILTERS: DonationOrderFilters = {
+  name: '',
+  phone: '',
+  transactionNumber: '',
+  source: '',
+  status: '',
+  donationType: '',
+};
 
 export function useDonationOrderFilters(onFilterChange: () => void) {
-  const [nameFilter, setNameFilterRaw] = useState('');
-  const [statusFilter, setStatusFilterRaw] = useState('');
-  const [payTypeFilter, setPayTypeFilterRaw] = useState('');
+  const [filters, setFilters] = useState<DonationOrderFilters>(INITIAL_FILTERS);
 
-  const handleNameChange = useCallback((value: string) => {
-    setNameFilterRaw(value);
+  const setFilter = useCallback(<Key extends keyof DonationOrderFilters>(
+    name: Key,
+    value: DonationOrderFilters[Key],
+  ) => {
+    setFilters((current) => ({ ...current, [name]: value }));
     onFilterChange();
   }, [onFilterChange]);
 
-  const handleStatusChange = useCallback((value: string) => {
-    setStatusFilterRaw(value);
+  const resetFilters = useCallback(() => {
+    setFilters(INITIAL_FILTERS);
     onFilterChange();
   }, [onFilterChange]);
 
-  const handlePayTypeChange = useCallback((value: string) => {
-    setPayTypeFilterRaw(value);
-    onFilterChange();
-  }, [onFilterChange]);
-
-  return {
-    nameFilter,
-    statusFilter,
-    payTypeFilter,
-    handleNameChange,
-    handleStatusChange,
-    handlePayTypeChange,
-  };
+  return { filters, setFilter, resetFilters };
 }
