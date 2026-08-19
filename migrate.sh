@@ -4,6 +4,7 @@
 #   No args:         apply all unapplied migrations in order
 #   With arg:        apply a single specified migration file
 #   --seed N:        mark migrations 001..N as applied without executing SQL
+#   --check-source-approval: verify filenames and approved checksums without DB access
 
 set -euo pipefail
 
@@ -12,8 +13,12 @@ ENV_FILE="${SCRIPT_DIR}/backend/.env"
 MIGRATIONS_DIR="${SCRIPT_DIR}/backend/migrations"
 EXTERNAL_CANDIDATE_MANIFEST_SHA256="${CANONICAL_CANDIDATE_MANIFEST_SHA256:-}"
 T03_AUTH_ENGINE_BOUND_APPLY="${T03_AUTH_ENGINE_BOUND_APPLY:-0}"
+SOURCE_APPROVAL_ONLY=0
+[ "${1:-}" != "--check-source-approval" ] || SOURCE_APPROVAL_ONLY=1
+PREFLIGHT_FUTURE_COUNT=0
 readonly EXTERNAL_CANDIDATE_MANIFEST_SHA256
 readonly T03_AUTH_ENGINE_BOUND_APPLY
+readonly SOURCE_APPROVAL_ONLY
 case "$T03_AUTH_ENGINE_BOUND_APPLY" in 0|1) ;; *) echo "Error: invalid T03 bound-apply mode" >&2; exit 1 ;; esac
 if [ "$T03_AUTH_ENGINE_BOUND_APPLY" = "1" ] && [ "$(id -u)" -ne 0 ]; then
   echo "Error: T03 bound apply requires root authority" >&2
@@ -21,21 +26,23 @@ if [ "$T03_AUTH_ENGINE_BOUND_APPLY" = "1" ] && [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Load .env
-if [ ! -f "$ENV_FILE" ]; then
+if [ ! -f "$ENV_FILE" ] && [ "$SOURCE_APPROVAL_ONLY" = "0" ]; then
   echo "Error: ${ENV_FILE} not found"
   exit 1
 fi
 
-while IFS='=' read -r key value; do
-  # Skip comments and blank lines
-  [[ -z "$key" || "$key" =~ ^# ]] && continue
-  # Trim surrounding whitespace without spawning a process over secret values.
-  key="${key#"${key%%[![:space:]]*}"}"
-  key="${key%"${key##*[![:space:]]}"}"
-  value="${value#"${value%%[![:space:]]*}"}"
-  value="${value%"${value##*[![:space:]]}"}"
-  export "$key=$value"
-done < "$ENV_FILE"
+if [ -f "$ENV_FILE" ]; then
+  while IFS='=' read -r key value; do
+    # Skip comments and blank lines
+    [[ -z "$key" || "$key" =~ ^# ]] && continue
+    # Trim surrounding whitespace without spawning a process over secret values.
+    key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]}"}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    export "$key=$value"
+  done < "$ENV_FILE"
+fi
 
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
@@ -149,6 +156,7 @@ preflight_candidate_approval() {
     fi
   done
   [ "$future_count" -gt 0 ] || return 0
+  PREFLIGHT_FUTURE_COUNT="$future_count"
 
   [ -f "$manifest" ] && [ ! -L "$manifest" ] || {
     echo "Error: canonical candidate manifest missing" >&2
@@ -232,6 +240,10 @@ preflight_candidate_approval() {
 # Reject source ambiguity before the first database side effect.
 preflight_migration_source_set
 preflight_candidate_approval
+if [ "$SOURCE_APPROVAL_ONLY" = "1" ]; then
+  echo "MIGRATION_SOURCE_APPROVAL=PASS future_migrations=${PREFLIGHT_FUTURE_COUNT}"
+  exit 0
+fi
 
 # Ensure migration tracking table exists
 mysql_exec -e "

@@ -240,7 +240,7 @@ verify_harness_fixture_lineage() {
 candidate_manifest_is_valid() {
   local manifest="${TESTDATA_DIR}/canonical_identity_candidate_lineage.sha256"
   local expected_digest filename number candidate candidate_path actual_digest extra
-  local candidate_count=0 entry_count=0 seen_numbers=" "
+  local candidate_count=0 source_count=0 entry_count=0 seen_numbers=" "
   [ -f "$manifest" ] && [ ! -L "$manifest" ] || fail "canonical candidate digest manifest missing"
   local approved_manifest_digest="${CANONICAL_CANDIDATE_MANIFEST_SHA256:-}"
   [ "${#approved_manifest_digest}" -eq 64 ] || fail "canonical candidate manifest approval missing"
@@ -255,13 +255,11 @@ candidate_manifest_is_valid() {
     [ -z "${extra:-}" ] || fail "candidate manifest malformed entry"
     [ "${#expected_digest}" -eq 64 ] || fail "candidate manifest malformed digest"
     case "$expected_digest" in *[!0-9a-f]*) fail "candidate manifest malformed digest" ;; esac
-    case "$filename" in
-      040_convert_auth_transaction_boundary_to_innodb.sql|\
-      041_create_canonical_identity_schema.sql|\
-      042_prepare_canonical_auth_cutover.sql) ;;
-      *) fail "candidate manifest contains an unapproved migration" ;;
-    esac
+    if [[ ! "$filename" =~ ^([0-9]{3})_[a-z0-9][a-z0-9_]*\.sql$ ]]; then
+      fail "candidate manifest filename invalid"
+    fi
     number="${filename%%_*}"
+    (( 10#$number >= 40 )) || fail "candidate manifest contains a historical migration"
     case "$seen_numbers" in
       *" ${number} "*) fail "candidate manifest duplicate migration number" ;;
     esac
@@ -282,7 +280,15 @@ candidate_manifest_is_valid() {
     entry_count=$((entry_count + 1))
   done < "$manifest"
 
-  [ "$entry_count" -eq 3 ] || fail "candidate manifest cardinality mismatch"
+  for candidate_path in "${MIGRATIONS_DIR}"/[0-9][0-9][0-9]_*.sql; do
+    [ -f "$candidate_path" ] || continue
+    filename="$(basename "$candidate_path")"
+    number="${filename%%_*}"
+    if (( 10#$number >= 40 )); then
+      source_count=$((source_count + 1))
+    fi
+  done
+  [ "$entry_count" -eq "$source_count" ] || fail "candidate manifest cardinality mismatch"
 }
 
 check_candidate_range() {
@@ -538,7 +544,7 @@ apply_canonical_migrations() {
       040_convert_auth_transaction_boundary_to_innodb.sql|\
       041_create_canonical_identity_schema.sql|\
       042_prepare_canonical_auth_cutover.sql) ;;
-      *) fail "canonical candidate manifest contains an unapproved migration" ;;
+      *) continue ;;
     esac
 
     [ -f "${MIGRATIONS_DIR}/${filename}" ] || fail "canonical candidate migration missing"
