@@ -56,6 +56,7 @@ export function DonationImportSection() {
   const addToast = useToast((state) => state.addToast);
   const previewMutation = usePreviewDonationImport();
   const commitMutation = useCommitDonationImport();
+  const [donationDate, setDonationDate] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<DonationImportPreviewResult | null>(null);
   const [selection, setSelection] = useState<ImportRowSelection>({
@@ -71,9 +72,15 @@ export function DonationImportSection() {
     setCommitResult(null);
   };
 
+  const handleDonationDateChanged = (nextDonationDate: string) => {
+    setDonationDate(nextDonationDate);
+    setPreview(null);
+    setCommitResult(null);
+  };
+
   const handlePreview = () => {
-    if (!file) return;
-    previewMutation.mutate(file, {
+    if (!file || !donationDate) return;
+    previewMutation.mutate({ file, donationDate }, {
       onSuccess: (result) => {
         setPreview(result);
         setSelection(createInitialSelection(result));
@@ -160,15 +167,15 @@ export function DonationImportSection() {
       return {
         rowIndex: row.rowIndex,
         donorName: row.donorName,
+        donorCohort: row.donorCohort,
+        donorDepartment: row.donorDepartment,
         donorPhone: row.donorPhone,
         amount: row.amount,
-        donationDate: row.donationDate,
-        transactionNo: row.transactionNo,
         accountUsrSeq: isValidAccountUsrSeq ? accountUsrSeq : null,
       };
     });
 
-    commitMutation.mutate(commitRows, {
+    commitMutation.mutate({ donationDate, rows: commitRows }, {
       onSuccess: (result) => {
         setCommitResult(result);
         const successCount = result.rows.filter((row) => row.success).length;
@@ -201,6 +208,19 @@ export function DonationImportSection() {
       </div>
 
       <div className="space-y-3">
+        <div className="max-w-xs space-y-1.5">
+          <label htmlFor="donation-import-date" className="block text-sm font-medium text-dark-slate">
+            기부 반영일자 <span className="text-error-text">*</span>
+          </label>
+          <Input
+            id="donation-import-date"
+            type="date"
+            required
+            value={donationDate}
+            disabled={previewMutation.isPending || commitMutation.isPending}
+            onChange={(event) => handleDonationDateChanged(event.target.value)}
+          />
+        </div>
         <ExcelFileDropzone
           file={file}
           onFileSelected={handleFileSelected}
@@ -211,7 +231,7 @@ export function DonationImportSection() {
             description: '.xlsx 형식만 사용할 수 있습니다.',
           })}
         />
-        <Button onClick={handlePreview} disabled={!file || previewMutation.isPending || commitMutation.isPending}>
+        <Button onClick={handlePreview} disabled={!file || !donationDate || previewMutation.isPending || commitMutation.isPending}>
           {previewMutation.isPending ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" />미리보기 생성 중...</>
           ) : '미리보기'}
@@ -326,16 +346,17 @@ function PreviewTable({
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border-light">
-        <table className="w-full min-w-[1180px] text-sm">
+        <table className="w-full min-w-[1240px] text-sm">
           <thead>
             <tr className="border-b border-border-light text-left text-cool-gray">
               <th className="w-16 px-3 py-3 text-center font-medium">반영</th>
               <th className="w-16 px-3 py-3 font-medium">행</th>
               <th className="px-3 py-3 font-medium">이름</th>
+              <th className="px-3 py-3 font-medium">기수</th>
+              <th className="px-3 py-3 font-medium">부서</th>
               <th className="px-3 py-3 font-medium">전화</th>
               <th className="px-3 py-3 text-right font-medium">금액</th>
               <th className="px-3 py-3 font-medium">기부일</th>
-              <th className="px-3 py-3 font-medium">거래번호</th>
               <th className="px-3 py-3 text-center font-medium">상태</th>
               <th className="min-w-60 px-3 py-3 font-medium">회원 계정 연결</th>
             </tr>
@@ -409,10 +430,11 @@ function PreviewTableRow({
       </td>
       <td className="px-3 py-3 text-cool-gray">{row.rowIndex}</td>
       <td className="px-3 py-3 text-dark-slate">{row.donorName || '—'}</td>
+      <td className="px-3 py-3 text-cool-gray">{row.donorCohort || '—'}</td>
+      <td className="px-3 py-3 text-cool-gray">{row.donorDepartment || '—'}</td>
       <td className="px-3 py-3 text-cool-gray">{row.donorPhone || '—'}</td>
       <td className="px-3 py-3 text-right text-dark-slate">₩{formatAmount(row.amount)}</td>
       <td className="px-3 py-3 text-cool-gray">{row.donationDate || '—'}</td>
-      <td className="px-3 py-3 font-mono text-xs text-cool-gray">{row.transactionNo || '—'}</td>
       <td className="px-3 py-3 text-center">
         <Badge variant={statusDetail.variant}>{statusDetail.label}</Badge>
         {row.note && <p className="mt-1 max-w-44 text-xs text-cool-gray">{row.note}</p>}

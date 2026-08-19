@@ -306,10 +306,10 @@ export interface AdminDonationOrderUpdateRequest {
 export interface ExcelDonationRow {
   rowIndex: number;
   donorName: string;
+  donorCohort: string;
+  donorDepartment: string;
   donorPhone: string;
   amount: number;
-  donationDate: string;
-  transactionNo: string;
 }
 
 export type DonationImportRowStatus =
@@ -319,6 +319,7 @@ export type DonationImportRowStatus =
   | 'duplicate';
 
 export interface DonationImportPreviewRow extends ExcelDonationRow {
+  donationDate: string;
   status: DonationImportRowStatus;
   matchedUsrSeq: number | null;
   matchedName: string;
@@ -335,6 +336,11 @@ export interface DonationImportPreviewResult {
 
 export interface DonationImportCommitRow extends ExcelDonationRow {
   accountUsrSeq: number | null;
+}
+
+export interface DonationImportCommitRequest {
+  donationDate: string;
+  rows: DonationImportCommitRow[];
 }
 
 export interface DonationImportCommitRowResult {
