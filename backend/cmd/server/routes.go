@@ -14,6 +14,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const defaultMaxBodySizeBytes int64 = 2 << 20
+
 // handlers holds all HTTP handler instances for route registration.
 type handlers struct {
 	health              *handler.HealthHandler
@@ -65,7 +67,6 @@ func registerRoutes(h handlers, authService *service.AuthService, cacheStore *ca
 	router.Use(mw.Recoverer(logger, debugHook))
 	router.Use(mw.RequestLogger(logger))
 	router.Use(mw.CORSMiddleware(allowedOrigins))
-	router.Use(mw.MaxBodySize(int64(cfg.Upload.MaxFileSizeMB) << 20))
 
 	// Static file servers (dev: proxied from Vite/Nginx; prod: handled by Nginx alias)
 	router.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.Upload.BasePath))))
@@ -95,12 +96,23 @@ func registerPGRoutes(router chi.Router, h handlers) {
 // registerAPIRoutes registers all /api/* routes with CSRF protection.
 func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config) {
 	router.Group(func(r chi.Router) {
+		r.Use(mw.MaxBodySize(defaultMaxBodySizeBytes))
 		r.Use(mw.CSRFMiddleware(allowedOrigins))
 
 		registerPublicRoutes(r, h, cacheStore)
 		registerAuthRoutes(r, h, authService)
 		registerOptionalAuthRoutes(r, h, authService)
 		registerAdminRoutes(r, h, authService, cfg)
+	})
+
+	// The preview handler applies the configured upload limit with MaxBytesReader.
+	// Keep it outside the default API body limit so only this upload endpoint can
+	// accept a body larger than 2 MiB.
+	router.Group(func(r chi.Router) {
+		r.Use(mw.CSRFMiddleware(allowedOrigins))
+		r.Use(mw.AuthMiddleware(authService))
+		r.Use(mw.AdminAuthMiddleware)
+		registerAdminDonationImportPreviewRoute(r, h.adminDonationImport)
 	})
 }
 
@@ -270,6 +282,9 @@ func registerAdminDonationRoutes(router chi.Router, donationHandler *handler.Adm
 	router.Get("/orders/{orderSeq}", donationHandler.GetOrder)
 	router.Post("/orders", donationHandler.CreateOrder)
 	router.Put("/orders/{orderSeq}", donationHandler.UpdateOrder)
-	router.Post("/import/preview", importHandler.Preview)
 	router.Post("/import/commit", importHandler.Commit)
+}
+
+func registerAdminDonationImportPreviewRoute(router chi.Router, importHandler *handler.AdminDonationImportHandler) {
+	router.Post("/api/admin/donation/import/preview", importHandler.Preview)
 }

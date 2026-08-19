@@ -24,7 +24,6 @@ func TestRegisterAdminDonationRoutes(t *testing.T) {
 		{http.MethodGet, "/orders/3001"},
 		{http.MethodPost, "/orders"},
 		{http.MethodPut, "/orders/3001"},
-		{http.MethodPost, "/import/preview"},
 		{http.MethodPost, "/import/commit"},
 	}
 	for _, test := range tests {
@@ -34,5 +33,15 @@ func TestRegisterAdminDonationRoutes(t *testing.T) {
 				t.Fatalf("route %s %s is not registered", test.method, test.path)
 			}
 		})
+	}
+}
+
+func TestRegisterAdminDonationImportPreviewRoute(t *testing.T) {
+	router := chi.NewRouter()
+	registerAdminDonationImportPreviewRoute(router, handler.NewAdminDonationImportHandler(nil, 10))
+
+	context := chi.NewRouteContext()
+	if !router.Match(context, http.MethodPost, "/api/admin/donation/import/preview") {
+		t.Fatal("donation import preview route is not registered")
 	}
 }
