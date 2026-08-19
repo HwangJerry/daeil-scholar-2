@@ -343,6 +343,10 @@ export interface DonationOrderInput {
   memo: string | null;
 }
 
+export type DonationOrderUpdateInput = Omit<DonationOrderInput, 'accountUsrSeq'> & {
+  accountUsrSeq?: number | null;
+};
+
 export interface DonationOrder {
   orderSeq: number;
   accountUsrSeq: number | null;

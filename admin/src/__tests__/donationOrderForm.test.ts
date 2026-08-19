@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createDonationOrderFormValues,
   toDonationOrderInput,
+  toDonationOrderUpdateInput,
   validateDonationOrderForm,
 } from '../components/donation/donationOrderForm.ts';
 
@@ -53,5 +54,32 @@ describe('donation order form helpers', () => {
         phone: '010-1234-5678',
       },
     });
+  });
+
+  it('omits accountUsrSeq from an update when the loaded value is unchanged', () => {
+    const values = createDonationOrderFormValues();
+    values.accountUsrSeq = '42';
+
+    expect(toDonationOrderUpdateInput(values, 42)).not.toHaveProperty('accountUsrSeq');
+  });
+
+  it('omits accountUsrSeq from an update when an unlinked order stays unchanged', () => {
+    const values = createDonationOrderFormValues();
+
+    expect(toDonationOrderUpdateInput(values, null)).not.toHaveProperty('accountUsrSeq');
+  });
+
+  it('serializes an explicitly cleared accountUsrSeq as null for an update', () => {
+    const values = createDonationOrderFormValues();
+    values.accountUsrSeq = '';
+
+    expect(toDonationOrderUpdateInput(values, 42)).toHaveProperty('accountUsrSeq', null);
+  });
+
+  it('serializes a newly entered accountUsrSeq value for an update', () => {
+    const values = createDonationOrderFormValues();
+    values.accountUsrSeq = '73';
+
+    expect(toDonationOrderUpdateInput(values, null)).toHaveProperty('accountUsrSeq', 73);
   });
 });

@@ -6,6 +6,7 @@ import type {
   DonationOrderFilters,
   DonationOrderInput,
   DonationOrderPage,
+  DonationOrderUpdateInput,
 } from '../types/api.ts';
 import { useToast } from './useToast.ts';
 
@@ -56,7 +57,7 @@ export function useCreateDonationOrder() {
 
 interface UpdateDonationOrderVariables {
   orderSeq: number;
-  input: DonationOrderInput;
+  input: DonationOrderUpdateInput;
 }
 
 export function useUpdateDonationOrder() {

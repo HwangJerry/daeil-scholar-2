@@ -15,6 +15,7 @@ import { Textarea } from '../ui/Textarea.tsx';
 import {
   createDonationOrderFormValues,
   toDonationOrderInput,
+  toDonationOrderUpdateInput,
   validateDonationOrderForm,
   type DonationOrderFormErrors,
   type DonationOrderFormValues,
@@ -80,7 +81,6 @@ function DonationOrderFormDialog({ open, order, onOpenChange }: DonationOrderFor
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
-    const input = toDonationOrderInput(values);
     const mutationOptions = {
       onSuccess: () => {
         setValues(createDonationOrderFormValues());
@@ -91,9 +91,11 @@ function DonationOrderFormDialog({ open, order, onOpenChange }: DonationOrderFor
     };
 
     if (order) {
+      const input = toDonationOrderUpdateInput(values, order.accountUsrSeq);
       updateMutation.mutate({ orderSeq: order.orderSeq, input }, mutationOptions);
       return;
     }
+    const input = toDonationOrderInput(values);
     createMutation.mutate(input, mutationOptions);
   };
 

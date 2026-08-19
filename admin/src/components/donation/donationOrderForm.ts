@@ -1,6 +1,7 @@
 import type {
   DonationOrder,
   DonationOrderInput,
+  DonationOrderUpdateInput,
   DonationPaymentMethod,
   DonationSource,
   DonationStatus,
@@ -98,14 +99,14 @@ export function validateDonationOrderForm(values: DonationOrderFormValues) {
   return errors;
 }
 
-export function toDonationOrderInput(values: DonationOrderFormValues): DonationOrderInput {
-  const accountUsrSeq = values.accountUsrSeq.trim();
+function toDonationOrderInputWithoutAccount(
+  values: DonationOrderFormValues,
+): Omit<DonationOrderInput, 'accountUsrSeq'> {
   const transactionNumber = values.transactionNumber.trim();
   const memo = values.memo.trim();
 
   return {
     source: values.source,
-    accountUsrSeq: accountUsrSeq ? Number(accountUsrSeq) : null,
     transactionNumber: transactionNumber || null,
     donationDate: values.donationDate,
     donor: {
@@ -121,4 +122,26 @@ export function toDonationOrderInput(values: DonationOrderFormValues): DonationO
     paymentMethod: values.paymentMethod,
     memo: memo || null,
   };
+}
+
+function parseAccountUsrSeq(value: string) {
+  const accountUsrSeq = value.trim();
+  return accountUsrSeq ? Number(accountUsrSeq) : null;
+}
+
+export function toDonationOrderInput(values: DonationOrderFormValues): DonationOrderInput {
+  return {
+    ...toDonationOrderInputWithoutAccount(values),
+    accountUsrSeq: parseAccountUsrSeq(values.accountUsrSeq),
+  };
+}
+
+export function toDonationOrderUpdateInput(
+  values: DonationOrderFormValues,
+  initialAccountUsrSeq: number | null,
+): DonationOrderUpdateInput {
+  const input = toDonationOrderInputWithoutAccount(values);
+  const accountUsrSeq = parseAccountUsrSeq(values.accountUsrSeq);
+  if (accountUsrSeq === initialAccountUsrSeq) return input;
+  return { ...input, accountUsrSeq };
 }
