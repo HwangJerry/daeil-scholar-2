@@ -1,6 +1,10 @@
 package service
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,6 +31,7 @@ const (
 	donationImportMaxRows           = 500
 	donationImportMaxAmount         = int64(1_000_000_000_000)
 	donationImportUnzipSizeLimit    = 50 << 20
+	donationImportPreviewTokenTTL   = time.Hour
 )
 
 type donationImportHeaderRule struct {
@@ -67,15 +72,15 @@ func (e *DonationImportCommitError) Error() string {
 }
 
 type donationImportRepository interface {
-	FindMemberCandidatesByNameCohortPhone(name, cohort, phone string) ([]model.MemberCandidate, error)
-	FindMemberCandidatesByNameCohortPhoneTx(tx *sqlx.Tx, name, cohort, phone string) ([]model.MemberCandidate, error)
-	ExtRefExists(transactionNo, compositeKey string) (bool, error)
-	ExtRefExistsTx(tx *sqlx.Tx, transactionNo, compositeKey string) (bool, error)
+	FindMemberCandidatesByKeys(keys []model.DonationImportMemberKey) (map[model.DonationImportMemberKey][]model.MemberCandidate, error)
+	FindMemberCandidatesByKeysTx(tx *sqlx.Tx, keys []model.DonationImportMemberKey) (map[model.DonationImportMemberKey][]model.MemberCandidate, error)
+	FindExistingCompositeKeys(compositeKeys []string) (map[string]bool, error)
+	FindExistingCompositeKeysTx(tx *sqlx.Tx, compositeKeys []string) (map[string]bool, error)
 	RunInTransaction(operation func(*sqlx.Tx) error) error
 }
 
 type donationImportOrderCreator interface {
-	CreateImportedOrderTx(tx *sqlx.Tx, row model.ImportedDonationRow, accountUsrSeq *int, operSeq int, ip string) (int64, error)
+	CreateImportedOrdersTx(tx *sqlx.Tx, orders []model.ImportedDonationOrder, operSeq int, ip string) ([]int64, error)
 }
 type donationCacheInvalidator interface{ InvalidateCache() }
 
@@ -83,10 +88,17 @@ type DonationImportService struct {
 	repo             donationImportRepository
 	orderCreator     donationImportOrderCreator
 	cacheInvalidator donationCacheInvalidator
+	signingKey       []byte
+	now              func() time.Time
 }
 
-func NewDonationImportService(repo donationImportRepository, orderCreator donationImportOrderCreator, invalidators ...donationCacheInvalidator) *DonationImportService {
-	s := &DonationImportService{repo: repo, orderCreator: orderCreator}
+func NewDonationImportService(repo donationImportRepository, orderCreator donationImportOrderCreator, signingKey string, invalidators ...donationCacheInvalidator) *DonationImportService {
+	s := &DonationImportService{
+		repo:         repo,
+		orderCreator: orderCreator,
+		signingKey:   []byte("donation-import-preview:v1:" + signingKey),
+		now:          time.Now,
+	}
 	if len(invalidators) > 0 {
 		s.cacheInvalidator = invalidators[0]
 	}
@@ -106,13 +118,24 @@ func (s *DonationImportService) ParsePreview(file io.Reader, donationDate string
 		return nil, &DonationImportFileValidationError{Errors: validationErrors}
 	}
 
+	memberKeys, compositeKeys, err := donationImportLookupInputs(rows, normalizedDate)
+	if err != nil {
+		return nil, err
+	}
+	candidatesByKey, err := s.repo.FindMemberCandidatesByKeys(memberKeys)
+	if err != nil {
+		return nil, fmt.Errorf("회원 일괄 조회: %w", err)
+	}
+	existingCompositeKeys, err := s.repo.FindExistingCompositeKeys(compositeKeys)
+	if err != nil {
+		return nil, fmt.Errorf("중복 일괄 조회: %w", err)
+	}
+
 	result := &model.DonationImportPreviewResult{Rows: make([]model.DonationImportPreviewRow, 0, len(rows))}
 	for _, row := range rows {
 		previewRow := model.DonationImportPreviewRow{ExcelDonationRow: row, DonationDate: normalizedDate}
-		candidates, err := s.repo.FindMemberCandidatesByNameCohortPhone(row.DonorName, row.DonorCohort, row.DonorPhone)
-		if err != nil {
-			return nil, fmt.Errorf("%d행 회원 조회: %w", row.RowIndex, err)
-		}
+		memberKey := model.NewDonationImportMemberKey(row.DonorName, row.DonorCohort, row.DonorPhone)
+		candidates := candidatesByKey[memberKey]
 		switch len(candidates) {
 		case 0:
 			previewRow.Status, previewRow.Note = model.DonationImportRowUnmatched, "일치하는 활성 회원 없음"
@@ -122,16 +145,13 @@ func (s *DonationImportService) ParsePreview(file io.Reader, donationDate string
 		default:
 			previewRow.Status, previewRow.Note = model.DonationImportRowAmbiguous, fmt.Sprintf("동명이인 %d명 발견", len(candidates))
 		}
-		key, err := importedDonationCompositeKey(model.ImportedDonationRow{ExcelDonationRow: row, DonationDate: normalizedDate})
-		if err != nil {
-			return nil, err
-		}
-		duplicate, err := s.repo.ExtRefExists("", key)
-		if err != nil {
-			return nil, fmt.Errorf("%d행 중복 조회: %w", row.RowIndex, err)
-		}
-		if duplicate {
+		key, _ := importedDonationCompositeKey(model.ImportedDonationRow{ExcelDonationRow: row, DonationDate: normalizedDate})
+		if existingCompositeKeys[key] {
 			previewRow.Status, previewRow.Note = model.DonationImportRowDuplicate, "이미 반영된 기부 거래"
+		}
+		previewRow.PreviewToken, err = s.signDonationImportPreviewRow(previewRow)
+		if err != nil {
+			return nil, fmt.Errorf("%d행 미리보기 토큰 생성: %w", row.RowIndex, err)
 		}
 		result.Rows = append(result.Rows, previewRow)
 		incrementDonationImportCount(result, previewRow.Status)
@@ -152,7 +172,10 @@ func (s *DonationImportService) Commit(rows []model.DonationImportCommitRow, don
 	}
 
 	normalizedRows := make([]model.DonationImportCommitRow, 0, len(rows))
+	previewPayloads := make([]donationImportPreviewTokenPayload, 0, len(rows))
 	seenKeys := make(map[string]int, len(rows))
+	compositeKeys := make([]string, 0, len(rows))
+	memberKeys := make([]model.DonationImportMemberKey, 0, len(rows))
 	for _, row := range rows {
 		normalizedRow, rowErr := normalizeDonationImportCommitRow(row)
 		if rowErr != nil {
@@ -166,43 +189,55 @@ func (s *DonationImportService) Commit(rows []model.DonationImportCommitRow, don
 			return nil, newCommitError(row.RowIndex, "compositeKey", "DUPLICATE_IN_FILE", fmt.Sprintf("%d행과 동일한 기부 내역입니다.", first))
 		}
 		seenKeys[key] = row.RowIndex
+		payload, tokenErr := s.verifyDonationImportPreviewToken(normalizedRow, normalizedDate)
+		if tokenErr != nil {
+			return nil, newCommitError(row.RowIndex, "previewToken", "INVALID_PREVIEW_TOKEN", tokenErr.Error())
+		}
 		normalizedRows = append(normalizedRows, normalizedRow)
+		previewPayloads = append(previewPayloads, payload)
+		compositeKeys = append(compositeKeys, key)
+		memberKeys = append(memberKeys, model.NewDonationImportMemberKey(normalizedRow.DonorName, normalizedRow.DonorCohort, normalizedRow.DonorPhone))
 	}
 
 	result := &model.DonationImportCommitResult{Rows: make([]model.DonationImportCommitRowResult, 0, len(rows))}
 	err = s.repo.RunInTransaction(func(tx *sqlx.Tx) error {
-		for _, row := range normalizedRows {
+		existingKeys, lookupErr := s.repo.FindExistingCompositeKeysTx(tx, compositeKeys)
+		if lookupErr != nil {
+			return internalCommitFailure(0, "중복 확인 중 오류가 발생했습니다.", lookupErr)
+		}
+		candidatesByKey, matchErr := s.repo.FindMemberCandidatesByKeysTx(tx, memberKeys)
+		if matchErr != nil {
+			return internalCommitFailure(0, "회원 재확인 중 오류가 발생했습니다.", matchErr)
+		}
+
+		orders := make([]model.ImportedDonationOrder, 0, len(normalizedRows))
+		for index, row := range normalizedRows {
 			importedRow := model.ImportedDonationRow{ExcelDonationRow: row.ExcelDonationRow, DonationDate: normalizedDate}
-			key, _ := importedDonationCompositeKey(importedRow)
-			duplicate, lookupErr := s.repo.ExtRefExistsTx(tx, "", key)
-			if lookupErr != nil {
-				return internalCommitFailure(row.RowIndex, "중복 확인 중 오류가 발생했습니다.", lookupErr)
-			}
-			if duplicate {
+			if existingKeys[compositeKeys[index]] {
 				return newCommitError(row.RowIndex, "compositeKey", "ALREADY_IMPORTED", "이미 반영된 기부 거래입니다.")
 			}
-
-			candidates, matchErr := s.repo.FindMemberCandidatesByNameCohortPhoneTx(tx, row.DonorName, row.DonorCohort, row.DonorPhone)
-			if matchErr != nil {
-				return internalCommitFailure(row.RowIndex, "회원 재확인 중 오류가 발생했습니다.", matchErr)
-			}
-			serverCanAutoMatch := len(candidates) == 1
-			clientConfirmedAutoMatch := serverCanAutoMatch && row.AccountUsrSeq != nil && candidates[0].USRSeq == *row.AccountUsrSeq
-			if serverCanAutoMatch && !clientConfirmedAutoMatch {
+			candidates := candidatesByKey[memberKeys[index]]
+			if !donationImportMatchStillValid(previewPayloads[index], candidates, row.AccountUsrSeq) {
 				return newCommitError(row.RowIndex, "accountUsrSeq", "MEMBER_MATCH_CHANGED", "미리보기 이후 회원 매칭 정보가 변경되었습니다. 다시 미리보기해 주세요.")
 			}
+			orders = append(orders, model.ImportedDonationOrder{ImportedDonationRow: importedRow, AccountUsrSeq: row.AccountUsrSeq})
+		}
 
-			orderSeq, createErr := s.orderCreator.CreateImportedOrderTx(tx, importedRow, row.AccountUsrSeq, adminUsrSeq, ip)
-			if createErr != nil {
-				if errors.Is(createErr, repository.ErrDonationOrderConflict) {
-					return newCommitError(row.RowIndex, "compositeKey", "ALREADY_IMPORTED", "이미 반영된 기부 거래입니다.")
-				}
-				if errors.Is(createErr, repository.ErrDonationAccountNotFound) {
-					return newCommitError(row.RowIndex, "accountUsrSeq", "ACCOUNT_NOT_FOUND", "연결할 활성 회원을 찾을 수 없습니다.")
-				}
-				return internalCommitFailure(row.RowIndex, "저장 중 오류가 발생했습니다.", createErr)
+		orderSeqs, createErr := s.orderCreator.CreateImportedOrdersTx(tx, orders, adminUsrSeq, ip)
+		if createErr != nil {
+			if errors.Is(createErr, repository.ErrDonationOrderConflict) {
+				return newCommitError(0, "compositeKey", "ALREADY_IMPORTED", "이미 반영된 기부 거래입니다.")
 			}
-			result.Rows = append(result.Rows, model.DonationImportCommitRowResult{RowIndex: row.RowIndex, Success: true, OrderSeq: int64Pointer(orderSeq)})
+			if errors.Is(createErr, repository.ErrDonationAccountNotFound) {
+				return newCommitError(0, "accountUsrSeq", "ACCOUNT_NOT_FOUND", "연결할 활성 회원을 찾을 수 없습니다.")
+			}
+			return internalCommitFailure(0, "저장 중 오류가 발생했습니다.", createErr)
+		}
+		if len(orderSeqs) != len(normalizedRows) {
+			return internalCommitFailure(0, "저장 결과를 확인하지 못했습니다.", errors.New("unexpected imported order sequence count"))
+		}
+		for index, row := range normalizedRows {
+			result.Rows = append(result.Rows, model.DonationImportCommitRowResult{RowIndex: row.RowIndex, Success: true, OrderSeq: int64Pointer(orderSeqs[index])})
 		}
 		return nil
 	})
@@ -236,6 +271,114 @@ func internalCommitFailure(rowIndex int, message string, cause error) error {
 }
 func newCommitError(rowIndex int, field, code, message string) *DonationImportCommitError {
 	return &DonationImportCommitError{RowError: model.DonationImportRowError{RowIndex: rowIndex, Field: field, Code: code, Message: message}}
+}
+
+type donationImportPreviewTokenPayload struct {
+	ExpiresAt       int64                         `json:"exp"`
+	RowIndex        int                           `json:"rowIndex"`
+	DonorName       string                        `json:"donorName"`
+	DonorCohort     string                        `json:"donorCohort"`
+	DonorDepartment string                        `json:"donorDepartment"`
+	DonorPhone      string                        `json:"donorPhone"`
+	Amount          int64                         `json:"amount"`
+	DonationDate    string                        `json:"donationDate"`
+	Status          model.DonationImportRowStatus `json:"status"`
+	MatchedUsrSeq   *int                          `json:"matchedUsrSeq"`
+}
+
+func (s *DonationImportService) signDonationImportPreviewRow(row model.DonationImportPreviewRow) (string, error) {
+	payload := donationImportPreviewTokenPayload{
+		ExpiresAt:       s.now().Add(donationImportPreviewTokenTTL).Unix(),
+		RowIndex:        row.RowIndex,
+		DonorName:       row.DonorName,
+		DonorCohort:     row.DonorCohort,
+		DonorDepartment: row.DonorDepartment,
+		DonorPhone:      row.DonorPhone,
+		Amount:          row.Amount,
+		DonationDate:    row.DonationDate,
+		Status:          row.Status,
+		MatchedUsrSeq:   row.MatchedUsrSeq,
+	}
+	return s.signDonationImportPreviewPayload(payload)
+}
+
+func (s *DonationImportService) signDonationImportPreviewPayload(payload donationImportPreviewTokenPayload) (string, error) {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	encodedPayload := base64.RawURLEncoding.EncodeToString(payloadJSON)
+	mac := hmac.New(sha256.New, s.signingKey)
+	_, _ = mac.Write([]byte(encodedPayload))
+	return encodedPayload + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
+
+func (s *DonationImportService) verifyDonationImportPreviewToken(row model.DonationImportCommitRow, donationDate string) (donationImportPreviewTokenPayload, error) {
+	parts := strings.Split(row.PreviewToken, ".")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return donationImportPreviewTokenPayload{}, errors.New("미리보기 토큰이 없거나 올바르지 않습니다. 다시 미리보기해 주세요.")
+	}
+	providedSignature, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return donationImportPreviewTokenPayload{}, errors.New("미리보기 토큰이 올바르지 않습니다. 다시 미리보기해 주세요.")
+	}
+	mac := hmac.New(sha256.New, s.signingKey)
+	_, _ = mac.Write([]byte(parts[0]))
+	if !hmac.Equal(providedSignature, mac.Sum(nil)) {
+		return donationImportPreviewTokenPayload{}, errors.New("미리보기 토큰이 올바르지 않습니다. 다시 미리보기해 주세요.")
+	}
+	payloadJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return donationImportPreviewTokenPayload{}, errors.New("미리보기 토큰이 올바르지 않습니다. 다시 미리보기해 주세요.")
+	}
+	var payload donationImportPreviewTokenPayload
+	if err := json.Unmarshal(payloadJSON, &payload); err != nil {
+		return donationImportPreviewTokenPayload{}, errors.New("미리보기 토큰이 올바르지 않습니다. 다시 미리보기해 주세요.")
+	}
+	if payload.ExpiresAt <= s.now().Unix() {
+		return donationImportPreviewTokenPayload{}, errors.New("미리보기 토큰이 만료되었습니다. 다시 미리보기해 주세요.")
+	}
+	expectedPayload := payload
+	expectedPayload.RowIndex = row.RowIndex
+	expectedPayload.DonorName = row.DonorName
+	expectedPayload.DonorCohort = row.DonorCohort
+	expectedPayload.DonorDepartment = row.DonorDepartment
+	expectedPayload.DonorPhone = row.DonorPhone
+	expectedPayload.Amount = row.Amount
+	expectedPayload.DonationDate = donationDate
+	expectedToken, err := s.signDonationImportPreviewPayload(expectedPayload)
+	if err != nil || !hmac.Equal([]byte(expectedToken), []byte(row.PreviewToken)) {
+		return donationImportPreviewTokenPayload{}, errors.New("미리보기 이후 행 데이터가 변경되었습니다. 다시 미리보기해 주세요.")
+	}
+	return payload, nil
+}
+
+func donationImportMatchStillValid(payload donationImportPreviewTokenPayload, candidates []model.MemberCandidate, accountUsrSeq *int) bool {
+	switch payload.Status {
+	case model.DonationImportRowMatched:
+		return len(candidates) == 1 && payload.MatchedUsrSeq != nil && accountUsrSeq != nil &&
+			candidates[0].USRSeq == *payload.MatchedUsrSeq && *accountUsrSeq == *payload.MatchedUsrSeq
+	case model.DonationImportRowAmbiguous:
+		return len(candidates) > 1 && payload.MatchedUsrSeq == nil
+	case model.DonationImportRowUnmatched:
+		return len(candidates) == 0 && payload.MatchedUsrSeq == nil
+	default:
+		return false
+	}
+}
+
+func donationImportLookupInputs(rows []model.ExcelDonationRow, donationDate string) ([]model.DonationImportMemberKey, []string, error) {
+	memberKeys := make([]model.DonationImportMemberKey, 0, len(rows))
+	compositeKeys := make([]string, 0, len(rows))
+	for _, row := range rows {
+		memberKeys = append(memberKeys, model.NewDonationImportMemberKey(row.DonorName, row.DonorCohort, row.DonorPhone))
+		key, err := importedDonationCompositeKey(model.ImportedDonationRow{ExcelDonationRow: row, DonationDate: donationDate})
+		if err != nil {
+			return nil, nil, err
+		}
+		compositeKeys = append(compositeKeys, key)
+	}
+	return memberKeys, compositeKeys, nil
 }
 
 func parseExcelDonationRows(reader io.Reader, donationDate string) ([]model.ExcelDonationRow, []model.DonationImportRowError, error) {

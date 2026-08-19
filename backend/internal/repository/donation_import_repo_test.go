@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/jmoiron/sqlx"
 )
@@ -28,6 +29,57 @@ func TestFindMemberCandidatesByNameCohortPhoneReturnsEveryActiveExactMatch(t *te
 	}
 	if len(candidates) != 2 || candidates[0].USRSeq != 11 || candidates[1].USRSeq != 19 {
 		t.Fatalf("candidates = %+v, want both matches", candidates)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFindMemberCandidatesByKeysUsesSingleBatchQuery(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewDonationImportRepository(sqlx.NewDb(db, "sqlmock"))
+	keys := []model.DonationImportMemberKey{
+		model.NewDonationImportMemberKey("김동문", "11", "010-1111-1111"),
+		model.NewDonationImportMemberKey("이동문", "12", "010-2222-2222"),
+	}
+
+	mock.ExpectQuery(`SELECT USR_SEQ, USR_NAME, USR_FN,[\s\S]*\(USR_NAME = \?[\s\S]* OR \(USR_NAME = \?`).
+		WithArgs("김동문", "11", "01011111111", "01011111111", "이동문", "12", "01022222222", "01022222222").
+		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ", "USR_NAME", "USR_FN", "CANONICAL_PHONE"}).
+			AddRow(11, "김동문", "11", "01011111111").
+			AddRow(12, "이동문", "12", "01022222222"))
+
+	result, err := repo.FindMemberCandidatesByKeys(keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result[keys[0]]) != 1 || result[keys[0]][0].USRSeq != 11 || len(result[keys[1]]) != 1 || result[keys[1]][0].USRSeq != 12 {
+		t.Fatalf("batch candidates = %+v", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFindExistingCompositeKeysUsesSingleBatchQuery(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewDonationImportRepository(sqlx.NewDb(db, "sqlmock"))
+
+	mock.ExpectQuery(`SELECT O_COMPOSITE_KEY FROM WEO_ORDER WHERE O_COMPOSITE_KEY IN \(\?,\?\)`).
+		WithArgs("key-1", "key-2").
+		WillReturnRows(sqlmock.NewRows([]string{"O_COMPOSITE_KEY"}).AddRow("key-2"))
+
+	result, err := repo.FindExistingCompositeKeys([]string{"key-1", "key-2"})
+	if err != nil || result["key-1"] || !result["key-2"] {
+		t.Fatalf("FindExistingCompositeKeys() = %+v, %v", result, err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

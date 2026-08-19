@@ -1,5 +1,7 @@
 package model
 
+import "strings"
+
 type ExcelDonationRow struct {
 	RowIndex        int    `json:"rowIndex"`
 	DonorName       string `json:"donorName"`
@@ -23,6 +25,20 @@ type MemberCandidate struct {
 	Name   string `db:"USR_NAME" json:"name"`
 }
 
+type DonationImportMemberKey struct {
+	Name   string
+	Cohort string
+	Phone  string
+}
+
+func NewDonationImportMemberKey(name, cohort, phone string) DonationImportMemberKey {
+	return DonationImportMemberKey{
+		Name:   strings.TrimSpace(name),
+		Cohort: strings.TrimSpace(cohort),
+		Phone:  NormalizePhoneNumber(phone).String(),
+	}
+}
+
 type DonationImportPreviewRow struct {
 	ExcelDonationRow
 	DonationDate  string                  `json:"donationDate"`
@@ -30,6 +46,7 @@ type DonationImportPreviewRow struct {
 	MatchedUsrSeq *int                    `json:"matchedUsrSeq"`
 	MatchedName   string                  `json:"matchedName"`
 	Note          string                  `json:"note"`
+	PreviewToken  string                  `json:"previewToken"`
 }
 
 type DonationImportPreviewResult struct {
@@ -42,8 +59,8 @@ type DonationImportPreviewResult struct {
 
 type DonationImportCommitRow struct {
 	ExcelDonationRow
-	AccountUsrSeq  *int `json:"accountUsrSeq"`
-	ManualOverride bool `json:"manualOverride"` // Deprecated: accepted for compatibility and ignored by the server.
+	AccountUsrSeq *int   `json:"accountUsrSeq"`
+	PreviewToken  string `json:"previewToken"`
 }
 
 type DonationImportCommitRequest struct {
@@ -56,6 +73,11 @@ type DonationImportCommitRequest struct {
 type ImportedDonationRow struct {
 	ExcelDonationRow
 	DonationDate string
+}
+
+type ImportedDonationOrder struct {
+	ImportedDonationRow
+	AccountUsrSeq *int
 }
 
 type DonationImportCommitRowResult struct {

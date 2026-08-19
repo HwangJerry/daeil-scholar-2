@@ -137,7 +137,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	disclosureSvc := service.NewDisclosureService(disclosureRepo)
 	adminAdSvc := service.NewAdminAdService(adminAdRepo)
 	adminDonationSvc := service.NewAdminDonationService(adminDonationRepo, donationRepo)
-	donationImportSvc := service.NewDonationImportService(donationImportRepo, adminDonationSvc, donationService)
+	donationImportSvc := service.NewDonationImportService(donationImportRepo, adminDonationSvc, cfg.JWT.Secret, donationService)
 	donationJob := job.NewDonationSnapshotJob(donationRepo, logger)
 	adminDonationOrchestrator := service.NewDonationConfigOrchestrator(adminDonationSvc, donationService, donationJob)
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)

@@ -292,3 +292,18 @@ func (s *AdminDonationService) CreateImportedOrderTx(tx *sqlx.Tx, row model.Impo
 	}
 	return s.repo.CreateDonationOrderTx(tx, normalized, operSeq, ip)
 }
+
+func (s *AdminDonationService) CreateImportedOrdersTx(tx *sqlx.Tx, orders []model.ImportedDonationOrder, operSeq int, ip string) ([]int64, error) {
+	normalizedOrders := make([]model.NormalizedDonationOrder, 0, len(orders))
+	for _, order := range orders {
+		normalized, err := normalizeImportedDonationOrder(order.ImportedDonationRow, order.AccountUsrSeq)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateDonationAccountInput(normalized.AccountUsrSeq); err != nil {
+			return nil, err
+		}
+		normalizedOrders = append(normalizedOrders, normalized)
+	}
+	return s.repo.CreateDonationOrdersTx(tx, normalizedOrders, operSeq, ip)
+}
