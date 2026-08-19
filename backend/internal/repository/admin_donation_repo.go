@@ -53,6 +53,19 @@ func (r *AdminDonationRepository) CreateDonationOrder(order model.NormalizedDona
 		return 0, err
 	}
 	defer tx.Rollback()
+	seq, err := r.CreateDonationOrderTx(tx, order, operSeq, ip)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return seq, nil
+}
+
+// CreateDonationOrderTx persists a canonical donation using the caller's
+// transaction. Batch import uses this to keep every approved row atomic.
+func (r *AdminDonationRepository) CreateDonationOrderTx(tx *sqlx.Tx, order model.NormalizedDonationOrder, operSeq int, ip string) (int64, error) {
 	if err := lockActiveDonationAccount(tx, order.AccountUsrSeq); err != nil {
 		return 0, err
 	}
@@ -85,9 +98,6 @@ func (r *AdminDonationRepository) CreateDonationOrder(order model.NormalizedDona
 	}
 	seq, err := result.LastInsertId()
 	if err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 	return seq, nil

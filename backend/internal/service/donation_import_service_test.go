@@ -20,12 +20,15 @@ func TestParseExcelDonationRowsUsesLegacyPositionsFromThirdRow(t *testing.T) {
 		{"무시", " 김동문 ", " 12 ", " 총무부 ", "010-1234-5678", "100,000"},
 	})
 
-	rows, err := parseExcelDonationRows(workbook)
+	rows, validationErrors, err := parseExcelDonationRows(workbook, "2026-08-19")
 	if err != nil {
 		t.Fatalf("parseExcelDonationRows() error = %v", err)
 	}
 	if len(rows) != 1 {
 		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if len(validationErrors) != 0 {
+		t.Fatalf("validationErrors = %+v", validationErrors)
 	}
 	row := rows[0]
 	if row.RowIndex != 3 || row.DonorName != "김동문" || row.DonorCohort != "12" || row.DonorDepartment != "총무부" || row.DonorPhone != "01012345678" || row.Amount != 100000 {
@@ -33,7 +36,7 @@ func TestParseExcelDonationRowsUsesLegacyPositionsFromThirdRow(t *testing.T) {
 	}
 }
 
-func TestParseExcelDonationRowsSkipsRowsWithoutNameOrPhone(t *testing.T) {
+func TestParseExcelDonationRowsRejectsRowsWithMissingRequiredFields(t *testing.T) {
 	workbook := excelWorkbook(t, [][]interface{}{
 		{"제목"},
 		{"헤더"},
@@ -41,9 +44,15 @@ func TestParseExcelDonationRowsSkipsRowsWithoutNameOrPhone(t *testing.T) {
 		{"", "이름", "1", "부서", "", "10000"},
 	})
 
-	rows, err := parseExcelDonationRows(workbook)
-	if err != nil || len(rows) != 0 {
-		t.Fatalf("parseExcelDonationRows() = %+v, %v; want empty rows", rows, err)
+	rows, validationErrors, err := parseExcelDonationRows(workbook, "2026-08-19")
+	if err != nil || len(rows) != 0 || len(validationErrors) != 2 {
+		t.Fatalf("parseExcelDonationRows() = %+v, %+v, %v; want two row errors", rows, validationErrors, err)
+	}
+	if validationErrors[0].RowIndex != 3 || validationErrors[0].Field != "donorName" || validationErrors[0].Code != "REQUIRED" {
+		t.Fatalf("first validation error = %+v", validationErrors[0])
+	}
+	if validationErrors[1].RowIndex != 4 || validationErrors[1].Field != "donorPhone" || validationErrors[1].Code != "REQUIRED" {
+		t.Fatalf("second validation error = %+v", validationErrors[1])
 	}
 }
 
@@ -69,7 +78,11 @@ func TestDonationImportPreviewClassifiesEveryStatus(t *testing.T) {
 		ExcelDonationRow: model.ExcelDonationRow{RowIndex: 6, DonorName: "중복", DonorCohort: "14", DonorDepartment: "D", DonorPhone: "01044444444", Amount: 40000},
 		DonationDate:     "2026-08-19",
 	}
-	repo.duplicates[donationImportIdentity(duplicateRow)] = true
+	duplicateKey, err := importedDonationCompositeKey(duplicateRow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.duplicates[duplicateKey] = true
 
 	result, err := service.ParsePreview(workbook, "2026-08-19")
 	if err != nil {
@@ -100,50 +113,74 @@ func TestDonationImportPreviewClassifiesEveryStatus(t *testing.T) {
 	}
 }
 
-func TestDonationImportCommitRechecksDuplicatesAndRecordsPerRowResults(t *testing.T) {
-	repo := &donationImportRepositoryStub{duplicates: map[string]bool{}}
-	creator := &donationImportOrderCreatorStub{
-		sequences: map[string]int64{"성공": 7001},
-		errors: map[string]error{
-			"경합": repository.ErrDonationOrderConflict,
-			"실패": errors.New("insert failed"),
-		},
+func TestDonationImportPreviewRejectsDuplicateCompositeKeyInFile(t *testing.T) {
+	service := NewDonationImportService(&donationImportRepositoryStub{}, &donationImportOrderCreatorStub{})
+	workbook := excelWorkbook(t, [][]interface{}{
+		{"제목"},
+		{"", "이름", "기수", "학과", "전화", "금액"},
+		{"", "중복", "11", "A", "010-1111-1111", "10000"},
+		{"", "중복", "11", "A", "01011111111", "10000"},
+	})
+
+	result, err := service.ParsePreview(workbook, "2026-08-19")
+	if result != nil || err == nil {
+		t.Fatalf("ParsePreview() = %+v, %v; want file rejection", result, err)
 	}
+	var validationError *DonationImportFileValidationError
+	if !errors.As(err, &validationError) || len(validationError.Errors) != 1 {
+		t.Fatalf("validation error = %#v", err)
+	}
+	rowError := validationError.Errors[0]
+	if rowError.RowIndex != 4 || rowError.Field != "compositeKey" || rowError.Code != "DUPLICATE_IN_FILE" {
+		t.Fatalf("row error = %+v", rowError)
+	}
+}
+
+func TestDonationImportCommitRollsBackWholeBatchOnFailure(t *testing.T) {
+	repo := &donationImportRepositoryStub{duplicates: map[string]bool{}}
+	creator := &donationImportOrderCreatorStub{sequences: map[string]int64{"성공": 7001}, errors: map[string]error{"실패": errors.New("insert failed")}}
 	service := NewDonationImportService(repo, creator)
 	accountUsrSeq := 42
-	rows := []model.DonationImportCommitRow{
-		commitRow(2, "중복", 10000, &accountUsrSeq),
-		commitRow(3, "성공", 20000, &accountUsrSeq),
-		commitRow(4, "경합", 30000, nil),
-		commitRow(5, "실패", 40000, nil),
-		commitRow(6, "잘못", 0, nil),
-	}
-	repo.duplicates[donationImportIdentity(model.ImportedDonationRow{ExcelDonationRow: rows[0].ExcelDonationRow, DonationDate: "2026-08-19"})] = true
-
+	rows := []model.DonationImportCommitRow{commitRow(3, "성공", 20000, &accountUsrSeq), commitRow(4, "실패", 30000, nil)}
+	rows[0].ManualOverride = true
+	rows[1].ManualOverride = true
 	result, err := service.Commit(rows, "2026-08-19", 9, "192.0.2.10")
-	if err != nil {
-		t.Fatalf("Commit() error = %v", err)
+	if result != nil || err == nil {
+		t.Fatalf("Commit() = %+v, %v; want atomic failure", result, err)
 	}
-	if len(result.Rows) != 5 {
-		t.Fatalf("result rows = %d, want 5", len(result.Rows))
+	var commitError *DonationImportCommitError
+	if !errors.As(err, &commitError) || commitError.RowError.RowIndex != 4 || commitError.RowError.Message != "저장 중 오류가 발생했습니다." {
+		t.Fatalf("commit error = %#v", err)
 	}
-	if result.Rows[0].Success || result.Rows[0].ErrorMessage != "이미 반영된 기부 거래입니다." {
-		t.Fatalf("duplicate result = %+v", result.Rows[0])
+	if !repo.rolledBack || creator.calls != 2 {
+		t.Fatalf("rolledBack = %v, creator calls = %d", repo.rolledBack, creator.calls)
 	}
-	if !result.Rows[1].Success || result.Rows[1].OrderSeq == nil || *result.Rows[1].OrderSeq != 7001 {
-		t.Fatalf("success result = %+v", result.Rows[1])
+}
+
+func TestDonationImportCommitRevalidatesAutomaticMatchAndInvalidatesCacheAfterSuccess(t *testing.T) {
+	accountUsrSeq := 42
+	repo := &donationImportRepositoryStub{candidates: map[string][]model.MemberCandidate{
+		"변경|3": {{USRSeq: 99, Name: "변경"}},
+	}}
+	creator := &donationImportOrderCreatorStub{sequences: map[string]int64{"변경": 7001}}
+	cache := &donationCacheInvalidatorStub{}
+	service := NewDonationImportService(repo, creator, cache)
+	row := commitRow(3, "변경", 20000, &accountUsrSeq)
+
+	result, err := service.Commit([]model.DonationImportCommitRow{row}, "2026-08-19", 9, "192.0.2.10")
+	if result != nil || err == nil || !repo.rolledBack || creator.calls != 0 || cache.calls != 0 {
+		t.Fatalf("changed match result=%+v err=%v rollback=%v creates=%d cache=%d", result, err, repo.rolledBack, creator.calls, cache.calls)
 	}
-	if result.Rows[2].Success || result.Rows[2].ErrorMessage != "이미 반영된 기부 거래입니다." {
-		t.Fatalf("race result = %+v", result.Rows[2])
+	var commitError *DonationImportCommitError
+	if !errors.As(err, &commitError) || commitError.RowError.Code != "MEMBER_MATCH_CHANGED" {
+		t.Fatalf("commit error = %#v", err)
 	}
-	if result.Rows[3].Success || result.Rows[3].ErrorMessage != "insert failed" {
-		t.Fatalf("failure result = %+v", result.Rows[3])
-	}
-	if result.Rows[4].Success || result.Rows[4].ErrorMessage != "입금액은 0보다 커야 합니다" {
-		t.Fatalf("validation result = %+v", result.Rows[4])
-	}
-	if creator.calls != 3 {
-		t.Fatalf("creator calls = %d, want 3 (duplicate and invalid skipped)", creator.calls)
+
+	repo.rolledBack = false
+	row.ManualOverride = true
+	result, err = service.Commit([]model.DonationImportCommitRow{row}, "2026-08-19", 9, "192.0.2.10")
+	if err != nil || result == nil || len(result.Rows) != 1 || repo.rolledBack || creator.calls != 1 || cache.calls != 1 {
+		t.Fatalf("manual result=%+v err=%v rollback=%v creates=%d cache=%d", result, err, repo.rolledBack, creator.calls, cache.calls)
 	}
 }
 
@@ -162,7 +199,7 @@ func TestCreateImportedOrderUsesCanonicalDonationWriter(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ"}).AddRow(accountUsrSeq))
 	mock.ExpectExec(`INSERT INTO WEO_ORDER \([\s\S]*O_ACCOUNT_USR_SEQ[\s\S]*O_SOURCE`).
 		WithArgs(
-			accountUsrSeq, accountUsrSeq, "happy_nanum", nil, "", "2026-08-19",
+			accountUsrSeq, accountUsrSeq, "happy_nanum", nil, "cccac1e1b1a20ff31aad795d61129d78adbc2635cc663a01543f1f373e54edde", "2026-08-19",
 			"김동문", "01012345678", "11", "총무부", "S",
 			int64(100000), int64(0), int64(100000), "completed", "other", nil,
 			int64(100000), int64(100000), "FREE", "Y", "Y", 9, "192.0.2.10", 9, "192.0.2.10",
@@ -170,12 +207,19 @@ func TestCreateImportedOrderUsesCanonicalDonationWriter(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(7001, 1))
 	mock.ExpectCommit()
 
-	seq, err := adminService.CreateImportedOrder(model.ImportedDonationRow{
+	tx, err := adminService.repo.DB.Beginx()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seq, err := adminService.CreateImportedOrderTx(tx, model.ImportedDonationRow{
 		ExcelDonationRow: model.ExcelDonationRow{RowIndex: 2, DonorName: "김동문", DonorCohort: "11", DonorDepartment: "총무부", DonorPhone: "01012345678", Amount: 100000},
 		DonationDate:     "2026-08-19",
-	}, &accountUsrSeq, "", 9, "192.0.2.10")
+	}, &accountUsrSeq, 9, "192.0.2.10")
 	if err != nil || seq != 7001 {
 		t.Fatalf("CreateImportedOrder() = %d, %v", seq, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
@@ -185,6 +229,7 @@ func TestCreateImportedOrderUsesCanonicalDonationWriter(t *testing.T) {
 type donationImportRepositoryStub struct {
 	candidates map[string][]model.MemberCandidate
 	duplicates map[string]bool
+	rolledBack bool
 }
 
 func (s *donationImportRepositoryStub) FindMemberCandidatesByNameCohortPhone(name, cohort, _ string) ([]model.MemberCandidate, error) {
@@ -195,13 +240,33 @@ func (s *donationImportRepositoryStub) ExtRefExists(transactionNo, compositeKey 
 	return s.duplicates[transactionNo] || s.duplicates[compositeKey], nil
 }
 
+func (s *donationImportRepositoryStub) FindMemberCandidatesByNameCohortPhoneTx(_ *sqlx.Tx, name, cohort, phone string) ([]model.MemberCandidate, error) {
+	return s.FindMemberCandidatesByNameCohortPhone(name, cohort, phone)
+}
+
+func (s *donationImportRepositoryStub) ExtRefExistsTx(_ *sqlx.Tx, transactionNo, compositeKey string) (bool, error) {
+	return s.ExtRefExists(transactionNo, compositeKey)
+}
+
+func (s *donationImportRepositoryStub) RunInTransaction(operation func(*sqlx.Tx) error) error {
+	err := operation(nil)
+	if err != nil {
+		s.rolledBack = true
+	}
+	return err
+}
+
 type donationImportOrderCreatorStub struct {
 	sequences map[string]int64
 	errors    map[string]error
 	calls     int
 }
 
-func (s *donationImportOrderCreatorStub) CreateImportedOrder(row model.ImportedDonationRow, _ *int, _ string, _ int, _ string) (int64, error) {
+type donationCacheInvalidatorStub struct{ calls int }
+
+func (s *donationCacheInvalidatorStub) InvalidateCache() { s.calls++ }
+
+func (s *donationImportOrderCreatorStub) CreateImportedOrderTx(_ *sqlx.Tx, row model.ImportedDonationRow, _ *int, _ int, _ string) (int64, error) {
 	s.calls++
 	if err := s.errors[row.DonorName]; err != nil {
 		return 0, err
@@ -235,7 +300,7 @@ func excelWorkbook(t *testing.T, rows [][]interface{}) *bytes.Reader {
 func commitRow(rowIndex int, donorName string, amount int64, accountUsrSeq *int) model.DonationImportCommitRow {
 	return model.DonationImportCommitRow{
 		ExcelDonationRow: model.ExcelDonationRow{
-			RowIndex: rowIndex, DonorName: donorName, DonorCohort: fmt.Sprintf("%d", rowIndex), DonorPhone: "010-1234-5678", Amount: amount,
+			RowIndex: rowIndex, DonorName: donorName, DonorCohort: fmt.Sprintf("%d", rowIndex), DonorDepartment: "학과", DonorPhone: "010-1234-5678", Amount: amount,
 		},
 		AccountUsrSeq: accountUsrSeq,
 	}

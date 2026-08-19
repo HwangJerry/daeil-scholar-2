@@ -42,7 +42,8 @@ type DonationImportPreviewResult struct {
 
 type DonationImportCommitRow struct {
 	ExcelDonationRow
-	AccountUsrSeq *int `json:"accountUsrSeq"`
+	AccountUsrSeq  *int `json:"accountUsrSeq"`
+	ManualOverride bool `json:"manualOverride"`
 }
 
 type DonationImportCommitRequest struct {
@@ -66,4 +67,17 @@ type DonationImportCommitRowResult struct {
 
 type DonationImportCommitResult struct {
 	Rows []DonationImportCommitRowResult `json:"rows"`
+}
+
+type DonationImportRowError struct {
+	RowIndex int    `json:"rowIndex"`
+	Field    string `json:"field"`
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+}
+
+type DonationImportErrorResponse struct {
+	Code    string                   `json:"code"`
+	Message string                   `json:"message"`
+	Errors  []DonationImportRowError `json:"errors"`
 }
