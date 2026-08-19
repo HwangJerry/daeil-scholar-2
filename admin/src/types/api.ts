@@ -280,13 +280,18 @@ export interface ActiveUsersResponse {
 }
 
 export interface DonationSummary {
-  totalAmount: number;
-  manualAdj: number;
   displayAmount: number;
-  donorCount: number;
   goalAmount: number;
+  donorCount: number;
   achievementRate: number;
   snapshotDate: string;
+  tierThresholds: {
+    sprout: number;
+    sapling: number;
+    tree: number;
+    blooming: number;
+    fruiting: number;
+  };
 }
 
 export interface DashboardAdStats {
