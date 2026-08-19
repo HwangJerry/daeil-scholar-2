@@ -1,7 +1,7 @@
 // DonationOrderForm — shared create/edit dialog for one canonical donation order
 import * as Dialog from '@radix-ui/react-dialog';
 import { Loader2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ApiClientError } from '../../api/client.ts';
 import {
   useCreateDonationOrder,
@@ -51,7 +51,12 @@ function getRequestErrorMessage(error: unknown) {
   return '네트워크 상태를 확인하고 다시 시도해 주세요.';
 }
 
-export function DonationOrderForm({ open, order, onOpenChange }: DonationOrderFormProps) {
+export function DonationOrderForm(props: DonationOrderFormProps) {
+  if (!props.open) return null;
+  return <DonationOrderFormDialog {...props} />;
+}
+
+function DonationOrderFormDialog({ open, order, onOpenChange }: DonationOrderFormProps) {
   const createMutation = useCreateDonationOrder();
   const updateMutation = useUpdateDonationOrder();
   const [values, setValues] = useState(() => createDonationOrderFormValues(order));
@@ -59,13 +64,6 @@ export function DonationOrderForm({ open, order, onOpenChange }: DonationOrderFo
   const [requestError, setRequestError] = useState('');
   const isEditing = order !== undefined;
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
-
-  useEffect(() => {
-    if (!open) return;
-    setValues(createDonationOrderFormValues(order));
-    setErrors({});
-    setRequestError('');
-  }, [open, order]);
 
   const setValue = <Key extends keyof DonationOrderFormValues>(
     name: Key,
