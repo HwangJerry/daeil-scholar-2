@@ -206,6 +206,7 @@ func TestUpdateDonationOrderChangesLinkedAccountWhenProvided(t *testing.T) {
 			Source: "other", AccountUsrSeq: &accountUsrSeq, AccountUsrSeqSet: true, DonationDate: "2026-07-29",
 			Donor:        model.DonationDonor{Name: "기부자", Cohort: "19", Department: "중국어", Phone: "01011112222"},
 			DonationType: "sponsorship", GrossAmount: 50000, Status: "completed", PaymentMethod: "admin",
+			LastEditedAt: "2026-08-20T12:00:00Z",
 		},
 		NetReceivedAmount: 50000, CompositeKey: "replacement-key", LegacyGate: "F", LegacyStatus: "Y", LegacyPayment: "Y",
 	}
@@ -216,7 +217,7 @@ func TestUpdateDonationOrderChangesLinkedAccountWhenProvided(t *testing.T) {
 			true, accountUsrSeq, true, accountUsrSeq, true, accountUsrSeq,
 			"other", nil, "replacement-key", "2026-07-29", "기부자", "01011112222", "19", "중국어", "F",
 			int64(50000), int64(0), int64(50000), "completed", "admin", nil,
-			int64(50000), int64(50000), "ADMS", "Y", "Y", 7, "192.0.2.1", int64(3001),
+			int64(50000), int64(50000), "ADMS", "Y", "Y", 7, "192.0.2.1", int64(3001), "2026-08-20T12:00:00Z",
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -241,6 +242,7 @@ func TestUpdateDonationOrderPreservesLinkedAccountWhenOmitted(t *testing.T) {
 			Source: "bank_transfer", DonationDate: "2026-07-28",
 			Donor:        model.DonationDonor{Name: "예시 동문", Cohort: "18", Department: "영어", Phone: "01000000000"},
 			DonationType: "one_time", GrossAmount: 100000, Status: "completed", PaymentMethod: "bank",
+			LastEditedAt: "2026-08-20T12:00:00Z",
 		},
 		NetReceivedAmount: 100000, CompositeKey: "composite", LegacyGate: "S", LegacyStatus: "Y", LegacyPayment: "Y",
 	}
@@ -250,7 +252,7 @@ func TestUpdateDonationOrderPreservesLinkedAccountWhenOmitted(t *testing.T) {
 			false, nil, false, nil, false, nil,
 			"bank_transfer", nil, "composite", "2026-07-28", "예시 동문", "01000000000", "18", "영어", "S",
 			int64(100000), int64(0), int64(100000), "completed", "bank", nil,
-			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001),
+			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001), "2026-08-20T12:00:00Z",
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -278,12 +280,16 @@ func TestUpdateDonationOrderReturnsNotFoundWhenNoDonationOrderMatches(t *testing
 			GrossAmount:   100000,
 			Status:        "completed",
 			PaymentMethod: "bank",
+			LastEditedAt:  "2026-08-20T12:00:00Z",
 		},
 		NetReceivedAmount: 100000, CompositeKey: "composite", LegacyGate: "S", LegacyStatus: "Y", LegacyPayment: "Y",
 	}
 	mock.ExpectBegin()
 	mock.ExpectExec(`(?s)UPDATE WEO_ORDER SET.*WHERE O_SEQ = \? AND O_TYPE = 'A'`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(`(?s)SELECT COALESCE.*FROM WEO_ORDER.*WHERE O_SEQ = \? AND O_TYPE = 'A'.*FOR UPDATE`).
+		WithArgs(int64(3001)).
+		WillReturnRows(sqlmock.NewRows([]string{"LAST_EDITED_AT"}))
 	mock.ExpectRollback()
 
 	err = repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1")
@@ -307,6 +313,7 @@ func TestUpdateDonationOrderClearsLinkedAccountWhenNullProvided(t *testing.T) {
 			Source: "bank_transfer", AccountUsrSeqSet: true, DonationDate: "2026-07-28",
 			Donor:        model.DonationDonor{Name: "예시 동문", Cohort: "18", Department: "영어", Phone: "01000000000"},
 			DonationType: "one_time", GrossAmount: 100000, Status: "completed", PaymentMethod: "bank",
+			LastEditedAt: "2026-08-20T12:00:00Z",
 		},
 		NetReceivedAmount: 100000, CompositeKey: "composite", LegacyGate: "S", LegacyStatus: "Y", LegacyPayment: "Y",
 	}
@@ -316,13 +323,47 @@ func TestUpdateDonationOrderClearsLinkedAccountWhenNullProvided(t *testing.T) {
 			true, nil, true, nil, true, nil,
 			"bank_transfer", nil, "composite", "2026-07-28", "예시 동문", "01000000000", "18", "영어", "S",
 			int64(100000), int64(0), int64(100000), "completed", "bank", nil,
-			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001),
+			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001), "2026-08-20T12:00:00Z",
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	if err := repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1"); err != nil {
 		t.Fatalf("UpdateDonationOrder() error = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateDonationOrderRejectsStaleLastEditedAt(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	order := model.NormalizedDonationOrder{
+		DonationOrderInput: model.DonationOrderInput{
+			Source: "bank_transfer", DonationDate: "2026-07-28",
+			Donor:        model.DonationDonor{Name: "예시 동문", Cohort: "18", Department: "영어", Phone: "01000000000"},
+			DonationType: "one_time", GrossAmount: 100000, Status: "completed", PaymentMethod: "bank",
+			LastEditedAt: "2026-08-20T12:00:00Z",
+		},
+		NetReceivedAmount: 100000, CompositeKey: "composite", LegacyGate: "S", LegacyStatus: "Y", LegacyPayment: "Y",
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`(?s)UPDATE WEO_ORDER SET.*COALESCE\(EDT_DATE, REG_DATE\) = STR_TO_DATE\(\?, '%Y-%m-%dT%H:%i:%sZ'\)`).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(`(?s)SELECT COALESCE.*FROM WEO_ORDER.*FOR UPDATE`).
+		WithArgs(int64(3001)).
+		WillReturnRows(sqlmock.NewRows([]string{"LAST_EDITED_AT"}).AddRow("2026-08-20T12:05:00Z"))
+	mock.ExpectRollback()
+
+	err = repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1")
+	if !errors.Is(err, repository.ErrDonationOrderStale) {
+		t.Fatalf("error = %v, want ErrDonationOrderStale", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

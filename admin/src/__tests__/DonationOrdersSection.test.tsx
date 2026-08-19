@@ -21,7 +21,7 @@ const ORDER_PAGE: DonationOrderPage = {
     paymentMethod: 'bank',
     memo: null,
     lastEditedBy: 1,
-    lastEditedAt: '2026-08-20 12:00:00',
+    lastEditedAt: '2026-08-20T12:00:00Z',
     lastEditedIp: '127.0.0.1',
   }],
   total: 1,

@@ -139,8 +139,9 @@ export function toDonationOrderInput(values: DonationOrderFormValues): DonationO
 export function toDonationOrderUpdateInput(
   values: DonationOrderFormValues,
   initialAccountUsrSeq: number | null,
+  lastEditedAt: string,
 ): DonationOrderUpdateInput {
-  const input = toDonationOrderInputWithoutAccount(values);
+  const input = { ...toDonationOrderInputWithoutAccount(values), lastEditedAt };
   const accountUsrSeq = parseAccountUsrSeq(values.accountUsrSeq);
   if (accountUsrSeq === initialAccountUsrSeq) return input;
   return { ...input, accountUsrSeq };

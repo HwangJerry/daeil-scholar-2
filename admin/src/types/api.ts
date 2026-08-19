@@ -345,6 +345,7 @@ export interface DonationOrderInput {
 
 export type DonationOrderUpdateInput = Omit<DonationOrderInput, 'accountUsrSeq'> & {
   accountUsrSeq?: number | null;
+  lastEditedAt: string;
 };
 
 export interface DonationOrder {

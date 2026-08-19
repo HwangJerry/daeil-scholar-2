@@ -50,6 +50,7 @@ type DonationOrderInput struct {
 	Status            string        `json:"status"`
 	PaymentMethod     string        `json:"paymentMethod"`
 	Memo              *string       `json:"memo"`
+	LastEditedAt      string        `json:"lastEditedAt,omitempty"`
 }
 
 type NormalizedDonationOrder struct {

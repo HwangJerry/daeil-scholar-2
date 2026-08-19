@@ -35,6 +35,7 @@ func NormalizeDonationOrderInput(input model.DonationOrderInput) (normalized mod
 	input.DonationType = strings.TrimSpace(input.DonationType)
 	input.Status = strings.TrimSpace(input.Status)
 	input.PaymentMethod = strings.TrimSpace(input.PaymentMethod)
+	input.LastEditedAt = strings.TrimSpace(input.LastEditedAt)
 
 	switch input.Source {
 	case "happy_nanum", "bank_transfer", "other":
@@ -88,6 +89,11 @@ func NormalizeDonationOrderInput(input model.DonationOrderInput) (normalized mod
 	}
 	if input.GrossAmount < 0 || input.RefundedAmount < 0 || input.RefundedAmount > input.GrossAmount {
 		return model.NormalizedDonationOrder{}, fmt.Errorf("invalid donation amounts")
+	}
+	if input.LastEditedAt != "" {
+		if parsed, err := time.Parse("2006-01-02T15:04:05Z", input.LastEditedAt); err != nil || parsed.Format("2006-01-02T15:04:05Z") != input.LastEditedAt {
+			return model.NormalizedDonationOrder{}, fmt.Errorf("invalid last edited timestamp")
+		}
 	}
 	switch input.Status {
 	case "partially_refunded":
@@ -270,6 +276,9 @@ func (s *AdminDonationService) CreateOrder(input model.DonationOrderInput, operS
 func (s *AdminDonationService) UpdateOrder(seq int64, input model.DonationOrderInput, operSeq int, ip string) (*model.DonationOrder, error) {
 	if seq <= 0 {
 		return nil, fmt.Errorf("%w: invalid donation order sequence", ErrInvalidDonationOrder)
+	}
+	if strings.TrimSpace(input.LastEditedAt) == "" {
+		return nil, fmt.Errorf("%w: last edited timestamp is required", ErrInvalidDonationOrder)
 	}
 	normalized, err := NormalizeDonationOrderInput(input)
 	if err != nil {

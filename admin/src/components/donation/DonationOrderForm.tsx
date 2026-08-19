@@ -48,6 +48,9 @@ function FormField({ htmlFor, label, error, required, children }: FormFieldProps
 }
 
 function getRequestErrorMessage(error: unknown) {
+  if (error instanceof ApiClientError && error.status === 409 && error.code === 'DONATION_ORDER_STALE') {
+    return '다른 관리자가 먼저 수정했습니다. 새로고침 후 다시 시도해주세요.';
+  }
   if (error instanceof ApiClientError) return error.message;
   return '네트워크 상태를 확인하고 다시 시도해 주세요.';
 }
@@ -91,7 +94,7 @@ function DonationOrderFormDialog({ open, order, onOpenChange }: DonationOrderFor
     };
 
     if (order) {
-      const input = toDonationOrderUpdateInput(values, order.accountUsrSeq);
+      const input = toDonationOrderUpdateInput(values, order.accountUsrSeq, order.lastEditedAt);
       updateMutation.mutate({ orderSeq: order.orderSeq, input }, mutationOptions);
       return;
     }

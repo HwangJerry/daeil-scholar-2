@@ -295,5 +295,6 @@ func validDonationOrderInput(accountUsrSeq *int, accountUsrSeqSet bool) model.Do
 		GrossAmount:      100000,
 		Status:           "completed",
 		PaymentMethod:    "admin",
+		LastEditedAt:     "2026-08-20T12:00:00Z",
 	}
 }

@@ -211,6 +211,7 @@ type donationOrderRequest struct {
 	Status            *string                `json:"status"`
 	PaymentMethod     *string                `json:"paymentMethod"`
 	Memo              nullableDonationString `json:"memo"`
+	LastEditedAt      *string                `json:"lastEditedAt"`
 }
 
 func decodeDonationOrderInput(r *http.Request) (model.DonationOrderInput, error) {
@@ -224,6 +225,13 @@ func decodeDonationOrderInput(r *http.Request) (model.DonationOrderInput, error)
 		request.GrossAmount == nil || request.RefundedAmount == nil || request.Status == nil ||
 		request.PaymentMethod == nil || !request.Memo.set {
 		return model.DonationOrderInput{}, errors.New("donation order body requires every canonical field")
+	}
+	if r.Method == http.MethodPut && request.LastEditedAt == nil {
+		return model.DonationOrderInput{}, errors.New("donation order update requires lastEditedAt")
+	}
+	lastEditedAt := ""
+	if request.LastEditedAt != nil {
+		lastEditedAt = *request.LastEditedAt
 	}
 	return model.DonationOrderInput{
 		Source:            *request.Source,
@@ -243,6 +251,7 @@ func decodeDonationOrderInput(r *http.Request) (model.DonationOrderInput, error)
 		Status:         *request.Status,
 		PaymentMethod:  *request.PaymentMethod,
 		Memo:           request.Memo.value,
+		LastEditedAt:   lastEditedAt,
 	}, nil
 }
 
@@ -272,6 +281,8 @@ func respondDonationOrderError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, repository.ErrDonationOrderNotFound):
 		respondError(w, http.StatusNotFound, "DONATION_ORDER_NOT_FOUND", "기부 거래를 찾을 수 없습니다.")
+	case errors.Is(err, repository.ErrDonationOrderStale):
+		respondError(w, http.StatusConflict, "DONATION_ORDER_STALE", "다른 관리자가 먼저 수정했습니다. 새로고침 후 다시 시도해주세요.")
 	case errors.Is(err, repository.ErrDonationOrderConflict):
 		respondError(w, http.StatusConflict, "DONATION_ORDER_CONFLICT", "이미 존재하는 기부 거래입니다.")
 	case errors.Is(err, service.ErrDonationAccountNotFound):

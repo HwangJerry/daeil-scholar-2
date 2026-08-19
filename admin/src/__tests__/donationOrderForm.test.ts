@@ -60,26 +60,29 @@ describe('donation order form helpers', () => {
     const values = createDonationOrderFormValues();
     values.accountUsrSeq = '42';
 
-    expect(toDonationOrderUpdateInput(values, 42)).not.toHaveProperty('accountUsrSeq');
+    const input = toDonationOrderUpdateInput(values, 42, '2026-08-20T12:00:00Z');
+
+    expect(input).not.toHaveProperty('accountUsrSeq');
+    expect(input.lastEditedAt).toBe('2026-08-20T12:00:00Z');
   });
 
   it('omits accountUsrSeq from an update when an unlinked order stays unchanged', () => {
     const values = createDonationOrderFormValues();
 
-    expect(toDonationOrderUpdateInput(values, null)).not.toHaveProperty('accountUsrSeq');
+    expect(toDonationOrderUpdateInput(values, null, '2026-08-20T12:00:00Z')).not.toHaveProperty('accountUsrSeq');
   });
 
   it('serializes an explicitly cleared accountUsrSeq as null for an update', () => {
     const values = createDonationOrderFormValues();
     values.accountUsrSeq = '';
 
-    expect(toDonationOrderUpdateInput(values, 42)).toHaveProperty('accountUsrSeq', null);
+    expect(toDonationOrderUpdateInput(values, 42, '2026-08-20T12:00:00Z')).toHaveProperty('accountUsrSeq', null);
   });
 
   it('serializes a newly entered accountUsrSeq value for an update', () => {
     const values = createDonationOrderFormValues();
     values.accountUsrSeq = '73';
 
-    expect(toDonationOrderUpdateInput(values, null)).toHaveProperty('accountUsrSeq', 73);
+    expect(toDonationOrderUpdateInput(values, null, '2026-08-20T12:00:00Z')).toHaveProperty('accountUsrSeq', 73);
   });
 });

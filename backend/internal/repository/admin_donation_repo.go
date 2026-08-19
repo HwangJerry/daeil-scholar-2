@@ -15,6 +15,7 @@ import (
 
 var (
 	ErrDonationOrderConflict   = errors.New("donation order identity conflict")
+	ErrDonationOrderStale      = errors.New("donation order was edited concurrently")
 	ErrDonationOrderNotFound   = errors.New("donation order not found")
 	ErrDonationAccountNotFound = errors.New("donation account not found")
 )
@@ -500,6 +501,7 @@ func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.Nor
 			O_PAYMENT_METHOD = ?, O_MEMO = ?, O_PRICE = ?, O_PAY = ?, O_PAY_TYPE = ?, O_STATUS = ?, O_PAYMENT = ?,
 			EDT_OPER = ?, EDT_DATE = NOW(), EDT_IPADDR = ?
 		WHERE O_SEQ = ? AND O_TYPE = 'A'
+		  AND COALESCE(EDT_DATE, REG_DATE) = STR_TO_DATE(?, '%Y-%m-%dT%H:%i:%sZ')
 	`,
 		order.AccountUsrSeqSet, order.AccountUsrSeq,
 		order.AccountUsrSeqSet, order.AccountUsrSeq,
@@ -509,7 +511,7 @@ func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.Nor
 		order.GrossAmount, order.RefundedAmount, order.NetReceivedAmount, order.Status,
 		order.PaymentMethod, order.Memo, order.GrossAmount, order.NetReceivedAmount,
 		legacyDonationPayType(order.PaymentMethod), order.LegacyStatus, order.LegacyPayment,
-		operSeq, ip, seq,
+		operSeq, ip, seq, order.LastEditedAt,
 	)
 	if err != nil {
 		var mysqlErr *mysql.MySQLError
@@ -523,7 +525,26 @@ func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.Nor
 		return err
 	}
 	if rowsAffected == 0 {
-		return ErrDonationOrderNotFound
+		var currentLastEditedAt string
+		err := tx.Get(&currentLastEditedAt, `
+			SELECT COALESCE(
+				DATE_FORMAT(EDT_DATE, '%Y-%m-%dT%H:%i:%sZ'),
+				DATE_FORMAT(REG_DATE, '%Y-%m-%dT%H:%i:%sZ'),
+				''
+			)
+			FROM WEO_ORDER
+			WHERE O_SEQ = ? AND O_TYPE = 'A'
+			FOR UPDATE
+		`, seq)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrDonationOrderNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if currentLastEditedAt != order.LastEditedAt {
+			return ErrDonationOrderStale
+		}
 	}
 	return tx.Commit()
 }
