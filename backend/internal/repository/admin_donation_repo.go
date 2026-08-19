@@ -59,7 +59,7 @@ func (r *AdminDonationRepository) CreateDonationOrder(order model.NormalizedDona
 			'A', NOW(), ?, NOW(), ?, ?, NOW(), ?
 		)
 	`,
-		0, order.AccountUsrSeq, order.Source, order.TransactionNumber, nullableCompositeKey(order), order.DonationDate,
+		accountUsrSeqOrZero(order.AccountUsrSeq), order.AccountUsrSeq, order.Source, order.TransactionNumber, nullableCompositeKey(order), order.DonationDate,
 		order.Donor.Name, order.Donor.Phone, order.Donor.Cohort, order.Donor.Department, order.LegacyGate,
 		order.GrossAmount, order.RefundedAmount, order.NetReceivedAmount, order.Status,
 		order.PaymentMethod, order.Memo, order.GrossAmount, order.NetReceivedAmount,
@@ -210,6 +210,13 @@ func nullableCompositeKey(order model.NormalizedDonationOrder) interface{} {
 		return nil
 	}
 	return order.CompositeKey
+}
+
+func accountUsrSeqOrZero(accountUsrSeq *int) int {
+	if accountUsrSeq == nil {
+		return 0
+	}
+	return *accountUsrSeq
 }
 
 func legacyDonationPayType(paymentMethod string) string {
