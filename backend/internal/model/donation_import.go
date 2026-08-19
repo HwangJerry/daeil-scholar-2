@@ -43,7 +43,7 @@ type DonationImportPreviewResult struct {
 type DonationImportCommitRow struct {
 	ExcelDonationRow
 	AccountUsrSeq  *int `json:"accountUsrSeq"`
-	ManualOverride bool `json:"manualOverride"`
+	ManualOverride bool `json:"manualOverride"` // Deprecated: accepted for compatibility and ignored by the server.
 }
 
 type DonationImportCommitRequest struct {

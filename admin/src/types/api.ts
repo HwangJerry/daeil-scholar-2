@@ -344,7 +344,6 @@ export interface DonationImportPreviewResult {
 
 export interface DonationImportCommitRow extends ExcelDonationRow {
   accountUsrSeq: number | null;
-  manualOverride: boolean;
 }
 
 export interface DonationImportCommitRequest {

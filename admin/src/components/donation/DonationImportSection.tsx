@@ -179,7 +179,6 @@ export function DonationImportSection() {
         donorPhone: row.donorPhone,
         amount: row.amount,
         accountUsrSeq: isValidAccountUsrSeq ? accountUsrSeq : null,
-        manualOverride: row.status !== 'matched',
       };
     });
 
