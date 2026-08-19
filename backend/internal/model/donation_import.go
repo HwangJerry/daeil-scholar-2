@@ -1,12 +1,12 @@
 package model
 
 type ExcelDonationRow struct {
-	RowIndex      int    `json:"rowIndex"`
-	DonorName     string `json:"donorName"`
-	DonorPhone    string `json:"donorPhone"`
-	Amount        int64  `json:"amount"`
-	DonationDate  string `json:"donationDate"`
-	TransactionNo string `json:"transactionNo"`
+	RowIndex        int    `json:"rowIndex"`
+	DonorName       string `json:"donorName"`
+	DonorCohort     string `json:"donorCohort"`
+	DonorDepartment string `json:"donorDepartment"`
+	DonorPhone      string `json:"donorPhone"`
+	Amount          int64  `json:"amount"`
 }
 
 type DonationImportRowStatus string
@@ -25,6 +25,7 @@ type MemberCandidate struct {
 
 type DonationImportPreviewRow struct {
 	ExcelDonationRow
+	DonationDate  string                  `json:"donationDate"`
 	Status        DonationImportRowStatus `json:"status"`
 	MatchedUsrSeq *int                    `json:"matchedUsrSeq"`
 	MatchedName   string                  `json:"matchedName"`
@@ -42,6 +43,18 @@ type DonationImportPreviewResult struct {
 type DonationImportCommitRow struct {
 	ExcelDonationRow
 	AccountUsrSeq *int `json:"accountUsrSeq"`
+}
+
+type DonationImportCommitRequest struct {
+	DonationDate string                    `json:"donationDate"`
+	Rows         []DonationImportCommitRow `json:"rows"`
+}
+
+// ImportedDonationRow combines the position-based Excel values with the
+// batch-level donation date supplied by the administrator.
+type ImportedDonationRow struct {
+	ExcelDonationRow
+	DonationDate string
 }
 
 type DonationImportCommitRowResult struct {

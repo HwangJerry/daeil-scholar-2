@@ -15,17 +15,18 @@ func NewDonationImportRepository(db *sqlx.DB) *DonationImportRepository {
 	return &DonationImportRepository{DB: db}
 }
 
-func (r *DonationImportRepository) FindMemberCandidatesByNamePhone(name, phone string) ([]model.MemberCandidate, error) {
+func (r *DonationImportRepository) FindMemberCandidatesByNameCohortPhone(name, cohort, phone string) ([]model.MemberCandidate, error) {
 	canonicalPhone := model.NormalizePhoneNumber(phone).String()
 	candidates := make([]model.MemberCandidate, 0)
 	err := r.DB.Select(&candidates, `
 		SELECT USR_SEQ, USR_NAME
 		FROM WEO_MEMBER
 		WHERE USR_NAME = ?
+		  AND USR_FN = ?
 		  AND (USR_PHONE = ? OR `+legacyCanonicalPhoneSQL+` = ?)
 		  AND USR_STATUS != 'AAA'
 		ORDER BY USR_SEQ
-	`, strings.TrimSpace(name), canonicalPhone, canonicalPhone)
+	`, strings.TrimSpace(name), strings.TrimSpace(cohort), canonicalPhone, canonicalPhone)
 	return candidates, err
 }
 

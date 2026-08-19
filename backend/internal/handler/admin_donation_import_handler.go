@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/model"
@@ -34,9 +35,18 @@ func (h *AdminDonationImportHandler) Preview(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	defer file.Close()
+	donationDate := strings.TrimSpace(r.FormValue("donationDate"))
+	if donationDate == "" {
+		respondError(w, http.StatusBadRequest, "NO_DONATION_DATE", "기부 반영일자가 필요합니다.")
+		return
+	}
 
-	result, err := h.service.ParsePreview(file)
+	result, err := h.service.ParsePreview(file, donationDate)
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidDonationDate) {
+			respondError(w, http.StatusBadRequest, "INVALID_DONATION_DATE", err.Error())
+			return
+		}
 		if errors.Is(err, service.ErrInvalidDonationImportFile) {
 			respondError(w, http.StatusBadRequest, "INVALID_DONATION_FILE", err.Error())
 			return
@@ -54,11 +64,11 @@ func (h *AdminDonationImportHandler) Commit(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var rows []model.DonationImportCommitRow
+	var request model.DonationImportCommitRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&rows); err != nil {
-		respondError(w, http.StatusBadRequest, "INVALID_BODY", "요청 본문은 기부 행 배열이어야 합니다.")
+	if err := decoder.Decode(&request); err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_BODY", "요청 본문은 기부 반영일자와 행 목록이어야 합니다.")
 		return
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
@@ -66,8 +76,17 @@ func (h *AdminDonationImportHandler) Commit(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	result, err := h.service.Commit(rows, user.USRSeq, requestIP(r))
+	if strings.TrimSpace(request.DonationDate) == "" {
+		respondError(w, http.StatusBadRequest, "NO_DONATION_DATE", "기부 반영일자가 필요합니다.")
+		return
+	}
+
+	result, err := h.service.Commit(request.Rows, request.DonationDate, user.USRSeq, requestIP(r))
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidDonationDate) {
+			respondError(w, http.StatusBadRequest, "INVALID_DONATION_DATE", err.Error())
+			return
+		}
 		respondError(w, http.StatusInternalServerError, "DONATION_COMMIT_FAILED", "기부 내역을 반영하지 못했습니다.")
 		return
 	}

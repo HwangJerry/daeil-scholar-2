@@ -8,38 +8,31 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/xuri/excelize/v2"
 )
 
-// Happy Nanum export header aliases are intentionally centralized here. Update
-// these lists when an authoritative export sample becomes available.
-var donationImportHeaderCandidates = struct {
-	Name          []string
-	Phone         []string
-	Amount        []string
-	DonationDate  []string
-	TransactionNo []string
-}{
-	Name:          []string{"성명", "이름"},
-	Phone:         []string{"연락처", "전화번호"},
-	Amount:        []string{"입금액", "금액"},
-	DonationDate:  []string{"입금일자", "후원일자", "일자"},
-	TransactionNo: []string{"거래번호", "승인번호", "고유번호"},
-}
+const (
+	donationImportFirstDataRowIndex = 2 // zero-based: Excel row 3
+	donationImportNameColumn        = 1 // B
+	donationImportCohortColumn      = 2 // C
+	donationImportDepartmentColumn  = 3 // D
+	donationImportPhoneColumn       = 4 // E
+	donationImportAmountColumn      = 5 // F
+)
 
 var ErrInvalidDonationImportFile = errors.New("invalid donation import file")
+var ErrInvalidDonationDate = errors.New("invalid donation date")
 
 type donationImportRepository interface {
-	FindMemberCandidatesByNamePhone(name, phone string) ([]model.MemberCandidate, error)
+	FindMemberCandidatesByNameCohortPhone(name, cohort, phone string) ([]model.MemberCandidate, error)
 	ExtRefExists(transactionNo, compositeKey string) (bool, error)
 }
 
 type donationImportOrderCreator interface {
-	CreateImportedOrder(row model.ExcelDonationRow, accountUsrSeq *int, compositeKey string, operSeq int, ip string) (int64, error)
+	CreateImportedOrder(row model.ImportedDonationRow, accountUsrSeq *int, compositeKey string, operSeq int, ip string) (int64, error)
 }
 
 type DonationImportService struct {
@@ -51,7 +44,11 @@ func NewDonationImportService(repo donationImportRepository, orderCreator donati
 	return &DonationImportService{repo: repo, orderCreator: orderCreator}
 }
 
-func (s *DonationImportService) ParsePreview(file io.Reader) (*model.DonationImportPreviewResult, error) {
+func (s *DonationImportService) ParsePreview(file io.Reader, donationDate string) (*model.DonationImportPreviewResult, error) {
+	normalizedDonationDate, err := validateDonationImportDate(donationDate)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := parseExcelDonationRows(file)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidDonationImportFile, err)
@@ -59,8 +56,8 @@ func (s *DonationImportService) ParsePreview(file io.Reader) (*model.DonationImp
 
 	result := &model.DonationImportPreviewResult{Rows: make([]model.DonationImportPreviewRow, 0, len(rows))}
 	for _, row := range rows {
-		previewRow := model.DonationImportPreviewRow{ExcelDonationRow: row}
-		candidates, err := s.repo.FindMemberCandidatesByNamePhone(row.DonorName, row.DonorPhone)
+		previewRow := model.DonationImportPreviewRow{ExcelDonationRow: row, DonationDate: normalizedDonationDate}
+		candidates, err := s.repo.FindMemberCandidatesByNameCohortPhone(row.DonorName, row.DonorCohort, row.DonorPhone)
 		if err != nil {
 			return nil, fmt.Errorf("%d행 회원 조회: %w", row.RowIndex, err)
 		}
@@ -77,8 +74,8 @@ func (s *DonationImportService) ParsePreview(file io.Reader) (*model.DonationImp
 			previewRow.Note = fmt.Sprintf("동명이인 %d명 발견", len(candidates))
 		}
 
-		transactionNo, compositeKey := donationImportIdentity(row)
-		duplicate, err := s.repo.ExtRefExists(transactionNo, compositeKey)
+		compositeKey := donationImportIdentity(model.ImportedDonationRow{ExcelDonationRow: row, DonationDate: normalizedDonationDate})
+		duplicate, err := s.repo.ExtRefExists("", compositeKey)
 		if err != nil {
 			return nil, fmt.Errorf("%d행 중복 조회: %w", row.RowIndex, err)
 		}
@@ -93,7 +90,11 @@ func (s *DonationImportService) ParsePreview(file io.Reader) (*model.DonationImp
 	return result, nil
 }
 
-func (s *DonationImportService) Commit(rows []model.DonationImportCommitRow, adminUsrSeq int, ip string) (*model.DonationImportCommitResult, error) {
+func (s *DonationImportService) Commit(rows []model.DonationImportCommitRow, donationDate string, adminUsrSeq int, ip string) (*model.DonationImportCommitResult, error) {
+	normalizedDonationDate, err := validateDonationImportDate(donationDate)
+	if err != nil {
+		return nil, err
+	}
 	result := &model.DonationImportCommitResult{Rows: make([]model.DonationImportCommitRowResult, 0, len(rows))}
 	for _, row := range rows {
 		rowResult := model.DonationImportCommitRowResult{RowIndex: row.RowIndex}
@@ -104,8 +105,9 @@ func (s *DonationImportService) Commit(rows []model.DonationImportCommitRow, adm
 			continue
 		}
 
-		transactionNo, compositeKey := donationImportIdentity(normalizedRow.ExcelDonationRow)
-		duplicate, err := s.repo.ExtRefExists(transactionNo, compositeKey)
+		importedRow := model.ImportedDonationRow{ExcelDonationRow: normalizedRow.ExcelDonationRow, DonationDate: normalizedDonationDate}
+		compositeKey := donationImportIdentity(importedRow)
+		duplicate, err := s.repo.ExtRefExists("", compositeKey)
 		if err != nil {
 			rowResult.ErrorMessage = fmt.Sprintf("중복 확인 실패: %v", err)
 			result.Rows = append(result.Rows, rowResult)
@@ -118,7 +120,7 @@ func (s *DonationImportService) Commit(rows []model.DonationImportCommitRow, adm
 		}
 
 		orderSeq, err := s.orderCreator.CreateImportedOrder(
-			normalizedRow.ExcelDonationRow,
+			importedRow,
 			normalizedRow.AccountUsrSeq,
 			compositeKey,
 			adminUsrSeq,
@@ -141,21 +143,19 @@ func (s *DonationImportService) Commit(rows []model.DonationImportCommitRow, adm
 	return result, nil
 }
 
-func (s *AdminDonationService) CreateImportedOrder(row model.ExcelDonationRow, accountUsrSeq *int, compositeKey string, operSeq int, ip string) (int64, error) {
-	var transactionNumber *string
-	if row.TransactionNo != "" {
-		transactionNumber = &row.TransactionNo
-	}
+func (s *AdminDonationService) CreateImportedOrder(row model.ImportedDonationRow, accountUsrSeq *int, compositeKey string, operSeq int, ip string) (int64, error) {
 	return s.repo.CreateDonationOrder(model.NormalizedDonationOrder{
 		DonationOrderInput: model.DonationOrderInput{
 			Source:            "happy_nanum",
 			AccountUsrSeq:     accountUsrSeq,
 			AccountUsrSeqSet:  true,
-			TransactionNumber: transactionNumber,
+			TransactionNumber: nil,
 			DonationDate:      row.DonationDate,
 			Donor: model.DonationDonor{
-				Name:  row.DonorName,
-				Phone: row.DonorPhone,
+				Name:       row.DonorName,
+				Cohort:     row.DonorCohort,
+				Department: row.DonorDepartment,
+				Phone:      row.DonorPhone,
 			},
 			DonationType:   "one_time",
 			GrossAmount:    row.Amount,
@@ -169,14 +169,6 @@ func (s *AdminDonationService) CreateImportedOrder(row model.ExcelDonationRow, a
 		LegacyStatus:      "Y",
 		LegacyPayment:     "Y",
 	}, operSeq, ip)
-}
-
-type donationImportColumns struct {
-	name          int
-	phone         int
-	amount        int
-	donationDate  int
-	transactionNo int
 }
 
 func parseExcelDonationRows(reader io.Reader) ([]model.ExcelDonationRow, error) {
@@ -194,100 +186,30 @@ func parseExcelDonationRows(reader io.Reader) ([]model.ExcelDonationRow, error) 
 	if err != nil {
 		return nil, fmt.Errorf("엑셀 행을 읽을 수 없습니다: %w", err)
 	}
-	headerRowIndex, columns, err := findDonationImportHeaders(worksheetRows)
-	if err != nil {
-		return nil, err
-	}
-
-	rows := make([]model.ExcelDonationRow, 0, len(worksheetRows)-headerRowIndex-1)
-	for index := headerRowIndex + 1; index < len(worksheetRows); index++ {
+	rows := make([]model.ExcelDonationRow, 0, max(0, len(worksheetRows)-donationImportFirstDataRowIndex))
+	for index := donationImportFirstDataRowIndex; index < len(worksheetRows); index++ {
 		worksheetRow := worksheetRows[index]
-		if isBlankExcelRow(worksheetRow) {
+		if strings.TrimSpace(cellAt(worksheetRow, donationImportNameColumn)) == "" || strings.TrimSpace(cellAt(worksheetRow, donationImportPhoneColumn)) == "" {
 			continue
 		}
-		amount, err := parseDonationImportAmount(cellAt(worksheetRow, columns.amount))
+		amount, err := parseDonationImportAmount(cellAt(worksheetRow, donationImportAmountColumn))
 		if err != nil {
 			return nil, fmt.Errorf("%d행 입금액: %w", index+1, err)
 		}
+		donorDepartment := strings.TrimSpace(cellAt(worksheetRow, donationImportDepartmentColumn))
+		if donorDepartment == "0" {
+			donorDepartment = ""
+		}
 		rows = append(rows, model.ExcelDonationRow{
-			RowIndex:      index + 1,
-			DonorName:     strings.TrimSpace(cellAt(worksheetRow, columns.name)),
-			DonorPhone:    strings.TrimSpace(cellAt(worksheetRow, columns.phone)),
-			Amount:        amount,
-			DonationDate:  normalizeDonationImportDate(cellAt(worksheetRow, columns.donationDate)),
-			TransactionNo: strings.TrimSpace(cellAt(worksheetRow, columns.transactionNo)),
+			RowIndex:        index + 1,
+			DonorName:       strings.TrimSpace(cellAt(worksheetRow, donationImportNameColumn)),
+			DonorCohort:     strings.TrimSpace(cellAt(worksheetRow, donationImportCohortColumn)),
+			DonorDepartment: donorDepartment,
+			DonorPhone:      strings.ReplaceAll(strings.TrimSpace(cellAt(worksheetRow, donationImportPhoneColumn)), "-", ""),
+			Amount:          amount,
 		})
 	}
 	return rows, nil
-}
-
-func findDonationImportHeaders(rows [][]string) (int, donationImportColumns, error) {
-	for rowIndex, row := range rows {
-		columns := donationImportColumns{name: -1, phone: -1, amount: -1, donationDate: -1, transactionNo: -1}
-		for columnIndex, header := range row {
-			switch {
-			case headerMatches(header, donationImportHeaderCandidates.Name):
-				if columns.name == -1 {
-					columns.name = columnIndex
-				}
-			case headerMatches(header, donationImportHeaderCandidates.Phone):
-				if columns.phone == -1 {
-					columns.phone = columnIndex
-				}
-			case headerMatches(header, donationImportHeaderCandidates.Amount):
-				if columns.amount == -1 {
-					columns.amount = columnIndex
-				}
-			case headerMatches(header, donationImportHeaderCandidates.DonationDate):
-				if columns.donationDate == -1 {
-					columns.donationDate = columnIndex
-				}
-			case headerMatches(header, donationImportHeaderCandidates.TransactionNo):
-				if columns.transactionNo == -1 {
-					columns.transactionNo = columnIndex
-				}
-			}
-		}
-
-		hasRecognizedHeader := columns.name >= 0 || columns.phone >= 0 || columns.amount >= 0 || columns.donationDate >= 0 || columns.transactionNo >= 0
-		if !hasRecognizedHeader {
-			continue
-		}
-		missing := make([]string, 0, 3)
-		if columns.name < 0 {
-			missing = append(missing, "성명/이름")
-		}
-		if columns.phone < 0 {
-			missing = append(missing, "연락처/전화번호")
-		}
-		if columns.amount < 0 {
-			missing = append(missing, "입금액/금액")
-		}
-		if len(missing) > 0 {
-			return 0, donationImportColumns{}, fmt.Errorf("필수 헤더를 찾을 수 없습니다: %s", strings.Join(missing, ", "))
-		}
-		return rowIndex, columns, nil
-	}
-	return 0, donationImportColumns{}, errors.New("필수 헤더를 찾을 수 없습니다: 성명/이름, 연락처/전화번호, 입금액/금액")
-}
-
-func headerMatches(value string, candidates []string) bool {
-	normalizedValue := normalizeDonationImportHeader(value)
-	for _, candidate := range candidates {
-		if normalizedValue == normalizeDonationImportHeader(candidate) {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeDonationImportHeader(value string) string {
-	return strings.ToLower(strings.Map(func(character rune) rune {
-		if unicode.IsSpace(character) {
-			return -1
-		}
-		return character
-	}, strings.TrimSpace(value)))
 }
 
 func parseDonationImportAmount(value string) (int64, error) {
@@ -315,9 +237,9 @@ func normalizeDonationImportDate(value string) string {
 
 func normalizeDonationImportCommitRow(row model.DonationImportCommitRow) (model.DonationImportCommitRow, error) {
 	row.DonorName = strings.TrimSpace(row.DonorName)
+	row.DonorCohort = strings.TrimSpace(row.DonorCohort)
+	row.DonorDepartment = strings.TrimSpace(row.DonorDepartment)
 	row.DonorPhone = model.NormalizePhoneNumber(row.DonorPhone).String()
-	row.DonationDate = normalizeDonationImportDate(row.DonationDate)
-	row.TransactionNo = strings.TrimSpace(row.TransactionNo)
 	if row.RowIndex <= 0 {
 		return row, errors.New("rowIndex는 1 이상이어야 합니다")
 	}
@@ -330,32 +252,32 @@ func normalizeDonationImportCommitRow(row model.DonationImportCommitRow) (model.
 	if row.Amount <= 0 {
 		return row, errors.New("입금액은 0보다 커야 합니다")
 	}
-	parsedDate, err := time.Parse("2006-01-02", row.DonationDate)
-	if err != nil || parsedDate.Format("2006-01-02") != row.DonationDate {
-		return row, errors.New("후원일자가 YYYY-MM-DD 형식의 유효한 날짜가 아닙니다")
-	}
-	if row.TransactionNo != "" && (len(row.TransactionNo) > 191 || !isASCII(row.TransactionNo)) {
-		return row, errors.New("거래번호는 191자 이하의 ASCII 문자열이어야 합니다")
-	}
 	if row.AccountUsrSeq != nil && *row.AccountUsrSeq <= 0 {
 		return row, errors.New("accountUsrSeq는 1 이상이어야 합니다")
 	}
 	return row, nil
 }
 
-func donationImportIdentity(row model.ExcelDonationRow) (string, string) {
-	transactionNo := strings.TrimSpace(row.TransactionNo)
-	if transactionNo != "" {
-		return transactionNo, ""
-	}
+func donationImportIdentity(row model.ImportedDonationRow) string {
 	identity := fmt.Sprintf(
-		"happy_nanum\x00%s\x00%s\x00%s\x00%d",
+		"happy_nanum\x00%s\x00%s\x00%s\x00%s\x00%s\x00%d",
 		normalizeDonationImportDate(row.DonationDate),
 		model.NormalizePhoneNumber(row.DonorPhone).String(),
 		strings.TrimSpace(row.DonorName),
+		strings.TrimSpace(row.DonorCohort),
+		strings.TrimSpace(row.DonorDepartment),
 		row.Amount,
 	)
-	return "", fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
+}
+
+func validateDonationImportDate(value string) (string, error) {
+	normalized := normalizeDonationImportDate(value)
+	parsedDate, err := time.Parse("2006-01-02", normalized)
+	if err != nil || parsedDate.Format("2006-01-02") != normalized {
+		return "", fmt.Errorf("%w: 기부 반영일자는 YYYY-MM-DD 형식의 유효한 날짜여야 합니다", ErrInvalidDonationDate)
+	}
+	return normalized, nil
 }
 
 func incrementDonationImportCount(result *model.DonationImportPreviewResult, status model.DonationImportRowStatus) {
