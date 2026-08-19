@@ -33,11 +33,11 @@ func (r *DonationImportRepository) FindMemberCandidatesByNameCohortPhone(name, c
 }
 
 func (r *DonationImportRepository) FindMemberCandidatesByKeys(keys []model.DonationImportMemberKey) (map[model.DonationImportMemberKey][]model.MemberCandidate, error) {
-	return findMemberCandidatesByKeys(r.DB, keys)
+	return findMemberCandidatesByKeys(r.DB, keys, false)
 }
 
 func (r *DonationImportRepository) FindMemberCandidatesByKeysTx(tx *sqlx.Tx, keys []model.DonationImportMemberKey) (map[model.DonationImportMemberKey][]model.MemberCandidate, error) {
-	return findMemberCandidatesByKeys(tx, keys)
+	return findMemberCandidatesByKeys(tx, keys, true)
 }
 
 func (r *DonationImportRepository) FindMemberCandidatesByNameCohortPhoneTx(tx *sqlx.Tx, name, cohort, phone string) ([]model.MemberCandidate, error) {
@@ -69,37 +69,49 @@ func findMemberCandidatesByNameCohortPhone(queryer donationImportQueryer, name, 
 }
 
 type donationImportMemberRow struct {
-	USRSeq int    `db:"USR_SEQ"`
-	Name   string `db:"USR_NAME"`
-	Cohort string `db:"USR_FN"`
-	Phone  string `db:"CANONICAL_PHONE"`
+	MatchName   string `db:"MATCH_NAME"`
+	MatchCohort string `db:"MATCH_COHORT"`
+	MatchPhone  string `db:"MATCH_PHONE"`
+	USRSeq      int    `db:"USR_SEQ"`
+	Name        string `db:"USR_NAME"`
 }
 
-func findMemberCandidatesByKeys(queryer donationImportQueryer, keys []model.DonationImportMemberKey) (map[model.DonationImportMemberKey][]model.MemberCandidate, error) {
+func findMemberCandidatesByKeys(queryer donationImportQueryer, keys []model.DonationImportMemberKey, lockForUpdate bool) (map[model.DonationImportMemberKey][]model.MemberCandidate, error) {
 	result := make(map[model.DonationImportMemberKey][]model.MemberCandidate, len(keys))
 	uniqueKeys := uniqueDonationImportMemberKeys(keys)
 	if len(uniqueKeys) == 0 {
 		return result, nil
 	}
 
-	conditions := make([]string, 0, len(uniqueKeys))
-	args := make([]interface{}, 0, len(uniqueKeys)*4)
-	for _, key := range uniqueKeys {
-		conditions = append(conditions, `(USR_NAME = ? AND USR_FN = ? AND (USR_PHONE = ? OR `+legacyCanonicalPhoneSQL+` = ?))`)
-		args = append(args, key.Name, key.Cohort, key.Phone, key.Phone)
+	requestRows := make([]string, 0, len(uniqueKeys))
+	args := make([]interface{}, 0, len(uniqueKeys)*3)
+	for index, key := range uniqueKeys {
+		selectKeyword := "SELECT"
+		if index > 0 {
+			selectKeyword = "UNION ALL SELECT"
+		}
+		requestRows = append(requestRows, selectKeyword+` ? AS MATCH_NAME, ? AS MATCH_COHORT, ? AS MATCH_PHONE`)
+		args = append(args, key.Name, key.Cohort, key.Phone)
 	}
 	query := `
-		SELECT USR_SEQ, USR_NAME, USR_FN, ` + legacyCanonicalPhoneSQL + ` AS CANONICAL_PHONE
-		FROM WEO_MEMBER
-		WHERE USR_STATUS != 'AAA'
-		  AND (` + strings.Join(conditions, " OR ") + `)
-		ORDER BY USR_SEQ`
+		SELECT requested.MATCH_NAME, requested.MATCH_COHORT, requested.MATCH_PHONE,
+		       member.USR_SEQ, member.USR_NAME
+		FROM (` + strings.Join(requestRows, " ") + `) AS requested
+		JOIN WEO_MEMBER AS member
+		  ON member.USR_NAME = requested.MATCH_NAME
+		 AND member.USR_FN = requested.MATCH_COHORT
+		 AND (member.USR_PHONE = requested.MATCH_PHONE OR ` + legacyCanonicalPhoneSQL + ` = requested.MATCH_PHONE)
+		WHERE member.USR_STATUS != 'AAA'
+		ORDER BY member.USR_SEQ`
+	if lockForUpdate {
+		query += " FOR UPDATE"
+	}
 	rows := make([]donationImportMemberRow, 0)
 	if err := queryer.Select(&rows, query, args...); err != nil {
 		return nil, err
 	}
 	for _, row := range rows {
-		key := model.NewDonationImportMemberKey(row.Name, row.Cohort, row.Phone)
+		key := model.NewDonationImportMemberKey(row.MatchName, row.MatchCohort, row.MatchPhone)
 		result[key] = append(result[key], model.MemberCandidate{USRSeq: row.USRSeq, Name: row.Name})
 	}
 	return result, nil

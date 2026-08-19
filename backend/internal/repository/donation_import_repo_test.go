@@ -47,11 +47,11 @@ func TestFindMemberCandidatesByKeysUsesSingleBatchQuery(t *testing.T) {
 		model.NewDonationImportMemberKey("이동문", "12", "010-2222-2222"),
 	}
 
-	mock.ExpectQuery(`SELECT USR_SEQ, USR_NAME, USR_FN,[\s\S]*\(USR_NAME = \?[\s\S]* OR \(USR_NAME = \?`).
-		WithArgs("김동문", "11", "01011111111", "01011111111", "이동문", "12", "01022222222", "01022222222").
-		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ", "USR_NAME", "USR_FN", "CANONICAL_PHONE"}).
-			AddRow(11, "김동문", "11", "01011111111").
-			AddRow(12, "이동문", "12", "01022222222"))
+	mock.ExpectQuery(`SELECT requested.MATCH_NAME,[\s\S]*FROM \(SELECT \? AS MATCH_NAME,[\s\S]*UNION ALL SELECT \? AS MATCH_NAME,[\s\S]*JOIN WEO_MEMBER`).
+		WithArgs("김동문", "11", "01011111111", "이동문", "12", "01022222222").
+		WillReturnRows(sqlmock.NewRows([]string{"MATCH_NAME", "MATCH_COHORT", "MATCH_PHONE", "USR_SEQ", "USR_NAME"}).
+			AddRow("김동문", "11", "01011111111", 11, "김동문").
+			AddRow("이동문", "12", "01022222222", 12, "이동문"))
 
 	result, err := repo.FindMemberCandidatesByKeys(keys)
 	if err != nil {
@@ -59,6 +59,69 @@ func TestFindMemberCandidatesByKeysUsesSingleBatchQuery(t *testing.T) {
 	}
 	if len(result[keys[0]]) != 1 || result[keys[0]][0].USRSeq != 11 || len(result[keys[1]]) != 1 || result[keys[1]][0].USRSeq != 12 {
 		t.Fatalf("batch candidates = %+v", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFindMemberCandidatesByKeysPreservesDatabaseCaseInsensitiveMatches(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewDonationImportRepository(sqlx.NewDb(db, "sqlmock"))
+	key := model.NewDonationImportMemberKey("Alice", "12", "010-1111-1111")
+
+	mock.ExpectQuery(`SELECT requested.MATCH_NAME,[\s\S]*JOIN WEO_MEMBER`).
+		WithArgs("Alice", "12", "01011111111").
+		WillReturnRows(sqlmock.NewRows([]string{"MATCH_NAME", "MATCH_COHORT", "MATCH_PHONE", "USR_SEQ", "USR_NAME"}).
+			AddRow("Alice", "12", "01011111111", 11, "Alice").
+			AddRow("Alice", "12", "01011111111", 19, "ALICE"))
+
+	result, err := repo.FindMemberCandidatesByKeys([]model.DonationImportMemberKey{key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result[key]) != 2 || result[key][0].USRSeq != 11 || result[key][1].USRSeq != 19 {
+		t.Fatalf("case-insensitive candidates = %+v, want both database matches", result[key])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFindMemberCandidatesByKeysTxLocksBatchMatchesForUpdate(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	repo := repository.NewDonationImportRepository(sqlxDB)
+	key := model.NewDonationImportMemberKey("김동문", "11", "010-1111-1111")
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT requested.MATCH_NAME,[\s\S]*ORDER BY member.USR_SEQ FOR UPDATE`).
+		WithArgs("김동문", "11", "01011111111").
+		WillReturnRows(sqlmock.NewRows([]string{"MATCH_NAME", "MATCH_COHORT", "MATCH_PHONE", "USR_SEQ", "USR_NAME"}).
+			AddRow("김동문", "11", "01011111111", 11, "김동문"))
+	mock.ExpectRollback()
+
+	tx, err := sqlxDB.Beginx()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := repo.FindMemberCandidatesByKeysTx(tx, []model.DonationImportMemberKey{key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result[key]) != 1 || result[key][0].USRSeq != 11 {
+		t.Fatalf("locked candidates = %+v", result[key])
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
