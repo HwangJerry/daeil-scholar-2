@@ -405,12 +405,18 @@ func legacyDonationGate(donationType string) string {
 	}
 }
 
-func (r *AdminDonationRepository) UpdateConfig(goal int64, manualAdj int64, manualDonorCnt int, note string, overwrite string, operSeq int) error {
+func (r *AdminDonationRepository) UpdateConfig(config model.DonationConfig, operSeq int) error {
 	_, err := r.DB.Exec(`
 		UPDATE DONATION_CONFIG
-		SET DC_GOAL = ?, DC_MANUAL_ADJ = ?, DC_MANUAL_DONOR_CNT = ?, DC_NOTE = ?, DC_OVERWRITE = ?, REG_OPER = ?, REG_DATE = NOW()
+		SET DC_GOAL = ?, DC_MANUAL_ADJ = ?, DC_MANUAL_DONOR_CNT = ?,
+		    DC_TIER_SPROUT_MIN = ?, DC_TIER_SAPLING_MIN = ?, DC_TIER_TREE_MIN = ?,
+		    DC_TIER_BLOOMING_MIN = ?, DC_TIER_FRUITING_MIN = ?,
+		    DC_NOTE = ?, DC_OVERWRITE = ?, REG_OPER = ?, REG_DATE = NOW()
 		WHERE IS_ACTIVE = 'Y'
-	`, goal, manualAdj, manualDonorCnt, note, overwrite, operSeq)
+	`, config.Goal, config.ManualAdj, config.ManualDonorCnt,
+		config.TierSproutMin, config.TierSaplingMin, config.TierTreeMin,
+		config.TierBloomingMin, config.TierFruitingMin,
+		config.Note, config.Overwrite, operSeq)
 	return err
 }
 

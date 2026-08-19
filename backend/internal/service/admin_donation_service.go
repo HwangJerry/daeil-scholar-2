@@ -16,6 +16,7 @@ import (
 
 var (
 	ErrInvalidDonationOrder    = errors.New("invalid donation order")
+	ErrInvalidTierThresholds   = errors.New("donation tier thresholds must be non-negative and strictly increasing")
 	ErrDonationAccountNotFound = repository.ErrDonationAccountNotFound
 )
 
@@ -141,12 +142,52 @@ func (s *AdminDonationService) GetConfig() (*model.DonationConfig, error) {
 	return s.donationRepo.GetActiveConfig()
 }
 
-func (s *AdminDonationService) UpdateConfig(goal int64, manualAdj int64, manualDonorCnt int, note string, overwrite bool, operSeq int) error {
+type DonationConfigUpdate struct {
+	Goal            int64
+	ManualAdj       int64
+	ManualDonorCnt  int
+	TierSproutMin   int64
+	TierSaplingMin  int64
+	TierTreeMin     int64
+	TierBloomingMin int64
+	TierFruitingMin int64
+	Note            string
+	Overwrite       bool
+}
+
+func (s *AdminDonationService) UpdateConfig(update DonationConfigUpdate, operSeq int) error {
+	if !validDonationTierThresholds(update) {
+		return ErrInvalidTierThresholds
+	}
 	ov := "N"
-	if overwrite {
+	if update.Overwrite {
 		ov = "Y"
 	}
-	return s.repo.UpdateConfig(goal, manualAdj, manualDonorCnt, note, ov, operSeq)
+	return s.repo.UpdateConfig(model.DonationConfig{
+		Goal:            update.Goal,
+		ManualAdj:       update.ManualAdj,
+		ManualDonorCnt:  update.ManualDonorCnt,
+		TierSproutMin:   update.TierSproutMin,
+		TierSaplingMin:  update.TierSaplingMin,
+		TierTreeMin:     update.TierTreeMin,
+		TierBloomingMin: update.TierBloomingMin,
+		TierFruitingMin: update.TierFruitingMin,
+		Note:            update.Note,
+		Overwrite:       ov,
+	}, operSeq)
+}
+
+func validDonationTierThresholds(update DonationConfigUpdate) bool {
+	allNonNegative := update.TierSproutMin >= 0 &&
+		update.TierSaplingMin >= 0 &&
+		update.TierTreeMin >= 0 &&
+		update.TierBloomingMin >= 0 &&
+		update.TierFruitingMin >= 0
+	strictlyIncreasing := update.TierSproutMin < update.TierSaplingMin &&
+		update.TierSaplingMin < update.TierTreeMin &&
+		update.TierTreeMin < update.TierBloomingMin &&
+		update.TierBloomingMin < update.TierFruitingMin
+	return allNonNegative && strictlyIncreasing
 }
 
 func (s *AdminDonationService) GetHistory(days int) ([]model.DonationSnapshot, error) {

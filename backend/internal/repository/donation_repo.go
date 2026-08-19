@@ -124,6 +124,8 @@ func (r *DonationRepository) GetActiveConfig() (*model.DonationConfig, error) {
 	err := r.DB.Get(&cfg, `
 		SELECT DC_SEQ, DC_GOAL, DC_MANUAL_ADJ,
 		       IFNULL(DC_MANUAL_DONOR_CNT,0) AS DC_MANUAL_DONOR_CNT,
+		       DC_TIER_SPROUT_MIN, DC_TIER_SAPLING_MIN, DC_TIER_TREE_MIN,
+		       DC_TIER_BLOOMING_MIN, DC_TIER_FRUITING_MIN,
 		       IFNULL(DC_NOTE,'') AS DC_NOTE,
 		       IFNULL(DC_OVERWRITE,'N') AS DC_OVERWRITE, IS_ACTIVE,
 		       IFNULL(DATE_FORMAT(REG_DATE,'%Y-%m-%d %H:%i:%s'),'') AS REG_DATE,
