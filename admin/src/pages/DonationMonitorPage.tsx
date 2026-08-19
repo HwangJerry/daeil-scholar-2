@@ -4,6 +4,7 @@ import { StatsCard } from '../components/ui/StatsCard.tsx';
 import { ErrorState } from '../components/ui/ErrorState.tsx';
 import { DonationConfigSection } from '../components/donation/DonationConfigSection.tsx';
 import { DonationImportSection } from '../components/donation/DonationImportSection.tsx';
+import { DonationOrdersSection } from '../components/donation/DonationOrdersSection.tsx';
 import { useDonationMonitor } from '../hooks/useDonationMonitor.ts';
 import { formatAmount } from '../lib/formatAmount.ts';
 
@@ -62,6 +63,8 @@ export function DonationMonitorPage() {
       )}
 
       <DonationConfigSection />
+
+      <DonationOrdersSection />
 
       <DonationImportSection />
 
