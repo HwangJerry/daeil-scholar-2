@@ -257,7 +257,7 @@ func (r *AdminDonationRepository) GetDonationOrder(seq int64) (*model.DonationOr
 			COALESCE(o.EDT_IPADDR, o.REG_IPADDR, '') AS LAST_EDITED_IP
 		FROM WEO_ORDER o
 		LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = o.USR_SEQ
-		WHERE o.O_SEQ = ?
+		WHERE o.O_SEQ = ? AND o.O_TYPE = 'A'
 		LIMIT 1
 	`, seq)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -270,7 +270,7 @@ func (r *AdminDonationRepository) GetDonationOrder(seq int64) (*model.DonationOr
 }
 
 func (r *AdminDonationRepository) ListDonationOrders(filters model.DonationOrderFilters, page, size int) ([]*model.DonationOrder, int, error) {
-	conditions := []string{"1=1"}
+	conditions := []string{"o.O_TYPE = 'A'"}
 	args := []interface{}{}
 	if filters.Name != "" {
 		conditions = append(conditions, "COALESCE(o.O_DONOR_NAME, m.USR_NAME, '') LIKE ?")
@@ -485,7 +485,7 @@ func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.Nor
 		}
 	}
 
-	_, err = tx.Exec(`
+	result, err := tx.Exec(`
 		UPDATE WEO_ORDER SET
 			O_ACCOUNT_USR_SEQ = CASE WHEN ? THEN ? ELSE O_ACCOUNT_USR_SEQ END,
 			USR_SEQ = CASE WHEN ? THEN COALESCE(?, 0) ELSE USR_SEQ END,
@@ -517,6 +517,13 @@ func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.Nor
 			return ErrDonationOrderConflict
 		}
 		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrDonationOrderNotFound
 	}
 	return tx.Commit()
 }

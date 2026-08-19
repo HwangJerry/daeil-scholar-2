@@ -147,7 +147,7 @@ func TestGetDonationOrderReturnsCanonicalDetail(t *testing.T) {
 	}
 	defer db.Close()
 	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
-	mock.ExpectQuery(`FROM WEO_ORDER o`).
+	mock.ExpectQuery(`(?s)FROM WEO_ORDER o.*WHERE o.O_SEQ = \? AND o.O_TYPE = 'A'`).
 		WithArgs(3001).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"ORDER_SEQ", "ACCOUNT_USR_SEQ", "SOURCE", "TRANSACTION_NUMBER", "DONATION_DATE",
@@ -167,6 +167,26 @@ func TestGetDonationOrderReturnsCanonicalDetail(t *testing.T) {
 	}
 	if order.OrderSeq != 3001 || order.AccountUsrSeq == nil || *order.AccountUsrSeq != 42 || order.Donor.Phone != "01000000000" || order.NetReceivedAmount != 80000 {
 		t.Fatalf("unexpected order: %+v", order)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGetDonationOrderReturnsNotFoundWhenNoDonationOrderMatches(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	mock.ExpectQuery(`(?s)FROM WEO_ORDER o.*WHERE o.O_SEQ = \? AND o.O_TYPE = 'A'`).
+		WithArgs(3001).
+		WillReturnRows(sqlmock.NewRows([]string{"ORDER_SEQ"}))
+
+	_, err = repo.GetDonationOrder(3001)
+	if !errors.Is(err, repository.ErrDonationOrderNotFound) {
+		t.Fatalf("error = %v, want ErrDonationOrderNotFound", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
@@ -232,11 +252,43 @@ func TestUpdateDonationOrderPreservesLinkedAccountWhenOmitted(t *testing.T) {
 			int64(100000), int64(0), int64(100000), "completed", "bank", nil,
 			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001),
 		).
-		WillReturnResult(sqlmock.NewResult(0, 0))
+		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	if err := repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1"); err != nil {
 		t.Fatalf("UpdateDonationOrder() unchanged replacement error = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateDonationOrderReturnsNotFoundWhenNoDonationOrderMatches(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	order := model.NormalizedDonationOrder{
+		DonationOrderInput: model.DonationOrderInput{
+			Source: "bank_transfer", DonationDate: "2026-07-28",
+			Donor:         model.DonationDonor{Name: "예시 동문", Cohort: "18", Department: "영어", Phone: "01000000000"},
+			DonationType:  "one_time",
+			GrossAmount:   100000,
+			Status:        "completed",
+			PaymentMethod: "bank",
+		},
+		NetReceivedAmount: 100000, CompositeKey: "composite", LegacyGate: "S", LegacyStatus: "Y", LegacyPayment: "Y",
+	}
+	mock.ExpectBegin()
+	mock.ExpectExec(`(?s)UPDATE WEO_ORDER SET.*WHERE O_SEQ = \? AND O_TYPE = 'A'`).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+
+	err = repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1")
+	if !errors.Is(err, repository.ErrDonationOrderNotFound) {
+		t.Fatalf("error = %v, want ErrDonationOrderNotFound", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
@@ -320,11 +372,11 @@ func TestListDonationOrdersAppliesCanonicalFiltersAndStablePagination(t *testing
 	defer db.Close()
 	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
 	filterArgs := []driver.Value{"%동문%", "%0100000%", "%TX%", "bank_transfer", "completed", "S"}
-	mock.ExpectQuery(`SELECT COUNT\(\*\).*FROM WEO_ORDER o`).
+	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\).*FROM WEO_ORDER o.*WHERE o.O_TYPE = 'A'`).
 		WithArgs(filterArgs...).
 		WillReturnRows(sqlmock.NewRows([]string{"COUNT"}).AddRow(21))
 	listArgs := append(append([]driver.Value{}, filterArgs...), 20, 20)
-	mock.ExpectQuery(`ORDER BY o.O_DONATION_DATE DESC, o.O_SEQ DESC`).
+	mock.ExpectQuery(`(?s)WHERE o.O_TYPE = 'A'.*ORDER BY o.O_DONATION_DATE DESC, o.O_SEQ DESC`).
 		WithArgs(listArgs...).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"ORDER_SEQ", "ACCOUNT_USR_SEQ", "SOURCE", "TRANSACTION_NUMBER", "DONATION_DATE",
@@ -344,6 +396,31 @@ func TestListDonationOrdersAppliesCanonicalFiltersAndStablePagination(t *testing
 	}
 	if total != 21 || len(orders) != 1 || orders[0].OrderSeq != 3001 || orders[0].AccountUsrSeq == nil || *orders[0].AccountUsrSeq != 42 {
 		t.Fatalf("orders/total = %+v/%d", orders, total)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListDonationOrdersExcludesNonDonationOrders(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\).*FROM WEO_ORDER o.*WHERE o.O_TYPE = 'A'`).
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT"}).AddRow(0))
+	mock.ExpectQuery(`(?s)FROM WEO_ORDER o.*WHERE o.O_TYPE = 'A'.*ORDER BY o.O_DONATION_DATE DESC`).
+		WithArgs(20, 0).
+		WillReturnRows(sqlmock.NewRows([]string{"ORDER_SEQ"}))
+
+	orders, total, err := repo.ListDonationOrders(model.DonationOrderFilters{}, 1, 20)
+	if err != nil {
+		t.Fatalf("ListDonationOrders() error = %v", err)
+	}
+	if total != 0 || len(orders) != 0 {
+		t.Fatalf("orders/total = %+v/%d, want empty", orders, total)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
