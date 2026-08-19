@@ -97,11 +97,14 @@ func (s *AuthService) RevokeAllMobileRefreshTokens(usrSeq int) {
 
 // LogoutCurrent revokes only the mobile session represented by the request
 // (this device's refresh tokens) plus the legacy PHP session, then clears cookies.
+//
+// Intentionally does NOT call s.LogoutKakao: the cached Kakao access token is
+// keyed per-user ("kakao_token:<usrSeq>"), not per-device/session, so revoking
+// it here would silently log the user out of Kakao on every other device too.
+// Only LogoutAll (account-wide logout) or an explicit "disconnect provider"
+// flow should revoke the shared Kakao/social token.
 func (s *AuthService) LogoutCurrent(w http.ResponseWriter, user *model.AuthUser, legacySessionID string) error {
 	var logoutErrors []error
-	if err := s.LogoutKakao(user.USRSeq); err != nil {
-		s.logger.Warn().Err(err).Int("usrSeq", user.USRSeq).Msg("kakao logout failed, proceeding with app logout")
-	}
 	if legacySessionID != "" {
 		if err := s.repo.DeleteLegacySession(legacySessionID); err != nil {
 			logoutErrors = append(logoutErrors, err)

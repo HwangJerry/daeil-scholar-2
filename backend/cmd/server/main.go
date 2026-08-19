@@ -94,6 +94,8 @@ func main() {
 	// subscriptionBillingJob.Start()
 	visitJob := d.visitJob
 	visitJob.Start()
+	socialRevocationWorker := d.socialRevocationWorker
+	socialRevocationWorker.Start()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -104,6 +106,7 @@ func main() {
 	emailWorker.Stop()
 	// subscriptionBillingJob.Stop()
 	visitJob.Stop()
+	socialRevocationWorker.Stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()

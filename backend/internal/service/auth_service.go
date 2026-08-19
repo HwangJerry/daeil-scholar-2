@@ -51,3 +51,10 @@ func NewAuthService(
 		logger:      logger,
 	}
 }
+
+// IsMobileSessionActive reports whether a mobile session (sid) is still active,
+// i.e. has not been revoked (logout) or expired. Passthrough to the repository
+// so callers outside this package (e.g. middleware) don't need direct DB access.
+func (s *AuthService) IsMobileSessionActive(usrSeq int, sid string) (bool, error) {
+	return s.repo.IsMobileSessionActive(usrSeq, sid)
+}

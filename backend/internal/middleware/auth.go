@@ -77,10 +77,24 @@ func resolveAuthFromAuthorizationHeader(authService *service.AuthService, r *htt
 			return nil, true, errors.New("unsupported mobile token type")
 		}
 
-		if user, err := authService.ValidateMobileAccessToken(headerToken); err == nil && user != nil {
-			return user, true, nil
+		user, err := authService.ValidateMobileAccessToken(headerToken)
+		if err != nil || user == nil {
+			return nil, true, errors.New("invalid mobile token")
 		}
-		return nil, true, errors.New("invalid mobile token")
+
+		// Mobile-issued tokens carry a session id (sid); re-check on every
+		// request that the session hasn't been logged out/revoked, so a
+		// stolen or revoked access token stops working immediately instead
+		// of staying valid until natural JWT expiry. Legacy web JWTs have no
+		// SessionID and are unaffected by this check.
+		if user.SessionID != "" {
+			active, sessionErr := authService.IsMobileSessionActive(user.USRSeq, user.SessionID)
+			if sessionErr != nil || !active {
+				return nil, true, errors.New("mobile session revoked")
+			}
+		}
+
+		return user, true, nil
 	}
 
 	if user, err := authService.ValidateJWT(headerToken); err == nil && user != nil {

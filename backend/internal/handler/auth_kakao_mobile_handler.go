@@ -62,29 +62,12 @@ func (h *AuthHandler) KakaoMobileLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if info.Email != "" {
-		matched, err := h.service.FindMemberByEmail(info.Email)
-		if err != nil {
-			h.logger.Error().Err(err).Str("email", info.Email).Msg("kakao mobile: email lookup failed")
-			respondError(w, http.StatusInternalServerError, "LOOKUP_FAILED", "Failed to lookup member by email")
-			return
-		}
-		if matched != nil {
-			if err := h.service.InsertSocialLink(matched.USRSeq, "KT", info.KakaoID, info.Email); err != nil {
-				h.logger.Error().Err(err).Int("usrSeq", matched.USRSeq).Msg("kakao mobile: insert social link failed")
-				respondError(w, http.StatusInternalServerError, "LINK_FAILED", "Failed to link social account")
-				return
-			}
-			if info.ProfileImageURL != "" {
-				if err := h.service.UpdateProfilePhotoIfEmpty(matched.USRSeq, info.ProfileImageURL); err != nil {
-					h.logger.Warn().Err(err).Int("usrSeq", matched.USRSeq).Msg("kakao mobile: optional photo update failed")
-				}
-			}
-			h.completeKakaoMobileLogin(w, r, matched, info.AccessToken)
-			return
-		}
-	}
-
+	// Per CLAUDE.md/docs/spec-auth.md §4.6: mobile deliberately does NOT
+	// implement account-linking. A Kakao identity with no existing social-ID
+	// link always gets 202 link_required here - even when its email matches
+	// an existing member - so the app can surface "sign in with your
+	// existing ID" rather than silently auto-linking accounts by email alone
+	// (email match is not proof of ownership of the alumni account).
 	linkToken := h.service.GenerateSessionID()
 	if linkToken == "" {
 		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "Failed to start social link")
@@ -111,7 +94,29 @@ func (h *AuthHandler) KakaoMobileLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) completeKakaoMobileLogin(w http.ResponseWriter, r *http.Request, user *model.User, kakaoAccessToken string) {
+	// Mirrors auth_social_handler.go's completeSocialLogin: a Kakao identity
+	// already being linked to a member does not mean that member is currently
+	// allowed to log in (withdrawn/suspended/pending-approval accounts must
+	// still be rejected here, same as the password and web social paths).
+	if err := (service.LoginEligibilityPolicy{}).EnsureLoginAllowed(user); err != nil {
+		respondError(w, http.StatusForbidden, service.LoginErrorCode(err), "이 계정은 현재 로그인할 수 없습니다.")
+		return
+	}
+
 	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
+
+	// Store the Kakao credential before issuing any session state, matching
+	// the web login path (auth_social_handler.go): if vault storage fails we
+	// must fail closed without having already persisted an active refresh
+	// session that the user has no way to know about or revoke.
+	if kakaoAccessToken != "" {
+		if err := h.socialLifecycle.StoreCredential(user.USRSeq, model.SocialProviderKakao, kakaoAccessToken); err != nil {
+			h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Str("provider", string(model.SocialProviderKakao)).Msg("kakao mobile: social credential storage failed")
+			respondError(w, http.StatusServiceUnavailable, "CREDENTIAL_STORAGE_UNAVAILABLE", "로그인을 완료할 수 없습니다.")
+			return
+		}
+	}
+
 	mobileSessionID := h.service.GenerateSessionID()
 	if mobileSessionID == "" {
 		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 토큰 생성에 실패했습니다")
@@ -159,8 +164,8 @@ func (h *AuthHandler) completeKakaoMobileLogin(w http.ResponseWriter, r *http.Re
 		AccessToken:      mobileToken,
 		RefreshToken:     refreshToken,
 		AccessIssuedAt:   now.Unix(),
-		AccessExpiresAt:  now.Add(h.cfg.JWT.MaxAge).Unix(),
-		RefreshExpiresAt: now.Add(h.cfg.JWT.MaxAge).Unix(),
+		AccessExpiresAt:  now.Add(h.service.MobileAccessTokenTTL()).Unix(),
+		RefreshExpiresAt: refreshExpiresAt.Unix(),
 		Sid:              mobileSessionID,
 		Jti:              refreshJTI,
 	})

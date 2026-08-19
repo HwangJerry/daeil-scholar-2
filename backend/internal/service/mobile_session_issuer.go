@@ -49,7 +49,7 @@ func (i *MobileSessionIssuer) Issue(user *model.User) (*model.MobileSession, err
 		AccessToken:      accessToken,
 		RefreshToken:     refreshToken,
 		AccessIssuedAt:   now.Unix(),
-		AccessExpiresAt:  now.Add(i.auth.cfg.JWT.MaxAge).Unix(),
+		AccessExpiresAt:  now.Add(i.auth.MobileAccessTokenTTL()).Unix(),
 		RefreshExpiresAt: refreshExpiresAt.Unix(),
 		SID:              sid,
 		JTI:              refreshJTI,

@@ -194,7 +194,18 @@ func (s *SocialAccountLifecycleService) disconnect(
 		_ = s.auth.repo.EnqueueSocialRevocation(usrSeq, string(provider), action, err)
 		return err
 	}
-	return s.auth.repo.DeleteSocialConnection(usrSeq, string(provider))
+	if err := s.auth.repo.DeleteSocialConnection(usrSeq, string(provider)); err != nil {
+		// The upstream provider has already revoked the credential - only
+		// the local cleanup failed. Hand the row to the async revocation
+		// worker (as an already-REVOKED entry, so it never re-calls the
+		// provider) instead of leaving no recovery path at all: without
+		// this, a synchronous caller that never retries would leave the
+		// local connection/credential rows stranded forever even though the
+		// user's Kakao/Apple account was already disconnected upstream.
+		_ = s.auth.repo.EnqueueSocialRevocationAlreadyRevoked(usrSeq, string(provider), action, err)
+		return err
+	}
+	return nil
 }
 
 func (s *SocialAccountLifecycleService) loadCredential(usrSeq int, provider model.SocialProvider) (string, error) {

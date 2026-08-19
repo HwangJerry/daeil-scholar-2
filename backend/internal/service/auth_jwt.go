@@ -19,6 +19,39 @@ const (
 	maxSupportedTokenVer   = 1
 )
 
+// mobileAccessTokenTTL returns the configured access token lifetime, falling back
+// to JWT.MaxAge when AccessTokenTTL is unset (e.g. tests constructing a bare
+// config.Config{JWT: config.JWTConfig{MaxAge: ...}} literal instead of config.Load()).
+func (s *AuthService) mobileAccessTokenTTL() time.Duration {
+	if s.cfg.JWT.AccessTokenTTL <= 0 {
+		return s.cfg.JWT.MaxAge
+	}
+	return s.cfg.JWT.AccessTokenTTL
+}
+
+// mobileRefreshTokenTTL returns the configured refresh token lifetime, falling back
+// to JWT.MaxAge when RefreshTokenTTL is unset (see mobileAccessTokenTTL).
+func (s *AuthService) mobileRefreshTokenTTL() time.Duration {
+	if s.cfg.JWT.RefreshTokenTTL <= 0 {
+		return s.cfg.JWT.MaxAge
+	}
+	return s.cfg.JWT.RefreshTokenTTL
+}
+
+// MobileAccessTokenTTL exposes mobileAccessTokenTTL to callers outside this
+// package (handlers, mobile_session_issuer.go) that need to compute the
+// accessExpiresAt value returned in API responses using the same TTL that
+// GenerateMobileJWT actually signs into the token's exp claim.
+func (s *AuthService) MobileAccessTokenTTL() time.Duration {
+	return s.mobileAccessTokenTTL()
+}
+
+// MobileRefreshTokenTTL exposes mobileRefreshTokenTTL to callers outside this
+// package, symmetrical with MobileAccessTokenTTL.
+func (s *AuthService) MobileRefreshTokenTTL() time.Duration {
+	return s.mobileRefreshTokenTTL()
+}
+
 // GenerateJWT creates a signed JWT for the given authenticated user.
 func (s *AuthService) GenerateJWT(user *model.AuthUser) (string, error) {
 	claims := jwt.MapClaims{
@@ -34,7 +67,10 @@ func (s *AuthService) GenerateJWT(user *model.AuthUser) (string, error) {
 // GenerateMobileJWT issues a strict mobile access token for iOS apps.
 func (s *AuthService) GenerateMobileJWT(user *model.AuthUser, sid string) (string, error) {
 	issuedAt := time.Now()
-	expAt := issuedAt.Add(s.cfg.JWT.MaxAge)
+	// Access token lifetime is driven by JWT.AccessTokenTTL (ACCESS_TOKEN_TTL, default 15m),
+	// not the shared JWT.MaxAge — keep these distinct so a leaked access token doesn't
+	// silently inherit the much longer 24h MaxAge window.
+	expAt := issuedAt.Add(s.mobileAccessTokenTTL())
 	claims := jwt.MapClaims{
 		"iss":    mobileTokenIssuer,
 		"aud":    mobileTokenAudience,
@@ -55,7 +91,9 @@ func (s *AuthService) GenerateMobileJWT(user *model.AuthUser, sid string) (strin
 // GenerateMobileRefreshJWT creates a refresh token pair member with same claims plus refresh type.
 func (s *AuthService) GenerateMobileRefreshJWT(user *model.AuthUser, sid string) (string, string, time.Time, error) {
 	issuedAt := time.Now()
-	expAt := issuedAt.Add(s.cfg.JWT.MaxAge)
+	// Refresh token lifetime is driven by JWT.RefreshTokenTTL (REFRESH_TOKEN_TTL, default 30d),
+	// not the shared JWT.MaxAge — see GenerateMobileJWT for the matching access-token note.
+	expAt := issuedAt.Add(s.mobileRefreshTokenTTL())
 	jti := s.GenerateSessionID()
 	claims := jwt.MapClaims{
 		"iss":    mobileTokenIssuer,

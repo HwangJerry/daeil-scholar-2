@@ -450,6 +450,30 @@ func (r *AuthRepository) EnqueueSocialRevocation(usrSeq int, provider string, ac
 	return err
 }
 
+// EnqueueSocialRevocationAlreadyRevoked queues an outbox row starting in
+// STATUS='REVOKED' rather than 'PENDING' - for use when the caller already
+// successfully called the upstream provider's revoke/unlink API itself (e.g.
+// SocialAccountLifecycleService.disconnect's synchronous flow) and only the
+// local WEO_MEMBER_SOCIAL/ALUMNI_SOCIAL_CREDENTIAL cleanup failed. Enqueuing
+// as PENDING here would make the async worker call the provider a second
+// time on an already-revoked credential, which providers reject; see
+// internal/job/social_revocation_worker.go's REVOKED handling.
+func (r *AuthRepository) EnqueueSocialRevocationAlreadyRevoked(usrSeq int, provider string, action string, failure error) error {
+	lastError := ""
+	if failure != nil {
+		lastError = failure.Error()
+		if len(lastError) > 500 {
+			lastError = lastError[:500]
+		}
+	}
+	_, err := r.DB.Exec(`
+		INSERT INTO ALUMNI_SOCIAL_REVOCATION_OUTBOX
+			(USR_SEQ, PROVIDER, ACTION, STATUS, ATTEMPT_COUNT, NEXT_ATTEMPT_AT, LAST_ERROR, CREATED_AT, UPDATED_AT)
+		VALUES (?, ?, ?, 'REVOKED', 0, NOW(), ?, NOW(), NOW())
+	`, usrSeq, provider, action, lastError)
+	return err
+}
+
 // RevokeMobileRefreshTokensBySession revokes all active refresh tokens tied to
 // a single mobile session (sid), used to log out only the current device.
 func (r *AuthRepository) RevokeMobileRefreshTokensBySession(usrSeq int, sid string) error {
@@ -459,6 +483,26 @@ func (r *AuthRepository) RevokeMobileRefreshTokensBySession(usrSeq int, sid stri
 		WHERE USR_SEQ = ? AND MRT_SID = ? AND MRT_REVOKED_AT IS NULL
 	`, usrSeq, sid)
 	return err
+}
+
+// IsMobileSessionActive reports whether the given mobile session (sid) still has
+// at least one non-revoked, non-expired refresh token on record for usrSeq. This
+// is used on every authenticated request to make logout immediately invalidate
+// the mobile access token, instead of waiting for the JWT to naturally expire.
+func (r *AuthRepository) IsMobileSessionActive(usrSeq int, sid string) (bool, error) {
+	if usrSeq <= 0 || sid == "" {
+		return false, nil
+	}
+	var count int
+	err := r.DB.Get(&count, `
+		SELECT COUNT(*)
+		FROM ALUMNI_MOBILE_REFRESH_TOKEN
+		WHERE USR_SEQ = ? AND MRT_SID = ? AND MRT_REVOKED_AT IS NULL AND EXPIRES_AT > NOW()
+	`, usrSeq, sid)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (r *AuthRepository) InsertAppleChallenge(challengeID string, nonceHash string, expiresAt time.Time) error {

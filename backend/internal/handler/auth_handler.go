@@ -191,8 +191,8 @@ func (h *AuthHandler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 		AccessToken:      mobileToken,
 		RefreshToken:     refreshToken,
 		AccessIssuedAt:   now.Unix(),
-		AccessExpiresAt:  now.Add(h.cfg.JWT.MaxAge).Unix(),
-		RefreshExpiresAt: now.Add(h.cfg.JWT.MaxAge).Unix(),
+		AccessExpiresAt:  now.Add(h.service.MobileAccessTokenTTL()).Unix(),
+		RefreshExpiresAt: refreshExpiresAt.Unix(),
 		Sid:              mobileSessionID,
 		Jti:              refreshJTI,
 	})
@@ -258,8 +258,8 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		AccessToken:      newAccessToken,
 		RefreshToken:     newRefreshToken,
 		AccessIssuedAt:   now.Unix(),
-		AccessExpiresAt:  now.Add(h.cfg.JWT.MaxAge).Unix(),
-		RefreshExpiresAt: now.Add(h.cfg.JWT.MaxAge).Unix(),
+		AccessExpiresAt:  now.Add(h.service.MobileAccessTokenTTL()).Unix(),
+		RefreshExpiresAt: newRefreshExpAt.Unix(),
 		Sid:              sid,
 		Jti:              newRefreshJTI,
 	})

@@ -35,6 +35,7 @@ type deps struct {
 	emailService           *service.EmailService
 	subscriptionBillingJob *job.SubscriptionBillingJob
 	visitJob               *job.VisitAggregationJob
+	socialRevocationWorker *job.SocialRevocationWorker
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
@@ -94,6 +95,10 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	emailService := service.NewEmailService(cfg.SMTP, logger)
 
 	authService := service.NewAuthService(authRepo, sessionRepo, cfg, cacheStore, kakaoClient, logger)
+	appleVerifier := service.NewAppleIdentityVerifier(authService, cfg.Apple)
+	socialCredentialVault, socialCredentialVaultErr := service.NewSocialCredentialVault(cfg.Apple.CredentialEncryptionKey)
+	// TODO: make the poll interval configurable; 1 minute is a reasonable default for now.
+	socialRevocationWorker := job.NewSocialRevocationWorker(authRepo, authService, appleVerifier, socialCredentialVault, socialCredentialVaultErr, time.Minute, logger)
 	memberService := service.NewMemberService(authRepo)
 	registrationService := service.NewRegistrationService(authRepo, profileRepo)
 	feedService := service.NewFeedService(feedRepo, adRepo, cacheStore)
@@ -205,5 +210,6 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		emailService:           emailService,
 		subscriptionBillingJob: subscriptionBillingJob,
 		visitJob:               visitJob,
+		socialRevocationWorker: socialRevocationWorker,
 	}, nil
 }
