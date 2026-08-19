@@ -162,6 +162,11 @@ export interface DonationConfig {
   dcGoal: number;
   dcManualAdj: number;
   dcManualDonorCnt: number;
+  dcTierSproutMin: number;
+  dcTierSaplingMin: number;
+  dcTierTreeMin: number;
+  dcTierBloomingMin: number;
+  dcTierFruitingMin: number;
   dcNote: string;
   dcOverwrite: string; // "Y" | "N"
   isActive: string;
@@ -172,6 +177,11 @@ export interface DonationConfigUpdateRequest {
   goal: number;
   manualAdj: number;
   manualDonorCnt: number;
+  tierSproutMin: number;
+  tierSaplingMin: number;
+  tierTreeMin: number;
+  tierBloomingMin: number;
+  tierFruitingMin: number;
   note: string;
   overwrite: boolean;
 }
