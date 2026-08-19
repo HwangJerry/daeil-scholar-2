@@ -4,6 +4,8 @@ package repository
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/dflh-saf/backend/internal/model"
@@ -53,6 +55,19 @@ func (r *AdminDonationRepository) CreateDonationOrder(order model.NormalizedDona
 		return 0, err
 	}
 	defer tx.Rollback()
+	seq, err := r.CreateDonationOrderTx(tx, order, operSeq, ip)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return seq, nil
+}
+
+// CreateDonationOrderTx persists a canonical donation using the caller's
+// transaction. Batch import uses this to keep every approved row atomic.
+func (r *AdminDonationRepository) CreateDonationOrderTx(tx *sqlx.Tx, order model.NormalizedDonationOrder, operSeq int, ip string) (int64, error) {
 	if err := lockActiveDonationAccount(tx, order.AccountUsrSeq); err != nil {
 		return 0, err
 	}
@@ -87,10 +102,115 @@ func (r *AdminDonationRepository) CreateDonationOrder(order model.NormalizedDona
 	if err != nil {
 		return 0, err
 	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
 	return seq, nil
+}
+
+func (r *AdminDonationRepository) CreateDonationOrdersTx(tx *sqlx.Tx, orders []model.NormalizedDonationOrder, operSeq int, ip string) ([]int64, error) {
+	if len(orders) == 0 {
+		return []int64{}, nil
+	}
+	if err := lockActiveDonationAccounts(tx, orders); err != nil {
+		return nil, err
+	}
+
+	const valueClause = `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'A', NOW(), ?, NOW(), ?, ?, NOW(), ?)`
+	values := make([]string, len(orders))
+	args := make([]interface{}, 0, len(orders)*26)
+	for index, order := range orders {
+		values[index] = valueClause
+		args = append(args,
+			accountUsrSeqOrZero(order.AccountUsrSeq), order.AccountUsrSeq, order.Source, order.TransactionNumber, nullableCompositeKey(order), order.DonationDate,
+			order.Donor.Name, order.Donor.Phone, order.Donor.Cohort, order.Donor.Department, order.LegacyGate,
+			order.GrossAmount, order.RefundedAmount, order.NetReceivedAmount, order.Status,
+			order.PaymentMethod, order.Memo, order.GrossAmount, order.NetReceivedAmount,
+			legacyDonationPayType(order.PaymentMethod), order.LegacyStatus, order.LegacyPayment,
+			operSeq, ip, operSeq, ip,
+		)
+	}
+	query := `
+		INSERT INTO WEO_ORDER (
+			USR_SEQ, O_ACCOUNT_USR_SEQ, O_SOURCE, O_TRANSACTION_NO, O_COMPOSITE_KEY, O_DONATION_DATE,
+			O_DONOR_NAME, O_DONOR_PHONE, O_DONOR_COHORT, O_DONOR_DEPARTMENT, O_GATE,
+			O_GROSS_AMOUNT, O_REFUNDED_AMOUNT, O_NET_RECEIVED_AMOUNT, O_LIFECYCLE_STATUS,
+			O_PAYMENT_METHOD, O_MEMO, O_PRICE, O_PAY, O_PAY_TYPE, O_STATUS, O_PAYMENT,
+			O_TYPE, O_REGDATE, REG_OPER, REG_DATE, REG_IPADDR, EDT_OPER, EDT_DATE, EDT_IPADDR
+		) VALUES ` + strings.Join(values, ", ")
+	if _, err := tx.Exec(query, args...); err != nil {
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+			return nil, ErrDonationOrderConflict
+		}
+		return nil, err
+	}
+
+	return findInsertedDonationOrderSequences(tx, orders)
+}
+
+func lockActiveDonationAccounts(tx *sqlx.Tx, orders []model.NormalizedDonationOrder) error {
+	unique := make(map[int]struct{})
+	for _, order := range orders {
+		if order.AccountUsrSeq != nil {
+			unique[*order.AccountUsrSeq] = struct{}{}
+		}
+	}
+	accountUsrSeqs := make([]int, 0, len(unique))
+	for usrSeq := range unique {
+		accountUsrSeqs = append(accountUsrSeqs, usrSeq)
+	}
+	if len(accountUsrSeqs) == 0 {
+		return nil
+	}
+	sort.Ints(accountUsrSeqs)
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(accountUsrSeqs)), ",")
+	args := make([]interface{}, len(accountUsrSeqs))
+	for index, usrSeq := range accountUsrSeqs {
+		args[index] = usrSeq
+	}
+	locked := make([]int, 0, len(accountUsrSeqs))
+	query := fmt.Sprintf(`
+		SELECT USR_SEQ
+		FROM WEO_MEMBER
+		WHERE USR_SEQ IN (%s) AND USR_STATUS != 'AAA'
+		ORDER BY USR_SEQ
+		FOR UPDATE`, placeholders)
+	if err := tx.Select(&locked, query, args...); err != nil {
+		return err
+	}
+	if len(locked) != len(accountUsrSeqs) {
+		return ErrDonationAccountNotFound
+	}
+	return nil
+}
+
+type insertedDonationOrderRow struct {
+	OrderSeq     int64  `db:"O_SEQ"`
+	CompositeKey string `db:"O_COMPOSITE_KEY"`
+}
+
+func findInsertedDonationOrderSequences(tx *sqlx.Tx, orders []model.NormalizedDonationOrder) ([]int64, error) {
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(orders)), ",")
+	args := make([]interface{}, len(orders))
+	for index, order := range orders {
+		args[index] = order.CompositeKey
+	}
+	rows := make([]insertedDonationOrderRow, 0, len(orders))
+	query := fmt.Sprintf(`SELECT O_SEQ, O_COMPOSITE_KEY FROM WEO_ORDER WHERE O_COMPOSITE_KEY IN (%s)`, placeholders)
+	if err := tx.Select(&rows, query, args...); err != nil {
+		return nil, err
+	}
+	sequenceByKey := make(map[string]int64, len(rows))
+	for _, row := range rows {
+		sequenceByKey[row.CompositeKey] = row.OrderSeq
+	}
+	sequences := make([]int64, len(orders))
+	for index, order := range orders {
+		sequence, exists := sequenceByKey[order.CompositeKey]
+		if !exists {
+			return nil, errors.New("inserted donation order not found")
+		}
+		sequences[index] = sequence
+	}
+	return sequences, nil
 }
 
 // lockActiveDonationAccount serializes donation linking with account deletion,
