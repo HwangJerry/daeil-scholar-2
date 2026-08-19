@@ -332,6 +332,7 @@ export interface DonationImportPreviewRow extends ExcelDonationRow {
   matchedUsrSeq: number | null;
   matchedName: string;
   note: string;
+  previewToken: string;
 }
 
 export interface DonationImportPreviewResult {
@@ -344,6 +345,7 @@ export interface DonationImportPreviewResult {
 
 export interface DonationImportCommitRow extends ExcelDonationRow {
   accountUsrSeq: number | null;
+  previewToken: string;
 }
 
 export interface DonationImportCommitRequest {
