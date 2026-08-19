@@ -38,7 +38,7 @@ type handlers struct {
 	adminUpload       *handler.AdminUploadHandler
 	adminAttachUpload *handler.AdminAttachmentUploadHandler
 	socialLinkPhoto   *handler.SocialLinkPhotoHandler
-	myDonation        *handler.MyDonationHandler
+	personalDonation  *handler.PersonalDonationHandler
 	message           *handler.MessageHandler
 	memberBlock       *handler.MemberBlockHandler
 	push              *handler.PushHandler
@@ -156,7 +156,7 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Post("/api/profile/password", h.passwordChange.ChangePassword)
 		// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
 		// r.Post("/api/donation/orders", h.payment.CreateOrder)
-		// r.Get("/api/donation/my", h.myDonation.GetMyDonations)
+		r.Get("/api/donation/my", h.personalDonation.GetMyDonations)
 		r.Post("/api/feed/{seq}/like", h.like.ToggleLike)
 		r.Post("/api/feed/{seq}/comments", h.comment.CreateComment)
 		r.Delete("/api/feed/{seq}/comments/{cSeq}", h.comment.DeleteComment)
