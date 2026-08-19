@@ -426,6 +426,23 @@ func parseExcelDonationRows(reader io.Reader, donationDate string) ([]model.Exce
 		}
 		phone := strings.TrimSpace(cellAt(worksheetRow, donationImportPhoneColumn))
 		amountValue := cellAt(worksheetRow, donationImportAmountColumn)
+		amountCell, coordinateErr := excelize.CoordinatesToCellName(donationImportAmountColumn+1, rowIndex)
+		if coordinateErr != nil {
+			return nil, nil, fmt.Errorf("%d행 금액 셀 위치를 확인할 수 없습니다: %w", rowIndex, coordinateErr)
+		}
+		amountFormula, formulaErr := workbook.GetCellFormula(sheets[0], amountCell)
+		if formulaErr != nil {
+			return nil, nil, fmt.Errorf("%d행 F열 수식을 확인할 수 없습니다: %w", rowIndex, formulaErr)
+		}
+		if amountFormula != "" {
+			validationErrors = append(validationErrors, model.DonationImportRowError{
+				RowIndex: rowIndex,
+				Field:    "amount",
+				Code:     "FORMULA_NOT_ALLOWED",
+				Message:  fmt.Sprintf("%d행 F열은 수식이 아닌 값이어야 합니다.", rowIndex),
+			})
+			continue
+		}
 		rowErrors := validateExcelDonationFields(rowIndex, name, cohort, department, phone, amountValue)
 		validationErrors = append(validationErrors, rowErrors...)
 		if len(rowErrors) > 0 {

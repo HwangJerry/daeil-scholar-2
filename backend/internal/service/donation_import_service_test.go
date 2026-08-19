@@ -67,6 +67,44 @@ func TestParseExcelDonationRowsRejectsAmountAboveLimit(t *testing.T) {
 	}
 }
 
+func TestParseExcelDonationRowsRejectsFormulaAmountWithCachedValue(t *testing.T) {
+	workbook := excelize.NewFile()
+	sheet := workbook.GetSheetName(0)
+	rows := [][]interface{}{
+		{"제목"},
+		{"", "이름", "기수", "과", "연락처", "금액"},
+		{"", "김동문", "12", "영", "010-1234-5678", "999999"},
+	}
+	for index, row := range rows {
+		cell, err := excelize.CoordinatesToCellName(1, index+1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := workbook.SetSheetRow(sheet, cell, &row); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := workbook.SetCellFormula(sheet, "F3", "1+1"); err != nil {
+		t.Fatal(err)
+	}
+	var buffer bytes.Buffer
+	if err := workbook.Write(&buffer); err != nil {
+		t.Fatal(err)
+	}
+	if err := workbook.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	parsedRows, validationErrors, err := parseExcelDonationRows(bytes.NewReader(buffer.Bytes()), "2026-08-19")
+	if err != nil || len(parsedRows) != 0 || len(validationErrors) != 1 {
+		t.Fatalf("parseExcelDonationRows() = %+v, %+v, %v; want formula rejection", parsedRows, validationErrors, err)
+	}
+	rowError := validationErrors[0]
+	if rowError.RowIndex != 3 || rowError.Field != "amount" || rowError.Code != "FORMULA_NOT_ALLOWED" || rowError.Message != "3행 F열은 수식이 아닌 값이어야 합니다." {
+		t.Fatalf("formula validation error = %+v", rowError)
+	}
+}
+
 func TestParseExcelDonationRowsRejectsRowsWithMissingRequiredFields(t *testing.T) {
 	workbook := excelWorkbook(t, [][]interface{}{
 		{"제목"},
