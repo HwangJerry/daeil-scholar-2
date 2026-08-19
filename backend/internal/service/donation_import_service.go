@@ -25,6 +25,7 @@ const (
 	donationImportPhoneColumn       = 4
 	donationImportAmountColumn      = 5
 	donationImportMaxRows           = 500
+	donationImportMaxAmount         = int64(1_000_000_000_000)
 	donationImportUnzipSizeLimit    = 50 << 20
 )
 
@@ -38,9 +39,8 @@ type donationImportHeaderRule struct {
 var donationImportHeaderRules = []donationImportHeaderRule{
 	{columnIndex: donationImportNameColumn, columnName: "B", wantLabel: "이름", keywords: []string{"이름", "성명", "회원명"}},
 	{columnIndex: donationImportCohortColumn, columnName: "C", wantLabel: "기수", keywords: []string{"기수", "회차"}},
-	{columnIndex: donationImportDepartmentColumn, columnName: "D", wantLabel: "학과 또는 부서", keywords: []string{"학과", "부서", "소속"}},
+	{columnIndex: donationImportDepartmentColumn, columnName: "D", wantLabel: "학과 또는 부서", keywords: []string{"과", "부서", "소속"}},
 	{columnIndex: donationImportPhoneColumn, columnName: "E", wantLabel: "전화 또는 연락처", keywords: []string{"전화", "연락처"}},
-	{columnIndex: donationImportAmountColumn, columnName: "F", wantLabel: "금액", keywords: []string{"금액", "후원금"}},
 }
 
 var (
@@ -347,6 +347,8 @@ func validateExcelDonationFields(rowIndex int, name, cohort, department, phone, 
 			code = "REQUIRED"
 		}
 		found = append(found, model.DonationImportRowError{RowIndex: rowIndex, Field: "amount", Code: code, Message: "금액은 0보다 큰 정수여야 합니다."})
+	} else if parsedAmount > donationImportMaxAmount {
+		found = append(found, model.DonationImportRowError{RowIndex: rowIndex, Field: "amount", Code: "AMOUNT_LIMIT_EXCEEDED", Message: "금액은 1조원 이하여야 합니다."})
 	}
 	return found
 }
@@ -395,6 +397,9 @@ func normalizeDonationImportCommitRow(row model.DonationImportCommitRow) (model.
 	row.DonorPhone = strings.ReplaceAll(rawPhone, "-", "")
 	if row.Amount <= 0 {
 		return row, rowError(row.RowIndex, "amount", "INVALID_AMOUNT", "금액은 0보다 큰 정수여야 합니다.")
+	}
+	if row.Amount > donationImportMaxAmount {
+		return row, rowError(row.RowIndex, "amount", "AMOUNT_LIMIT_EXCEEDED", "금액은 1조원 이하여야 합니다.")
 	}
 	if row.AccountUsrSeq != nil && *row.AccountUsrSeq <= 0 {
 		return row, rowError(row.RowIndex, "accountUsrSeq", "INVALID_ACCOUNT", "accountUsrSeq는 1 이상이어야 합니다.")

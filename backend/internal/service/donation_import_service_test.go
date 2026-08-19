@@ -37,6 +37,35 @@ func TestParseExcelDonationRowsUsesLegacyPositionsFromThirdRow(t *testing.T) {
 	}
 }
 
+func TestParseExcelDonationRowsAcceptsProductionWorkbookHeaders(t *testing.T) {
+	workbook := excelWorkbook(t, [][]interface{}{
+		{"", "", "", "", "", "해피나눔, 계좌이체 건만의 합계"},
+		{"", "이름", "기수", "과", "연락처", "2025년 6월"},
+		{"", "김동문", "12", "영", "010-1234-5678", "100,000"},
+	})
+
+	rows, validationErrors, err := parseExcelDonationRows(workbook, "2026-08-19")
+	if err != nil || len(validationErrors) != 0 || len(rows) != 1 {
+		t.Fatalf("parseExcelDonationRows() = %+v, %+v, %v; want production header accepted", rows, validationErrors, err)
+	}
+}
+
+func TestParseExcelDonationRowsRejectsAmountAboveLimit(t *testing.T) {
+	workbook := excelWorkbook(t, [][]interface{}{
+		{"제목"},
+		{"", "이름", "기수", "과", "연락처", "2025년 6월"},
+		{"", "김동문", "12", "영", "010-1234-5678", donationImportMaxAmount + 1},
+	})
+
+	rows, validationErrors, err := parseExcelDonationRows(workbook, "2026-08-19")
+	if err != nil || len(rows) != 0 || len(validationErrors) != 1 {
+		t.Fatalf("parseExcelDonationRows() = %+v, %+v, %v; want amount limit error", rows, validationErrors, err)
+	}
+	if validationErrors[0].Code != "AMOUNT_LIMIT_EXCEEDED" {
+		t.Fatalf("validation error = %+v", validationErrors[0])
+	}
+}
+
 func TestParseExcelDonationRowsRejectsRowsWithMissingRequiredFields(t *testing.T) {
 	workbook := excelWorkbook(t, [][]interface{}{
 		{"제목"},
@@ -258,6 +287,20 @@ func TestDonationImportCommitRejectsMoreThanMaximumRows(t *testing.T) {
 	}
 	var commitError *DonationImportCommitError
 	if !errors.As(err, &commitError) || commitError.RowError.Code != "ROW_LIMIT_EXCEEDED" || !strings.Contains(commitError.RowError.Message, "500행") {
+		t.Fatalf("commit error = %#v", err)
+	}
+}
+
+func TestDonationImportCommitRejectsAmountAboveLimit(t *testing.T) {
+	service := NewDonationImportService(&donationImportRepositoryStub{}, &donationImportOrderCreatorStub{})
+	row := commitRow(3, "고액", donationImportMaxAmount+1, nil)
+
+	result, err := service.Commit([]model.DonationImportCommitRow{row}, "2026-08-19", 9, "192.0.2.10")
+	if result != nil || err == nil {
+		t.Fatalf("Commit() = %+v, %v; want amount limit rejection", result, err)
+	}
+	var commitError *DonationImportCommitError
+	if !errors.As(err, &commitError) || commitError.RowError.Code != "AMOUNT_LIMIT_EXCEEDED" {
 		t.Fatalf("commit error = %#v", err)
 	}
 }
