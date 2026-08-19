@@ -221,17 +221,8 @@ func (s *AdminDonationService) CreateOrder(input model.DonationOrderInput, operS
 	if err != nil {
 		return nil, err
 	}
-	if normalized.AccountUsrSeq != nil {
-		if *normalized.AccountUsrSeq <= 0 {
-			return nil, fmt.Errorf("%w: invalid account user sequence", ErrInvalidDonationOrder)
-		}
-		exists, err := s.accountRepo.CheckUserExists(*normalized.AccountUsrSeq)
-		if err != nil {
-			return nil, err
-		}
-		if !exists {
-			return nil, ErrDonationAccountNotFound
-		}
+	if err := s.validateDonationAccount(normalized.AccountUsrSeq); err != nil {
+		return nil, err
 	}
 	seq, err := s.repo.CreateDonationOrder(normalized, operSeq, ip)
 	if err != nil {
@@ -248,8 +239,30 @@ func (s *AdminDonationService) UpdateOrder(seq int64, input model.DonationOrderI
 	if err != nil {
 		return nil, err
 	}
+	if normalized.AccountUsrSeqSet {
+		if err := s.validateDonationAccount(normalized.AccountUsrSeq); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.repo.UpdateDonationOrder(seq, normalized, operSeq, ip); err != nil {
 		return nil, err
 	}
 	return s.repo.GetDonationOrder(seq)
+}
+
+func (s *AdminDonationService) validateDonationAccount(accountUsrSeq *int) error {
+	if accountUsrSeq == nil {
+		return nil
+	}
+	if *accountUsrSeq <= 0 {
+		return fmt.Errorf("%w: invalid account user sequence", ErrInvalidDonationOrder)
+	}
+	exists, err := s.accountRepo.CheckUserExists(*accountUsrSeq)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrDonationAccountNotFound
+	}
+	return nil
 }

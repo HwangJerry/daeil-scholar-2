@@ -131,24 +131,25 @@ func TestGetDonationOrderReturnsCanonicalDetail(t *testing.T) {
 	}
 }
 
-func TestUpdateDonationOrderReplacesCanonicalAndLegacyFields(t *testing.T) {
+func TestUpdateDonationOrderChangesLinkedAccountWhenProvided(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	accountUsrSeq := 42
 	order := model.NormalizedDonationOrder{
 		DonationOrderInput: model.DonationOrderInput{
-			Source: "other", DonationDate: "2026-07-29",
+			Source: "other", AccountUsrSeq: &accountUsrSeq, AccountUsrSeqSet: true, DonationDate: "2026-07-29",
 			Donor:        model.DonationDonor{Name: "기부자", Cohort: "19", Department: "중국어", Phone: "01011112222"},
 			DonationType: "sponsorship", GrossAmount: 50000, Status: "completed", PaymentMethod: "admin",
 		},
 		NetReceivedAmount: 50000, CompositeKey: "replacement-key", LegacyGate: "F", LegacyStatus: "Y", LegacyPayment: "Y",
 	}
-	mock.ExpectExec(`UPDATE WEO_ORDER`).
+	mock.ExpectExec(`O_ACCOUNT_USR_SEQ = CASE WHEN \? THEN \? ELSE O_ACCOUNT_USR_SEQ END`).
 		WithArgs(
-			"other", nil, "replacement-key", "2026-07-29", "기부자", "01011112222", "19", "중국어", "F",
+			true, accountUsrSeq, "other", nil, "replacement-key", "2026-07-29", "기부자", "01011112222", "19", "중국어", "F",
 			int64(50000), int64(0), int64(50000), "completed", "admin", nil,
 			int64(50000), int64(50000), "ADMS", "Y", "Y", 7, "192.0.2.1", int64(3001),
 		).
@@ -162,7 +163,7 @@ func TestUpdateDonationOrderReplacesCanonicalAndLegacyFields(t *testing.T) {
 	}
 }
 
-func TestUpdateDonationOrderAcceptsUnchangedFullReplacement(t *testing.T) {
+func TestUpdateDonationOrderPreservesLinkedAccountWhenOmitted(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -177,10 +178,47 @@ func TestUpdateDonationOrderAcceptsUnchangedFullReplacement(t *testing.T) {
 		},
 		NetReceivedAmount: 100000, CompositeKey: "composite", LegacyGate: "S", LegacyStatus: "Y", LegacyPayment: "Y",
 	}
-	mock.ExpectExec(`UPDATE WEO_ORDER`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`O_ACCOUNT_USR_SEQ = CASE WHEN \? THEN \? ELSE O_ACCOUNT_USR_SEQ END`).
+		WithArgs(
+			false, nil, "bank_transfer", nil, "composite", "2026-07-28", "예시 동문", "01000000000", "18", "영어", "S",
+			int64(100000), int64(0), int64(100000), "completed", "bank", nil,
+			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001),
+		).
+		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	if err := repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1"); err != nil {
 		t.Fatalf("UpdateDonationOrder() unchanged replacement error = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateDonationOrderClearsLinkedAccountWhenNullProvided(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	order := model.NormalizedDonationOrder{
+		DonationOrderInput: model.DonationOrderInput{
+			Source: "bank_transfer", AccountUsrSeqSet: true, DonationDate: "2026-07-28",
+			Donor:        model.DonationDonor{Name: "예시 동문", Cohort: "18", Department: "영어", Phone: "01000000000"},
+			DonationType: "one_time", GrossAmount: 100000, Status: "completed", PaymentMethod: "bank",
+		},
+		NetReceivedAmount: 100000, CompositeKey: "composite", LegacyGate: "S", LegacyStatus: "Y", LegacyPayment: "Y",
+	}
+	mock.ExpectExec(`O_ACCOUNT_USR_SEQ = CASE WHEN \? THEN \? ELSE O_ACCOUNT_USR_SEQ END`).
+		WithArgs(
+			true, nil, "bank_transfer", nil, "composite", "2026-07-28", "예시 동문", "01000000000", "18", "영어", "S",
+			int64(100000), int64(0), int64(100000), "completed", "bank", nil,
+			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001),
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1"); err != nil {
+		t.Fatalf("UpdateDonationOrder() error = %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

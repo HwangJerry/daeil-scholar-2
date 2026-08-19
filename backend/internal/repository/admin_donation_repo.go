@@ -299,6 +299,7 @@ func (r *AdminDonationRepository) GetDonationOrders(page, size int, search, stat
 func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.NormalizedDonationOrder, operSeq int, ip string) error {
 	_, err := r.DB.Exec(`
 		UPDATE WEO_ORDER SET
+			O_ACCOUNT_USR_SEQ = CASE WHEN ? THEN ? ELSE O_ACCOUNT_USR_SEQ END,
 			O_SOURCE = ?, O_TRANSACTION_NO = ?, O_COMPOSITE_KEY = ?, O_DONATION_DATE = ?,
 			O_DONOR_NAME = ?, O_DONOR_PHONE = ?, O_DONOR_COHORT = ?, O_DONOR_DEPARTMENT = ?, O_GATE = ?,
 			O_GROSS_AMOUNT = ?, O_REFUNDED_AMOUNT = ?, O_NET_RECEIVED_AMOUNT = ?, O_LIFECYCLE_STATUS = ?,
@@ -306,6 +307,7 @@ func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.Nor
 			EDT_OPER = ?, EDT_DATE = NOW(), EDT_IPADDR = ?
 		WHERE O_SEQ = ? AND O_TYPE = 'A'
 	`,
+		order.AccountUsrSeqSet, order.AccountUsrSeq,
 		order.Source, order.TransactionNumber, nullableCompositeKey(order), order.DonationDate,
 		order.Donor.Name, order.Donor.Phone, order.Donor.Cohort, order.Donor.Department, order.LegacyGate,
 		order.GrossAmount, order.RefundedAmount, order.NetReceivedAmount, order.Status,

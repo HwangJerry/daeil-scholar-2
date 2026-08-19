@@ -154,3 +154,29 @@ func TestCreateOrderRejectsMissingDonationAccount(t *testing.T) {
 		t.Fatalf("checked account = %d, want %d", accountRepo.checkedSeq, accountUsrSeq)
 	}
 }
+
+func TestUpdateOrderRejectsMissingDonationAccount(t *testing.T) {
+	accountUsrSeq := 9999
+	accountRepo := &donationAccountRepositoryStub{exists: false}
+	service := NewAdminDonationService(nil, nil, accountRepo)
+
+	_, err := service.UpdateOrder(3001, model.DonationOrderInput{
+		Source:           "other",
+		AccountUsrSeq:    &accountUsrSeq,
+		AccountUsrSeqSet: true,
+		DonationDate:     "2026-07-28",
+		Donor:            model.DonationDonor{Name: "기부자", Cohort: "18", Department: "영어", Phone: "01000000000"},
+		DonationType:     "one_time",
+		GrossAmount:      100000,
+		RefundedAmount:   0,
+		Status:           "completed",
+		PaymentMethod:    "admin",
+	}, 7, "192.0.2.1")
+
+	if !errors.Is(err, ErrDonationAccountNotFound) {
+		t.Fatalf("UpdateOrder() error = %v, want ErrDonationAccountNotFound", err)
+	}
+	if accountRepo.checkedSeq != accountUsrSeq {
+		t.Fatalf("checked account = %d, want %d", accountRepo.checkedSeq, accountUsrSeq)
+	}
+}

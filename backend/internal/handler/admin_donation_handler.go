@@ -149,6 +149,25 @@ func (f *nullableDonationString) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type nullableDonationInt struct {
+	value *int
+	set   bool
+}
+
+func (f *nullableDonationInt) UnmarshalJSON(data []byte) error {
+	f.set = true
+	if string(data) == "null" {
+		f.value = nil
+		return nil
+	}
+	var value int
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	f.value = &value
+	return nil
+}
+
 type donationDonorRequest struct {
 	Name       *string `json:"name"`
 	Cohort     *string `json:"cohort"`
@@ -158,7 +177,7 @@ type donationDonorRequest struct {
 
 type donationOrderRequest struct {
 	Source            *string                `json:"source"`
-	AccountUsrSeq     *int                   `json:"accountUsrSeq"`
+	AccountUsrSeq     nullableDonationInt    `json:"accountUsrSeq"`
 	TransactionNumber nullableDonationString `json:"transactionNumber"`
 	DonationDate      *string                `json:"donationDate"`
 	Donor             *donationDonorRequest  `json:"donor"`
@@ -184,7 +203,8 @@ func decodeDonationOrderInput(r *http.Request) (model.DonationOrderInput, error)
 	}
 	return model.DonationOrderInput{
 		Source:            *request.Source,
-		AccountUsrSeq:     request.AccountUsrSeq,
+		AccountUsrSeq:     request.AccountUsrSeq.value,
+		AccountUsrSeqSet:  request.AccountUsrSeq.set,
 		TransactionNumber: request.TransactionNumber.value,
 		DonationDate:      *request.DonationDate,
 		Donor: model.DonationDonor{
