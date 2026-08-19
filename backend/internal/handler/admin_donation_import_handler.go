@@ -5,11 +5,13 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/service"
+	"github.com/rs/zerolog/log"
 )
 
 type AdminDonationImportHandler struct {
@@ -29,12 +31,16 @@ func (h *AdminDonationImportHandler) Preview(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	file, _, err := r.FormFile("file")
+	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "NO_FILE", "업로드할 엑셀 파일이 필요합니다.")
 		return
 	}
 	defer file.Close()
+	if !strings.EqualFold(filepath.Ext(fileHeader.Filename), ".xlsx") {
+		respondError(w, http.StatusBadRequest, "INVALID_FILE_TYPE", ".xlsx 형식의 엑셀 파일만 업로드할 수 있습니다.")
+		return
+	}
 	donationDate := strings.TrimSpace(r.FormValue("donationDate"))
 	if donationDate == "" {
 		respondError(w, http.StatusBadRequest, "NO_DONATION_DATE", "기부 반영일자가 필요합니다.")
@@ -43,6 +49,13 @@ func (h *AdminDonationImportHandler) Preview(w http.ResponseWriter, r *http.Requ
 
 	result, err := h.service.ParsePreview(file, donationDate)
 	if err != nil {
+		var validationError *service.DonationImportFileValidationError
+		if errors.As(err, &validationError) {
+			respondJSON(w, http.StatusBadRequest, model.DonationImportErrorResponse{
+				Code: "DONATION_FILE_VALIDATION_FAILED", Message: validationError.Error(), Errors: validationError.Errors,
+			})
+			return
+		}
 		if errors.Is(err, service.ErrInvalidDonationDate) {
 			respondError(w, http.StatusBadRequest, "INVALID_DONATION_DATE", err.Error())
 			return
@@ -51,6 +64,7 @@ func (h *AdminDonationImportHandler) Preview(w http.ResponseWriter, r *http.Requ
 			respondError(w, http.StatusBadRequest, "INVALID_DONATION_FILE", err.Error())
 			return
 		}
+		log.Error().Err(err).Msg("donation import preview failed")
 		respondError(w, http.StatusInternalServerError, "DONATION_PREVIEW_FAILED", "기부 내역 미리보기를 만들지 못했습니다.")
 		return
 	}
@@ -87,6 +101,14 @@ func (h *AdminDonationImportHandler) Commit(w http.ResponseWriter, r *http.Reque
 			respondError(w, http.StatusBadRequest, "INVALID_DONATION_DATE", err.Error())
 			return
 		}
+		var commitError *service.DonationImportCommitError
+		if errors.As(err, &commitError) {
+			respondJSON(w, http.StatusConflict, model.DonationImportErrorResponse{
+				Code: "DONATION_IMPORT_COMMIT_REJECTED", Message: commitError.Error(), Errors: []model.DonationImportRowError{commitError.RowError},
+			})
+			return
+		}
+		log.Error().Err(err).Msg("donation import commit failed")
 		respondError(w, http.StatusInternalServerError, "DONATION_COMMIT_FAILED", "기부 내역을 반영하지 못했습니다.")
 		return
 	}

@@ -3,6 +3,14 @@
 export interface APIError {
   code: string;
   message: string;
+  errors?: APIFieldError[];
+}
+
+export interface APIFieldError {
+  rowIndex: number;
+  field: string;
+  code: string;
+  message: string;
 }
 
 export interface AuthUser {
@@ -336,6 +344,7 @@ export interface DonationImportPreviewResult {
 
 export interface DonationImportCommitRow extends ExcelDonationRow {
   accountUsrSeq: number | null;
+  manualOverride: boolean;
 }
 
 export interface DonationImportCommitRequest {

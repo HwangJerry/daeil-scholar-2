@@ -48,7 +48,14 @@ function createInitialSelection(preview: DonationImportPreviewResult): ImportRow
 }
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof ApiClientError) return error.message;
+  if (error instanceof ApiClientError) {
+    if (error.details.length === 0) return error.message;
+    const visibleErrors = error.details.slice(0, 5);
+    const messages = visibleErrors.map((detail) => `${detail.rowIndex}행 ${detail.message}`);
+    const remainingCount = error.details.length - visibleErrors.length;
+    if (remainingCount > 0) messages.push(`외 ${remainingCount.toLocaleString()}건`);
+    return messages.join(' / ');
+  }
   return '네트워크 상태를 확인하고 다시 시도해 주세요.';
 }
 
@@ -172,6 +179,7 @@ export function DonationImportSection() {
         donorPhone: row.donorPhone,
         amount: row.amount,
         accountUsrSeq: isValidAccountUsrSeq ? accountUsrSeq : null,
+        manualOverride: row.status !== 'matched',
       };
     });
 

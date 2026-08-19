@@ -65,7 +65,7 @@ func registerRoutes(h handlers, authService *service.AuthService, cacheStore *ca
 	router.Use(mw.Recoverer(logger, debugHook))
 	router.Use(mw.RequestLogger(logger))
 	router.Use(mw.CORSMiddleware(allowedOrigins))
-	router.Use(mw.MaxBodySize(2 << 20))
+	router.Use(mw.MaxBodySize(int64(cfg.Upload.MaxFileSizeMB) << 20))
 
 	// Static file servers (dev: proxied from Vite/Nginx; prod: handled by Nginx alias)
 	router.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.Upload.BasePath))))
