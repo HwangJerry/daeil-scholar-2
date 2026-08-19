@@ -158,6 +158,7 @@ type donationDonorRequest struct {
 
 type donationOrderRequest struct {
 	Source            *string                `json:"source"`
+	AccountUsrSeq     *int                   `json:"accountUsrSeq"`
 	TransactionNumber nullableDonationString `json:"transactionNumber"`
 	DonationDate      *string                `json:"donationDate"`
 	Donor             *donationDonorRequest  `json:"donor"`
@@ -183,6 +184,7 @@ func decodeDonationOrderInput(r *http.Request) (model.DonationOrderInput, error)
 	}
 	return model.DonationOrderInput{
 		Source:            *request.Source,
+		AccountUsrSeq:     request.AccountUsrSeq,
 		TransactionNumber: request.TransactionNumber.value,
 		DonationDate:      *request.DonationDate,
 		Donor: model.DonationDonor{
@@ -228,6 +230,8 @@ func respondDonationOrderError(w http.ResponseWriter, err error) {
 		respondError(w, http.StatusNotFound, "DONATION_ORDER_NOT_FOUND", "기부 거래를 찾을 수 없습니다.")
 	case errors.Is(err, repository.ErrDonationOrderConflict):
 		respondError(w, http.StatusConflict, "DONATION_ORDER_CONFLICT", "이미 존재하는 기부 거래입니다.")
+	case errors.Is(err, service.ErrDonationAccountNotFound):
+		respondError(w, http.StatusNotFound, "DONATION_ACCOUNT_NOT_FOUND", "연결할 회원 계정을 찾을 수 없습니다.")
 	case errors.Is(err, service.ErrInvalidDonationOrder):
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "요청 값이 올바르지 않습니다.")
 	default:

@@ -13,7 +13,14 @@ import (
 	"github.com/dflh-saf/backend/internal/repository"
 )
 
-var ErrInvalidDonationOrder = errors.New("invalid donation order")
+var (
+	ErrInvalidDonationOrder    = errors.New("invalid donation order")
+	ErrDonationAccountNotFound = errors.New("donation account not found")
+)
+
+type donationAccountRepository interface {
+	CheckUserExists(usrSeq int) (bool, error)
+}
 
 func NormalizeDonationOrderInput(input model.DonationOrderInput) (normalized model.NormalizedDonationOrder, err error) {
 	defer func() {
@@ -124,10 +131,15 @@ func isASCII(value string) bool {
 type AdminDonationService struct {
 	repo         *repository.AdminDonationRepository
 	donationRepo *repository.DonationRepository
+	accountRepo  donationAccountRepository
 }
 
-func NewAdminDonationService(repo *repository.AdminDonationRepository, donationRepo *repository.DonationRepository) *AdminDonationService {
-	return &AdminDonationService{repo: repo, donationRepo: donationRepo}
+func NewAdminDonationService(
+	repo *repository.AdminDonationRepository,
+	donationRepo *repository.DonationRepository,
+	accountRepo donationAccountRepository,
+) *AdminDonationService {
+	return &AdminDonationService{repo: repo, donationRepo: donationRepo, accountRepo: accountRepo}
 }
 
 func (s *AdminDonationService) GetConfig() (*model.DonationConfig, error) {
@@ -208,6 +220,18 @@ func (s *AdminDonationService) CreateOrder(input model.DonationOrderInput, operS
 	normalized, err := NormalizeDonationOrderInput(input)
 	if err != nil {
 		return nil, err
+	}
+	if normalized.AccountUsrSeq != nil {
+		if *normalized.AccountUsrSeq <= 0 {
+			return nil, fmt.Errorf("%w: invalid account user sequence", ErrInvalidDonationOrder)
+		}
+		exists, err := s.accountRepo.CheckUserExists(*normalized.AccountUsrSeq)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, ErrDonationAccountNotFound
+		}
 	}
 	seq, err := s.repo.CreateDonationOrder(normalized, operSeq, ip)
 	if err != nil {

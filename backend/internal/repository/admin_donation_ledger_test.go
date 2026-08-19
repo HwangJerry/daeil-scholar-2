@@ -19,9 +19,11 @@ func TestCreateDonationOrderPersistsCanonicalAndLegacyFields(t *testing.T) {
 	}
 	defer db.Close()
 	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	accountUsrSeq := 42
 	order := model.NormalizedDonationOrder{
 		DonationOrderInput: model.DonationOrderInput{
 			Source:         "bank_transfer",
+			AccountUsrSeq:  &accountUsrSeq,
 			DonationDate:   "2026-07-28",
 			Donor:          model.DonationDonor{Name: "예시 동문", Cohort: "18", Department: "영어", Phone: "01000000000"},
 			DonationType:   "one_time",
@@ -37,9 +39,9 @@ func TestCreateDonationOrderPersistsCanonicalAndLegacyFields(t *testing.T) {
 		LegacyPayment:     "Y",
 	}
 
-	mock.ExpectExec(`INSERT INTO WEO_ORDER`).
+	mock.ExpectExec(`INSERT INTO WEO_ORDER \(\s*USR_SEQ, O_ACCOUNT_USR_SEQ`).
 		WithArgs(
-			0, "bank_transfer", nil, "composite-key", "2026-07-28",
+			0, accountUsrSeq, "bank_transfer", nil, "composite-key", "2026-07-28",
 			"예시 동문", "01000000000", "18", "영어", "S",
 			int64(100000), int64(20000), int64(80000), "partially_refunded", "bank", nil,
 			int64(100000), int64(80000), "BANK", "Y", "Y", 7, "192.0.2.1", 7, "192.0.2.1",
@@ -52,6 +54,28 @@ func TestCreateDonationOrderPersistsCanonicalAndLegacyFields(t *testing.T) {
 	}
 	if seq != 3001 {
 		t.Fatalf("seq = %d, want 3001", seq)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCreateDonationOrderAllowsUnlinkedAccount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewAdminDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	mock.ExpectExec(`INSERT INTO WEO_ORDER`).
+		WillReturnResult(sqlmock.NewResult(3002, 1))
+
+	seq, err := repo.CreateDonationOrder(model.NormalizedDonationOrder{}, 7, "192.0.2.1")
+	if err != nil {
+		t.Fatalf("CreateDonationOrder() error = %v", err)
+	}
+	if seq != 3002 {
+		t.Fatalf("seq = %d, want 3002", seq)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

@@ -48,17 +48,17 @@ func NewAdminDonationRepository(db *sqlx.DB) *AdminDonationRepository {
 func (r *AdminDonationRepository) CreateDonationOrder(order model.NormalizedDonationOrder, operSeq int, ip string) (int64, error) {
 	result, err := r.DB.Exec(`
 		INSERT INTO WEO_ORDER (
-			USR_SEQ, O_SOURCE, O_TRANSACTION_NO, O_COMPOSITE_KEY, O_DONATION_DATE,
+			USR_SEQ, O_ACCOUNT_USR_SEQ, O_SOURCE, O_TRANSACTION_NO, O_COMPOSITE_KEY, O_DONATION_DATE,
 			O_DONOR_NAME, O_DONOR_PHONE, O_DONOR_COHORT, O_DONOR_DEPARTMENT, O_GATE,
 			O_GROSS_AMOUNT, O_REFUNDED_AMOUNT, O_NET_RECEIVED_AMOUNT, O_LIFECYCLE_STATUS,
 			O_PAYMENT_METHOD, O_MEMO, O_PRICE, O_PAY, O_PAY_TYPE, O_STATUS, O_PAYMENT,
 			O_TYPE, O_REGDATE, REG_OPER, REG_DATE, REG_IPADDR, EDT_OPER, EDT_DATE, EDT_IPADDR
 		) VALUES (
-			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			'A', NOW(), ?, NOW(), ?, ?, NOW(), ?
 		)
 	`,
-		0, order.Source, order.TransactionNumber, nullableCompositeKey(order), order.DonationDate,
+		0, order.AccountUsrSeq, order.Source, order.TransactionNumber, nullableCompositeKey(order), order.DonationDate,
 		order.Donor.Name, order.Donor.Phone, order.Donor.Cohort, order.Donor.Department, order.LegacyGate,
 		order.GrossAmount, order.RefundedAmount, order.NetReceivedAmount, order.Status,
 		order.PaymentMethod, order.Memo, order.GrossAmount, order.NetReceivedAmount,

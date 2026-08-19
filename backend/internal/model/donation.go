@@ -34,6 +34,7 @@ type DonationDonor struct {
 
 type DonationOrderInput struct {
 	Source            string        `json:"source"`
+	AccountUsrSeq     *int          `json:"accountUsrSeq"`
 	TransactionNumber *string       `json:"transactionNumber"`
 	DonationDate      string        `json:"donationDate"`
 	Donor             DonationDonor `json:"donor"`
