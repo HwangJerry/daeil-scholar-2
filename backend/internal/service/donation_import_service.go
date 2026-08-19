@@ -31,6 +31,8 @@ var donationImportHeaderCandidates = struct {
 	TransactionNo: []string{"거래번호", "승인번호", "고유번호"},
 }
 
+var ErrInvalidDonationImportFile = errors.New("invalid donation import file")
+
 type donationImportRepository interface {
 	FindMemberCandidatesByNamePhone(name, phone string) ([]model.MemberCandidate, error)
 	ExtRefExists(transactionNo, compositeKey string) (bool, error)
@@ -52,7 +54,7 @@ func NewDonationImportService(repo donationImportRepository, orderCreator donati
 func (s *DonationImportService) ParsePreview(file io.Reader) (*model.DonationImportPreviewResult, error) {
 	rows, err := parseExcelDonationRows(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrInvalidDonationImportFile, err)
 	}
 
 	result := &model.DonationImportPreviewResult{Rows: make([]model.DonationImportPreviewRow, 0, len(rows))}

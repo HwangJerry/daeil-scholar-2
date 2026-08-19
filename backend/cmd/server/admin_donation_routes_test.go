@@ -10,7 +10,11 @@ import (
 
 func TestRegisterAdminDonationRoutes(t *testing.T) {
 	router := chi.NewRouter()
-	registerAdminDonationRoutes(router, handler.NewAdminDonationHandler(nil))
+	registerAdminDonationRoutes(
+		router,
+		handler.NewAdminDonationHandler(nil),
+		handler.NewAdminDonationImportHandler(nil, 10),
+	)
 
 	tests := []struct {
 		method string
@@ -20,6 +24,8 @@ func TestRegisterAdminDonationRoutes(t *testing.T) {
 		{http.MethodGet, "/orders/3001"},
 		{http.MethodPost, "/orders"},
 		{http.MethodPut, "/orders/3001"},
+		{http.MethodPost, "/import/preview"},
+		{http.MethodPost, "/import/commit"},
 	}
 	for _, test := range tests {
 		t.Run(test.method+" "+test.path, func(t *testing.T) {

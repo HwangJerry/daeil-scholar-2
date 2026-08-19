@@ -16,46 +16,47 @@ import (
 
 // handlers holds all HTTP handler instances for route registration.
 type handlers struct {
-	health            *handler.HealthHandler
-	auth              *handler.AuthHandler
-	feed              *handler.FeedHandler
-	like              *handler.LikeHandler
-	comment           *handler.CommentHandler
-	donation          *handler.DonationHandler
-	alumni            *handler.AlumniHandler
-	profile           *handler.ProfileHandler
-	profileUpload     *handler.ProfileUploadHandler
-	ad                *handler.AdHandler
-	adLike            *handler.AdLikeHandler
-	adComment         *handler.AdCommentHandler
-	adminNotice       *handler.AdminNoticeHandler
-	adminDisclosure   *handler.AdminDisclosureHandler
-	disclosure        *handler.DisclosureHandler
-	adminAd           *handler.AdminAdHandler
-	adminDonation     *handler.AdminDonationHandler
-	adminMember       *handler.AdminMemberHandler
-	adminDashboard    *handler.AdminDashboardHandler
-	adminUpload       *handler.AdminUploadHandler
-	adminAttachUpload *handler.AdminAttachmentUploadHandler
-	socialLinkPhoto   *handler.SocialLinkPhotoHandler
-	personalDonation  *handler.PersonalDonationHandler
-	message           *handler.MessageHandler
-	memberBlock       *handler.MemberBlockHandler
-	push              *handler.PushHandler
-	payment           *handler.PaymentHandler
-	subscription      *handler.SubscriptionHandler
-	og                *handler.OGHandler
-	sitemap           *handler.SitemapHandler
-	rss               *handler.RSSHandler
-	passwordReset     *handler.PasswordResetHandler
-	passwordChange    *handler.PasswordChangeHandler
-	badge             *handler.BadgeHandler
-	adminJobCat       *handler.AdminJobCategoryHandler
-	history           *handler.HistoryHandler
-	realtime          *handler.RealtimeHandler
-	adminSubscription *handler.AdminSubscriptionHandler
-	visit             *handler.VisitHandler
-	adminErrorReport  *handler.AdminErrorReportHandler
+	health              *handler.HealthHandler
+	auth                *handler.AuthHandler
+	feed                *handler.FeedHandler
+	like                *handler.LikeHandler
+	comment             *handler.CommentHandler
+	donation            *handler.DonationHandler
+	alumni              *handler.AlumniHandler
+	profile             *handler.ProfileHandler
+	profileUpload       *handler.ProfileUploadHandler
+	ad                  *handler.AdHandler
+	adLike              *handler.AdLikeHandler
+	adComment           *handler.AdCommentHandler
+	adminNotice         *handler.AdminNoticeHandler
+	adminDisclosure     *handler.AdminDisclosureHandler
+	disclosure          *handler.DisclosureHandler
+	adminAd             *handler.AdminAdHandler
+	adminDonation       *handler.AdminDonationHandler
+	adminDonationImport *handler.AdminDonationImportHandler
+	adminMember         *handler.AdminMemberHandler
+	adminDashboard      *handler.AdminDashboardHandler
+	adminUpload         *handler.AdminUploadHandler
+	adminAttachUpload   *handler.AdminAttachmentUploadHandler
+	socialLinkPhoto     *handler.SocialLinkPhotoHandler
+	personalDonation    *handler.PersonalDonationHandler
+	message             *handler.MessageHandler
+	memberBlock         *handler.MemberBlockHandler
+	push                *handler.PushHandler
+	payment             *handler.PaymentHandler
+	subscription        *handler.SubscriptionHandler
+	og                  *handler.OGHandler
+	sitemap             *handler.SitemapHandler
+	rss                 *handler.RSSHandler
+	passwordReset       *handler.PasswordResetHandler
+	passwordChange      *handler.PasswordChangeHandler
+	badge               *handler.BadgeHandler
+	adminJobCat         *handler.AdminJobCategoryHandler
+	history             *handler.HistoryHandler
+	realtime            *handler.RealtimeHandler
+	adminSubscription   *handler.AdminSubscriptionHandler
+	visit               *handler.VisitHandler
+	adminErrorReport    *handler.AdminErrorReportHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
@@ -234,7 +235,7 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Put("/donation/config", h.adminDonation.UpdateConfig)
 		r.Get("/donation/history", h.adminDonation.History)
 		r.Route("/donation", func(donationRouter chi.Router) {
-			registerAdminDonationRoutes(donationRouter, h.adminDonation)
+			registerAdminDonationRoutes(donationRouter, h.adminDonation, h.adminDonationImport)
 		})
 		r.Get("/member", h.adminMember.List)
 		r.Get("/member/{seq}", h.adminMember.Detail)
@@ -264,9 +265,11 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 	})
 }
 
-func registerAdminDonationRoutes(router chi.Router, donationHandler *handler.AdminDonationHandler) {
+func registerAdminDonationRoutes(router chi.Router, donationHandler *handler.AdminDonationHandler, importHandler *handler.AdminDonationImportHandler) {
 	router.Get("/orders", donationHandler.ListOrders)
 	router.Get("/orders/{orderSeq}", donationHandler.GetOrder)
 	router.Post("/orders", donationHandler.CreateOrder)
 	router.Put("/orders/{orderSeq}", donationHandler.UpdateOrder)
+	router.Post("/import/preview", importHandler.Preview)
+	router.Post("/import/commit", importHandler.Commit)
 }
