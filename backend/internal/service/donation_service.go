@@ -1,6 +1,7 @@
 package service
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
@@ -9,8 +10,9 @@ import (
 )
 
 type DonationService struct {
-	repo  *repository.DonationRepository
-	cache *cache.Cache
+	repo          *repository.DonationRepository
+	cache         *cache.Cache
+	snapshotStale atomic.Bool
 }
 
 func NewDonationService(repo *repository.DonationRepository, cacheStore *cache.Cache) *DonationService {
@@ -22,6 +24,14 @@ func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
 		if summary, ok := cached.(*model.DonationSummary); ok {
 			return summary, nil
 		}
+	}
+	if s.snapshotStale.Load() {
+		summary, err := s.computeLiveSummary()
+		if err != nil {
+			return nil, err
+		}
+		s.cache.Set("donation_summary", summary, 5*time.Minute)
+		return summary, nil
 	}
 	snapshot, err := s.repo.GetSnapshotByDate(time.Now())
 	if err != nil {
@@ -81,6 +91,16 @@ func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
 // InvalidateCache evicts the cached donation summary so the next call recomputes from the snapshot.
 func (s *DonationService) InvalidateCache() {
 	s.cache.Delete("donation_summary")
+}
+
+func (s *DonationService) MarkSnapshotFresh() {
+	s.snapshotStale.Store(false)
+	s.InvalidateCache()
+}
+
+func (s *DonationService) MarkSnapshotStale() {
+	s.snapshotStale.Store(true)
+	s.InvalidateCache()
 }
 
 func (s *DonationService) computeLiveSummary() (*model.DonationSummary, error) {

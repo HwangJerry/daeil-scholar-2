@@ -82,25 +82,25 @@ type donationImportRepository interface {
 type donationImportOrderCreator interface {
 	CreateImportedOrdersTx(tx *sqlx.Tx, orders []model.ImportedDonationOrder, operSeq int, ip string) ([]int64, error)
 }
-type donationCacheInvalidator interface{ InvalidateCache() }
+type donationSummaryRefresher interface{ RefreshDonationSummary() error }
 
 type DonationImportService struct {
 	repo             donationImportRepository
 	orderCreator     donationImportOrderCreator
-	cacheInvalidator donationCacheInvalidator
+	summaryRefresher donationSummaryRefresher
 	signingKey       []byte
 	now              func() time.Time
 }
 
-func NewDonationImportService(repo donationImportRepository, orderCreator donationImportOrderCreator, signingKey string, invalidators ...donationCacheInvalidator) *DonationImportService {
+func NewDonationImportService(repo donationImportRepository, orderCreator donationImportOrderCreator, signingKey string, refreshers ...donationSummaryRefresher) *DonationImportService {
 	s := &DonationImportService{
 		repo:         repo,
 		orderCreator: orderCreator,
 		signingKey:   []byte("donation-import-preview:v1:" + signingKey),
 		now:          time.Now,
 	}
-	if len(invalidators) > 0 {
-		s.cacheInvalidator = invalidators[0]
+	if len(refreshers) > 0 {
+		s.summaryRefresher = refreshers[0]
 	}
 	return s
 }
@@ -254,8 +254,8 @@ func (s *DonationImportService) Commit(rows []model.DonationImportCommitRow, don
 		log.Error().Err(err).Msg("donation import transaction failed")
 		return nil, newCommitError(0, "rows", "COMMIT_FAILED", "저장 중 오류가 발생했습니다.")
 	}
-	if s.cacheInvalidator != nil {
-		s.cacheInvalidator.InvalidateCache()
+	if s.summaryRefresher != nil {
+		_ = s.summaryRefresher.RefreshDonationSummary()
 	}
 	return result, nil
 }

@@ -32,6 +32,10 @@ type EasyPayBilling interface {
 	AutoBilling(billingKey, orderNo string, amount int, traceNo, clientIP string) (*model.ApproveResult, error)
 }
 
+type donationSummaryRefresher interface {
+	RefreshDonationSummary() error
+}
+
 // SubscriptionBillingJob charges active recurring subscriptions whose BILL_DAY matches today.
 // Each subscription is processed in its own transaction; one failure does not roll back others.
 type SubscriptionBillingJob struct {
@@ -43,6 +47,7 @@ type SubscriptionBillingJob struct {
 	cfg        config.EasyPayConfig
 	logger     zerolog.Logger
 	cancel     context.CancelFunc
+	summary    donationSummaryRefresher
 }
 
 // NewSubscriptionBillingJob wires the daily billing job.
@@ -54,8 +59,9 @@ func NewSubscriptionBillingJob(
 	cacheStore *cache.Cache,
 	cfg config.EasyPayConfig,
 	logger zerolog.Logger,
+	refreshers ...donationSummaryRefresher,
 ) *SubscriptionBillingJob {
-	return &SubscriptionBillingJob{
+	j := &SubscriptionBillingJob{
 		subRepo:    subRepo,
 		donateRepo: donateRepo,
 		epSvc:      epSvc,
@@ -64,6 +70,10 @@ func NewSubscriptionBillingJob(
 		cfg:        cfg,
 		logger:     logger,
 	}
+	if len(refreshers) > 0 {
+		j.summary = refreshers[0]
+	}
+	return j
 }
 
 // Start launches the daily ticker. Mirrors job.DonationSnapshotJob.Start: cancellable
@@ -129,7 +139,13 @@ func (j *SubscriptionBillingJob) RunOnce(now time.Time) (int, []error) {
 		processed++
 	}
 	if processed > 0 {
-		j.cache.Delete("donation_summary")
+		if j.summary != nil {
+			if err := j.summary.RefreshDonationSummary(); err != nil {
+				j.logger.Error().Err(err).Msg("subscription billing snapshot refresh failed; live summary enabled")
+			}
+		} else {
+			j.cache.Delete("donation_summary")
+		}
 	}
 	return processed, errs
 }

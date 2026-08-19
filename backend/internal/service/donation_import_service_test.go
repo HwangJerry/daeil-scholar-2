@@ -543,7 +543,10 @@ type donationImportOrderCreatorStub struct {
 
 type donationCacheInvalidatorStub struct{ calls int }
 
-func (s *donationCacheInvalidatorStub) InvalidateCache() { s.calls++ }
+func (s *donationCacheInvalidatorStub) RefreshDonationSummary() error {
+	s.calls++
+	return nil
+}
 
 func (s *donationImportOrderCreatorStub) CreateImportedOrdersTx(_ *sqlx.Tx, orders []model.ImportedDonationOrder, _ int, _ string) ([]int64, error) {
 	sequences := make([]int64, 0, len(orders))

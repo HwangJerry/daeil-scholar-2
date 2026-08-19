@@ -43,10 +43,21 @@ func (o *DonationConfigOrchestrator) UpdateConfig(update DonationConfigUpdate, o
 	if err := o.adminSvc.UpdateConfig(update, operSeq); err != nil {
 		return err
 	}
-	if err := o.snapshotJob.CreateSnapshotNow(); err != nil {
+	if err := o.RefreshDonationSummary(); err != nil {
 		return fmt.Errorf("config saved but snapshot refresh failed: %w", err)
 	}
-	o.donationSvc.InvalidateCache()
+	return nil
+}
+
+// RefreshDonationSummary recomputes today's snapshot and updates the public
+// summary cache policy. If snapshot persistence fails, the next public read
+// uses the canonical live aggregate instead of serving stale snapshot data.
+func (o *DonationConfigOrchestrator) RefreshDonationSummary() error {
+	if err := o.snapshotJob.CreateSnapshotNow(); err != nil {
+		o.donationSvc.MarkSnapshotStale()
+		return err
+	}
+	o.donationSvc.MarkSnapshotFresh()
 	return nil
 }
 
@@ -67,7 +78,7 @@ func (o *DonationConfigOrchestrator) CreateOrder(input model.DonationOrderInput,
 	if err != nil {
 		return nil, err
 	}
-	o.donationSvc.InvalidateCache()
+	_ = o.RefreshDonationSummary()
 	return order, nil
 }
 
@@ -76,6 +87,6 @@ func (o *DonationConfigOrchestrator) UpdateOrder(seq int64, input model.Donation
 	if err != nil {
 		return nil, err
 	}
-	o.donationSvc.InvalidateCache()
+	_ = o.RefreshDonationSummary()
 	return order, nil
 }

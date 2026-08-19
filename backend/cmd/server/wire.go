@@ -137,9 +137,9 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	disclosureSvc := service.NewDisclosureService(disclosureRepo)
 	adminAdSvc := service.NewAdminAdService(adminAdRepo)
 	adminDonationSvc := service.NewAdminDonationService(adminDonationRepo, donationRepo)
-	donationImportSvc := service.NewDonationImportService(donationImportRepo, adminDonationSvc, cfg.JWT.Secret, donationService)
 	donationJob := job.NewDonationSnapshotJob(donationRepo, logger)
 	adminDonationOrchestrator := service.NewDonationConfigOrchestrator(adminDonationSvc, donationService, donationJob)
+	donationImportSvc := service.NewDonationImportService(donationImportRepo, adminDonationSvc, cfg.JWT.Secret, adminDonationOrchestrator)
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
 	visitService := service.NewVisitService(visitRepo, cacheStore, cfg.VisitIPSalt, logger)
 	visitJob := job.NewVisitAggregationJob(visitRepo, logger)
@@ -172,14 +172,14 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	}
 	subscriptionRepo := repository.NewSubscriptionRepository(db)
 	subscriptionActivator := service.NewSubscriptionActivator(subscriptionRepo)
-	donateService := service.NewDonateService(donateRepo, subscriptionActivator, easypayService, cacheStore, logger, pgAuditLogger)
+	donateService := service.NewDonateService(donateRepo, subscriptionActivator, easypayService, cacheStore, logger, pgAuditLogger, adminDonationOrchestrator)
 	adminJobCatRepo := repository.NewAdminJobCategoryRepository(db)
 	adminJobCatSvc := service.NewAdminJobCategoryService(adminJobCatRepo, cacheStore)
 	historyRepo := repository.NewHistoryRepository(db)
 	historySvc := service.NewHistoryService(historyRepo)
 
 	subscriptionService := service.NewSubscriptionService(subscriptionRepo, donateService, easypayService, pgAuditLogger, cacheStore, logger)
-	subscriptionBillingJob := job.NewSubscriptionBillingJob(subscriptionRepo, donateRepo, easypayService, pgAuditLogger, cacheStore, cfg.EasyPay, logger)
+	subscriptionBillingJob := job.NewSubscriptionBillingJob(subscriptionRepo, donateRepo, easypayService, pgAuditLogger, cacheStore, cfg.EasyPay, logger, adminDonationOrchestrator)
 
 	feedPresenter := presenter.NewFeedPresenter()
 

@@ -21,6 +21,7 @@ type DonateService struct {
 	epSvc        *EasyPayService
 	logger       zerolog.Logger
 	pgAudit      *PGAuditLogger
+	summary      donationSummaryRefresher
 }
 
 func NewDonateService(
@@ -30,8 +31,13 @@ func NewDonateService(
 	cacheStore *cache.Cache,
 	logger zerolog.Logger,
 	pgAudit *PGAuditLogger,
+	refreshers ...donationSummaryRefresher,
 ) *DonateService {
-	return &DonateService{repo: repo, subActivator: subActivator, epSvc: epSvc, cache: cacheStore, logger: logger, pgAudit: pgAudit}
+	s := &DonateService{repo: repo, subActivator: subActivator, epSvc: epSvc, cache: cacheStore, logger: logger, pgAudit: pgAudit}
+	if len(refreshers) > 0 {
+		s.summary = refreshers[0]
+	}
+	return s
 }
 
 func (s *DonateService) CreateOrder(user *model.AuthUser, req model.CreateOrderRequest, ip string, cfg config.EasyPayConfig) (*model.CreateOrderResponse, error) {
@@ -224,7 +230,13 @@ func (s *DonateService) ConfirmPayment(orderNo string, encData string, sessionKe
 		return nil
 	}
 
-	s.cache.Delete("donation_summary")
+	if s.summary != nil {
+		if err := s.summary.RefreshDonationSummary(); err != nil {
+			s.logger.Error().Err(err).Str("orderNo", orderNo).Msg("donation snapshot refresh failed; live summary enabled")
+		}
+	} else {
+		s.cache.Delete("donation_summary")
+	}
 	s.logger.Info().Str("orderNo", orderNo).Int("amount", approvedAmount).Msg("payment confirmed")
 	return nil
 }
