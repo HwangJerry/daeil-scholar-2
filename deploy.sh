@@ -318,6 +318,7 @@ else
     echo "=== Applying ${#PENDING[@]} pending migration(s) on ${TARGET} ==="
     for m in "${PENDING[@]}"; do
       REMOTE_TMP="/tmp/_mig_$$_${m}"
+      MIGRATION_SHA256=$(shasum -a 256 "backend/migrations/${m}" | cut -d ' ' -f 1)
       echo "  APPLY ${m} ..."
       if ! scp "${SCP_OPTS[@]}" "backend/migrations/${m}" "${TARGET}:${REMOTE_TMP}" >/dev/null; then
         echo "✗ Failed to upload ${m} to ${TARGET}:${REMOTE_TMP}" >&2
@@ -327,7 +328,7 @@ else
       if ! ssh "${SSH_OPTS[@]}" "${TARGET}" \
         "MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' '${DB_NAME_VAL}' < ${REMOTE_TMP} \
          && MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' -BN '${DB_NAME_VAL}' \
-              -e \"INSERT INTO _migration_history (filename) VALUES ('${m}')\" \
+              -e \"INSERT INTO _migration_history (filename, sha256) VALUES ('${m}', '${MIGRATION_SHA256}')\" \
          && rm -f ${REMOTE_TMP}"; then
         echo "✗ Migration failed: ${m}" >&2
         echo "  DB may be in a partial state. Backend NOT restarted. Investigate before retrying." >&2
