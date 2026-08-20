@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/jmoiron/sqlx"
@@ -79,6 +80,34 @@ func TestDonationSummaryFallsBackToLiveCalculationWithManualOverwrite(t *testing
 	}
 	if summary.SnapshotDate != time.Now().Format("2006-01-02") {
 		t.Fatalf("snapshotDate = %q", summary.SnapshotDate)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDonationSummaryIgnoresCacheWhenSnapshotIsStale(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewDonationRepository(sqlx.NewDb(db, "sqlmock"))
+	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
+	donationService := service.NewDonationService(repo, cacheStore)
+
+	donationService.MarkSnapshotStale()
+	cacheStore.Set("donation_summary", &model.DonationSummary{DisplayAmount: 10000, DonorCount: 1}, 5*time.Minute)
+	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*COUNT\(DISTINCT CASE.*O_TYPE = 'A'`).
+		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(50000), 2))
+	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("N", 0))
+
+	summary, err := donationService.GetSummary()
+	if err != nil {
+		t.Fatalf("GetSummary() error = %v", err)
+	}
+	if summary.DisplayAmount != 70000 || summary.DonorCount != 2 {
+		t.Fatalf("live summary = %+v", summary)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

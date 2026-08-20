@@ -20,11 +20,6 @@ func NewDonationService(repo *repository.DonationRepository, cacheStore *cache.C
 }
 
 func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
-	if cached, found := s.cache.Get("donation_summary"); found {
-		if summary, ok := cached.(*model.DonationSummary); ok {
-			return summary, nil
-		}
-	}
 	if s.snapshotStale.Load() {
 		summary, err := s.computeLiveSummary()
 		if err != nil {
@@ -32,6 +27,11 @@ func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
 		}
 		s.cache.Set("donation_summary", summary, 5*time.Minute)
 		return summary, nil
+	}
+	if cached, found := s.cache.Get("donation_summary"); found {
+		if summary, ok := cached.(*model.DonationSummary); ok {
+			return summary, nil
+		}
 	}
 	snapshot, err := s.repo.GetSnapshotByDate(time.Now())
 	if err != nil {
