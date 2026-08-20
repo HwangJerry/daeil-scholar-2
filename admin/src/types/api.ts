@@ -18,6 +18,7 @@ export interface AuthUser {
   usrId: string;
   usrName: string;
   usrStatus: string;
+  adminRole: 'root' | 'operator' | null;
 }
 
 // --- Notice ---

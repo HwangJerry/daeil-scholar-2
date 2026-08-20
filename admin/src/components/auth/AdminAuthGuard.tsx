@@ -17,7 +17,7 @@ export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (user.usrStatus !== 'ZZZ') {
+  if (!user.adminRole) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <p className="text-lg text-cool-gray">관리자 권한이 필요합니다.</p>
