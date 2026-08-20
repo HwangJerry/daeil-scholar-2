@@ -65,6 +65,7 @@ func (o *DonationConfigOrchestrator) UpdateConfig(update DonationConfigUpdate, o
 // summary cache policy. If snapshot persistence fails, the next public read
 // uses the canonical live aggregate instead of serving stale snapshot data.
 func (o *DonationConfigOrchestrator) RefreshDonationSummary() error {
+	// Known limitation: concurrent refreshes are not serialized or versioned and may overwrite a newer snapshot; tracked as a follow-up.
 	if err := o.snapshotJob.CreateSnapshotNow(); err != nil {
 		o.donationSvc.MarkSnapshotStale()
 		return err
@@ -86,19 +87,24 @@ func (o *DonationConfigOrchestrator) GetOrder(seq int64) (*model.DonationOrder, 
 }
 
 func (o *DonationConfigOrchestrator) CreateOrder(input model.DonationOrderInput, operSeq int, ip string) (*model.DonationOrder, error) {
-	order, err := o.adminSvc.CreateOrder(input, operSeq, ip)
+	seq, err := o.adminSvc.CreateOrder(input, operSeq, ip)
 	if err != nil {
 		return nil, err
 	}
-	_ = o.RefreshDonationSummary()
-	return order, nil
+	o.refreshSummaryAfterLedgerWrite()
+	return o.adminSvc.GetOrder(seq)
 }
 
 func (o *DonationConfigOrchestrator) UpdateOrder(seq int64, input model.DonationOrderInput, operSeq int, ip string) (*model.DonationOrder, error) {
-	order, err := o.adminSvc.UpdateOrder(seq, input, operSeq, ip)
-	if err != nil {
+	if err := o.adminSvc.UpdateOrder(seq, input, operSeq, ip); err != nil {
 		return nil, err
 	}
+	o.refreshSummaryAfterLedgerWrite()
+	return o.adminSvc.GetOrder(seq)
+}
+
+func (o *DonationConfigOrchestrator) refreshSummaryAfterLedgerWrite() {
+	// The ledger commit is already durable, so public reads must stop trusting the old snapshot immediately.
+	o.donationSvc.MarkSnapshotStale()
 	_ = o.RefreshDonationSummary()
-	return order, nil
 }

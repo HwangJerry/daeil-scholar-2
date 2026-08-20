@@ -135,6 +135,76 @@ func TestSnapshotRefreshFailureForcesCanonicalLiveSummary(t *testing.T) {
 	}
 }
 
+func TestDonationOrderCreateResponseReadFailureStillRefreshesSummary(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	donationRepo := repository.NewDonationRepository(sqlxDB)
+	donationService := service.NewDonationService(donationRepo, cache.New(5*time.Minute, 10*time.Minute))
+	adminService := service.NewAdminDonationService(repository.NewAdminDonationRepository(sqlxDB), donationRepo)
+	snapshotCreator := &snapshotCreatorStub{}
+	orchestrator := service.NewDonationConfigOrchestrator(adminService, donationService, snapshotCreator)
+	responseReadErr := errors.New("response read failed")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`(?s)INSERT INTO WEO_ORDER \(.*O_TYPE.*\) VALUES`).WillReturnResult(sqlmock.NewResult(3001, 1))
+	mock.ExpectCommit()
+	mock.ExpectQuery(`(?s)FROM WEO_ORDER o.*WHERE o.O_SEQ = \? AND o.O_TYPE = 'A'`).
+		WithArgs(int64(3001)).
+		WillReturnError(responseReadErr)
+
+	_, err = orchestrator.CreateOrder(validSummaryDonationOrderInput(), 7, "192.0.2.1")
+	if !errors.Is(err, responseReadErr) {
+		t.Fatalf("CreateOrder() error = %v, want response read failure", err)
+	}
+	if snapshotCreator.calls != 1 {
+		t.Fatalf("snapshot refresh calls = %d, want 1", snapshotCreator.calls)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDonationOrderUpdateResponseReadFailureStillRefreshesSummary(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	donationRepo := repository.NewDonationRepository(sqlxDB)
+	donationService := service.NewDonationService(donationRepo, cache.New(5*time.Minute, 10*time.Minute))
+	adminService := service.NewAdminDonationService(repository.NewAdminDonationRepository(sqlxDB), donationRepo)
+	snapshotCreator := &snapshotCreatorStub{}
+	orchestrator := service.NewDonationConfigOrchestrator(adminService, donationService, snapshotCreator)
+	responseReadErr := errors.New("response read failed")
+	input := validSummaryDonationOrderInput()
+	input.LastEditedAt = "2026-08-20T12:00:00Z"
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`(?s)UPDATE WEO_ORDER SET.*WHERE O_SEQ = \? AND O_TYPE = 'A'`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	mock.ExpectQuery(`(?s)FROM WEO_ORDER o.*WHERE o.O_SEQ = \? AND o.O_TYPE = 'A'`).
+		WithArgs(int64(3001)).
+		WillReturnError(responseReadErr)
+
+	_, err = orchestrator.UpdateOrder(3001, input, 7, "192.0.2.1")
+	if !errors.Is(err, responseReadErr) {
+		t.Fatalf("UpdateOrder() error = %v, want response read failure", err)
+	}
+	if snapshotCreator.calls != 1 {
+		t.Fatalf("snapshot refresh calls = %d, want 1", snapshotCreator.calls)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDonationConfigUpdateRollsBackWhenSnapshotUpsertFails(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

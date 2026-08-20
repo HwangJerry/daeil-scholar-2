@@ -242,7 +242,7 @@ func TestUpdateOrderRejectsInvalidDonationAccountSequence(t *testing.T) {
 	accountUsrSeq := 0
 	service := NewAdminDonationService(nil, nil)
 
-	_, err := service.UpdateOrder(3001, model.DonationOrderInput{
+	err := service.UpdateOrder(3001, model.DonationOrderInput{
 		Source:           "other",
 		AccountUsrSeq:    &accountUsrSeq,
 		AccountUsrSeqSet: true,
@@ -275,7 +275,7 @@ func TestUpdateOrderRejectsMissingDonationAccount(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ"}))
 	mock.ExpectRollback()
 
-	_, err = service.UpdateOrder(3001, validDonationOrderInput(&accountUsrSeq, true), 7, "192.0.2.1")
+	err = service.UpdateOrder(3001, validDonationOrderInput(&accountUsrSeq, true), 7, "192.0.2.1")
 	if !errors.Is(err, ErrDonationAccountNotFound) {
 		t.Fatalf("UpdateOrder() error = %v, want ErrDonationAccountNotFound", err)
 	}

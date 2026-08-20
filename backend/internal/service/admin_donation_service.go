@@ -278,41 +278,35 @@ func (s *AdminDonationService) GetOrder(seq int64) (*model.DonationOrder, error)
 	return s.repo.GetDonationOrder(seq)
 }
 
-func (s *AdminDonationService) CreateOrder(input model.DonationOrderInput, operSeq int, ip string) (*model.DonationOrder, error) {
+func (s *AdminDonationService) CreateOrder(input model.DonationOrderInput, operSeq int, ip string) (int64, error) {
 	normalized, err := NormalizeDonationOrderInput(input)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	if err := validateDonationAccountInput(normalized.AccountUsrSeq); err != nil {
-		return nil, err
+		return 0, err
 	}
-	seq, err := s.repo.CreateDonationOrder(normalized, operSeq, ip)
-	if err != nil {
-		return nil, err
-	}
-	return s.repo.GetDonationOrder(seq)
+	return s.repo.CreateDonationOrder(normalized, operSeq, ip)
 }
 
-func (s *AdminDonationService) UpdateOrder(seq int64, input model.DonationOrderInput, operSeq int, ip string) (*model.DonationOrder, error) {
+func (s *AdminDonationService) UpdateOrder(seq int64, input model.DonationOrderInput, operSeq int, ip string) error {
 	if seq <= 0 {
-		return nil, fmt.Errorf("%w: invalid donation order sequence", ErrInvalidDonationOrder)
+		return fmt.Errorf("%w: invalid donation order sequence", ErrInvalidDonationOrder)
 	}
 	if strings.TrimSpace(input.LastEditedAt) == "" {
-		return nil, fmt.Errorf("%w: last edited timestamp is required", ErrInvalidDonationOrder)
+		return fmt.Errorf("%w: last edited timestamp is required", ErrInvalidDonationOrder)
 	}
 	normalized, err := NormalizeDonationOrderInput(input)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if normalized.AccountUsrSeqSet {
 		if err := validateDonationAccountInput(normalized.AccountUsrSeq); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	if err := s.repo.UpdateDonationOrder(seq, normalized, operSeq, ip); err != nil {
-		return nil, err
-	}
-	return s.repo.GetDonationOrder(seq)
+	// Known limitation: LastEditedAt has second precision, so same-second edits can still collide; tracked as a follow-up.
+	return s.repo.UpdateDonationOrder(seq, normalized, operSeq, ip)
 }
 
 func validateDonationAccountInput(accountUsrSeq *int) error {
