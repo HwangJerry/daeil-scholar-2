@@ -12,6 +12,8 @@ import { useToast } from './useToast.ts';
 
 export const donationOrdersQueryKey = ['admin', 'donation', 'orders'] as const;
 
+// Known limitation: order mutations only invalidate this list, leaving summary/history/dashboard stale; tracked as a follow-up.
+
 function createDonationOrderSearchParams(
   filters: DonationOrderFilters,
   page: number,

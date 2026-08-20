@@ -46,6 +46,7 @@ func (r *AuthRepository) AnonymizeAccountForDeletion(usrSeq int) ([]string, erro
 		return nil, err
 	}
 
+	// Known limitation: unlinking identities can merge donor keys without refreshing donorCount; tracked as a follow-up.
 	statements := []string{
 		`UPDATE WEO_ORDER o
 		 JOIN WEO_MEMBER m ON m.USR_SEQ = ?
