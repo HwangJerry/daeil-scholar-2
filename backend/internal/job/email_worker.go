@@ -64,7 +64,14 @@ func (w *EmailWorker) Start() {
 				if !ok {
 					return
 				}
-				w.send(msg)
+				for !w.send(msg) {
+					select {
+					case <-w.stop:
+						w.logger.Info().Msg("email worker stopped with a maintenance-blocked message")
+						return
+					case <-time.After(100 * time.Millisecond):
+					}
+				}
 			}
 		}
 	}()
@@ -90,18 +97,26 @@ func (w *EmailWorker) drainQueue() {
 			if !ok {
 				return
 			}
-			w.send(msg)
+			if !w.send(msg) {
+				return
+			}
 		default:
 			return
 		}
 	}
 }
 
-func (w *EmailWorker) send(msg model.EmailMessage) {
+func (w *EmailWorker) send(msg model.EmailMessage) bool {
 	if w.svc == nil {
-		return
+		return true
 	}
+	lease, err := w.maintenanceGate.EnterBackground()
+	if err != nil {
+		return false
+	}
+	defer lease.Release()
 	if err := w.svc.Send(msg); err != nil {
 		w.logger.Error().Err(err).Str("to", msg.To).Msg("email delivery failed")
 	}
+	return true
 }

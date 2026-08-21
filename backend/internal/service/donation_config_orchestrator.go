@@ -9,7 +9,7 @@ import (
 
 // snapshotCreator is satisfied by job.DonationSnapshotJob.
 type snapshotCreator interface {
-	CreateSnapshotNow() error
+	CreateSnapshotNowAdmitted() error
 }
 
 // DonationConfigOrchestrator is the single service the admin donation handler calls.
@@ -43,7 +43,7 @@ func (o *DonationConfigOrchestrator) UpdateConfig(goal int64, manualAdj int64, m
 	if err := o.adminSvc.UpdateConfig(goal, manualAdj, manualDonorCnt, note, overwrite, operSeq); err != nil {
 		return err
 	}
-	if err := o.snapshotJob.CreateSnapshotNow(); err != nil {
+	if err := o.snapshotJob.CreateSnapshotNowAdmitted(); err != nil {
 		return fmt.Errorf("config saved but snapshot refresh failed: %w", err)
 	}
 	o.donationSvc.InvalidateCache()

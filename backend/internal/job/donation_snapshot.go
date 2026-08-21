@@ -66,10 +66,22 @@ func (j *DonationSnapshotJob) CreateSnapshotNow() error {
 	return j.createSnapshot()
 }
 
+// CreateSnapshotNowAdmitted completes a snapshot as a continuation of an
+// already-admitted HTTP write. The caller owns the outer writer lease.
+func (j *DonationSnapshotJob) CreateSnapshotNowAdmitted() error {
+	return j.createSnapshotAdmitted()
+}
+
 func (j *DonationSnapshotJob) createSnapshot() error {
-	if j.maintenanceGate.Active() {
+	lease, err := j.maintenanceGate.EnterBackground()
+	if err != nil {
 		return maintenance.ErrWritesFrozen
 	}
+	defer lease.Release()
+	return j.createSnapshotAdmitted()
+}
+
+func (j *DonationSnapshotJob) createSnapshotAdmitted() error {
 	total, err := j.repo.SumDonations()
 	if err != nil {
 		return err
@@ -94,9 +106,6 @@ func (j *DonationSnapshotJob) createSnapshot() error {
 		if config.Overwrite == "Y" {
 			donorCount = config.ManualDonorCnt
 		}
-	}
-	if j.maintenanceGate.Active() {
-		return maintenance.ErrWritesFrozen
 	}
 	return j.repo.UpsertSnapshot(time.Now(), total, manualAdj, donorCount, goal, overwrite)
 }

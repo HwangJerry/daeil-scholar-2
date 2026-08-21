@@ -111,9 +111,11 @@ func (j *SubscriptionBillingJob) Stop() {
 // admin manual-trigger endpoint. Returns the count of attempted-and-succeeded charges plus
 // the slice of per-subscription errors (one entry per failing row).
 func (j *SubscriptionBillingJob) RunOnce(now time.Time) (int, []error) {
-	if j.maintenanceGate.Active() {
+	lease, err := j.maintenanceGate.EnterBackground()
+	if err != nil {
 		return 0, []error{maintenance.ErrWritesFrozen}
 	}
+	defer lease.Release()
 	billDay := now.Day()
 	if billDay > 28 {
 		billDay = 28

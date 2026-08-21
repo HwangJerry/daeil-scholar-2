@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/config"
@@ -44,6 +46,18 @@ type deps struct {
 func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook *observability.Hook) (*deps, error) {
 	maintenanceGate, err := maintenance.NewRuntimeGate(cfg.Environment, cfg.Maintenance.SentinelPath, cfg.Maintenance.SmokeProofSHA256, cfg.Maintenance.SmokeAllowedPaths...)
 	if err != nil {
+		return nil, err
+	}
+	environment := strings.ToLower(strings.TrimSpace(cfg.Environment))
+	if (environment == "prod" || environment == "production") &&
+		(cfg.Maintenance.ReleaseBridgePath != maintenance.ProductionReleaseBridgePath || cfg.Maintenance.ReleaseOwnerUID != 0) {
+		return nil, fmt.Errorf("production maintenance release bridge authority is invalid")
+	}
+	if err := maintenanceGate.ConfigureRelease(maintenance.ReleaseConfig{
+		BridgePath:       cfg.Maintenance.ReleaseBridgePath,
+		ProofSHA256:      cfg.Maintenance.ReleaseProofSHA256,
+		ExpectedOwnerUID: cfg.Maintenance.ReleaseOwnerUID,
+	}); err != nil {
 		return nil, err
 	}
 	authRepo := repository.NewAuthRepository(db)
@@ -169,45 +183,46 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	feedPresenter := presenter.NewFeedPresenter()
 
 	h := handlers{
-		health:            handler.NewHealthHandler(db),
-		auth:              handler.NewAuthHandler(authService, memberService, registrationService, profileService, cacheStore, cfg, logger),
-		feed:              handler.NewFeedHandler(feedService, likeService, feedPresenter),
-		like:              handler.NewLikeHandler(likeService),
-		comment:           handler.NewCommentHandler(commentService),
-		donation:          handler.NewDonationHandler(donationService),
-		alumni:            handler.NewAlumniHandler(alumniService),
-		profile:           handler.NewProfileHandler(profileService),
-		profileUpload:     handler.NewProfileUploadHandler(profileUploadService),
-		ad:                handler.NewAdHandler(adService),
-		adLike:            handler.NewAdLikeHandler(adLikeService),
-		adComment:         handler.NewAdCommentHandler(adCommentService),
-		adminNotice:       handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
-		adminDisclosure:   handler.NewAdminDisclosureHandler(adminDisclosureSvc, feedPresenter),
-		disclosure:        handler.NewDisclosureHandler(disclosureSvc, feedPresenter),
-		adminAd:           handler.NewAdminAdHandler(adminAdSvc),
-		adminDonation:     handler.NewAdminDonationHandler(adminDonationOrchestrator),
-		adminMember:       handler.NewAdminMemberHandler(adminMemberSvc),
-		adminDashboard:    handler.NewAdminDashboardHandler(adminDashboardSvc),
-		adminUpload:       handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
-		adminAttachUpload: handler.NewAdminAttachmentUploadHandler(attachmentUploadOrchestrator, cfg.Upload.MaxFileSizeMB),
-		socialLinkPhoto:   handler.NewSocialLinkPhotoHandler(uploadOrchestrator, cacheStore, logger),
-		myDonation:        handler.NewMyDonationHandler(myDonationService),
-		message:           handler.NewMessageHandler(messageService),
-		payment:           handler.NewPaymentHandler(donateService, cfg.EasyPay),
-		subscription:      handler.NewSubscriptionHandler(subscriptionService, cfg.EasyPay),
-		og:                handler.NewOGHandler(ogService, cfg.Server.SiteBaseURL),
-		sitemap:           handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
-		rss:               handler.NewRSSHandler(rssService, cfg.Server.SiteBaseURL),
-		passwordReset:     handler.NewPasswordResetHandler(passwordResetService, logger),
-		passwordChange:    handler.NewPasswordChangeHandler(passwordChangeSvc),
-		badge:             handler.NewBadgeHandler(messageService, logger),
-		adminJobCat:       handler.NewAdminJobCategoryHandler(adminJobCatSvc),
-		history:           handler.NewHistoryHandler(historySvc),
-		adminSubscription: handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
-		realtime:          handler.NewRealtimeHandler(realtimeHub, logger),
-		visit:             handler.NewVisitHandler(visitService, logger, cfg.Server.IsSecure()),
-		adminErrorReport:  handler.NewAdminErrorReportHandler(logger, debugHook),
-		push:              handler.NewPushHandler(pushService),
+		health:             handler.NewHealthHandler(db),
+		auth:               handler.NewAuthHandler(authService, memberService, registrationService, profileService, cacheStore, cfg, logger),
+		feed:               handler.NewFeedHandler(feedService, likeService, feedPresenter),
+		like:               handler.NewLikeHandler(likeService),
+		comment:            handler.NewCommentHandler(commentService),
+		donation:           handler.NewDonationHandler(donationService),
+		alumni:             handler.NewAlumniHandler(alumniService),
+		profile:            handler.NewProfileHandler(profileService),
+		profileUpload:      handler.NewProfileUploadHandler(profileUploadService),
+		ad:                 handler.NewAdHandler(adService),
+		adLike:             handler.NewAdLikeHandler(adLikeService),
+		adComment:          handler.NewAdCommentHandler(adCommentService),
+		adminNotice:        handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
+		adminDisclosure:    handler.NewAdminDisclosureHandler(adminDisclosureSvc, feedPresenter),
+		disclosure:         handler.NewDisclosureHandler(disclosureSvc, feedPresenter),
+		adminAd:            handler.NewAdminAdHandler(adminAdSvc),
+		adminDonation:      handler.NewAdminDonationHandler(adminDonationOrchestrator),
+		adminMember:        handler.NewAdminMemberHandler(adminMemberSvc),
+		adminDashboard:     handler.NewAdminDashboardHandler(adminDashboardSvc),
+		adminUpload:        handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
+		adminAttachUpload:  handler.NewAdminAttachmentUploadHandler(attachmentUploadOrchestrator, cfg.Upload.MaxFileSizeMB),
+		socialLinkPhoto:    handler.NewSocialLinkPhotoHandler(uploadOrchestrator, cacheStore, logger),
+		myDonation:         handler.NewMyDonationHandler(myDonationService),
+		message:            handler.NewMessageHandler(messageService),
+		payment:            handler.NewPaymentHandler(donateService, cfg.EasyPay),
+		subscription:       handler.NewSubscriptionHandler(subscriptionService, cfg.EasyPay),
+		og:                 handler.NewOGHandler(ogService, cfg.Server.SiteBaseURL),
+		sitemap:            handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
+		rss:                handler.NewRSSHandler(rssService, cfg.Server.SiteBaseURL),
+		passwordReset:      handler.NewPasswordResetHandler(passwordResetService, logger),
+		passwordChange:     handler.NewPasswordChangeHandler(passwordChangeSvc),
+		badge:              handler.NewBadgeHandler(messageService, logger),
+		adminJobCat:        handler.NewAdminJobCategoryHandler(adminJobCatSvc),
+		history:            handler.NewHistoryHandler(historySvc),
+		adminSubscription:  handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
+		realtime:           handler.NewRealtimeHandler(realtimeHub, logger),
+		visit:              handler.NewVisitHandler(visitService, logger, cfg.Server.IsSecure()),
+		adminErrorReport:   handler.NewAdminErrorReportHandler(logger, debugHook),
+		push:               handler.NewPushHandler(pushService),
+		maintenanceRelease: handler.NewMaintenanceReleaseHandler(maintenanceGate, cfg.Maintenance.ReleaseDrainTimeout),
 	}
 
 	return &deps{

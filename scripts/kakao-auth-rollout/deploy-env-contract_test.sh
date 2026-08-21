@@ -63,7 +63,7 @@ grep -Fq "/bin/grep -E '^EnvironmentFiles?='" <<< "$ACTIVE_UNIT_BLOCK" ||
 if ! grep -Fq '0640' "$DEPLOY" || ! grep -Fq 'alumni-backend' "$DEPLOY"; then
   fail "deploy preflight does not preserve the approved 0640 root:alumni-backend contract"
 fi
-for maintenance_key in MAINTENANCE_SENTINEL_PATH MAINTENANCE_SMOKE_PROOF_SHA256 MAINTENANCE_SMOKE_ALLOWED_PATHS; do
+for maintenance_key in MAINTENANCE_SENTINEL_PATH MAINTENANCE_SMOKE_PROOF_SHA256 MAINTENANCE_SMOKE_ALLOWED_PATHS MAINTENANCE_RELEASE_BRIDGE_PATH MAINTENANCE_RELEASE_PROOF_SHA256 MAINTENANCE_RELEASE_OWNER_UID MAINTENANCE_RELEASE_DRAIN_TIMEOUT; do
   grep -Fq "$maintenance_key" "$DEPLOY" || fail "deploy preflight does not validate $maintenance_key"
 done
 if ! grep -Fq -- '--preflight-only' "$DEPLOY"; then
@@ -89,7 +89,7 @@ grep -Fq '[[ $(GOTOOLCHAIN=local go env GOVERSION) == go1.25.2 ]]' "$DEPLOY" ||
   fail "deploy does not pin the approved Go toolchain before building"
 grep -Fq "GOWORK=off GOFLAGS='' GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -o ../dist/server ./cmd/server" "$DEPLOY" ||
   fail "backend build is not path-independent or does not match the approved artifact environment"
-for required_example_key in EASYPAY_IMMEDIATELY_MALL_ID EASYPAY_PROFILE_MALL_ID EASYPAY_BIN_BASE ENV; do
+for required_example_key in EASYPAY_IMMEDIATELY_MALL_ID EASYPAY_PROFILE_MALL_ID EASYPAY_BIN_BASE ENV MAINTENANCE_RELEASE_BRIDGE_PATH MAINTENANCE_RELEASE_PROOF_SHA256 MAINTENANCE_RELEASE_OWNER_UID MAINTENANCE_RELEASE_DRAIN_TIMEOUT; do
   grep -Eq "^${required_example_key}=" "$ROOT/deploy/alumni-backend.env.example" ||
     fail "EnvironmentFile example is missing ${required_example_key}"
 done

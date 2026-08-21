@@ -40,13 +40,6 @@ func (h *AdHandler) trackEvent(w http.ResponseWriter, r *http.Request, eventType
 	if host, _, splitErr := net.SplitHostPort(r.RemoteAddr); splitErr == nil {
 		ipAddr = host
 	}
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// silently recover — ad tracking should not crash the server
-			}
-		}()
-		h.service.LogEvent(maSeq, usrSeq, eventType, ipAddr)
-	}()
+	h.service.LogEvent(maSeq, usrSeq, eventType, ipAddr)
 	w.WriteHeader(http.StatusNoContent)
 }

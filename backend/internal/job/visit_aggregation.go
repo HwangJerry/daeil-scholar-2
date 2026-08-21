@@ -53,21 +53,27 @@ func (j *VisitAggregationJob) Start() {
 				j.logger.Info().Msg("visit aggregation job stopped")
 				return
 			case <-time.After(time.Until(next)):
-				if j.maintenanceGate.Active() {
-					continue
-				}
 				yesterday := next.AddDate(0, 0, -1)
-				if err := j.aggregate(yesterday); err != nil {
-					j.logger.Error().Err(err).Msg("visit aggregation failed")
-				} else {
-					j.logger.Info().Str("date", yesterday.Format("2006-01-02")).Msg("visit summary written")
-				}
-				if err := j.prune(next); err != nil {
-					j.logger.Error().Err(err).Msg("visit prune failed")
-				}
+				j.runScheduledCycle(yesterday, next)
 			}
 		}
 	}()
+}
+
+func (j *VisitAggregationJob) runScheduledCycle(day, now time.Time) {
+	lease, err := j.maintenanceGate.EnterBackground()
+	if err != nil {
+		return
+	}
+	defer lease.Release()
+	if err := j.aggregate(day); err != nil {
+		j.logger.Error().Err(err).Msg("visit aggregation failed")
+	} else {
+		j.logger.Info().Str("date", day.Format("2006-01-02")).Msg("visit summary written")
+	}
+	if err := j.prune(now); err != nil {
+		j.logger.Error().Err(err).Msg("visit prune failed")
+	}
 }
 
 func (j *VisitAggregationJob) Stop() {
@@ -79,9 +85,11 @@ func (j *VisitAggregationJob) Stop() {
 // backfillRecent ensures the last N days have summary rows so the admin chart
 // isn't empty after a server restart that missed a midnight window.
 func (j *VisitAggregationJob) backfillRecent() {
-	if j.maintenanceGate.Active() {
+	lease, err := j.maintenanceGate.EnterBackground()
+	if err != nil {
 		return
 	}
+	defer lease.Release()
 	now := time.Now().In(kstZone)
 	for offset := 1; offset <= backfillWindowDays; offset++ {
 		if j.maintenanceGate.Active() {

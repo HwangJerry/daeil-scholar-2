@@ -56,7 +56,7 @@ func NewAPNsPushProvider(cfg config.PushConfig, logger zerolog.Logger) *APNsPush
 	return &APNsPushProvider{
 		cfg:        cfg,
 		logger:     logger,
-		httpClient: &http.Client{Timeout: cfg.APNsRequestTimeout},
+		httpClient: &http.Client{Timeout: normalizePushProviderRequestTimeout(cfg.APNsRequestTimeout)},
 	}
 }
 

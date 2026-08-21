@@ -13,13 +13,23 @@ import (
 func MaintenanceWriteMiddleware(gate *maintenance.Gate) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			allowsSmoke := isLoopbackRemoteAddr(r.RemoteAddr) &&
-				gate.AllowsSmoke(r.URL.Path, r.Header.Get(maintenance.SmokeProofHeader))
-			if gate.Active() && isMaintenanceWrite(r) && !allowsSmoke {
+			loopback := isLoopbackRemoteAddr(r.RemoteAddr)
+			if loopback && gate.AllowsRelease(r.URL.Path, r.Header.Get(maintenance.ReleaseProofHeader)) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if !isMaintenanceWrite(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			allowsSmoke := loopback && gate.AllowsSmoke(r.URL.Path, r.Header.Get(maintenance.SmokeProofHeader))
+			lease, err := gate.EnterWriter(allowsSmoke)
+			if err != nil {
 				w.Header().Set("Retry-After", "60")
 				writeError(w, http.StatusServiceUnavailable, "MAINTENANCE_MODE", "Writes are temporarily unavailable")
 				return
 			}
+			defer lease.Release()
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -4,10 +4,17 @@ $maintenanceSentinel = getenv('ALUMNI_MAINTENANCE_SENTINEL');
 if ($maintenanceSentinel === false || trim($maintenanceSentinel) === '') {
     $maintenanceSentinel = '/run/alumni/maintenance';
 }
+$maintenanceReleaseBridge = getenv('ALUMNI_MAINTENANCE_RELEASE_BRIDGE');
+if ($maintenanceReleaseBridge === false || trim($maintenanceReleaseBridge) === '') {
+    $maintenanceReleaseBridge = '/run/alumni/maintenance-release-bridge';
+}
 
 $sentinelParent = dirname($maintenanceSentinel);
-$sentinelStateInvalid = !is_dir($sentinelParent) || !is_readable($sentinelParent);
-$maintenanceActive = @lstat($maintenanceSentinel) !== false;
+$bridgeParent = dirname($maintenanceReleaseBridge);
+$sentinelStateInvalid = !is_dir($sentinelParent) || !is_readable($sentinelParent) ||
+    !is_dir($bridgeParent) || !is_readable($bridgeParent);
+$maintenanceActive = @lstat($maintenanceSentinel) !== false ||
+    @lstat($maintenanceReleaseBridge) !== false;
 
 if ($maintenanceActive || $sentinelStateInvalid) {
     http_response_code(503);

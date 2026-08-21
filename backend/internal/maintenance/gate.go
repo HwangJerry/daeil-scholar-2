@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // SmokeProofHeader carries an operator-controlled proof for narrow smoke writes.
@@ -22,15 +23,27 @@ var ErrWritesFrozen = errors.New("writes are frozen for maintenance")
 
 // Gate reports whether the configured maintenance sentinel is active.
 type Gate struct {
-	sentinelPath      string
-	smokeProofHash    [sha256.Size]byte
-	smokeProofEnabled bool
-	smokeAllowedPaths map[string]struct{}
+	sentinelPath        string
+	smokeProofHash      [sha256.Size]byte
+	smokeProofEnabled   bool
+	smokeAllowedPaths   map[string]struct{}
+	mu                  sync.Mutex
+	admissionsClosed    bool
+	inFlight            int
+	drained             chan struct{}
+	releaseBridgePath   string
+	releaseProofHash    [sha256.Size]byte
+	releaseProofEnabled bool
+	releaseOwnerUID     int
 }
 
 // NewGate creates a maintenance gate. An empty sentinel path keeps it disabled.
 func NewGate(sentinelPath, smokeProofHash string, smokeAllowedPaths ...string) (*Gate, error) {
-	gate := &Gate{sentinelPath: sentinelPath, smokeAllowedPaths: make(map[string]struct{}, len(smokeAllowedPaths))}
+	gate := &Gate{
+		sentinelPath:      sentinelPath,
+		smokeAllowedPaths: make(map[string]struct{}, len(smokeAllowedPaths)),
+		releaseOwnerUID:   -1,
+	}
 	for _, path := range smokeAllowedPaths {
 		path = strings.TrimSpace(path)
 		if path == "" {
@@ -66,10 +79,17 @@ func NewRuntimeGate(environment, sentinelPath, smokeProofHash string, smokeAllow
 
 // Active fails closed for sentinel lookup errors other than non-existence.
 func (g *Gate) Active() bool {
-	if g == nil || g.sentinelPath == "" {
+	if g == nil {
 		return false
 	}
-	_, err := os.Stat(g.sentinelPath)
+	return pathActive(g.sentinelPath) || pathActive(g.releaseBridgePath)
+}
+
+func pathActive(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Lstat(path)
 	return err == nil || !errors.Is(err, os.ErrNotExist)
 }
 

@@ -299,7 +299,9 @@ if ($checkRequired) {
         'EASYPAY_PROFILE_MALL_ID', 'EASYPAY_GW_URL', 'EASYPAY_BIN_BASE',
         'EASYPAY_RETURN_BASE_URL', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD',
         'VISIT_IP_SALT', 'ENV', 'MAINTENANCE_SENTINEL_PATH',
-        'MAINTENANCE_SMOKE_PROOF_SHA256', 'MAINTENANCE_SMOKE_ALLOWED_PATHS'
+        'MAINTENANCE_SMOKE_PROOF_SHA256', 'MAINTENANCE_SMOKE_ALLOWED_PATHS',
+        'MAINTENANCE_RELEASE_BRIDGE_PATH', 'MAINTENANCE_RELEASE_PROOF_SHA256',
+        'MAINTENANCE_RELEASE_OWNER_UID', 'MAINTENANCE_RELEASE_DRAIN_TIMEOUT'
     );
     $placeholders = array(
         'JWT_SECRET' => 'change-me-in-production',
@@ -332,6 +334,26 @@ if ($checkRequired) {
             echo "INVALID MAINTENANCE_SMOKE_ALLOWED_PATHS\n";
             $failed = true;
         }
+    }
+    if (isset($env['MAINTENANCE_RELEASE_BRIDGE_PATH']) &&
+        !hash_equals('/run/alumni/maintenance-release-bridge', (string)$env['MAINTENANCE_RELEASE_BRIDGE_PATH'])) {
+        echo "INVALID MAINTENANCE_RELEASE_BRIDGE_PATH\n";
+        $failed = true;
+    }
+    if (isset($env['MAINTENANCE_RELEASE_PROOF_SHA256']) &&
+        !preg_match('/^[a-f0-9]{64}$/', (string)$env['MAINTENANCE_RELEASE_PROOF_SHA256'])) {
+        echo "INVALID MAINTENANCE_RELEASE_PROOF_SHA256\n";
+        $failed = true;
+    }
+    if (isset($env['MAINTENANCE_RELEASE_OWNER_UID']) &&
+        !hash_equals('0', (string)$env['MAINTENANCE_RELEASE_OWNER_UID'])) {
+        echo "INVALID MAINTENANCE_RELEASE_OWNER_UID\n";
+        $failed = true;
+    }
+    if (isset($env['MAINTENANCE_RELEASE_DRAIN_TIMEOUT']) &&
+        !hash_equals('90s', (string)$env['MAINTENANCE_RELEASE_DRAIN_TIMEOUT'])) {
+        echo "INVALID MAINTENANCE_RELEASE_DRAIN_TIMEOUT\n";
+        $failed = true;
     }
 }
 

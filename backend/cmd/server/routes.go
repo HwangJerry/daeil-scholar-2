@@ -17,45 +17,46 @@ import (
 
 // handlers holds all HTTP handler instances for route registration.
 type handlers struct {
-	health            *handler.HealthHandler
-	auth              *handler.AuthHandler
-	feed              *handler.FeedHandler
-	like              *handler.LikeHandler
-	comment           *handler.CommentHandler
-	donation          *handler.DonationHandler
-	alumni            *handler.AlumniHandler
-	profile           *handler.ProfileHandler
-	profileUpload     *handler.ProfileUploadHandler
-	ad                *handler.AdHandler
-	adLike            *handler.AdLikeHandler
-	adComment         *handler.AdCommentHandler
-	adminNotice       *handler.AdminNoticeHandler
-	adminDisclosure   *handler.AdminDisclosureHandler
-	disclosure        *handler.DisclosureHandler
-	adminAd           *handler.AdminAdHandler
-	adminDonation     *handler.AdminDonationHandler
-	adminMember       *handler.AdminMemberHandler
-	adminDashboard    *handler.AdminDashboardHandler
-	adminUpload       *handler.AdminUploadHandler
-	adminAttachUpload *handler.AdminAttachmentUploadHandler
-	socialLinkPhoto   *handler.SocialLinkPhotoHandler
-	myDonation        *handler.MyDonationHandler
-	message           *handler.MessageHandler
-	payment           *handler.PaymentHandler
-	subscription      *handler.SubscriptionHandler
-	og                *handler.OGHandler
-	sitemap           *handler.SitemapHandler
-	rss               *handler.RSSHandler
-	passwordReset     *handler.PasswordResetHandler
-	passwordChange    *handler.PasswordChangeHandler
-	badge             *handler.BadgeHandler
-	adminJobCat       *handler.AdminJobCategoryHandler
-	history           *handler.HistoryHandler
-	realtime          *handler.RealtimeHandler
-	adminSubscription *handler.AdminSubscriptionHandler
-	visit             *handler.VisitHandler
-	adminErrorReport  *handler.AdminErrorReportHandler
-	push              *handler.PushHandler
+	health             *handler.HealthHandler
+	auth               *handler.AuthHandler
+	feed               *handler.FeedHandler
+	like               *handler.LikeHandler
+	comment            *handler.CommentHandler
+	donation           *handler.DonationHandler
+	alumni             *handler.AlumniHandler
+	profile            *handler.ProfileHandler
+	profileUpload      *handler.ProfileUploadHandler
+	ad                 *handler.AdHandler
+	adLike             *handler.AdLikeHandler
+	adComment          *handler.AdCommentHandler
+	adminNotice        *handler.AdminNoticeHandler
+	adminDisclosure    *handler.AdminDisclosureHandler
+	disclosure         *handler.DisclosureHandler
+	adminAd            *handler.AdminAdHandler
+	adminDonation      *handler.AdminDonationHandler
+	adminMember        *handler.AdminMemberHandler
+	adminDashboard     *handler.AdminDashboardHandler
+	adminUpload        *handler.AdminUploadHandler
+	adminAttachUpload  *handler.AdminAttachmentUploadHandler
+	socialLinkPhoto    *handler.SocialLinkPhotoHandler
+	myDonation         *handler.MyDonationHandler
+	message            *handler.MessageHandler
+	payment            *handler.PaymentHandler
+	subscription       *handler.SubscriptionHandler
+	og                 *handler.OGHandler
+	sitemap            *handler.SitemapHandler
+	rss                *handler.RSSHandler
+	passwordReset      *handler.PasswordResetHandler
+	passwordChange     *handler.PasswordChangeHandler
+	badge              *handler.BadgeHandler
+	adminJobCat        *handler.AdminJobCategoryHandler
+	history            *handler.HistoryHandler
+	realtime           *handler.RealtimeHandler
+	adminSubscription  *handler.AdminSubscriptionHandler
+	visit              *handler.VisitHandler
+	adminErrorReport   *handler.AdminErrorReportHandler
+	push               *handler.PushHandler
+	maintenanceRelease *handler.MaintenanceReleaseHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
@@ -66,6 +67,8 @@ func registerRoutes(h handlers, authService *service.AuthService, cacheStore *ca
 	router.Use(mw.CORSMiddleware(allowedOrigins))
 	router.Use(mw.MaxBodySize(2 << 20))
 	router.Use(mw.MaintenanceWriteMiddleware(maintenanceGate))
+	router.Post(maintenance.ReleaseDrainPath, h.maintenanceRelease.Drain)
+	router.Post(maintenance.ReleaseArmOpenPath, h.maintenanceRelease.ArmOpen)
 
 	// Static file servers (dev: proxied from Vite/Nginx; prod: handled by Nginx alias)
 	router.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.Upload.BasePath))))

@@ -63,9 +63,11 @@ func (j *SessionCleanupJob) Start() {
 
 // RunOnce performs one cleanup cycle unless maintenance has frozen writers.
 func (j *SessionCleanupJob) RunOnce() {
-	if j.maintenanceGate.Active() {
+	lease, err := j.maintenanceGate.EnterBackground()
+	if err != nil {
 		return
 	}
+	defer lease.Release()
 	j.cleanSessions()
 	j.cleanExpiredTokens()
 	j.cleanExpiredMobileRefreshTokens()

@@ -35,6 +35,22 @@ grep -Fq 'state_write_failed' "$PREPARE" ||
 [[ -x "$RELEASE" ]] || fail "maintenance release script is missing or not executable"
 [[ -x "$SMOKE" ]] || fail "controlled smoke script is missing or not executable"
 grep -Fq 'ALUMNI_MAINTENANCE_GATE=1' "$HTTPD" || fail "Apache maintenance gate marker is missing"
+grep -Fq '/run/alumni/maintenance-release-bridge' "$HTTPD" || fail "Apache maintenance gate does not include the release bridge"
+grep -Fq 'ALUMNI_MAINTENANCE_RELEASE_BRIDGE' "$GATE" || fail "legacy PHP maintenance gate does not include the release bridge"
+grep -Fq 'MAINTENANCE_RELEASE_BRIDGE_PATH' "$RELEASE" || fail "release launcher has no bridge authority"
+grep -Fq 'MAINTENANCE_RELEASE_PROOF_FILE' "$RELEASE" || fail "release launcher has no proof custody"
+grep -Fq 'MAINTENANCE_RELEASE_APPROVAL_ATTEMPT_ID' "$RELEASE" || fail "release launcher is not attempt-bound"
+PREPARED_LINE=$(grep -nF 'PREPARED_RELEASE_BRIDGE_INSTALL' "$RELEASE" | head -n 1 | cut -d: -f1)
+DRAIN_LINE=$(grep -nF 'APPLICATION_DRAIN_CONTROL_CALL' "$RELEASE" | head -n 1 | cut -d: -f1)
+DRAINED_LINE=$(grep -nF 'DRAINED_RELEASE_BRIDGE_PERSIST' "$RELEASE" | head -n 1 | cut -d: -f1)
+OBSERVE_LINE=$(grep -nF 'CANONICAL_SENTINEL_TO_OBSERVATION' "$RELEASE" | head -n 1 | cut -d: -f1)
+ARM_LINE=$(grep -nF '/internal/maintenance/arm-open' "$RELEASE" | head -n 1 | cut -d: -f1)
+BRIDGE_REMOVE_LINE=$(grep -nF 'FINAL_RELEASE_BRIDGE_UNLINK' "$RELEASE" | head -n 1 | cut -d: -f1)
+[[ -n $PREPARED_LINE && -n $DRAIN_LINE && -n $DRAINED_LINE && -n $OBSERVE_LINE && -n $ARM_LINE && -n $BRIDGE_REMOVE_LINE ]] ||
+  fail "application-owned release phases are incomplete"
+[[ $PREPARED_LINE -lt $DRAIN_LINE && $DRAIN_LINE -lt $DRAINED_LINE && $DRAINED_LINE -lt $OBSERVE_LINE &&
+   $OBSERVE_LINE -lt $ARM_LINE && $ARM_LINE -lt $BRIDGE_REMOVE_LINE ]] ||
+  fail "application-owned release phases are out of order"
 grep -Fq 'api/auth/kakao/callback' "$HTTPD" || fail "Apache gate does not block the mutating OAuth callback"
 grep -Fq 'api/(feed|disclosure)/[0-9]+' "$HTTPD" || fail "Apache gate does not block numeric mutating detail GET routes"
 if grep -Fq 'api/(feed|disclosure)/[^/]+' "$HTTPD"; then
@@ -64,22 +80,43 @@ set -e
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/maintenance-contract.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 SENTINEL="$TMP/maintenance"
+BRIDGE="$TMP/maintenance-release-bridge"
+RELEASE_PROOF_FILE="$TMP/maintenance-release-proof"
+RELEASE_ATTEMPT=$(printf 'b%.0s' {1..64})
+export MAINTENANCE_RELEASE_BRIDGE_PATH="$BRIDGE"
+export MAINTENANCE_RELEASE_PROOF_FILE="$RELEASE_PROOF_FILE"
+export MAINTENANCE_RELEASE_APPROVAL_ATTEMPT_ID="$RELEASE_ATTEMPT"
+export MAINTENANCE_RELEASE_OWNER_UID
+MAINTENANCE_RELEASE_OWNER_UID=$(id -u)
 
 touch "$SENTINEL"
 # $argv is evaluated by PHP, not by this shell.
 # shellcheck disable=SC2016
 BLOCKED_OUTPUT=$(
-  ALUMNI_MAINTENANCE_SENTINEL="$SENTINEL" php -r \
+  ALUMNI_MAINTENANCE_SENTINEL="$SENTINEL" \
+    ALUMNI_MAINTENANCE_RELEASE_BRIDGE="$BRIDGE" php -r \
     'include $argv[1]; echo "LEGACY_HANDLER_REACHED\n";' "$GATE"
 )
 [[ "$BLOCKED_OUTPUT" == *'MAINTENANCE_MODE'* ]] || fail "legacy gate did not return maintenance response"
 [[ "$BLOCKED_OUTPUT" != *'LEGACY_HANDLER_REACHED'* ]] || fail "legacy handler executed during maintenance"
 
 rm "$SENTINEL"
+touch "$BRIDGE"
+# $argv is evaluated by PHP, not by this shell.
+# shellcheck disable=SC2016
+BRIDGE_BLOCKED_OUTPUT=$(
+  ALUMNI_MAINTENANCE_SENTINEL="$SENTINEL" \
+    ALUMNI_MAINTENANCE_RELEASE_BRIDGE="$BRIDGE" php -r \
+    'include $argv[1]; echo "LEGACY_HANDLER_REACHED\n";' "$GATE"
+)
+[[ "$BRIDGE_BLOCKED_OUTPUT" == *'MAINTENANCE_MODE'* ]] || fail "legacy bridge did not return maintenance response"
+[[ "$BRIDGE_BLOCKED_OUTPUT" != *'LEGACY_HANDLER_REACHED'* ]] || fail "legacy handler executed while release bridge was active"
+rm "$BRIDGE"
 # $argv is evaluated by PHP, not by this shell.
 # shellcheck disable=SC2016
 OPEN_OUTPUT=$(
-  ALUMNI_MAINTENANCE_SENTINEL="$SENTINEL" php -r \
+  ALUMNI_MAINTENANCE_SENTINEL="$SENTINEL" \
+    ALUMNI_MAINTENANCE_RELEASE_BRIDGE="$BRIDGE" php -r \
     'include $argv[1]; echo "LEGACY_HANDLER_REACHED\n";' "$GATE"
 )
 [[ "$OPEN_OUTPUT" == *'LEGACY_HANDLER_REACHED'* ]] || fail "legacy handler stayed blocked after release"
@@ -91,7 +128,8 @@ touch "$NON_DIRECTORY_PARENT"
 # $argv is evaluated by PHP, not by this shell.
 # shellcheck disable=SC2016
 BROKEN_SENTINEL_OUTPUT=$(
-  ALUMNI_MAINTENANCE_SENTINEL="$NON_DIRECTORY_PARENT/maintenance" php -r \
+  ALUMNI_MAINTENANCE_SENTINEL="$NON_DIRECTORY_PARENT/maintenance" \
+    ALUMNI_MAINTENANCE_RELEASE_BRIDGE="$BRIDGE" php -r \
     'include $argv[1]; echo "LEGACY_HANDLER_REACHED\n";' "$GATE"
 )
 [[ "$BROKEN_SENTINEL_OUTPUT" == *'MAINTENANCE_MODE'* ]] || fail "legacy sentinel traversal error did not fail closed"
@@ -146,7 +184,13 @@ fi
 if [[ -n ${FAKE_CURL_SWITCH_MAIN_PID_FILE:-} ]]; then
   printf '%s\n' "${FAKE_CURL_SWITCH_MAIN_PID:-456}" > "$FAKE_CURL_SWITCH_MAIN_PID_FILE"
 fi
-if [[ ${1:-} == --config || ( ${1:-} == --disable && ${2:-} == --config ) ]]; then
+if [[ " $* " == *'/internal/maintenance/drain '* ]]; then
+  [[ ${FAKE_DRAIN_FAIL:-0} != 1 ]] || exit 22
+  printf '{"state":"DRAINED"}'
+elif [[ " $* " == *'/internal/maintenance/arm-open '* ]]; then
+  [[ ${FAKE_ARM_FAIL:-0} != 1 ]] || exit 23
+  printf '{"state":"ARMED"}'
+elif [[ ${1:-} == --config || ( ${1:-} == --disable && ${2:-} == --config ) ]]; then
   printf '%s' "${FAKE_SMOKE_STATUS:-204}"
 elif [[ " $* " == *' --write-out '* ]]; then
   printf '503'
@@ -485,6 +529,69 @@ printf 'state=active\ngeneration=%s\n' "$GENERATION" > "$SENTINEL"
 touch "$DEPLOY_EVIDENCE" "$SMOKE_OUTPUT" "$MIGRATION_EVIDENCE"
 
 RELEASE_CURL_COUNT="$TMP/release-curl.count"
+printf '%064d\n\n' 0 > "$RELEASE_PROOF_FILE"
+chmod 0600 "$RELEASE_PROOF_FILE"
+MALFORMED_PROOF_OBSERVATION="$TMP/malformed-proof-observation.txt"
+set +e
+PATH="$TMP/bin:$PATH" FAKE_SERVICE_ACTIVE=1 FAKE_MAIN_PID=123 FAKE_EXEC_START="$APPROVED_BINARY" \
+  BACKEND_BINARY_PATH="$APPROVED_BINARY" BACKEND_PROC_ROOT="$PROC_ROOT" MAINTENANCE_RELEASE_APPROVED=1 \
+  MAINTENANCE_SENTINEL_PATH="$SENTINEL" BACKEND_DEPLOY_EVIDENCE="$DEPLOY_EVIDENCE" \
+  BACKEND_SMOKE_EVIDENCE="$SMOKE_OUTPUT" BACKEND_MIGRATION_EVIDENCE="$MIGRATION_EVIDENCE" \
+  PUSH_OBSERVATION_START_OUTPUT="$MALFORMED_PROOF_OBSERVATION" "$RELEASE" >/dev/null 2>&1
+MALFORMED_PROOF_STATUS=$?
+set -e
+if [[ $MALFORMED_PROOF_STATUS -eq 0 ]]; then
+  rm -f "$MALFORMED_PROOF_OBSERVATION" "$BRIDGE"
+  printf 'state=active\ngeneration=%s\n' "$GENERATION" > "$SENTINEL"
+  chmod 0644 "$SENTINEL"
+  touch "$DEPLOY_EVIDENCE" "$SMOKE_OUTPUT" "$MIGRATION_EVIDENCE"
+  fail "release accepted noncanonical proof bytes"
+fi
+[[ -f $SENTINEL && ! -e $BRIDGE && ! -e $MALFORMED_PROOF_OBSERVATION ]] ||
+  fail "malformed proof changed release state"
+
+printf '%064d\n' 0 > "$RELEASE_PROOF_FILE"
+FAIL_DRAIN_OBSERVATION="$TMP/fail-drain-observation.txt"
+set +e
+PATH="$TMP/bin:$PATH" FAKE_DRAIN_FAIL=1 FAKE_SERVICE_ACTIVE=1 FAKE_MAIN_PID=123 FAKE_EXEC_START="$APPROVED_BINARY" \
+  BACKEND_BINARY_PATH="$APPROVED_BINARY" BACKEND_PROC_ROOT="$PROC_ROOT" MAINTENANCE_RELEASE_APPROVED=1 \
+  MAINTENANCE_SENTINEL_PATH="$SENTINEL" BACKEND_DEPLOY_EVIDENCE="$DEPLOY_EVIDENCE" \
+  BACKEND_SMOKE_EVIDENCE="$SMOKE_OUTPUT" BACKEND_MIGRATION_EVIDENCE="$MIGRATION_EVIDENCE" \
+  PUSH_OBSERVATION_START_OUTPUT="$FAIL_DRAIN_OBSERVATION" "$RELEASE" >/dev/null 2>&1
+FAIL_DRAIN_STATUS=$?
+set -e
+[[ $FAIL_DRAIN_STATUS -ne 0 && -f $SENTINEL && ! -e $FAIL_DRAIN_OBSERVATION ]] ||
+  fail "drain failure crossed the canonical sentinel boundary"
+grep -Fxq 'state=prepared' "$BRIDGE" || fail "drain failure did not retain prepared bridge"
+grep -Fxq "generation=$GENERATION" "$BRIDGE" || fail "drain failure bridge lost generation"
+grep -Fxq "approval_attempt_id=$RELEASE_ATTEMPT" "$BRIDGE" || fail "drain failure bridge lost attempt"
+rm -f "$BRIDGE"
+
+FAIL_ARM_OBSERVATION="$TMP/fail-arm-observation.txt"
+set +e
+PATH="$TMP/bin:$PATH" FAKE_ARM_FAIL=1 FAKE_SERVICE_ACTIVE=1 FAKE_MAIN_PID=123 FAKE_EXEC_START="$APPROVED_BINARY" \
+  BACKEND_BINARY_PATH="$APPROVED_BINARY" BACKEND_PROC_ROOT="$PROC_ROOT" MAINTENANCE_RELEASE_APPROVED=1 \
+  MAINTENANCE_SENTINEL_PATH="$SENTINEL" BACKEND_DEPLOY_EVIDENCE="$DEPLOY_EVIDENCE" \
+  BACKEND_SMOKE_EVIDENCE="$SMOKE_OUTPUT" BACKEND_MIGRATION_EVIDENCE="$MIGRATION_EVIDENCE" \
+  PUSH_OBSERVATION_START_OUTPUT="$FAIL_ARM_OBSERVATION" "$RELEASE" >/dev/null 2>&1
+FAIL_ARM_STATUS=$?
+set -e
+[[ $FAIL_ARM_STATUS -ne 0 && ! -e $SENTINEL && -f $FAIL_ARM_OBSERVATION ]] ||
+  fail "arm failure did not preserve the post-sentinel observation boundary"
+grep -Fxq 'state=drained' "$BRIDGE" || fail "arm failure did not retain drained bridge"
+# $argv is evaluated by PHP, not this shell.
+# shellcheck disable=SC2016
+BRIDGE_FAIL_CLOSED_OUTPUT=$(
+  ALUMNI_MAINTENANCE_SENTINEL="$SENTINEL" \
+    ALUMNI_MAINTENANCE_RELEASE_BRIDGE="$BRIDGE" php -r \
+    'include $argv[1]; echo "LEGACY_HANDLER_REACHED\n";' "$GATE"
+)
+[[ $BRIDGE_FAIL_CLOSED_OUTPUT == *'MAINTENANCE_MODE'* ]] || fail "arm failure reopened legacy writers"
+rm -f "$BRIDGE" "$FAIL_ARM_OBSERVATION"
+printf 'state=active\ngeneration=%s\n' "$GENERATION" > "$SENTINEL"
+chmod 0644 "$SENTINEL"
+touch "$DEPLOY_EVIDENCE" "$SMOKE_OUTPUT" "$MIGRATION_EVIDENCE"
+
 PATH="$TMP/bin:$PATH" FAKE_SERVICE_ACTIVE=1 FAKE_MAIN_PID=123 FAKE_EXEC_START="$APPROVED_BINARY" \
   BACKEND_BINARY_PATH="$APPROVED_BINARY" BACKEND_PROC_ROOT="$PROC_ROOT" \
   FAKE_CURL_COUNT_FILE="$RELEASE_CURL_COUNT" MAINTENANCE_RELEASE_APPROVED=1 \
@@ -494,7 +601,7 @@ PATH="$TMP/bin:$PATH" FAKE_SERVICE_ACTIVE=1 FAKE_MAIN_PID=123 FAKE_EXEC_START="$
   "$RELEASE" >/dev/null
 [[ ! -e $SENTINEL ]] || fail "dual-PASS release did not remove sentinel"
 [[ -s $OBSERVATION_OUTPUT ]] || fail "release did not record observation start"
-[[ $(<"$RELEASE_CURL_COUNT") == 2 ]] || fail "release performed a fallible probe after opening writes"
+[[ $(<"$RELEASE_CURL_COUNT") == 4 ]] || fail "release control call count is not exact"
 grep -Fxq 'state=STARTED' "$OBSERVATION_OUTPUT" || fail "observation record state is missing"
 grep -Fxq "generation=$GENERATION" "$OBSERVATION_OUTPUT" || fail "observation record generation is missing"
 
@@ -502,6 +609,6 @@ PATH="$TMP/bin:$PATH" FAKE_SERVICE_ACTIVE=1 FAKE_CURL_COUNT_FILE="$RELEASE_CURL_
   MAINTENANCE_SENTINEL_PATH="$SENTINEL" BACKEND_DEPLOY_EVIDENCE="$DEPLOY_EVIDENCE" \
   BACKEND_SMOKE_EVIDENCE="$SMOKE_OUTPUT" BACKEND_MIGRATION_EVIDENCE="$MIGRATION_EVIDENCE" \
   PUSH_OBSERVATION_START_OUTPUT="$OBSERVATION_OUTPUT" "$RELEASE" >/dev/null
-[[ $(<"$RELEASE_CURL_COUNT") == 2 ]] || fail "idempotent release retry repeated pre-open probes"
+[[ $(<"$RELEASE_CURL_COUNT") == 4 ]] || fail "idempotent release retry repeated pre-open probes"
 
 printf 'PASS: maintenance enter/smoke/release gates\n'

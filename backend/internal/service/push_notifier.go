@@ -88,7 +88,6 @@ type MobilePushService struct {
 	outbox      pushOutboxStore
 	provider    MobilePushProvider
 	logger      zerolog.Logger
-	dispatch    func(func())
 	now         func() time.Time
 }
 
@@ -118,10 +117,7 @@ func NewMobilePushServiceWithOutboxAndPreferences(
 		outbox:      outbox,
 		provider:    provider,
 		logger:      logger,
-		dispatch: func(job func()) {
-			go job()
-		},
-		now: time.Now,
+		now:         time.Now,
 	}
 }
 
@@ -180,23 +176,11 @@ func (s *MobilePushService) UpdatePreferences(usrSeq int, req model.PushPreferen
 }
 
 func (s *MobilePushService) NotifyMessageReceived(messageSeq, recvrSeq, senderSeq int, senderName string, contentPreview string) {
-	if s.outbox != nil {
-		s.notifyMessageReceived(context.Background(), messageSeq, recvrSeq, senderSeq, senderName)
-		return
-	}
-	s.enqueue(func() {
-		s.notifyMessageReceived(context.Background(), messageSeq, recvrSeq, senderSeq, senderName)
-	})
+	s.notifyMessageReceived(context.Background(), messageSeq, recvrSeq, senderSeq, senderName)
 }
 
 func (s *MobilePushService) NotifyPostPublished(authorSeq int, postSeq int, subject string) {
-	if s.outbox != nil {
-		s.notifyPostPublished(context.Background(), authorSeq, postSeq)
-		return
-	}
-	s.enqueue(func() {
-		s.notifyPostPublished(context.Background(), authorSeq, postSeq)
-	})
+	s.notifyPostPublished(context.Background(), authorSeq, postSeq)
 }
 
 func (s *MobilePushService) notifyMessageReceived(ctx context.Context, messageSeq, recvrSeq, senderSeq int, senderName string) {
@@ -291,14 +275,6 @@ func (s *MobilePushService) preferencesForUser(usrSeq int) (model.PushPreference
 
 func (p noopPushProvider) SendPush(ctx context.Context, notification PushNotification) error {
 	return nil
-}
-
-func (s *MobilePushService) enqueue(job func()) {
-	if s.dispatch != nil {
-		s.dispatch(job)
-		return
-	}
-	go job()
 }
 
 func (s *MobilePushService) currentTime() time.Time {

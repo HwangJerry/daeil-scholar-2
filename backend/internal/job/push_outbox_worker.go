@@ -145,9 +145,11 @@ func (w *PushOutboxWorker) Stop() {
 }
 
 func (w *PushOutboxWorker) RunOnce(ctx context.Context) error {
-	if w.maintenanceGate.Active() {
+	lease, err := w.maintenanceGate.EnterBackground()
+	if err != nil {
 		return nil
 	}
+	defer lease.Release()
 	if w.outbox == nil || w.provider == nil {
 		return nil
 	}

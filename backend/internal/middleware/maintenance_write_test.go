@@ -2,6 +2,7 @@
 package middleware
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/dflh-saf/backend/internal/maintenance"
 )
@@ -193,5 +195,88 @@ func TestMaintenanceWriteMiddlewareAllowsReadOnlyGet(t *testing.T) {
 				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNoContent)
 			}
 		})
+	}
+}
+
+func TestMaintenanceWriteMiddlewareLeaseDrainsExistingHandler(t *testing.T) {
+	dir := t.TempDir()
+	sentinel := filepath.Join(dir, "maintenance")
+	bridge := filepath.Join(dir, "bridge")
+	rawProof := "fixture-release-proof"
+	digest := sha256.Sum256([]byte(rawProof))
+	gate, err := maintenance.NewGate(sentinel, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gate.ConfigureRelease(maintenance.ReleaseConfig{
+		BridgePath:       bridge,
+		ProofSHA256:      hex.EncodeToString(digest[:]),
+		ExpectedOwnerUID: os.Getuid(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	handlerStarted := make(chan struct{})
+	handlerRelease := make(chan struct{})
+	requestDone := make(chan struct{})
+	handler := MaintenanceWriteMiddleware(gate)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(handlerStarted)
+		<-handlerRelease
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	go func() {
+		defer close(requestDone)
+		request := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
+		handler.ServeHTTP(httptest.NewRecorder(), request)
+	}()
+	<-handlerStarted
+
+	generation := "0123456789abcdef0123456789abcdef"
+	attempt := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	writeMaintenanceAuthority(t, sentinel, "state=active\ngeneration="+generation+"\n")
+	writeMaintenanceAuthority(t, bridge, "state=prepared\ngeneration="+generation+"\napproval_attempt_id="+attempt+"\n")
+	drained := make(chan error, 1)
+	go func() { drained <- gate.CloseAndDrain(context.Background(), generation, attempt) }()
+	waitForAdmissionsClosed(t, gate)
+	select {
+	case err := <-drained:
+		t.Fatalf("drain returned before HTTP handler completed: %v", err)
+	default:
+	}
+
+	close(handlerRelease)
+	select {
+	case <-requestDone:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP handler did not complete")
+	}
+	select {
+	case err := <-drained:
+		if err != nil {
+			t.Fatalf("drain: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("drain did not observe released HTTP lease")
+	}
+}
+
+func writeMaintenanceAuthority(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func waitForAdmissionsClosed(t *testing.T, gate *maintenance.Gate) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for !gate.AdmissionsClosed() {
+		if time.Now().After(deadline) {
+			t.Fatal("admissions did not close")
+		}
+		time.Sleep(time.Millisecond)
 	}
 }

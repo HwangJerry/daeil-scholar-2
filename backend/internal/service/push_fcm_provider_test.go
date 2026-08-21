@@ -66,6 +66,13 @@ func TestFCMPushProviderBuildsAndroidMessage(t *testing.T) {
 	}
 }
 
+func TestFCMPushProviderNormalizesNonPositiveRequestTimeout(t *testing.T) {
+	provider := NewFCMPushProviderForClient(&fakeFCMMessagingClient{}, 0, zerolog.Nop())
+	if provider.requestTimeout <= 0 {
+		t.Fatal("FCM provider accepted an unbounded request timeout")
+	}
+}
+
 func TestFCMResponseErrorInvalidTokenContract(t *testing.T) {
 	err := &FCMResponseError{
 		Err:                errors.New("registration token is not registered"),

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/dflh-saf/backend/internal/config"
+	"github.com/rs/zerolog"
 	"github.com/sideshow/apns2"
 )
 
@@ -49,6 +50,13 @@ func TestAPNsHostForEnvironmentUsesTokenEnvironment(t *testing.T) {
 	}
 	if got := apnsHostForEnvironment("", "production"); got != apnsProductionHost {
 		t.Fatalf("expected production host, got %q", got)
+	}
+}
+
+func TestAPNsPushProviderNormalizesNonPositiveRequestTimeout(t *testing.T) {
+	provider := NewAPNsPushProvider(config.PushConfig{}, zerolog.Nop())
+	if provider.httpClient.Timeout <= 0 {
+		t.Fatal("APNs provider accepted an unbounded request timeout")
 	}
 }
 

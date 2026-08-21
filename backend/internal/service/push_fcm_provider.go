@@ -68,7 +68,7 @@ func NewFCMPushProvider(ctx context.Context, cfg config.PushConfig, logger zerol
 	return &FCMPushProvider{
 		client:         client,
 		logger:         logger,
-		requestTimeout: cfg.FCMRequestTimeout,
+		requestTimeout: normalizePushProviderRequestTimeout(cfg.FCMRequestTimeout),
 	}, nil
 }
 
@@ -76,7 +76,7 @@ func NewFCMPushProviderForClient(client fcmMessagingClient, timeout time.Duratio
 	return &FCMPushProvider{
 		client:         client,
 		logger:         logger,
-		requestTimeout: timeout,
+		requestTimeout: normalizePushProviderRequestTimeout(timeout),
 	}
 }
 

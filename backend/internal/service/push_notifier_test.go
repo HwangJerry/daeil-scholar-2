@@ -49,6 +49,17 @@ func (f *fakePushProvider) SendPush(_ context.Context, notification PushNotifica
 	return f.err
 }
 
+type blockingPushProvider struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (p *blockingPushProvider) SendPush(context.Context, PushNotification) error {
+	close(p.started)
+	<-p.release
+	return nil
+}
+
 type fakeInvalidTokenError struct{}
 
 func (fakeInvalidTokenError) Error() string            { return "invalid token" }
@@ -92,9 +103,6 @@ func newInlinePushService(store *fakePushTokenStore, provider *fakePushProvider)
 		tokenRepo: store,
 		provider:  provider,
 		logger:    zerolog.Nop(),
-		dispatch: func(job func()) {
-			job()
-		},
 		now: func() time.Time {
 			return time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC)
 		},
@@ -111,6 +119,44 @@ func newInlinePushServiceWithPreferences(store *fakePushTokenStore, preferences 
 	svc := newInlinePushService(store, provider)
 	svc.preferences = preferences
 	return svc
+}
+
+func TestNotifierWithoutOutboxKeepsProviderSideEffectInsideCallerLifetime(t *testing.T) {
+	store := &fakePushTokenStore{userTokens: []repository.MobileDeviceToken{{
+		MDTSeq:      1,
+		UsrSeq:      20,
+		Platform:    "android",
+		DeviceToken: "fixture-token",
+	}}}
+	provider := &blockingPushProvider{started: make(chan struct{}), release: make(chan struct{})}
+	svc := &MobilePushService{
+		tokenRepo: store,
+		provider:  provider,
+		logger:    zerolog.Nop(),
+		now:       time.Now,
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		svc.NotifyMessageReceived(1, 20, 10, "sender", "preview")
+	}()
+
+	select {
+	case <-provider.started:
+	case <-time.After(time.Second):
+		t.Fatal("provider side effect did not start")
+	}
+	select {
+	case <-done:
+		t.Fatal("notifier returned while provider side effect was still in flight")
+	default:
+	}
+	close(provider.release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("notifier did not return after provider side effect completed")
+	}
 }
 
 func TestRegisterDeviceTokenUpsertsAPNsMetadata(t *testing.T) {
@@ -370,9 +416,6 @@ func TestNotifyMessageReceivedOutboxDoesNotDependOnAsyncDispatch(t *testing.T) {
 	}
 	outbox := &fakePushOutboxStore{}
 	svc := newInlineOutboxPushService(store, outbox, &fakePushProvider{})
-	svc.dispatch = func(func()) {
-		t.Fatalf("outbox enqueue must not depend on async dispatch")
-	}
 
 	svc.NotifyMessageReceived(777, 67890, 12345, "홍길동", "private message body")
 

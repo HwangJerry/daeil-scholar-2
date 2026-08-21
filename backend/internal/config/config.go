@@ -58,9 +58,13 @@ type ServerConfig struct {
 
 // MaintenanceConfig controls the shared write-freeze sentinel and smoke proof.
 type MaintenanceConfig struct {
-	SentinelPath      string
-	SmokeProofSHA256  string
-	SmokeAllowedPaths []string
+	SentinelPath        string
+	SmokeProofSHA256    string
+	SmokeAllowedPaths   []string
+	ReleaseBridgePath   string
+	ReleaseProofSHA256  string
+	ReleaseOwnerUID     int
+	ReleaseDrainTimeout time.Duration
 }
 
 // IsSecure returns true when the allowed origin uses HTTPS.
@@ -213,9 +217,13 @@ func Load() *Config {
 			Environment: getEnv("DEBUG_AGENT_ENVIRONMENT", getEnv("ENV", "dev")),
 		},
 		Maintenance: MaintenanceConfig{
-			SentinelPath:      getEnv("MAINTENANCE_SENTINEL_PATH", "/run/alumni/maintenance"),
-			SmokeProofSHA256:  getEnv("MAINTENANCE_SMOKE_PROOF_SHA256", ""),
-			SmokeAllowedPaths: getCSVEnv("MAINTENANCE_SMOKE_ALLOWED_PATHS"),
+			SentinelPath:        getEnv("MAINTENANCE_SENTINEL_PATH", "/run/alumni/maintenance"),
+			SmokeProofSHA256:    getEnv("MAINTENANCE_SMOKE_PROOF_SHA256", ""),
+			SmokeAllowedPaths:   getCSVEnv("MAINTENANCE_SMOKE_ALLOWED_PATHS"),
+			ReleaseBridgePath:   getEnv("MAINTENANCE_RELEASE_BRIDGE_PATH", "/run/alumni/maintenance-release-bridge"),
+			ReleaseProofSHA256:  getEnv("MAINTENANCE_RELEASE_PROOF_SHA256", ""),
+			ReleaseOwnerUID:     getIntEnv("MAINTENANCE_RELEASE_OWNER_UID", 0),
+			ReleaseDrainTimeout: getDurationEnv("MAINTENANCE_RELEASE_DRAIN_TIMEOUT", 90*time.Second),
 		},
 		PGAuditLogPath: getEnv("PG_AUDIT_LOG_PATH", "/var/logs/pg/pg-audit.log"),
 		Environment:    getEnv("ENV", "prod"),
