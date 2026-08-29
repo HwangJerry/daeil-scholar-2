@@ -12,6 +12,12 @@ var (
 	ErrInvalidPushRequest = errors.New("invalid push request")
 )
 
+const (
+	pushDeviceTokenMaxBytes = 512
+	pushLocaleMaxLength     = 16
+	pushBundleIDMaxRunes    = 255
+)
+
 type PushStore interface {
 	RegisterDevice(usrSeq int, registration model.PushDeviceRegistration) error
 	UnregisterDevice(usrSeq int, deviceToken string) error
@@ -86,7 +92,7 @@ func validPushDeviceRegistration(registration model.PushDeviceRegistration) bool
 }
 
 func validPushDeviceToken(token string) bool {
-	if len(token) == 0 || len(token) > 512 {
+	if len(token) == 0 || len(token) > pushDeviceTokenMaxBytes {
 		return false
 	}
 	for i := 0; i < len(token); i++ {
@@ -98,7 +104,7 @@ func validPushDeviceToken(token string) bool {
 }
 
 func validPushLocale(locale string) bool {
-	if len(locale) == 0 || len(locale) > 20 {
+	if len(locale) == 0 || len(locale) > pushLocaleMaxLength {
 		return false
 	}
 	for _, char := range locale {
@@ -112,7 +118,7 @@ func validPushLocale(locale string) bool {
 }
 
 func validPushBundleID(bundleID string) bool {
-	if strings.TrimSpace(bundleID) != bundleID || bundleID == "" || utf8.RuneCountInString(bundleID) > 255 {
+	if strings.TrimSpace(bundleID) != bundleID || bundleID == "" || utf8.RuneCountInString(bundleID) > pushBundleIDMaxRunes {
 		return false
 	}
 	for _, char := range bundleID {

@@ -17,23 +17,28 @@ func NewPushRepository(db *sqlx.DB) *PushRepository {
 
 func (r *PushRepository) RegisterDevice(usrSeq int, registration model.PushDeviceRegistration) error {
 	_, err := r.db.Exec(`
-		INSERT INTO ALUMNI_PUSH_DEVICE (
+		INSERT INTO ALUMNI_MOBILE_DEVICE_TOKEN (
 			USR_SEQ,
 			PLATFORM,
 			DEVICE_TOKEN,
 			LOCALE,
 			APNS_ENVIRONMENT,
 			BUNDLE_ID,
+			STATUS,
+			INVALID_COUNT,
 			LAST_SEEN_AT,
 			CREATED_AT,
 			UPDATED_AT
 		)
-		VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())
+		VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 0, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())
 		ON DUPLICATE KEY UPDATE
 			USR_SEQ = VALUES(USR_SEQ),
+			PLATFORM = VALUES(PLATFORM),
 			LOCALE = VALUES(LOCALE),
 			APNS_ENVIRONMENT = VALUES(APNS_ENVIRONMENT),
 			BUNDLE_ID = VALUES(BUNDLE_ID),
+			STATUS = 'ACTIVE',
+			INVALID_COUNT = 0,
 			LAST_SEEN_AT = UTC_TIMESTAMP(),
 			UPDATED_AT = UTC_TIMESTAMP()
 	`,
@@ -49,7 +54,7 @@ func (r *PushRepository) RegisterDevice(usrSeq int, registration model.PushDevic
 
 func (r *PushRepository) UnregisterDevice(usrSeq int, deviceToken string) error {
 	_, err := r.db.Exec(`
-		DELETE FROM ALUMNI_PUSH_DEVICE
+		DELETE FROM ALUMNI_MOBILE_DEVICE_TOKEN
 		WHERE USR_SEQ = ? AND DEVICE_TOKEN = ?
 	`, usrSeq, deviceToken)
 	return err
@@ -58,9 +63,9 @@ func (r *PushRepository) UnregisterDevice(usrSeq int, deviceToken string) error 
 func (r *PushRepository) ListDevices(usrSeq int) ([]model.PushDeliveryTarget, error) {
 	rows, err := r.db.Queryx(`
 		SELECT PLATFORM, DEVICE_TOKEN, APNS_ENVIRONMENT, BUNDLE_ID
-		FROM ALUMNI_PUSH_DEVICE
-		WHERE USR_SEQ = ?
-		ORDER BY APD_SEQ ASC
+		FROM ALUMNI_MOBILE_DEVICE_TOKEN
+		WHERE USR_SEQ = ? AND STATUS = 'ACTIVE'
+		ORDER BY MDT_SEQ ASC
 	`, usrSeq)
 	if err != nil {
 		return nil, err
@@ -87,7 +92,7 @@ func (r *PushRepository) ListDevices(usrSeq int) ([]model.PushDeliveryTarget, er
 
 func (r *PushRepository) DeleteDevice(platform, deviceToken string) error {
 	_, err := r.db.Exec(`
-		DELETE FROM ALUMNI_PUSH_DEVICE
+		DELETE FROM ALUMNI_MOBILE_DEVICE_TOKEN
 		WHERE PLATFORM = ? AND DEVICE_TOKEN = ?
 	`, platform, deviceToken)
 	return err

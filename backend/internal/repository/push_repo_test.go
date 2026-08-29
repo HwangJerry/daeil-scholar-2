@@ -27,7 +27,7 @@ func TestPushRepositoryRegistersDeviceWithAccountReassignmentUpsert(t *testing.T
 		Platform: "ios", DeviceToken: "token-123", Locale: "ko_KR",
 		APNSEnvironment: &environment, BundleID: &bundleID,
 	}
-	mock.ExpectExec(`(?s)INSERT INTO ALUMNI_PUSH_DEVICE.*LAST_SEEN_AT.*CREATED_AT.*UPDATED_AT.*VALUES.*UTC_TIMESTAMP\(\).*ON DUPLICATE KEY UPDATE.*LAST_SEEN_AT = UTC_TIMESTAMP\(\).*UPDATED_AT = UTC_TIMESTAMP\(\)`).
+	mock.ExpectExec(`(?s)INSERT INTO ALUMNI_MOBILE_DEVICE_TOKEN.*STATUS.*INVALID_COUNT.*LAST_SEEN_AT.*CREATED_AT.*UPDATED_AT.*VALUES.*'ACTIVE'.*0.*UTC_TIMESTAMP\(\).*ON DUPLICATE KEY UPDATE.*PLATFORM = VALUES\(PLATFORM\).*STATUS = 'ACTIVE'.*INVALID_COUNT = 0.*LAST_SEEN_AT = UTC_TIMESTAMP\(\).*UPDATED_AT = UTC_TIMESTAMP\(\)`).
 		WithArgs(42, "ios", "token-123", "ko_KR", "production", "com.daeil.dflhsafv2").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -42,7 +42,7 @@ func TestPushRepositoryRegistersDeviceWithAccountReassignmentUpsert(t *testing.T
 func TestPushRepositoryRegistersAndroidWithNullAPNSFields(t *testing.T) {
 	repo, mock, cleanup := newPushRepositoryTest(t)
 	defer cleanup()
-	mock.ExpectExec(`(?s)INSERT INTO ALUMNI_PUSH_DEVICE.*LAST_SEEN_AT.*CREATED_AT.*UPDATED_AT.*VALUES.*UTC_TIMESTAMP\(\).*ON DUPLICATE KEY UPDATE.*LAST_SEEN_AT = UTC_TIMESTAMP\(\).*UPDATED_AT = UTC_TIMESTAMP\(\)`).
+	mock.ExpectExec(`(?s)INSERT INTO ALUMNI_MOBILE_DEVICE_TOKEN.*STATUS.*INVALID_COUNT.*LAST_SEEN_AT.*CREATED_AT.*UPDATED_AT.*VALUES.*'ACTIVE'.*0.*UTC_TIMESTAMP\(\).*ON DUPLICATE KEY UPDATE.*PLATFORM = VALUES\(PLATFORM\).*STATUS = 'ACTIVE'.*INVALID_COUNT = 0.*LAST_SEEN_AT = UTC_TIMESTAMP\(\).*UPDATED_AT = UTC_TIMESTAMP\(\)`).
 		WithArgs(42, "android", "token-123", "ko-KR", nil, nil).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -59,7 +59,7 @@ func TestPushRepositoryRegistersAndroidWithNullAPNSFields(t *testing.T) {
 func TestPushRepositoryUnregistersOnlyCurrentOwnersMatchingToken(t *testing.T) {
 	repo, mock, cleanup := newPushRepositoryTest(t)
 	defer cleanup()
-	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM ALUMNI_PUSH_DEVICE`)).
+	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM ALUMNI_MOBILE_DEVICE_TOKEN`)).
 		WithArgs(42, "token-123").
 		WillReturnResult(sqlmock.NewResult(0, 2))
 
@@ -122,7 +122,7 @@ func TestPushRepositoryUpsertsCanonicalPreferenceFlags(t *testing.T) {
 func TestPushRepositoryListsEveryDeviceForRecipient(t *testing.T) {
 	repo, mock, cleanup := newPushRepositoryTest(t)
 	defer cleanup()
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT PLATFORM, DEVICE_TOKEN, APNS_ENVIRONMENT, BUNDLE_ID`)).
+	mock.ExpectQuery(`(?s)SELECT PLATFORM, DEVICE_TOKEN, APNS_ENVIRONMENT, BUNDLE_ID.*FROM ALUMNI_MOBILE_DEVICE_TOKEN.*WHERE USR_SEQ = \? AND STATUS = 'ACTIVE'.*ORDER BY MDT_SEQ ASC`).
 		WithArgs(42).
 		WillReturnRows(sqlmock.NewRows([]string{"PLATFORM", "DEVICE_TOKEN", "APNS_ENVIRONMENT", "BUNDLE_ID"}).
 			AddRow("android", "android-token", nil, nil).
@@ -140,7 +140,7 @@ func TestPushRepositoryListsEveryDeviceForRecipient(t *testing.T) {
 func TestPushRepositoryDeletesExactInvalidPlatformToken(t *testing.T) {
 	repo, mock, cleanup := newPushRepositoryTest(t)
 	defer cleanup()
-	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM ALUMNI_PUSH_DEVICE WHERE PLATFORM = ? AND DEVICE_TOKEN = ?`)).
+	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM ALUMNI_MOBILE_DEVICE_TOKEN WHERE PLATFORM = ? AND DEVICE_TOKEN = ?`)).
 		WithArgs("ios", "invalid-token").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 

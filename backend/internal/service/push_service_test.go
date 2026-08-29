@@ -86,7 +86,7 @@ func TestPushServiceRejectsInvalidDeviceRegistrationBeforeStore(t *testing.T) {
 		{Platform: "android", DeviceToken: "토큰", Locale: "ko-KR"},
 		{Platform: "android", DeviceToken: longToken, Locale: "ko-KR"},
 		{Platform: "android", DeviceToken: "token", Locale: ""},
-		{Platform: "android", DeviceToken: "token", Locale: strings.Repeat("k", 21)},
+		{Platform: "android", DeviceToken: "token", Locale: strings.Repeat("k", 17)},
 		{Platform: "android", DeviceToken: "token", Locale: "ko-KR", APNSEnvironment: &environment},
 		{Platform: "android", DeviceToken: "token", Locale: "ko-KR", BundleID: &bundleID},
 		{Platform: "ios", DeviceToken: "token", Locale: "ko-KR"},
