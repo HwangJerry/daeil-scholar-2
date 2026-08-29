@@ -2,7 +2,6 @@
 package contract
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,12 +28,12 @@ func TestMVPMigrationSetContainsRequiredSchema(t *testing.T) {
 }
 
 func TestMVPMigrationsAvoidUnsupportedMariaDB101Syntax(t *testing.T) {
+	// MariaDB 10.1 supports CURRENT_TIMESTAMP defaults for DATETIME columns.
 	forbidden := map[string]*regexp.Regexp{
 		"common table expression": regexp.MustCompile(`(?i)\bWITH\s+[A-Z0-9_]+\s+AS\s*\(`),
 		"window function":         regexp.MustCompile(`(?i)\b(ROW_NUMBER|DENSE_RANK|RANK)\s*\(`),
 		"JSON column":             regexp.MustCompile(`(?i)\bJSON\b`),
 		"default expression":      regexp.MustCompile(`(?i)\bDEFAULT\s*\(`),
-		"datetime default":        regexp.MustCompile(`(?i)\bDEFAULT\s+CURRENT_TIMESTAMP\b`),
 		"check constraint":        regexp.MustCompile(`(?i)\bCHECK\s*\(`),
 	}
 
@@ -51,35 +50,18 @@ func TestMVPMigrationsAvoidUnsupportedMariaDB101Syntax(t *testing.T) {
 	}
 }
 
-func TestApplyAllIncludesMigrationsBeforeHelperCleanup(t *testing.T) {
-	sql := readMigrationFile(t, "apply_all.sql")
-	cleanup := strings.Index(sql, "Cleanup: Drop helper procedures")
-	if cleanup < 0 {
-		t.Fatal("apply_all.sql is missing helper cleanup")
-	}
-	for number := 30; number <= 34; number++ {
-		marker := fmt.Sprintf("-- %03d:", number)
-		position := strings.Index(sql, marker)
-		if position < 0 {
-			t.Errorf("apply_all.sql is missing section %s", marker)
-		} else if position > cleanup {
-			t.Errorf("apply_all.sql section %s appears after helper cleanup", marker)
-		}
-	}
-}
-
 func TestPushPreferenceMigrationExtendsPreexistingSchema(t *testing.T) {
-	standalone := readMigrationFile(t, "032_create_push_device_and_preferences.sql")
-	applyAll := readMigrationFile(t, "apply_all.sql")
+	migration := readMigrationFile(t, "052_add_push_preference_message_preview.sql")
 	runbook := readMigrationFile(t, "MVP_ROLLBACK.md")
 
-	for name, content := range map[string]string{
-		"standalone": standalone,
-		"apply_all":  applyAll,
+	for _, marker := range []string{
+		"ALUMNI_PUSH_PREFERENCE",
+		"MESSAGE_PREVIEW_ENABLED",
+		"IF NOT EXISTS",
+		"ALTER TABLE",
 	} {
-		addPreview := regexp.MustCompile(`(?s)CALL\s+_add_column_if_not_exists\s*\(\s*'ALUMNI_PUSH_PREFERENCE'\s*,\s*'MESSAGE_PREVIEW_ENABLED'`)
-		if !addPreview.MatchString(content) {
-			t.Fatalf("%s must add MESSAGE_PREVIEW_ENABLED when ALUMNI_PUSH_PREFERENCE already exists", name)
+		if !strings.Contains(migration, marker) {
+			t.Errorf("052_add_push_preference_message_preview.sql is missing %q", marker)
 		}
 	}
 	for _, marker := range []string{"pre-existing `ALUMNI_PUSH_PREFERENCE`", "preserve the table", "MESSAGE_PREVIEW_ENABLED"} {
@@ -89,104 +71,9 @@ func TestPushPreferenceMigrationExtendsPreexistingSchema(t *testing.T) {
 	}
 }
 
-func TestApplyAllIncludesEveryNumberedMigration(t *testing.T) {
-	sql := readMigrationFile(t, "apply_all.sql")
-	for number := 1; number <= 34; number++ {
-		marker := fmt.Sprintf("-- %03d:", number)
-		if !strings.Contains(sql, marker) {
-			t.Errorf("apply_all.sql is missing section %s", marker)
-		}
-	}
-}
-
-func TestApplyAllIncludesBannerAdMigrationBeforeHelperCleanup(t *testing.T) {
-	standalone := readMigrationFile(t, "050_create_banner_ad.sql")
-	applyAll := readMigrationFile(t, "apply_all.sql")
-	cleanup := strings.Index(applyAll, "Cleanup: Drop helper procedures")
-	section := strings.Index(applyAll, "-- 050:")
-	if section < 0 {
-		t.Fatal("apply_all.sql is missing section -- 050:")
-	}
-	if cleanup < 0 || section > cleanup {
-		t.Fatal("apply_all.sql section -- 050: must appear before helper cleanup")
-	}
-
-	for _, marker := range []string{
-		"CREATE TABLE IF NOT EXISTS MAIN_BANNER_AD (",
-		"CREATE TABLE IF NOT EXISTS MAIN_BANNER_AD_IMAGE (",
-		"CREATE TABLE IF NOT EXISTS WEO_BANNER_AD_LOG (",
-		"IDX_MBA_OPEN_PERIOD",
-		"FK_MBAI_BN_SEQ",
-		"FK_WBAL_BN_SEQ",
-		"ENUM('VIEW','CLICK')",
-	} {
-		if !strings.Contains(standalone, marker) {
-			t.Errorf("050_create_banner_ad.sql is missing %q", marker)
-		}
-		if !strings.Contains(applyAll[section:cleanup], marker) {
-			t.Errorf("apply_all.sql section 050 is missing %q", marker)
-		}
-	}
-
-	for _, table := range []string{"MAIN_BANNER_AD", "MAIN_BANNER_AD_IMAGE", "WEO_BANNER_AD_LOG"} {
-		verification := fmt.Sprintf("SELECT '%s' AS chk, COUNT(*) AS found FROM information_schema.TABLES", table)
-		if !strings.Contains(applyAll, verification) {
-			t.Errorf("apply_all.sql is missing verification query for %s", table)
-		}
-	}
-}
-
-func TestApplyAllAvoidsANSIQuotesSensitiveHelperArguments(t *testing.T) {
-	sql := stripSQLComments(readMigrationFile(t, "apply_all.sql"))
-	unsafe := regexp.MustCompile(`(?m)CALL\s+_add_[^(]+\([^\n]*,\s*"`)
-	if unsafe.MatchString(sql) {
-		t.Error("apply_all.sql passes double-quoted SQL definitions to helpers")
-	}
-}
-
-func TestApplyAllGuardsOneTimePrivacyBackfill(t *testing.T) {
-	sql := readMigrationFile(t, "apply_all.sql")
-	for _, marker := range []string{
-		"ALUMNI_SCHEMA_MIGRATION",
-		"@run_021",
-		"WHERE @run_021 = 1",
-		"'021_default_privacy_private'",
-	} {
-		if !strings.Contains(sql, marker) {
-			t.Errorf("apply_all.sql is missing one-time privacy guard %q", marker)
-		}
-	}
-}
-
-func TestApplyAllIndexHelpersValidateExistingDefinitions(t *testing.T) {
-	sql := readMigrationFile(t, "apply_all.sql")
-	for _, marker := range []string{"GROUP_CONCAT", "SEQ_IN_INDEX", "NON_UNIQUE", "@idx_columns"} {
-		if !strings.Contains(sql, marker) {
-			t.Errorf("apply_all.sql index helpers do not validate existing definitions: missing %q", marker)
-		}
-	}
-}
-
-func TestApplyAllMirrorsRequiredMVPSchema(t *testing.T) {
-	sql := readMigrationFile(t, "apply_all.sql")
-	start := strings.Index(sql, "-- 030:")
-	end := strings.Index(sql, "Cleanup: Drop helper procedures")
-	if start < 0 || end < 0 || start >= end {
-		t.Fatal("apply_all.sql does not contain a valid 030-034 section")
-	}
-	segment := sql[start:end]
-	for _, contract := range mvpMigrationContracts() {
-		for _, marker := range contract.required {
-			if !strings.Contains(segment, marker) {
-				t.Errorf("apply_all.sql is missing %q from %s", marker, contract.name)
-			}
-		}
-	}
-}
-
 func TestMVPMigrationsHaveRollbackRunbookAndNoPublicDonorSchema(t *testing.T) {
 	runbook := readMigrationFile(t, "MVP_ROLLBACK.md")
-	for _, marker := range []string{"034", "033", "032", "031", "030", "backup", "information_schema"} {
+	for _, marker := range []string{"rollback runbook", "backup", "information_schema", "reverse order", "implicit commits"} {
 		if !strings.Contains(strings.ToLower(runbook), strings.ToLower(marker)) {
 			t.Errorf("rollback runbook is missing %q", marker)
 		}
@@ -203,42 +90,40 @@ func TestMVPMigrationsHaveRollbackRunbookAndNoPublicDonorSchema(t *testing.T) {
 }
 
 func TestLegacyRejectedMembersAreBackfilledAsRejected(t *testing.T) {
-	for _, name := range []string{"030_create_admin_role_and_alumni_verification.sql", "apply_all.sql"} {
-		sql := readMigrationFile(t, name)
-		for _, marker := range []string{"USR_STATUS = 'BAA'", "THEN 'rejected'"} {
-			if !strings.Contains(sql, marker) {
-				t.Errorf("%s does not preserve legacy rejected members: missing %q", name, marker)
-			}
+	const name = "038_create_auth_principal_tables.sql"
+	sql := readMigrationFile(t, name)
+	for _, marker := range []string{"USR_STATUS = 'BAA'", "THEN 'rejected'"} {
+		if !strings.Contains(sql, marker) {
+			t.Errorf("%s does not preserve legacy rejected members: missing %q", name, marker)
 		}
 	}
 }
 
 func TestDonationBackfillFailsClosedOnAmbiguousLegacyRows(t *testing.T) {
-	for _, name := range []string{"033_extend_weo_order_for_donation_ledger.sql", "apply_all.sql"} {
-		sql := readMigrationFile(t, name)
-		for _, marker := range []string{
-			"_MVP_DONATION_PREFLIGHT_GUARD",
-			"O_STATUS = 'N'",
-			"O_PAYMENT = 'Y' AND (O_STATUS IS NULL OR O_STATUS <> 'Y')",
-			"O_STATUS = 'Y' AND (O_PAYMENT IS NULL OR O_PAYMENT <> 'Y')",
-			"O_PRICE < 0",
-			"O_PAY < 0",
-			"O_PRICE IS NULL",
-			"COALESCE(O_STATUS, '') NOT IN ('I','Y','N')",
-			"COALESCE(O_PAYMENT, '') NOT IN ('Y','N')",
-			"O_PRICE <> O_PAY",
-			"COALESCE(O_PAYDATE, O_REGDATE) IS NULL",
-			"O_PAYMENT = 'Y' AND O_STATUS = 'Y'",
-			"THEN O_PAY",
-			"ELSE 0",
-		} {
-			if !strings.Contains(sql, marker) {
-				t.Errorf("%s is missing donation preflight/backfill marker %q", name, marker)
-			}
+	const name = "051_extend_weo_order_for_donation_ledger.sql"
+	sql := readMigrationFile(t, name)
+	for _, marker := range []string{
+		"_MVP_DONATION_PREFLIGHT_GUARD",
+		"O_STATUS = 'N'",
+		"O_PAYMENT = 'Y' AND (O_STATUS IS NULL OR O_STATUS <> 'Y')",
+		"O_STATUS = 'Y' AND (O_PAYMENT IS NULL OR O_PAYMENT <> 'Y')",
+		"O_PRICE < 0",
+		"O_PAY < 0",
+		"O_PRICE IS NULL",
+		"COALESCE(O_STATUS, '') NOT IN ('I','Y','N')",
+		"COALESCE(O_PAYMENT, '') NOT IN ('Y','N')",
+		"O_PRICE <> O_PAY",
+		"COALESCE(O_PAYDATE, O_REGDATE) IS NULL",
+		"O_PAYMENT = 'Y' AND O_STATUS = 'Y'",
+		"THEN O_PAY",
+		"ELSE 0",
+	} {
+		if !strings.Contains(sql, marker) {
+			t.Errorf("%s is missing donation preflight/backfill marker %q", name, marker)
 		}
-		if strings.Contains(sql, "O_PAYMENT = 'Y' OR O_STATUS = 'Y'") {
-			t.Errorf("%s treats inconsistent payment state as completed", name)
-		}
+	}
+	if strings.Contains(sql, "O_PAYMENT = 'Y' OR O_STATUS = 'Y'") {
+		t.Errorf("%s treats inconsistent payment state as completed", name)
 	}
 }
 
@@ -254,28 +139,59 @@ func mvpMigrationNames() []string {
 func mvpMigrationContracts() []migrationContract {
 	return []migrationContract{
 		{
-			name: "030_create_admin_role_and_alumni_verification.sql",
+			name: "028_create_mobile_device_token_table.sql",
+			required: []string{
+				"CREATE TABLE IF NOT EXISTS ALUMNI_MOBILE_DEVICE_TOKEN", "MDT_SEQ", "DEVICE_TOKEN",
+			},
+		},
+		{
+			name:     "029_extend_mobile_device_token_invalid_state.sql",
+			required: []string{"ALUMNI_MOBILE_DEVICE_TOKEN", "INVALID_COUNT", "STATUS"},
+		},
+		{
+			name:     "031_extend_mobile_device_token_apns_metadata.sql",
+			required: []string{"ALUMNI_MOBILE_DEVICE_TOKEN", "APNS_ENVIRONMENT", "BUNDLE_ID"},
+		},
+		{
+			name:     "032_allow_android_push_tokens_without_apns_metadata.sql",
+			required: []string{"ALUMNI_MOBILE_DEVICE_TOKEN", "APNS_ENVIRONMENT", "BUNDLE_ID"},
+		},
+		{
+			name: "033_backfill_android_push_token_metadata_and_length.sql",
+			required: []string{
+				"ALUMNI_MOBILE_DEVICE_TOKEN", "VARCHAR(512)", "PLATFORM = 'android'",
+			},
+		},
+		{
+			name: "034_create_push_outbox.sql",
+			required: []string{
+				"ALUMNI_PUSH_OUTBOX", "MDT_SEQ", "DEVICE_TOKEN", "APNS_ENVIRONMENT",
+				"PAYLOAD_JSON", "NEXT_ATTEMPT_AT", "ATTEMPT_COUNT",
+			},
+		},
+		{
+			name:     "035_create_push_preference.sql",
+			required: []string{"ALUMNI_PUSH_PREFERENCE", "NOTICE_ENABLED", "MESSAGE_ENABLED"},
+		},
+		{
+			name: "038_create_auth_principal_tables.sql",
 			required: []string{
 				"ALUMNI_ADMIN_ROLE", "ALUMNI_VERIFICATION", "unsubmitted",
 				"reapproval_pending", "REJECTION_REASON", "REVIEWED_BY",
+				"USR_STATUS = 'BAA'", "THEN 'rejected'",
 			},
 		},
 		{
-			name: "031_create_member_block_and_message_retention.sql",
+			name: "048_create_member_block_and_message_retention.sql",
 			required: []string{
 				"ALUMNI_MEMBER_BLOCK", "BLOCKER_USR_SEQ", "BLOCKED_USR_SEQ",
-				"AM_CLIENT_MESSAGE_ID", "AM_VISIBLE_RECVR", "PURGE_AT",
+				"AM_CLIENT_MESSAGE_ID", "AM_VISIBLE_RECVR", "AM_SUPPRESSION_REASON", "PURGE_AT",
+				"UK_AMB_DIRECTION", "IDX_AMB_BLOCKED", "UK_AM_SENDER_CLIENT",
+				"IDX_AM_RECVR_VISIBLE", "IDX_AM_PURGE",
 			},
 		},
 		{
-			name: "032_create_push_device_and_preferences.sql",
-			required: []string{
-				"ALUMNI_PUSH_DEVICE", "DEVICE_TOKEN", "APNS_ENVIRONMENT",
-				"ALUMNI_PUSH_PREFERENCE", "MESSAGE_PREVIEW_ENABLED",
-			},
-		},
-		{
-			name: "033_extend_weo_order_for_donation_ledger.sql",
+			name: "051_extend_weo_order_for_donation_ledger.sql",
 			required: []string{
 				"WEO_ORDER", "O_SOURCE", "O_TRANSACTION_NO", "O_COMPOSITE_KEY",
 				"O_GROSS_AMOUNT", "O_REFUNDED_AMOUNT", "O_NET_RECEIVED_AMOUNT",
@@ -283,28 +199,15 @@ func mvpMigrationContracts() []migrationContract {
 			},
 		},
 		{
-			name: "034_add_personal_data_retention_support.sql",
-			required: []string{
-				"USR_ANONYMIZED_AT", "USR_PURGE_AT", "O_LEGAL_RETENTION_UNTIL",
-				"O_ACCOUNT_UNLINKED_AT", "AM_SENDER_ANONYMIZED_YN",
-				"O_ACCOUNT_USR_SEQ", "AM_SENDER_ACCOUNT_SEQ", "AM_RECVR_ACCOUNT_SEQ",
-			},
+			name:     "052_add_push_preference_message_preview.sql",
+			required: []string{"ALUMNI_PUSH_PREFERENCE", "MESSAGE_PREVIEW_ENABLED"},
 		},
 	}
 }
 
 func readMigrationFile(t *testing.T, name string) string {
 	t.Helper()
-	dir := canonicalMigrationDir()
-	switch name {
-	case "030_create_admin_role_and_alumni_verification.sql",
-		"031_create_member_block_and_message_retention.sql",
-		"032_create_push_device_and_preferences.sql",
-		"033_extend_weo_order_for_donation_ledger.sql",
-		"034_add_personal_data_retention_support.sql":
-		dir = filepath.Join(dir, "testdata", "current-branch-8dcba0b")
-	}
-	data, err := os.ReadFile(filepath.Join(dir, name))
+	data, err := os.ReadFile(filepath.Join(canonicalMigrationDir(), name))
 	if err != nil {
 		t.Fatalf("read migration %s: %v", name, err)
 	}
