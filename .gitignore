@@ -30,3 +30,6 @@ daeil-redesign-v2.jsx
 .gstack/
 
 .claude/harness/**
+
+# Local production DB backups (raw dumps, never commit)
+prod-db-backups/
