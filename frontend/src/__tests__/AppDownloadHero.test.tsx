@@ -49,14 +49,13 @@ describe('AppDownloadHero', () => {
     });
   });
 
-  it('loads both app icon assets eagerly', () => {
+  it('keeps the hero focused on a single text column without a phone preview', () => {
     render(<AppDownloadHero downloadLinks={UNAVAILABLE_DOWNLOAD_LINKS} />);
 
     expect(
-      screen.getByRole('img', { name: '대일외고 장학회 iOS 앱 아이콘' }),
-    ).toHaveAttribute('loading', 'eager');
-    expect(
-      screen.getByRole('img', { name: '대일외고 장학회 Android 앱 아이콘' }),
-    ).toHaveAttribute('loading', 'eager');
+      screen.getByRole('heading', { name: '대일의 오늘과 내일을 잇습니다.' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('figure')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('img')).toHaveLength(0);
   });
 });

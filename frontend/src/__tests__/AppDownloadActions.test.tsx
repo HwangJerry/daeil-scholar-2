@@ -1,4 +1,4 @@
-// AppDownloadActions — Official marketplace badges and safe-link behavior
+// AppDownloadActions — Compact marketplace icons and safe-link behavior
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppDownloadActions } from '../components/landing/AppDownloadActions';
@@ -18,20 +18,23 @@ const UNAVAILABLE_DOWNLOAD_LINKS: AppDownloadLinks = {
 };
 
 describe('AppDownloadActions', () => {
-  it('renders the official badge assets without replacing their embedded labels', () => {
+  it('renders compact icon-only actions with accessible labels', () => {
     render(<AppDownloadActions downloadLinks={AVAILABLE_DOWNLOAD_LINKS} />);
 
-    const appStoreBadge = screen.getByRole('img', {
-      name: 'App Store에서 다운로드 하기',
+    const appStoreLink = screen.getByRole('link', {
+      name: 'App Store에서 다운로드',
     });
-    const googlePlayBadge = screen.getByRole('img', {
+    const googlePlayLink = screen.getByRole('link', {
       name: 'Google Play에서 다운로드',
     });
 
-    expect(appStoreBadge).toHaveAttribute('src', expect.stringContaining('.svg'));
-    expect(googlePlayBadge).toHaveAttribute('src', expect.stringContaining('.png'));
-    expect(appStoreBadge).toHaveClass('h-12', 'w-auto', 'object-contain');
-    expect(googlePlayBadge).toHaveClass('h-[63px]', 'w-auto', 'object-contain');
+    expect(appStoreLink).toHaveClass('size-[52px]', 'bg-primary', 'text-surface');
+    expect(googlePlayLink).toHaveClass('size-[52px]', 'bg-primary', 'text-surface');
+    expect(appStoreLink.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(googlePlayLink.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryAllByRole('img')).toHaveLength(0);
+    expect(screen.queryByText('App Store에서 다운로드')).not.toBeInTheDocument();
+    expect(screen.queryByText('Google Play에서 다운로드')).not.toBeInTheDocument();
   });
 
   it('opens available marketplace destinations in a new tab', () => {
@@ -71,7 +74,7 @@ describe('AppDownloadActions', () => {
         name: 'Google Play에서 다운로드, 출시 준비 중',
       }),
     ).toBeDisabled();
-    expect(screen.getAllByText('출시 준비 중')).toHaveLength(2);
+    expect(screen.getByText('출시 준비 중')).toBeInTheDocument();
     expect(screen.queryAllByRole('link')).toHaveLength(0);
   });
 });

@@ -87,7 +87,7 @@ export function SupportSection({
             </p>
             <AppDownloadActions
               downloadLinks={downloadLinks}
-              className={cn('mt-6 lg:flex-col')}
+              className={cn('mt-6')}
             />
           </div>
         </div>
