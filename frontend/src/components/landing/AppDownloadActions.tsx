@@ -1,6 +1,6 @@
 // AppDownloadActions — Shared safe marketplace actions for landing download CTAs
-import type { LucideIcon } from 'lucide-react';
-import { Apple, Play } from 'lucide-react';
+import appleAppStoreBadge from '../../assets/app-store-badges/apple-app-store-badge-ko-black.svg';
+import googlePlayBadge from '../../assets/app-store-badges/google-play-badge-ko.png';
 import {
   APP_DOWNLOAD_LINKS,
   type AppDownloadLink,
@@ -11,7 +11,11 @@ import { Button } from '../ui/Button';
 
 interface DownloadActionProps {
   downloadLink: AppDownloadLink;
-  icon: LucideIcon;
+  badgeSrc: string;
+  badgeAlt: string;
+  badgeWidth: number;
+  badgeHeight: number;
+  badgeDisplayClassName: string;
   label: string;
 }
 
@@ -20,17 +24,61 @@ interface AppDownloadActionsProps {
   className?: string;
 }
 
-function DownloadAction({ downloadLink, icon: Icon, label }: DownloadActionProps) {
+const APP_STORE_BADGE = {
+  badgeSrc: appleAppStoreBadge,
+  badgeAlt: 'App Store에서 다운로드 하기',
+  badgeWidth: 129.70071,
+  badgeHeight: 40,
+  badgeDisplayClassName: 'h-12',
+  label: 'App Store에서 다운로드',
+} as const;
+
+const GOOGLE_PLAY_BADGE = {
+  badgeSrc: googlePlayBadge,
+  badgeAlt: 'Google Play에서 다운로드',
+  badgeWidth: 646,
+  badgeHeight: 250,
+  badgeDisplayClassName: 'h-[63px]',
+  label: 'Google Play에서 다운로드',
+} as const;
+
+function DownloadAction({
+  downloadLink,
+  badgeSrc,
+  badgeAlt,
+  badgeWidth,
+  badgeHeight,
+  badgeDisplayClassName,
+  label,
+}: DownloadActionProps) {
   const actionContent = (
-    <>
-      <Icon aria-hidden="true" className={cn('size-5 shrink-0')} />
-      <span className={cn('flex flex-col items-start leading-tight')}>
-        <span>{label}</span>
-        {!downloadLink.available && (
-          <span className={cn('mt-1 text-caption font-normal')}>출시 준비 중</span>
-        )}
+    <span className={cn('flex flex-col items-center gap-1.5')}>
+      <span className={cn('flex h-[63px] items-center justify-center')}>
+        <img
+          src={badgeSrc}
+          alt={badgeAlt}
+          width={badgeWidth}
+          height={badgeHeight}
+          decoding="async"
+          className={cn(
+            'w-auto max-w-full shrink-0 object-contain',
+            badgeDisplayClassName,
+            !downloadLink.available && 'opacity-50',
+          )}
+        />
       </span>
-    </>
+      {!downloadLink.available && (
+        <span className={cn('text-caption font-normal leading-none text-text-tertiary')}>
+          출시 준비 중
+        </span>
+      )}
+    </span>
+  );
+
+  const actionClassName = cn(
+    'h-auto min-h-[83px] flex-1 rounded-xl border-surface/80 bg-surface px-3 py-2.5 text-text-secondary shadow-card',
+    'hover:border-border-hover hover:bg-background hover:shadow-card-hover',
+    'focus-visible:ring-primary-muted focus-visible:ring-offset-hero-from',
   );
 
   if (!downloadLink.available || !downloadLink.url) {
@@ -41,9 +89,7 @@ function DownloadAction({ downloadLink, icon: Icon, label }: DownloadActionProps
         size="lg"
         disabled
         aria-label={`${label}, 출시 준비 중`}
-        className={cn(
-          'h-auto min-h-14 flex-1 justify-start border-primary-muted/40 bg-primary-light/10 px-4 text-primary-muted',
-        )}
+        className={cn(actionClassName, 'disabled:opacity-100')}
       >
         {actionContent}
       </Button>
@@ -55,11 +101,14 @@ function DownloadAction({ downloadLink, icon: Icon, label }: DownloadActionProps
       asChild
       variant="outline"
       size="lg"
-      className={cn(
-        'h-auto min-h-14 flex-1 justify-start border-surface bg-surface px-4 text-primary hover:bg-primary-light',
-      )}
+      className={actionClassName}
     >
-      <a href={downloadLink.url} target="_blank" rel="noreferrer">
+      <a
+        href={downloadLink.url}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={label}
+      >
         {actionContent}
       </a>
     </Button>
@@ -77,13 +126,11 @@ export function AppDownloadActions({
     >
       <DownloadAction
         downloadLink={downloadLinks.appStore}
-        icon={Apple}
-        label="App Store에서 다운로드"
+        {...APP_STORE_BADGE}
       />
       <DownloadAction
         downloadLink={downloadLinks.googlePlay}
-        icon={Play}
-        label="Google Play에서 다운로드"
+        {...GOOGLE_PLAY_BADGE}
       />
     </div>
   );
