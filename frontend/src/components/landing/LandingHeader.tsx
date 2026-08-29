@@ -47,11 +47,19 @@ function LandingNavigation({
             ? 'flex min-h-11 items-center px-4 py-3 text-sm'
             : 'inline-flex min-h-11 items-center px-2 py-2 text-[13px]',
           isActive
-            ? 'bg-primary-light text-primary'
+            ? 'text-primary'
             : 'text-text-tertiary hover:bg-background hover:text-text-primary',
         )}
       >
-        {item.label}
+        <span
+          className={cn(
+            'relative',
+            isActive &&
+              'after:absolute after:inset-x-0 after:-bottom-1.5 after:h-0.5 after:bg-primary after:content-[\'\']',
+          )}
+        >
+          {item.label}
+        </span>
       </a>
     );
   });
