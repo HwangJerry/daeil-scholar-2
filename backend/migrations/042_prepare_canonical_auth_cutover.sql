@@ -1,4 +1,5 @@
 -- Migration 042: Prepare the canonical identity backfill run and journal authority.
+-- Deferred after a planning change: unapplied in production; future application timing will be decided separately.
 -- Target: MariaDB 10.1.38.
 -- This migration is additive only. It does not backfill data, remove legacy authority,
 -- invalidate sessions, or alter canonical domain tables.
