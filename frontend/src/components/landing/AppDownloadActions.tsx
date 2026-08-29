@@ -1,16 +1,18 @@
 // AppDownloadActions — Shared safe marketplace icon actions for landing download CTAs
-import { Apple, Play, type LucideIcon } from 'lucide-react';
+import type { ComponentType, SVGProps } from 'react';
 import {
   APP_DOWNLOAD_LINKS,
   type AppDownloadLink,
   type AppDownloadLinks,
 } from '../../constants/appDownload';
 import { cn } from '../../lib/utils';
+import { AppleLogoIcon } from '../icons/AppleLogoIcon';
+import { GooglePlayLogoIcon } from '../icons/GooglePlayLogoIcon';
 import { Button } from '../ui/Button';
 
 interface DownloadActionProps {
   downloadLink: AppDownloadLink;
-  icon: LucideIcon;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
   label: string;
 }
 
@@ -20,12 +22,12 @@ interface AppDownloadActionsProps {
 }
 
 const APP_STORE_ACTION = {
-  icon: Apple,
+  icon: AppleLogoIcon,
   label: 'App Store에서 다운로드',
 } as const;
 
 const GOOGLE_PLAY_ACTION = {
-  icon: Play,
+  icon: GooglePlayLogoIcon,
   label: 'Google Play에서 다운로드',
 } as const;
 
