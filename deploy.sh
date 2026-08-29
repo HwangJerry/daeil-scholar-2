@@ -460,7 +460,7 @@ if [[ "${DEPLOY_FRONTEND}" == "true" ]]; then
   if [[ "${PATCH_MODE}" == "true" ]]; then
     # patch-mode=true requires a non-empty VITE_WIP_ADMIN_CODE in frontend/.env so
     # the WipGate component (frontend/src/components/common/WipGate.tsx) is active.
-    WIP_CODE_VAL=$(sed -nE 's/^VITE_WIP_ADMIN_CODE=("?)([^"]*)\1[[:space:]]*$/\2/p' .env | head -n 1)
+    WIP_CODE_VAL=$(sed -n 's/^VITE_WIP_ADMIN_CODE=//p' .env | head -n 1 | sed -E 's/[[:space:]]*$//; s/^"(.*)"$/\1/')
     if [[ -z "${WIP_CODE_VAL}" ]]; then
       echo "✗ patch-mode=true requires VITE_WIP_ADMIN_CODE to be non-empty in frontend/.env" >&2
       echo "  Either set the code in frontend/.env or re-run with --patch-mode=false." >&2
