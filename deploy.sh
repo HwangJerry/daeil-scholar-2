@@ -219,7 +219,7 @@ if [[ "${DEPLOY_BACKEND}" == "true" && (
       "${SKIP_DEBUG_AGENT_CHECK:-0}" != "1" ||
       "${SKIP_MIGRATION_CHECK:-0}" != "1"
     ) ]]; then
-  if ! UNIT_CONTENT=$(ssh "${SSH_OPTS[@]}" "${TARGET}" "cat ${SERVICE_PATH}" 2>&1); then
+  if ! UNIT_CONTENT=$(ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" "cat ${SERVICE_PATH}" 2>&1); then
     echo "✗ Failed to read ${SERVICE_PATH}:" >&2
     echo "${UNIT_CONTENT}" | sed 's/^/    /' >&2
     echo "  Hint: ensure the service file exists and is world-readable (chmod 644)." >&2
@@ -366,7 +366,7 @@ else
     exit 1
   fi
 
-  if ! REMOTE_LIST=$(ssh "${SSH_OPTS[@]}" "${TARGET}" "MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' -BN '${DB_NAME_VAL}' -e 'SELECT filename FROM _migration_history ORDER BY filename'" 2>&1); then
+  if ! REMOTE_LIST=$(ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" "MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' -BN '${DB_NAME_VAL}' -e 'SELECT filename FROM _migration_history ORDER BY filename'" 2>&1); then
     echo "✗ Failed to query _migration_history on ${TARGET}:" >&2
     echo "${REMOTE_LIST}" | sed 's/^/    /' >&2
     echo "" >&2
@@ -418,19 +418,19 @@ else
       REMOTE_TMP="/tmp/_mig_$$_${m}"
       MIGRATION_SHA256=$(shasum -a 256 "backend/migrations/${m}" | cut -d ' ' -f 1)
       echo "  APPLY ${m} ..."
-      if ! scp "${SCP_OPTS[@]}" "backend/migrations/${m}" "${TARGET}:${REMOTE_TMP}" >/dev/null; then
+      if ! scp "${SCP_OPTS[@]+"${SCP_OPTS[@]}"}" "backend/migrations/${m}" "${TARGET}:${REMOTE_TMP}" >/dev/null; then
         echo "✗ Failed to upload ${m} to ${TARGET}:${REMOTE_TMP}" >&2
         echo "  Backend NOT restarted. Investigate before retrying." >&2
         exit 1
       fi
-      if ! ssh "${SSH_OPTS[@]}" "${TARGET}" \
+      if ! ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" \
         "MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' '${DB_NAME_VAL}' < ${REMOTE_TMP} \
          && MYSQL_PWD='${DB_PASS_VAL}' mysql --skip-ssl -u'${DB_USER_VAL}' -BN '${DB_NAME_VAL}' \
               -e \"INSERT INTO _migration_history (filename, sha256) VALUES ('${m}', '${MIGRATION_SHA256}')\" \
          && rm -f ${REMOTE_TMP}"; then
         echo "✗ Migration failed: ${m}" >&2
         echo "  DB may be in a partial state. Backend NOT restarted. Investigate before retrying." >&2
-        ssh "${SSH_OPTS[@]}" "${TARGET}" "rm -f ${REMOTE_TMP}" || true
+        ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" "rm -f ${REMOTE_TMP}" || true
         exit 1
       fi
       echo "  OK    ${m}"
@@ -489,30 +489,30 @@ fi
 
 if [[ "${DEPLOY_BACKEND}" == "true" ]]; then
   echo "=== Uploading Go binary ==="
-  scp "${SCP_OPTS[@]}" dist/server "${TARGET}:/app/backend/server.new"
-  scp "${SCP_OPTS[@]}" dist/backfill "${TARGET}:/app/backend/backfill"
-  ssh "${SSH_OPTS[@]}" "${TARGET}" 'mv /app/backend/server.new /app/backend/server && chmod 755 /app/backend/server /app/backend/backfill'
+  scp "${SCP_OPTS[@]+"${SCP_OPTS[@]}"}" dist/server "${TARGET}:/app/backend/server.new"
+  scp "${SCP_OPTS[@]+"${SCP_OPTS[@]}"}" dist/backfill "${TARGET}:/app/backend/backfill"
+  ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" 'mv /app/backend/server.new /app/backend/server && chmod 755 /app/backend/server /app/backend/backfill'
 else
   echo "=== Skipping Go binary upload ==="
 fi
 
 if [[ "${DEPLOY_FRONTEND}" == "true" ]]; then
   echo "=== Uploading User SPA ==="
-  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" frontend/dist/ "${TARGET}:/var/www/app/"
+  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]+${SSH_OPTS[*]}}" frontend/dist/ "${TARGET}:/var/www/app/"
 else
   echo "=== Skipping User SPA upload ==="
 fi
 
 if [[ "${DEPLOY_ADMIN}" == "true" ]]; then
   echo "=== Uploading Admin SPA ==="
-  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]}" admin/dist/ "${TARGET}:/var/www/admin/"
+  rsync -avz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "ssh ${SSH_OPTS[*]+${SSH_OPTS[*]}}" admin/dist/ "${TARGET}:/var/www/admin/"
 else
   echo "=== Skipping Admin SPA upload ==="
 fi
 
 if [[ "${DEPLOY_BACKEND}" == "true" ]]; then
   echo "=== Reloading systemd and restarting backend ==="
-  ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'
+  ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" 'sudo systemctl daemon-reload && sudo systemctl restart alumni-backend'
 else
   echo "=== Skipping backend restart ==="
 fi
@@ -521,8 +521,8 @@ fi
 # existing path does not require a reload. Install/reload the shared config only
 # when its contents have actually changed on the server.
 echo "=== Checking Apache httpd config ==="
-scp "${SCP_OPTS[@]}" deploy/httpd-alumni.conf "${TARGET}:/tmp/alumni.conf.new"
-HTTPD_CONFIG_STATUS=$(ssh "${SSH_OPTS[@]}" "${TARGET}" '
+scp "${SCP_OPTS[@]+"${SCP_OPTS[@]}"}" deploy/httpd-alumni.conf "${TARGET}:/tmp/alumni.conf.new"
+HTTPD_CONFIG_STATUS=$(ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" '
   if test -f /etc/httpd/conf.d/alumni.conf && cmp -s /tmp/alumni.conf.new /etc/httpd/conf.d/alumni.conf; then
     rm -f /tmp/alumni.conf.new
     printf unchanged
@@ -535,14 +535,14 @@ HTTPD_CONFIG_STATUS=$(ssh "${SSH_OPTS[@]}" "${TARGET}" '
 
 echo "=== Uploading legacy PHP compat shims ==="
 for shim in _set_docroot.php _legacy_docroot.php _legacy_url_rewriter.php; do
-  scp "${SCP_OPTS[@]}" "deploy/${shim}" "${TARGET}:/tmp/${shim}.new"
-  ssh "${SSH_OPTS[@]}" "${TARGET}" "sudo mv /tmp/${shim}.new /var/www/html/${shim} && sudo chmod 644 /var/www/html/${shim}"
+  scp "${SCP_OPTS[@]+"${SCP_OPTS[@]}"}" "deploy/${shim}" "${TARGET}:/tmp/${shim}.new"
+  ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" "sudo mv /tmp/${shim}.new /var/www/html/${shim} && sudo chmod 644 /var/www/html/${shim}"
 done
 
 case "${HTTPD_CONFIG_STATUS}" in
   changed)
     echo "=== Reloading Apache httpd (config changed) ==="
-    ssh "${SSH_OPTS[@]}" "${TARGET}" 'sudo systemctl reload httpd'
+    ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" 'sudo systemctl reload httpd'
     ;;
   unchanged)
     echo "=== Skipping Apache httpd reload (config unchanged) ==="
@@ -557,11 +557,11 @@ echo "=== Verifying /old/ legacy routing ==="
 SMOKE_HOST="daeilfoundation.or.kr"
 # 1) On-server check via loopback with --resolve so hairpin-NAT/DNS issues
 #    do not mask Apache config problems. Falls back gracefully if it fails.
-ssh "${SSH_OPTS[@]}" "${TARGET}" \
+ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" \
   "curl -s -o /dev/null -w '[server-loopback] HTTP %{http_code} for /old/index.php\n' \
     --resolve ${SMOKE_HOST}:443:127.0.0.1 https://${SMOKE_HOST}/old/index.php" \
   || echo "  ⚠ server-loopback /old/index.php failed (non-fatal)"
-ssh "${SSH_OPTS[@]}" "${TARGET}" \
+ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" \
   "curl -s -o /dev/null -w '[server-loopback] HTTP %{http_code} for /old/_sys/css/_common.css\n' \
     --resolve ${SMOKE_HOST}:443:127.0.0.1 https://${SMOKE_HOST}/old/_sys/css/_common.css" \
   || echo "  ⚠ server-loopback /old/_sys/css/_common.css failed (non-fatal)"
