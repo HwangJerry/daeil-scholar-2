@@ -1,6 +1,6 @@
 # 소셜 인증 운영 런북
 
-이 문서는 `028_social_auth_security.sql` 적용, Sign in with Apple/Kakao 모바일 로그인, 세션 회전, 계정 연결 해제와 탈퇴를 운영하기 위한 절차입니다. 애플리케이션 배포와 DB 마이그레이션은 별도 승인된 변경 창에서 실행합니다.
+이 문서는 `028_social_auth_security.sql` 적용, Sign in with Apple/Kakao 모바일 로그인, 세션 회전과 계정 탈퇴를 운영하기 위한 절차입니다. 애플리케이션 배포와 DB 마이그레이션은 별도 승인된 변경 창에서 실행합니다.
 
 ## 배포 전 확인
 
@@ -83,16 +83,15 @@ WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER' AND INDEX_NAME='IDX_WE
 
 - Kakao: SDK 취소와 provider 오류가 구분되는지, 조작된 access token이 거부되는지, linked/pending/new-account 흐름을 각각 확인합니다.
 - Apple: 첫 로그인에서 이름이 전달되는 경우와 재로그인에서 이름/이메일이 nil인 경우, Private Relay 이메일, 취소, 잘못된 nonce/audience를 확인합니다.
-- 계정 연결: 같은 이메일만으로 연결되지 않는지, `merge`가 기존 ID/비밀번호 재인증을 요구하는지 확인합니다.
-- 연결 상태: `GET /api/auth/account/connections`가 실제 `KT`/`AP` 연결과 password 보유 여부만 반환하는지 확인합니다.
+- 신규 회원가입: 같은 이메일만으로 기존 계정에 연결되지 않고 `mode=new`이 새 회원을 생성하는지 확인합니다.
 - 세션: access 만료 후 한 번만 refresh되는지, refresh rotation 후 이전 토큰 재사용이 해당 `sid` 전체를 로그아웃하는지 확인합니다.
 - 상태: `CCC`/`ZZZ`만 로그인되고 `BBB`는 pending, `AAA`와 알 수 없는 상태는 거부되는지 확인합니다.
 - 로그아웃: 현재 세션 로그아웃과 전체 로그아웃을 서로 다른 기기에서 확인합니다. 오프라인 로그아웃은 기기 Keychain을 정리해야 합니다.
-- 연결 해제/탈퇴: 마지막 로그인 수단은 `LAST_LOGIN_METHOD`로 거부되는지, 연결되지 않은 provider 해제가 outbox를 만들지 않는지, provider revoke 성공 시에만 link와 encrypted credential이 함께 삭제되는지, 탈퇴 요청 직후 `USR_STATUS=AAA`와 모든 세션 revoke가 반영되는지 확인합니다.
+- 탈퇴: 요청 직후 `USR_STATUS=AAA`와 모든 세션 revoke가 반영되는지 확인합니다.
 
 ## Revocation 실패 복구
 
-provider API 장애가 발생하면 계정 탈퇴는 로컬 상태와 세션 폐기를 먼저 완료하고 HTTP 202를 반환합니다. 실패 작업은 `ALUMNI_SOCIAL_REVOCATION_OUTBOX`에 `PENDING`으로 기록됩니다. 연결 해제는 link를 유지한 채 503을 반환합니다.
+provider API 장애가 발생하면 계정 탈퇴는 로컬 상태와 세션 폐기를 먼저 완료하고 HTTP 202를 반환합니다. 실패 작업은 `ALUMNI_SOCIAL_REVOCATION_OUTBOX`에 `PENDING`으로 기록됩니다.
 
 탈퇴 요청 시 즉시 수행되는 범위는 `USR_STATUS=AAA`, 모든 서비스 세션 폐기, provider revoke 시도입니다. 회원 기본 행, 기부/결제 기록, 감사 목적 기록은 이 API에서 물리 삭제하지 않습니다. 법적·운영 보존기간이 끝난 데이터의 삭제/익명화는 별도 승인된 배치로 수행해야 하며, provider revoke 실패 재처리와도 분리합니다.
 

@@ -37,8 +37,3 @@ func (s *AuthService) InsertSocialLink(usrSeq int, gate string, socialID string,
 func (s *AuthService) UpdateProfilePhotoIfEmpty(usrSeq int, url string) error {
 	return s.repo.UpdateProfilePhotoIfEmpty(usrSeq, url)
 }
-
-// UpdateMemberMergeFields updates merge-editable fields on an existing member.
-func (s *AuthService) UpdateMemberMergeFields(usrSeq int, name, email, fn, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) error {
-	return s.repo.UpdateMemberMergeFields(usrSeq, name, email, fn, fmDept, jobCat, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic)
-}

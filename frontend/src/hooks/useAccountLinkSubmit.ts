@@ -1,4 +1,4 @@
-// useAccountLinkSubmit — Shared submit handler for AccountLinkNewForm and AccountLinkMergeForm.
+// useAccountLinkSubmit — Submit handler for social new-member registration.
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiClientError } from '../api/client';

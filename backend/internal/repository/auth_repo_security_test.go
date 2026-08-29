@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/dflh-saf/backend/internal/model"
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 )
@@ -125,48 +124,6 @@ func TestLogoutScopesCurrentSessionAndAllSessionsSeparately(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 3))
 	if err := repo.RevokeAllMobileSessions(42); err != nil {
 		t.Fatal(err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestAccountConnectionsReturnsOnlyTypedProvidersAndPasswordState(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	repo := NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
-
-	mock.ExpectQuery(`FROM AUTH_IDENTITY i[\s\S]*AUTH_PASSWORD_CREDENTIAL c[\s\S]*i.STATUS = 'ACTIVE'[\s\S]*c.STATUS = 'ACTIVE'`).
-		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"HAS_PASSWORD"}).AddRow(true))
-	mock.ExpectQuery(`SELECT NMS_GATE[\s\S]*NMS_STATUS = 'ACTIVE'`).
-		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"NMS_GATE"}).
-			AddRow("KT").
-			AddRow("UNKNOWN").
-			AddRow("AP"))
-
-	connections, err := repo.GetAccountConnections(42)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !connections.HasPassword {
-		t.Fatal("password state was not returned")
-	}
-	expectedProviders := []model.SocialProvider{
-		model.SocialProviderApple,
-		model.SocialProviderKakao,
-	}
-	if len(connections.Providers) != len(expectedProviders) {
-		t.Fatalf("providers = %#v", connections.Providers)
-	}
-	for index, provider := range expectedProviders {
-		if connections.Providers[index] != provider {
-			t.Fatalf("providers = %#v, want %#v", connections.Providers, expectedProviders)
-		}
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

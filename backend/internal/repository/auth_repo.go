@@ -3,7 +3,6 @@ package repository
 import (
 	"database/sql"
 	"errors"
-	"sort"
 	"sync/atomic"
 	"time"
 
@@ -17,11 +16,9 @@ var (
 	ErrRefreshTokenReplay   = errors.New("refresh token replay detected")
 	ErrChallengeInvalid     = errors.New("apple challenge is invalid")
 	ErrAuthorizationReplay  = errors.New("authorization code replay detected")
-	ErrSocialIdentityOwner  = errors.New("social identity belongs to another member")
 	ErrPhoneAlreadyClaimed  = errors.New("canonical phone already claimed")
 	ErrInvalidPhone         = errors.New("canonical phone is invalid")
 	ErrPhoneClaimsMigrating = errors.New("phone claim migration is in progress")
-	ErrLastLoginMethod      = errors.New("cannot disconnect the last login method")
 )
 
 // MariaDB 10.1 has no REGEXP_REPLACE. This compatibility expression is kept in
@@ -57,15 +54,6 @@ type SocialAccountFields struct {
 	ProfileImageURL     string
 	EncryptedCredential string
 }
-
-type SocialDisconnectPhase int
-
-const (
-	SocialDisconnectNotConnected SocialDisconnectPhase = iota
-	SocialDisconnectRevokeFresh
-	SocialDisconnectRevokeRetry
-	SocialDisconnectFinalizePending
-)
 
 func NewAuthRepository(db *sqlx.DB) *AuthRepository {
 	return &AuthRepository{DB: db}
@@ -253,96 +241,6 @@ func (r *AuthRepository) CreateSocialAccount(fields SocialAccountFields) (*model
 	return user, nil
 }
 
-func (r *AuthRepository) MergeSocialAccount(fields SocialAccountFields) (*model.User, error) {
-	tx, err := r.DB.Beginx()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	var socialOwner int
-	err = tx.Get(&socialOwner, `
-		SELECT USR_SEQ
-		FROM WEO_MEMBER_SOCIAL
-		WHERE NMS_GATE = ? AND NMS_ID = ?
-		LIMIT 1
-		FOR UPDATE
-	`, fields.Provider, fields.SocialID)
-	switch {
-	case err == nil && socialOwner != fields.USRSeq:
-		return nil, ErrSocialIdentityOwner
-	case err != nil && !errors.Is(err, sql.ErrNoRows):
-		return nil, err
-	}
-
-	phonePublic, emailPublic := socialPrivacyDefaults(fields.USRPhonePublic, fields.USREmailPublic)
-	if _, err := tx.Exec(`
-		UPDATE WEO_MEMBER
-		SET USR_NAME = ?, USR_EMAIL = ?, USR_JOB_CAT = ?, USR_BIZ_NAME = ?, USR_BIZ_DESC = ?,
-		    USR_BIZ_ADDR = ?, USR_POSITION = ?, USR_PHONE_PUBLIC = ?, USR_EMAIL_PUBLIC = ?
-		WHERE USR_SEQ = ?
-	`, fields.Name, fields.Email, fields.JobCat, fields.BizName,
-		fields.BizDesc, fields.BizAddr, fields.Position, phonePublic, emailPublic, fields.USRSeq); err != nil {
-		return nil, err
-	}
-	if err := insertSocialConnectionTx(tx, fields); err != nil {
-		return nil, err
-	}
-	if fields.ProfileImageURL != "" {
-		if _, err := tx.Exec(`
-			UPDATE WEO_MEMBER
-			SET USR_PHOTO = ?
-			WHERE USR_SEQ = ? AND (USR_PHOTO IS NULL OR USR_PHOTO = '')
-		`, fields.ProfileImageURL, fields.USRSeq); err != nil {
-			return nil, err
-		}
-	}
-
-	user, err := getMemberBySequenceTx(tx, fields.USRSeq)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return user, nil
-}
-
-func (r *AuthRepository) AttachSocialAccount(fields SocialAccountFields) (*model.User, error) {
-	tx, err := r.DB.Beginx()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	var socialOwner int
-	err = tx.Get(&socialOwner, `
-		SELECT USR_SEQ
-		FROM WEO_MEMBER_SOCIAL
-		WHERE NMS_GATE = ? AND NMS_ID = ?
-		LIMIT 1
-		FOR UPDATE
-	`, fields.Provider, fields.SocialID)
-	switch {
-	case err == nil && socialOwner != fields.USRSeq:
-		return nil, ErrSocialIdentityOwner
-	case err != nil && !errors.Is(err, sql.ErrNoRows):
-		return nil, err
-	}
-
-	if err := insertSocialConnectionTx(tx, fields); err != nil {
-		return nil, err
-	}
-	user, err := getMemberBySequenceTx(tx, fields.USRSeq)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return user, nil
-}
-
 func insertAlumniVerificationCompanionTx(tx *sqlx.Tx, usrSeq int) error {
 	_, err := tx.Exec(`
 		INSERT INTO ALUMNI_VERIFICATION (USR_SEQ, STATUS, CREATED_AT, UPDATED_AT)
@@ -408,163 +306,6 @@ func (r *AuthRepository) ListSocialProviders(usrSeq int) ([]string, error) {
 		WHERE USR_SEQ = ? AND NMS_STATUS = 'ACTIVE'
 	`, usrSeq)
 	return providers, err
-}
-
-func (r *AuthRepository) GetAccountConnections(usrSeq int) (model.AccountConnections, error) {
-	return getAccountConnections(r.DB, usrSeq)
-}
-
-type connectionReader interface {
-	Get(dest interface{}, query string, args ...interface{}) error
-	Select(dest interface{}, query string, args ...interface{}) error
-}
-
-func getAccountConnections(reader connectionReader, usrSeq int) (model.AccountConnections, error) {
-	var hasPassword bool
-	if err := reader.Get(&hasPassword, `
-		SELECT EXISTS(
-			SELECT 1
-			FROM AUTH_IDENTITY i
-			JOIN AUTH_PASSWORD_CREDENTIAL c ON c.IDENTITY_ID = i.IDENTITY_ID
-			JOIN AUTH_ACCOUNT_STATE account_state ON account_state.ACCOUNT_ID = i.ACCOUNT_ID
-			WHERE i.ACCOUNT_ID = ?
-			  AND i.PROVIDER IN ('EMAIL', 'LOCAL_USERNAME')
-			  AND i.STATUS = 'ACTIVE'
-			  AND c.STATUS = 'ACTIVE'
-			  AND account_state.STATUS = 'ACTIVE'
-		)
-	`, usrSeq); err != nil {
-		return model.AccountConnections{}, err
-	}
-	var rawProviders []string
-	err := reader.Select(&rawProviders, `
-		SELECT NMS_GATE
-		FROM WEO_MEMBER_SOCIAL
-		WHERE USR_SEQ = ? AND NMS_STATUS = 'ACTIVE'
-	`, usrSeq)
-	if err != nil {
-		return model.AccountConnections{}, err
-	}
-	providers := make([]model.SocialProvider, 0, len(rawProviders))
-	for _, rawProvider := range rawProviders {
-		provider := model.SocialProvider(rawProvider)
-		if provider.Valid() {
-			providers = append(providers, provider)
-		}
-	}
-	sort.Slice(providers, func(left int, right int) bool {
-		return providers[left] < providers[right]
-	})
-	return model.AccountConnections{
-		Providers:   providers,
-		HasPassword: hasPassword,
-	}, nil
-}
-
-// ReserveSocialDisconnect serializes the last-login-method check on the member
-// row, making the invariant effective across backend replicas.
-func (r *AuthRepository) ReserveSocialDisconnect(usrSeq int, provider model.SocialProvider) (model.AccountConnections, SocialDisconnectPhase, error) {
-	tx, err := r.DB.Beginx()
-	if err != nil {
-		return model.AccountConnections{}, SocialDisconnectNotConnected, err
-	}
-	defer tx.Rollback()
-
-	var lockedAccount int
-	if err := tx.Get(&lockedAccount, `
-		SELECT USR_SEQ
-		FROM WEO_MEMBER
-		WHERE USR_SEQ = ?
-		FOR UPDATE
-	`, usrSeq); err != nil {
-		return model.AccountConnections{}, SocialDisconnectNotConnected, err
-	}
-	var providerStatus string
-	err = tx.Get(&providerStatus, `
-		SELECT NMS_STATUS
-		FROM WEO_MEMBER_SOCIAL
-		WHERE USR_SEQ = ? AND NMS_GATE = ?
-		LIMIT 1
-	`, usrSeq, string(provider))
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return model.AccountConnections{}, SocialDisconnectNotConnected, err
-	}
-	connections, err := getAccountConnections(tx, usrSeq)
-	if err != nil {
-		return model.AccountConnections{}, SocialDisconnectNotConnected, err
-	}
-	if providerStatus == "FINALIZE_PENDING" {
-		if err := tx.Commit(); err != nil {
-			return model.AccountConnections{}, SocialDisconnectNotConnected, err
-		}
-		return connections, SocialDisconnectFinalizePending, nil
-	}
-	if providerStatus == "DISCONNECTING" {
-		if err := tx.Commit(); err != nil {
-			return model.AccountConnections{}, SocialDisconnectNotConnected, err
-		}
-		return connections, SocialDisconnectRevokeRetry, nil
-	}
-	if providerStatus != "ACTIVE" {
-		if err := tx.Commit(); err != nil {
-			return model.AccountConnections{}, SocialDisconnectNotConnected, err
-		}
-		return connections, SocialDisconnectNotConnected, nil
-	}
-	if !connections.HasAlternativeTo(provider) {
-		return model.AccountConnections{}, SocialDisconnectRevokeFresh, ErrLastLoginMethod
-	}
-	result, err := tx.Exec(`
-		UPDATE WEO_MEMBER_SOCIAL
-		SET NMS_STATUS = 'DISCONNECTING'
-		WHERE USR_SEQ = ? AND NMS_GATE = ? AND NMS_STATUS = 'ACTIVE'
-	`, usrSeq, string(provider))
-	if err != nil {
-		return model.AccountConnections{}, SocialDisconnectNotConnected, err
-	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return model.AccountConnections{}, SocialDisconnectNotConnected, err
-	}
-	if affected != 1 {
-		return model.AccountConnections{}, SocialDisconnectNotConnected, errors.New("social disconnect reservation was not acquired")
-	}
-	if _, err := tx.Exec(`
-		INSERT INTO ALUMNI_SOCIAL_REVOCATION_OUTBOX
-			(USR_SEQ, PROVIDER, ACTION, STATUS, ATTEMPT_COUNT, NEXT_ATTEMPT_AT, CREATED_AT, UPDATED_AT)
-		SELECT ?, ?, 'DISCONNECT', 'PENDING', 0, NOW(), NOW(), NOW()
-		FROM DUAL
-		WHERE NOT EXISTS (
-			SELECT 1 FROM ALUMNI_SOCIAL_REVOCATION_OUTBOX
-			WHERE USR_SEQ = ? AND PROVIDER = ? AND ACTION = 'DISCONNECT'
-			  AND STATUS IN ('PENDING','PROCESSING')
-		)
-	`, usrSeq, string(provider), usrSeq, string(provider)); err != nil {
-		return model.AccountConnections{}, SocialDisconnectNotConnected, err
-	}
-	if err := tx.Commit(); err != nil {
-		return model.AccountConnections{}, SocialDisconnectNotConnected, err
-	}
-	return connections, SocialDisconnectRevokeFresh, nil
-}
-
-func (r *AuthRepository) MarkSocialDisconnectRevoked(usrSeq int, provider string) error {
-	result, err := r.DB.Exec(`
-		UPDATE WEO_MEMBER_SOCIAL
-		SET NMS_STATUS = 'FINALIZE_PENDING'
-		WHERE USR_SEQ = ? AND NMS_GATE = ? AND NMS_STATUS = 'DISCONNECTING'
-	`, usrSeq, provider)
-	if err != nil {
-		return err
-	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected != 1 {
-		return errors.New("social disconnect revocation state is missing")
-	}
-	return nil
 }
 
 func (r *AuthRepository) DeleteSocialConnection(usrSeq int, provider string) error {
@@ -662,63 +403,6 @@ func (r *AuthRepository) EnqueueSocialRevocation(usrSeq int, provider string, ac
 		VALUES (?, ?, ?, 'PENDING', 0, NOW(), ?, NOW(), NOW())
 	`, usrSeq, provider, action, lastError)
 	return err
-}
-
-func (r *AuthRepository) RecordSocialDisconnectFailure(usrSeq int, provider string, failure error, restoreConnection bool) error {
-	lastError := "provider revocation failed"
-	if failure != nil && failure.Error() != "" {
-		lastError = failure.Error()
-		if len(lastError) > 500 {
-			lastError = lastError[:500]
-		}
-	}
-	tx, err := r.DB.Beginx()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var lockedAccount int
-	if err := tx.Get(&lockedAccount, `
-		SELECT USR_SEQ FROM WEO_MEMBER WHERE USR_SEQ = ? FOR UPDATE
-	`, usrSeq); err != nil {
-		return err
-	}
-	result, err := tx.Exec(`
-		UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX
-		SET STATUS = 'PENDING', ATTEMPT_COUNT = ATTEMPT_COUNT + 1,
-		    NEXT_ATTEMPT_AT = DATE_ADD(NOW(), INTERVAL 5 MINUTE), LAST_ERROR = ?, UPDATED_AT = NOW()
-		WHERE USR_SEQ = ? AND PROVIDER = ? AND ACTION = 'DISCONNECT'
-		  AND STATUS IN ('PENDING','PROCESSING')
-	`, lastError, usrSeq, provider)
-	if err != nil {
-		return err
-	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected != 1 {
-		return errors.New("social disconnect outbox reservation is missing")
-	}
-	if !restoreConnection {
-		return tx.Commit()
-	}
-	result, err = tx.Exec(`
-		UPDATE WEO_MEMBER_SOCIAL
-		SET NMS_STATUS = 'ACTIVE'
-		WHERE USR_SEQ = ? AND NMS_GATE = ? AND NMS_STATUS = 'DISCONNECTING'
-	`, usrSeq, provider)
-	if err != nil {
-		return err
-	}
-	affected, err = result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected != 1 {
-		return errors.New("social disconnect reservation is missing")
-	}
-	return tx.Commit()
 }
 
 func (r *AuthRepository) InsertMobileRefreshToken(usrSeq int, sid string, jti string, expiresAt time.Time) error {
@@ -1072,26 +756,6 @@ func (r *AuthRepository) InsertMember(usrID, name, phone, fn, email, fmDept stri
 		return 0, err
 	}
 	return usrSeq, nil
-}
-
-// UpdateMemberMergeFields updates fields editable from the merge signup form.
-// USR_PHONE and USR_STATUS are intentionally untouched.
-func (r *AuthRepository) UpdateMemberMergeFields(usrSeq int, name, email, fn, fmDept string, jobCat *int, bizName, bizDesc, bizAddr, position, usrPhonePublic, usrEmailPublic string) error {
-	phonePublic := usrPhonePublic
-	if phonePublic == "" {
-		phonePublic = "N"
-	}
-	emailPublic := usrEmailPublic
-	if emailPublic == "" {
-		emailPublic = "N"
-	}
-	_, err := r.DB.Exec(`
-		UPDATE WEO_MEMBER
-		SET USR_NAME = ?, USR_EMAIL = ?, USR_JOB_CAT = ?, USR_BIZ_NAME = ?, USR_BIZ_DESC = ?,
-		    USR_BIZ_ADDR = ?, USR_POSITION = ?, USR_PHONE_PUBLIC = ?, USR_EMAIL_PUBLIC = ?
-		WHERE USR_SEQ = ?
-	`, name, email, jobCat, bizName, bizDesc, bizAddr, position, phonePublic, emailPublic, usrSeq)
-	return err
 }
 
 func (r *AuthRepository) GetMemberBySeq(usrSeq int) (*model.User, error) {

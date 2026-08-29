@@ -4,7 +4,6 @@ import type {
   AuthUser,
   LoginRequest,
   SocialLinkPrefillResponse,
-  SocialLinkPhoneMatchResponse,
   SocialLinkPhotoUploadResponse,
 } from '../types/api';
 
@@ -43,16 +42,6 @@ export function getSocialLinkPrefill(token: string): Promise<SocialLinkPrefillRe
   );
 }
 
-/** Check whether the given phone belongs to an existing member; returns their profile for merge-mode prefill. */
-export function getSocialLinkPhoneMatch(
-  token: string,
-  phone: string,
-): Promise<SocialLinkPhoneMatchResponse> {
-  return api.get<SocialLinkPhoneMatchResponse>(
-    `/api/auth/social/link/phone-match?token=${encodeURIComponent(token)}&phone=${encodeURIComponent(phone)}`,
-  );
-}
-
 /** Upload a replacement profile photo during the pre-signup flow (token-gated, no DB write). */
 export function uploadSocialLinkPhoto(
   token: string,
@@ -63,4 +52,3 @@ export function uploadSocialLinkPhoto(
   form.append('file', file);
   return api.upload<SocialLinkPhotoUploadResponse>('/api/auth/social/link/photo', form);
 }
-

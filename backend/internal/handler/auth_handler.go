@@ -26,7 +26,6 @@ type AuthHandler struct {
 	socialLifecycle  *service.SocialAccountLifecycleService
 	memberSvc        *service.MemberService
 	registerSvc      *service.RegistrationService
-	profileSvc       *service.ProfileService
 	cache            *cache.Cache
 	socialLinkTokens *service.SocialLinkTokenStore
 	cfg              *config.Config
@@ -37,7 +36,6 @@ func NewAuthHandler(
 	svc *service.AuthService,
 	memberSvc *service.MemberService,
 	registerSvc *service.RegistrationService,
-	profileSvc *service.ProfileService,
 	cacheStore *cache.Cache,
 	socialLinkTokens *service.SocialLinkTokenStore,
 	cfg *config.Config,
@@ -61,7 +59,6 @@ func NewAuthHandler(
 		socialLifecycle:  socialLifecycle,
 		memberSvc:        memberSvc,
 		registerSvc:      registerSvc,
-		profileSvc:       profileSvc,
 		cache:            cacheStore,
 		socialLinkTokens: socialLinkTokens,
 		cfg:              cfg,

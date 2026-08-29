@@ -22,11 +22,9 @@
 | POST | `/api/auth/kakao/mobile` | 검증된 Kakao SDK token 또는 allowlist redirect의 code 로그인 |
 | POST | `/api/auth/apple/challenge` | 일회용 Apple nonce challenge 생성 |
 | POST | `/api/auth/apple/mobile` | Apple ID token 검증 + authorization code 교환 |
-| POST | `/api/auth/social/link` | 명시적 신규 가입 또는 기존 계정 재인증 연결 |
+| POST | `/api/auth/social/link` | 검증된 소셜 계정으로 신규 회원가입 |
 | POST | `/api/auth/logout` | 현재 세션만 무효화 |
 | POST | `/api/auth/logout/all` | 사용자의 모든 모바일/레거시 세션 무효화 |
-| GET | `/api/auth/account/connections` | 연결된 provider와 password 보유 여부 조회 |
-| DELETE | `/api/auth/social/{provider}` | provider revoke 후 소셜 연결 해제 |
 | DELETE | `/api/auth/account` | 회원 상태 즉시 탈퇴 처리 + 세션 revoke + provider revoke/outbox |
 | POST | `/api/auth/apple/notifications` | 서명 검증된 Apple server notification 처리 |
 | GET | `/api/auth/me` | 현재 로그인 사용자 정보 |
@@ -72,49 +70,11 @@
 }
 ```
 
-기존 계정 통합은 `mode: "merge"`와 `existingUsrId`,
-`existingPassword`를 추가합니다. 서버는 해당 자격 증명으로 `CCC` 또는
-`ZZZ` 계정을 재인증하고, 그 계정의 canonical 전화번호가 요청 값과 같을
-때만 provider를 연결합니다. `BBB`를 포함한 로그인 불가 상태나 전화번호
-후보 검색만으로는 연결하지 않습니다.
-
-유효성 오류, `REAUTHENTICATION_REQUIRED`, `PHONE_NOT_MATCHED`,
-`PHONE_TAKEN`은 같은 link token으로 재시도할 수 있습니다. 성공한 token은
+유효성 오류와 `PHONE_TAKEN`은 같은 link token으로 재시도할 수 있습니다. 성공한 token은
 한 번만 소비되며 이후 요청은 `TOKEN_ALREADY_USED`, 처리 중인 동시 요청은
 `TOKEN_IN_PROGRESS`, 만료/알 수 없는 token은 `INVALID_TOKEN`을 반환합니다.
-회원 생성/수정, social link, encrypted credential 저장은 하나의 DB
+회원 생성, social link, encrypted credential 저장은 하나의 DB
 transaction으로 완료됩니다.
-
-#### 계정 연결 조회와 해제 계약
-
-`GET /api/auth/account/connections`:
-
-```json
-{
-  "providers": ["KT", "AP"],
-  "hasPassword": true
-}
-```
-
-provider는 `KT`(Kakao), `AP`(Apple)만 반환합니다.
-`DELETE /api/auth/social/{provider}`는 server-side에서 대체 로그인 수단을
-다시 검사합니다. 마지막 로그인 수단이면 HTTP 409와
-`LAST_LOGIN_METHOD`를 반환하며 link와 credential을 유지합니다. 연결되지
-않은 provider는 revoke/outbox 없이 idempotent 성공을 반환합니다.
-
-```json
-{
-  "status": "notConnected",
-  "connections": {
-    "providers": ["AP"],
-    "hasPassword": false
-  }
-}
-```
-
-실제 연결 해제 성공의 `status`는 `disconnected`입니다. provider revoke가
-실패하면 HTTP 503 `PROVIDER_REVOCATION_PENDING`을 반환하고 기존 link와
-credential을 유지하며 복구용 outbox를 기록합니다.
 
 ### 6.2 피드 (공지글)
 

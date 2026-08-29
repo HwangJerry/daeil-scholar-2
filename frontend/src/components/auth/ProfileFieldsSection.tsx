@@ -53,7 +53,7 @@ interface ProfileFieldsSectionProps {
   onChange: <K extends keyof ProfileFieldValues>(key: K, value: ProfileFieldValues[K]) => void;
   phoneCheck?: FieldCheckProps;
   emailCheck?: FieldCheckProps;
-  /** Field keys that should render as disabled (e.g. merge-mode locks 'name', 'phone', 'email'). */
+  /** Field keys that should render as disabled. */
   disabledFields?: Array<keyof ProfileFieldValues>;
 }
 

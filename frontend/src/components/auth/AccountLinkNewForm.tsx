@@ -1,17 +1,12 @@
-// AccountLinkNewForm — Fresh Kakao signup form. Prefills email/profile-image from Kakao and shows a merge banner when the typed phone matches an existing member.
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+// AccountLinkNewForm — Fresh Kakao signup form with provider email/profile-image prefill.
+import { useState } from 'react';
 import { ProfileFieldsSection } from './ProfileFieldsSection';
 import { defaultProfileFieldValues } from './profileFieldValues';
 import type { ProfileFieldValues } from './profileFieldValues';
 import { useCheckPhone } from '../../hooks/useCheckPhone';
 import { useCheckEmail } from '../../hooks/useCheckEmail';
 import { useSocialLinkPrefill } from '../../hooks/useSocialLinkPrefill';
-import { useSocialLinkPhoneMatch } from '../../hooks/useSocialLinkPhoneMatch';
 import { useAccountLinkSubmit } from '../../hooks/useAccountLinkSubmit';
-import { useResponsive } from '../../hooks/useResponsive';
-import { BottomSheet } from '../ui/BottomSheet';
-import { PhoneMatchBanner, PhoneMatchBottomSheetContent } from './PhoneMatchBanner';
 import { SignupProfileImageEditor } from './SignupProfileImageEditor';
 import { Button } from '../ui/Button';
 import { isValidDepartment } from '../../constants/departments';
@@ -23,18 +18,13 @@ interface AccountLinkNewFormProps {
 }
 
 export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
-  const navigate = useNavigate();
-  const { isMobile } = useResponsive();
   const { submitting, error, submit, setError } = useAccountLinkSubmit();
 
   const [profile, setProfile] = useState<ProfileFieldValues>(defaultProfileFieldValues);
   const [didPrefillEmail, setDidPrefillEmail] = useState(false);
   const [photoOverride, setPhotoOverride] = useState<{ url: string | null } | null>(null);
-  const [dismissedPhoneKey, setDismissedPhoneKey] = useState<string | null>(null);
-  const [isPhoneMatchSheetOpen, setIsPhoneMatchSheetOpen] = useState(false);
 
   const prefill = useSocialLinkPrefill(token);
-  const phoneBannerLookup = useSocialLinkPhoneMatch({ token, phone: profile.phone });
   const phoneCheck = useCheckPhone(profile.phone);
   const emailCheck = useCheckEmail(profile.email);
 
@@ -51,13 +41,6 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
     value: ProfileFieldValues[K],
   ) => {
     setProfile((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleConfirmMerge = () => {
-    navigate(`/login/link?token=${encodeURIComponent(token)}&mode=merge`, {
-      replace: true,
-      state: { phone: profile.phone, email: profile.email },
-    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -90,54 +73,13 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
     });
   };
 
-  const bannerMatch = phoneBannerLookup.status === 'matched' ? phoneBannerLookup.profile : null;
-  const phoneKey = profile.phone.replace(/\D/g, '');
-  const matchedPhoneKey = bannerMatch ? phoneKey : null;
   const photoUrl =
     photoOverride !== null ? photoOverride.url : prefill.data?.profileImageUrl || null;
   const handlePhotoChange = (url: string | null) => setPhotoOverride({ url });
-  const shouldShowMobileSheet =
-    isMobile && bannerMatch !== null && matchedPhoneKey !== null && dismissedPhoneKey !== matchedPhoneKey;
-
-  useEffect(() => {
-    if (dismissedPhoneKey !== null && phoneKey !== dismissedPhoneKey) {
-      setDismissedPhoneKey(null);
-    }
-  }, [dismissedPhoneKey, phoneKey]);
-
-  useEffect(() => {
-    setIsPhoneMatchSheetOpen(shouldShowMobileSheet);
-  }, [shouldShowMobileSheet]);
-
-  const handleDismissPhoneMatchSheet = () => {
-    if (matchedPhoneKey) {
-      setDismissedPhoneKey(matchedPhoneKey);
-    }
-    setIsPhoneMatchSheetOpen(false);
-  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      {isPhoneMatchSheetOpen && bannerMatch && (
-        <BottomSheet onClose={handleDismissPhoneMatchSheet}>
-          <PhoneMatchBottomSheetContent
-            matchedName={bannerMatch.name}
-            matchedFN={bannerMatch.fn}
-            onConfirm={handleConfirmMerge}
-            onContinue={handleDismissPhoneMatchSheet}
-          />
-        </BottomSheet>
-      )}
-
       <SignupProfileImageEditor token={token} imageUrl={photoUrl} onChange={handlePhotoChange} />
-
-      {bannerMatch && (
-        <PhoneMatchBanner
-          matchedName={bannerMatch.name}
-          matchedFN={bannerMatch.fn}
-          onConfirm={handleConfirmMerge}
-        />
-      )}
 
       <ProfileFieldsSection
         values={profile}

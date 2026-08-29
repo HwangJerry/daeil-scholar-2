@@ -241,41 +241,35 @@ HTTP `202`:
 ```
 
 - provider email만으로 기존 계정을 자동 병합하지 않는다.
-- 신규 등록과 기존 계정 재인증 연결을 구분한다.
-- 이미 별도로 존재하는 두 회원 row의 데이터 병합은 `409 ACCOUNT_MERGE_NOT_SUPPORTED`다.
-- 현재 로그인 계정에 provider credential을 추가 연결하는 것은 허용한다.
-
-#### 4.6.1 mobile existing-account link
-
-`linkRequired`를 받은 Android/iOS client가 현재 이메일 계정에 provider
-credential만 추가할 때 사용한다. 기존 회원 row의 프로필·학적·공개 설정은
-변경하지 않는다.
+- `linkRequired`는 신규 회원가입에만 사용한다.
 
 ```http
 POST /api/auth/social/link
 Content-Type: application/json
 ```
 
-Canonical mobile request는 정확히 다음 세 field를 사용한다.
+Canonical mobile request는 신규 회원 정보를 포함한다.
 
 ```json
 {
-  "linkToken": "fixture-link-token",
+  "token": "fixture-link-token",
+  "mode": "new",
+  "client": "mobile",
+  "name": "예시 동문",
+  "phone": "01012345678",
   "email": "member@example.com",
-  "password": "fixture-password"
+  "fn": "31",
+  "fmDept": "영어",
+  "usrPhonePublic": "N",
+  "usrEmailPublic": "N"
 }
 ```
 
-- mobile client는 legacy web field인 `token`, `mode`, `client`,
-  `existingUsrId`, `existingPassword`, `phone`, `fn`, `fmDept`를 보내지 않는다.
-- backend는 이메일·비밀번호로 현재 계정을 재인증한 후 link token의 social
-  identity와 credential만 해당 회원에 attach한다.
+- backend는 link token의 검증된 social identity와 함께 새 회원 row를 생성한다.
 - 성공 응답은 HTTP `200`의 canonical `authenticated` 결과이며 4.3의 nested
   `session` envelope를 그대로 사용한다.
-- 잘못된 credential은 `401 REAUTHENTICATION_REQUIRED`, 만료·잘못된 token은
-  `400 INVALID_TOKEN`, 이미 처리 중인 token은 `409 TOKEN_IN_PROGRESS`, 이미
-  사용된 token은 `409 TOKEN_ALREADY_USED`, 다른 회원이 소유한 social identity는
-  `409 ACCOUNT_MERGE_NOT_SUPPORTED`다.
+- 만료·잘못된 token은 `400 INVALID_TOKEN`, 이미 처리 중인 token은
+  `409 TOKEN_IN_PROGRESS`, 이미 사용된 token은 `409 TOKEN_ALREADY_USED`다.
 
 ### 4.7 refresh/logout
 
@@ -936,7 +930,7 @@ validation 실패 HTTP `422`:
 
 ### 인증
 
-`INVALID_BODY`, `INVALID_REQUEST`, `INVALID_CREDENTIALS`, `ACCOUNT_SUSPENDED`, `ACCOUNT_WITHDRAWN`, `INVALID_REFRESH_TOKEN`, `REFRESH_REPLAY_DETECTED`, `KAKAO_VERIFICATION_FAILED`, `APPLE_VERIFICATION_FAILED`, `LINK_REQUIRED`, `INVALID_TOKEN`, `TOKEN_ALREADY_USED`, `TOKEN_IN_PROGRESS`, `ACCOUNT_MERGE_NOT_SUPPORTED`, `LAST_LOGIN_METHOD`, `PROVIDER_REVOCATION_PENDING`
+`INVALID_BODY`, `INVALID_REQUEST`, `INVALID_CREDENTIALS`, `ACCOUNT_SUSPENDED`, `ACCOUNT_WITHDRAWN`, `INVALID_REFRESH_TOKEN`, `REFRESH_REPLAY_DETECTED`, `KAKAO_VERIFICATION_FAILED`, `APPLE_VERIFICATION_FAILED`, `LINK_REQUIRED`, `INVALID_TOKEN`, `TOKEN_ALREADY_USED`, `TOKEN_IN_PROGRESS`
 
 ### 동문·권한
 
