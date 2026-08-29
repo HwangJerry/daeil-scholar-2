@@ -1,6 +1,5 @@
-// AppDownloadActions — Shared safe marketplace actions for landing download CTAs
-import appleAppStoreBadge from '../../assets/app-store-badges/apple-app-store-badge-ko-black.svg';
-import googlePlayBadge from '../../assets/app-store-badges/google-play-badge-ko.png';
+// AppDownloadActions — Shared safe marketplace icon actions for landing download CTAs
+import { Apple, Play, type LucideIcon } from 'lucide-react';
 import {
   APP_DOWNLOAD_LINKS,
   type AppDownloadLink,
@@ -11,11 +10,7 @@ import { Button } from '../ui/Button';
 
 interface DownloadActionProps {
   downloadLink: AppDownloadLink;
-  badgeSrc: string;
-  badgeAlt: string;
-  badgeWidth: number;
-  badgeHeight: number;
-  badgeDisplayClassName: string;
+  icon: LucideIcon;
   label: string;
 }
 
@@ -24,74 +19,41 @@ interface AppDownloadActionsProps {
   className?: string;
 }
 
-const APP_STORE_BADGE = {
-  badgeSrc: appleAppStoreBadge,
-  badgeAlt: 'App Store에서 다운로드 하기',
-  badgeWidth: 129.70071,
-  badgeHeight: 40,
-  badgeDisplayClassName: 'h-12',
+const APP_STORE_ACTION = {
+  icon: Apple,
   label: 'App Store에서 다운로드',
 } as const;
 
-const GOOGLE_PLAY_BADGE = {
-  badgeSrc: googlePlayBadge,
-  badgeAlt: 'Google Play에서 다운로드',
-  badgeWidth: 646,
-  badgeHeight: 250,
-  badgeDisplayClassName: 'h-[63px]',
+const GOOGLE_PLAY_ACTION = {
+  icon: Play,
   label: 'Google Play에서 다운로드',
 } as const;
 
 function DownloadAction({
   downloadLink,
-  badgeSrc,
-  badgeAlt,
-  badgeWidth,
-  badgeHeight,
-  badgeDisplayClassName,
+  icon: MarketplaceIcon,
   label,
 }: DownloadActionProps) {
-  const actionContent = (
-    <span className={cn('flex flex-col items-center gap-1.5')}>
-      <span className={cn('flex h-[63px] items-center justify-center')}>
-        <img
-          src={badgeSrc}
-          alt={badgeAlt}
-          width={badgeWidth}
-          height={badgeHeight}
-          decoding="async"
-          className={cn(
-            'w-auto max-w-full shrink-0 object-contain',
-            badgeDisplayClassName,
-            !downloadLink.available && 'opacity-50',
-          )}
-        />
-      </span>
-      {!downloadLink.available && (
-        <span className={cn('text-caption font-normal leading-none text-text-tertiary')}>
-          출시 준비 중
-        </span>
-      )}
-    </span>
-  );
-
   const actionClassName = cn(
-    'h-auto min-h-[83px] flex-1 rounded-xl border-surface/80 bg-surface px-3 py-2.5 text-text-secondary shadow-card',
-    'hover:border-border-hover hover:bg-background hover:shadow-card-hover',
+    'size-[52px] shrink-0 rounded-xl border border-surface/20 bg-primary p-0 text-surface shadow-card',
+    'hover:border-surface/40 hover:bg-primary-hover hover:shadow-card-hover',
     'focus-visible:ring-primary-muted focus-visible:ring-offset-hero-from',
+  );
+  const actionIcon = (
+    <MarketplaceIcon aria-hidden="true" className={cn('size-6')} />
   );
 
   if (!downloadLink.available || !downloadLink.url) {
     return (
       <Button
         type="button"
-        variant="outline"
-        size="lg"
+        variant="default"
+        size="icon"
         disabled
         aria-label={`${label}, 출시 준비 중`}
-        className={cn(actionClassName, 'disabled:opacity-100')}
+        className={actionClassName}
       >
-        {actionContent}
+        {actionIcon}
       </Button>
     );
   }
@@ -99,8 +61,8 @@ function DownloadAction({
   return (
     <Button
       asChild
-      variant="outline"
-      size="lg"
+      variant="default"
+      size="icon"
       className={actionClassName}
     >
       <a
@@ -109,7 +71,7 @@ function DownloadAction({
         rel="noreferrer"
         aria-label={label}
       >
-        {actionContent}
+        {actionIcon}
       </a>
     </Button>
   );
@@ -119,19 +81,30 @@ export function AppDownloadActions({
   downloadLinks = APP_DOWNLOAD_LINKS,
   className,
 }: AppDownloadActionsProps) {
+  const hasUnavailableDownload =
+    !downloadLinks.appStore.available ||
+    !downloadLinks.appStore.url ||
+    !downloadLinks.googlePlay.available ||
+    !downloadLinks.googlePlay.url;
+
   return (
     <div
       aria-label="앱 다운로드"
-      className={cn('flex flex-col gap-3 sm:flex-row', className)}
+      className={cn('flex flex-col items-start gap-2', className)}
     >
-      <DownloadAction
-        downloadLink={downloadLinks.appStore}
-        {...APP_STORE_BADGE}
-      />
-      <DownloadAction
-        downloadLink={downloadLinks.googlePlay}
-        {...GOOGLE_PLAY_BADGE}
-      />
+      <div className={cn('flex items-center gap-3')}>
+        <DownloadAction
+          downloadLink={downloadLinks.appStore}
+          {...APP_STORE_ACTION}
+        />
+        <DownloadAction
+          downloadLink={downloadLinks.googlePlay}
+          {...GOOGLE_PLAY_ACTION}
+        />
+      </div>
+      {hasUnavailableDownload && (
+        <p className={cn('text-caption text-primary-muted')}>출시 준비 중</p>
+      )}
     </div>
   );
 }
