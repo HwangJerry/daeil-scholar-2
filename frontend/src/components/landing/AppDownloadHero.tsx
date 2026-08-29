@@ -29,75 +29,134 @@ function AppPreviewVisual() {
       />
 
       <div
+        aria-hidden="true"
         className={cn(
-          'relative h-[300px] w-[158px] rounded-[2.5rem] border-[6px] border-primary-muted/70 bg-primary p-1 shadow-float md:h-[440px] md:w-[226px] md:rounded-[3.25rem] md:border-8 md:p-1.5',
+          'absolute bottom-0 left-1/2 z-0 h-3 w-32 -translate-x-1/2 rounded-full bg-primary/30 blur-xl md:bottom-3 md:h-4 md:w-52 md:blur-2xl',
+        )}
+      />
+
+      <div
+        className={cn(
+          'relative z-10 h-[300px] w-[158px] rounded-[2.5rem] p-px shadow-float md:h-[440px] md:w-[226px] md:rounded-[3.25rem]',
         )}
       >
         <div
           aria-hidden="true"
           className={cn(
-            'absolute left-1/2 top-2 z-10 h-3 w-14 -translate-x-1/2 rounded-full bg-primary md:top-3 md:h-4 md:w-20',
+            'absolute inset-0 rounded-[2.5rem] bg-gradient-to-b from-primary-muted/80 via-primary-muted/30 to-primary-muted/60 md:rounded-[3.25rem]',
           )}
         />
+
         <div
+          aria-hidden="true"
           className={cn(
-            'flex h-full flex-col items-center overflow-hidden rounded-[2rem] bg-background px-3 pb-4 pt-8 text-center md:rounded-[2.6rem] md:px-5 md:pb-6 md:pt-12',
+            'absolute -left-[3px] top-[72px] flex flex-col gap-2 md:-left-[5px] md:top-28 md:gap-3',
           )}
         >
-          <img
-            src={iosAppIcon}
-            alt="대일외고 장학회 iOS 앱 아이콘"
-            width={256}
-            height={256}
-            loading="eager"
-            fetchPriority="high"
-            decoding="sync"
-            className={cn(
-              'size-20 rounded-xl object-cover shadow-card md:size-28 md:rounded-2xl',
-            )}
-          />
-          <p
-            className={cn(
-              'mt-4 font-serif text-xs font-bold text-text-primary md:mt-6 md:text-base',
-            )}
-          >
-            대일외고 장학회
-          </p>
-          <p
-            className={cn(
-              'mt-1 text-[9px] leading-relaxed text-text-tertiary md:text-xs',
-            )}
-          >
-            동문을 잇고, 미래를 응원합니다.
-          </p>
+          <span className={cn('h-4 w-1 rounded-full bg-primary-muted md:h-6 md:w-1.5')} />
+          <span className={cn('h-4 w-1 rounded-full bg-primary-muted md:h-6 md:w-1.5')} />
+        </div>
+
+        <div
+          aria-hidden="true"
+          className={cn(
+            'absolute -right-[3px] top-24 h-7 w-1 rounded-full bg-primary-muted md:-right-[5px] md:top-36 md:h-10 md:w-1.5',
+          )}
+        />
+
+        <div
+          className={cn(
+            'relative h-full w-full rounded-[calc(2.5rem-1px)] bg-primary p-[9px] md:rounded-[calc(3.25rem-1px)] md:p-[13px]',
+          )}
+        >
           <div
             className={cn(
-              'mt-auto flex w-full items-center gap-2 rounded-lg border border-border bg-surface p-2 text-left shadow-card md:rounded-xl md:p-3',
+              'relative flex h-full flex-col items-center overflow-hidden rounded-[2rem] bg-background px-3 pb-4 pt-8 text-center md:rounded-[2.6rem] md:px-5 md:pb-6 md:pt-12',
             )}
           >
-            <span
+            <div
+              aria-hidden="true"
               className={cn(
-                'flex size-7 shrink-0 items-center justify-center rounded-md bg-primary-light text-primary md:size-9',
+                'absolute left-1/2 top-2.5 z-20 flex -translate-x-1/2 items-center gap-1 md:top-3 md:gap-1.5',
               )}
             >
-              <Download aria-hidden="true" className={cn('size-3.5 md:size-4')} />
-            </span>
-            <span className={cn('min-w-0')}>
+              <span
+                className={cn('h-2.5 w-9 rounded-full bg-primary md:h-3.5 md:w-12')}
+              />
+              <span
+                className={cn('size-1.5 rounded-full bg-text-primary md:size-2')}
+              />
+            </div>
+
+            <div
+              aria-hidden="true"
+              className={cn(
+                'pointer-events-none absolute inset-0 z-10 bg-gradient-to-br from-surface/10 via-transparent to-transparent',
+              )}
+            />
+
+            <img
+              src={iosAppIcon}
+              alt="대일외고 장학회 iOS 앱 아이콘"
+              width={256}
+              height={256}
+              loading="eager"
+              fetchPriority="high"
+              decoding="sync"
+              className={cn(
+                'size-20 rounded-xl object-cover shadow-card md:size-28 md:rounded-2xl',
+              )}
+            />
+            <p
+              className={cn(
+                'mt-4 font-serif text-xs font-bold text-text-primary md:mt-6 md:text-base',
+              )}
+            >
+              대일외고 장학회
+            </p>
+            <p
+              className={cn(
+                'mt-1 text-[9px] leading-relaxed text-text-tertiary md:text-xs',
+              )}
+            >
+              동문을 잇고, 미래를 응원합니다.
+            </p>
+            <div
+              className={cn(
+                'mt-auto flex w-full items-center gap-2 rounded-lg border border-border bg-surface p-2 text-left shadow-card md:rounded-xl md:p-3',
+              )}
+            >
               <span
                 className={cn(
-                  'block truncate text-[8px] font-semibold text-text-primary md:text-caption',
+                  'flex size-7 shrink-0 items-center justify-center rounded-md bg-primary-light text-primary md:size-9',
                 )}
               >
-                장학회 소식
+                <Download aria-hidden="true" className={cn('size-3.5 md:size-4')} />
               </span>
-              <span
-                className={cn(
-                  'mt-0.5 block truncate text-[7px] text-text-tertiary md:text-[9px]',
-                )}
-              >
-                새로운 이야기를 확인하세요
+              <span className={cn('min-w-0')}>
+                <span
+                  className={cn(
+                    'block truncate text-[8px] font-semibold text-text-primary md:text-caption',
+                  )}
+                >
+                  장학회 소식
+                </span>
+                <span
+                  className={cn(
+                    'mt-0.5 block truncate text-[7px] text-text-tertiary md:text-[9px]',
+                  )}
+                >
+                  새로운 이야기를 확인하세요
+                </span>
               </span>
-            </span>
+            </div>
+
+            <div
+              aria-hidden="true"
+              className={cn(
+                'absolute bottom-2 left-1/2 z-20 h-1 w-16 -translate-x-1/2 rounded-full bg-text-primary/20 md:bottom-3 md:h-1.5 md:w-20',
+              )}
+            />
           </div>
         </div>
       </div>
