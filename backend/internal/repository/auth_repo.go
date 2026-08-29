@@ -611,7 +611,7 @@ func (r *AuthRepository) UpdateSocialProviderEmailEnabled(usrSeq int, gate strin
 }
 
 func (r *AuthRepository) UpdateMemberStatus(usrSeq int, status string) error {
-	_, err := r.DB.Exec(`UPDATE WEO_MEMBER SET USR_STATUS = ? WHERE USR_SEQ = ?`, status, usrSeq)
+	_, err := updateMemberStatusAndAdminRole(r.DB, usrSeq, status)
 	return err
 }
 

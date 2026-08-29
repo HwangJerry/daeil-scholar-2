@@ -10,6 +10,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
 )
 
@@ -37,16 +38,9 @@ func main() {
 
 	hashed := service.MysqlNativePassword(*password)
 
-	_, err = db.Exec(`
-		INSERT INTO WEO_MEMBER (USR_ID, USR_PWD, USR_NAME, USR_STATUS, REG_DATE)
-		VALUES (?, ?, ?, 'ZZZ', NOW())
-		ON DUPLICATE KEY UPDATE
-		  USR_PWD = VALUES(USR_PWD),
-		  USR_NAME = VALUES(USR_NAME),
-		  USR_STATUS = 'ZZZ'
-	`, *id, hashed, *name)
+	_, err = repository.NewAdminMemberRepository(db).UpsertRootAdminMember(*id, hashed, *name)
 	if err != nil {
-		log.Fatal("insert failed:", err)
+		log.Fatal("seed failed:", err)
 	}
 
 	var result struct {

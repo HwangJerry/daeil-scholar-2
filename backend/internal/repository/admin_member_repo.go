@@ -123,8 +123,67 @@ func (r *AdminMemberRepository) GetAlumniVerificationDetail(usrSeq int) (*model.
 }
 
 func (r *AdminMemberRepository) UpdateMemberStatus(seq int, status string) error {
-	_, err := r.DB.Exec(`UPDATE WEO_MEMBER SET USR_STATUS = ? WHERE USR_SEQ = ?`, status, seq)
+	_, err := updateMemberStatusAndAdminRole(r.DB, seq, status)
 	return err
+}
+
+// UpsertRootAdminMember creates or updates the legacy seed administrator and
+// keeps its canonical root role in the same transaction.
+func (r *AdminMemberRepository) UpsertRootAdminMember(usrID, passwordHash, name string) (int, error) {
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	var existing struct {
+		Seq    int            `db:"USR_SEQ"`
+		Status sql.NullString `db:"USR_STATUS"`
+	}
+	err = tx.Get(&existing, `
+		SELECT USR_SEQ, USR_STATUS
+		FROM WEO_MEMBER
+		WHERE USR_ID = ?
+		FOR UPDATE
+	`, usrID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+
+	usrSeq := existing.Seq
+	if errors.Is(err, sql.ErrNoRows) {
+		result, insertErr := tx.Exec(`
+			INSERT INTO WEO_MEMBER (USR_ID, USR_PWD, USR_NAME, USR_STATUS, REG_DATE)
+			VALUES (?, ?, ?, 'ZZZ', NOW())
+		`, usrID, passwordHash, name)
+		if insertErr != nil {
+			return 0, insertErr
+		}
+		insertedID, insertErr := result.LastInsertId()
+		if insertErr != nil {
+			return 0, insertErr
+		}
+		usrSeq = int(insertedID)
+		if err := syncAdminRoleForMemberInsertTx(tx, usrSeq, rootAdminMemberStatus); err != nil {
+			return 0, err
+		}
+	} else {
+		if _, err := tx.Exec(`
+			UPDATE WEO_MEMBER
+			SET USR_PWD = ?, USR_NAME = ?, USR_STATUS = 'ZZZ'
+			WHERE USR_SEQ = ?
+		`, passwordHash, name, usrSeq); err != nil {
+			return 0, err
+		}
+		if err := syncAdminRoleForStatusChangeTx(tx, usrSeq, existing.Status, rootAdminMemberStatus); err != nil {
+			return 0, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return usrSeq, nil
 }
 
 func (r *AdminMemberRepository) RejectAlumniVerification(
