@@ -4,14 +4,11 @@ import (
 	"errors"
 )
 
-// AnonymizeAccountForDeletion keeps its legacy name, but account withdrawal is
-// currently represented only by WEO_MEMBER.USR_STATUS = 'AAA'.
+// AnonymizeAccountForDeletion keeps its legacy name. Account withdrawal is
+// represented by WEO_MEMBER.USR_STATUS = 'AAA'; any root-role companion is
+// revoked atomically with that status change.
 func (r *AuthRepository) AnonymizeAccountForDeletion(usrSeq int) error {
-	result, err := r.DB.Exec(`UPDATE WEO_MEMBER SET USR_STATUS = 'AAA' WHERE USR_SEQ = ?`, usrSeq)
-	if err != nil {
-		return err
-	}
-	affected, err := result.RowsAffected()
+	affected, err := updateMemberStatusAndAdminRole(r.DB, usrSeq, "AAA")
 	if err != nil {
 		return err
 	}

@@ -524,9 +524,14 @@ func TestAppleNotificationsApplyAccountLifecycle(t *testing.T) {
 func TestAccountDeletionRequiresImmediateDeactivation(t *testing.T) {
 	auth, mock, cleanup := newAuthServiceForTest(t)
 	defer cleanup()
-	mock.ExpectExec(`^UPDATE WEO_MEMBER SET USR_STATUS = 'AAA' WHERE USR_SEQ = \?$`).
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
 		WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow("CCC"))
+	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
+		WithArgs("AAA", 42).
 		WillReturnError(errors.New("database unavailable"))
+	mock.ExpectRollback()
 	lifecycle := NewSocialAccountLifecycleService(auth, nil)
 
 	result, err := lifecycle.DeleteAccount(context.Background(), 42)
@@ -542,7 +547,7 @@ func TestAccountDeletionRequiresImmediateDeactivation(t *testing.T) {
 	}
 }
 
-func TestAccountDeletionUpdatesOnlyMemberStatus(t *testing.T) {
+func TestAccountDeletionUpdatesStatusAndRevokesRootRole(t *testing.T) {
 	auth, mock, cleanup := newAuthServiceForTest(t)
 	defer cleanup()
 	expectAccountDeletionStatusUpdate(mock, 42)
@@ -562,9 +567,17 @@ func TestAccountDeletionUpdatesOnlyMemberStatus(t *testing.T) {
 }
 
 func expectAccountDeletionStatusUpdate(mock sqlmock.Sqlmock, usrSeq int) {
-	mock.ExpectExec(`^UPDATE WEO_MEMBER SET USR_STATUS = 'AAA' WHERE USR_SEQ = \?$`).
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
 		WithArgs(usrSeq).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow("ZZZ"))
+	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
+		WithArgs("AAA", usrSeq).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`DELETE FROM ALUMNI_ADMIN_ROLE`).
+		WithArgs(usrSeq, "root").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 }
 
 func newAuthServiceForTest(t *testing.T) (*AuthService, sqlmock.Sqlmock, func()) {

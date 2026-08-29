@@ -75,7 +75,7 @@ func TestAppleEmailPreferenceUpdateCannotReactivateDisconnectingLink(t *testing.
 	}
 }
 
-func TestAnonymizeAccountForDeletionUpdatesOnlyMemberStatus(t *testing.T) {
+func TestAnonymizeAccountForDeletionUpdatesStatusAndRevokesRootRole(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -83,9 +83,17 @@ func TestAnonymizeAccountForDeletionUpdatesOnlyMemberStatus(t *testing.T) {
 	defer db.Close()
 	repo := NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
 
-	mock.ExpectExec(`^UPDATE WEO_MEMBER SET USR_STATUS = 'AAA' WHERE USR_SEQ = \?$`).
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
 		WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow("ZZZ"))
+	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
+		WithArgs("AAA", 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`DELETE FROM ALUMNI_ADMIN_ROLE`).
+		WithArgs(42, rootAdminRole).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	if err := repo.AnonymizeAccountForDeletion(42); err != nil {
 		t.Fatal(err)
@@ -103,9 +111,14 @@ func TestAnonymizeAccountForDeletionRequiresExactlyOneMember(t *testing.T) {
 	defer db.Close()
 	repo := NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
 
-	mock.ExpectExec(`^UPDATE WEO_MEMBER SET USR_STATUS = 'AAA' WHERE USR_SEQ = \?$`).
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
 		WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow("CCC"))
+	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
+		WithArgs("AAA", 42).
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
 
 	if err := repo.AnonymizeAccountForDeletion(42); err == nil {
 		t.Fatal("account deletion must fail unless exactly one member is updated")
