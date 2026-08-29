@@ -36,9 +36,9 @@ func (h *AdminUploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if gate == "" {
 		gate = "notice"
 	}
-	allowedGates := map[string]bool{"notice": true, "ad": true, "profile": true}
+	allowedGates := map[string]bool{"notice": true, "ad": true, "profile": true, "bannerAd": true}
 	if !allowedGates[gate] {
-		respondError(w, http.StatusBadRequest, "INVALID_TYPE", "Allowed types: notice, ad, profile")
+		respondError(w, http.StatusBadRequest, "INVALID_TYPE", "Allowed types: notice, ad, profile, bannerAd")
 		return
 	}
 

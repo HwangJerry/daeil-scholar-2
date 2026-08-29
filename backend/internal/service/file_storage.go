@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 )
 
 type FileStorageService struct {
@@ -79,6 +81,34 @@ func (s *FileStorageService) Save(file multipart.File, header *multipart.FileHea
 		Extension: ext,
 		Size:      header.Size,
 	}, nil
+}
+
+// DeleteUploadedURL removes a file created by Save for the given upload gate.
+// URLs outside that exact gate are ignored so remote and unrelated assets are untouched.
+func (s *FileStorageService) DeleteUploadedURL(urlPath, gate string) error {
+	prefix := fmt.Sprintf("/uploads/%s/", gate)
+	if !strings.HasPrefix(urlPath, prefix) {
+		return nil
+	}
+
+	fileName := strings.TrimPrefix(urlPath, prefix)
+	if fileName == "" || fileName != filepath.Base(fileName) {
+		return fmt.Errorf("invalid uploaded file URL")
+	}
+
+	baseDir, err := filepath.Abs(filepath.Join(s.basePath, gate))
+	if err != nil {
+		return fmt.Errorf("invalid upload directory")
+	}
+	targetPath, err := filepath.Abs(filepath.Join(baseDir, fileName))
+	if err != nil || filepath.Dir(targetPath) != baseDir {
+		return fmt.Errorf("invalid uploaded file path")
+	}
+	if err := os.Remove(targetPath); err != nil && !os.IsNotExist(err) {
+		log.Warn().Err(err).Str("path", targetPath).Msg("uploaded file deletion failed")
+		return err
+	}
+	return nil
 }
 
 func generateFileName() string {

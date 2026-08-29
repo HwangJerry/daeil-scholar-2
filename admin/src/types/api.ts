@@ -111,49 +111,43 @@ export interface UpdateDisclosureRequest {
   attachedFileSeqs?: number[];
 }
 
-// --- Ad ---
+// --- Banner Ad ---
 
-export interface AdminAdListItem {
-  maSeq: number;
-  maName: string | null;
-  maUrl: string | null;
-  maImg: string | null;
-  maStatus: string;
-  adTier: 'PREMIUM' | 'GOLD' | 'NORMAL';
-  adTitleLabel: string;
-  maIndx: number;
-  adStartDate: string | null;
-  adEndDate: string | null;
+export type RFC3339UTCDateTime = `${string}Z`;
+export type BannerAdOpenYn = 'Y' | 'N';
+
+export interface BannerAdImage {
+  bniSeq: number;
+  bnSeq: number;
+  imageUrl: string;
+  sortOrder: number;
 }
 
-export interface AdminAdCreateRequest {
-  maName: string;
-  maUrl: string;
-  maImg: string;
-  maStatus: string;
-  adTier: string;
-  adTitleLabel: string;
-  maIndx: number;
-  adStartDate?: string;
-  adEndDate?: string;
-}
-
-export interface AdminAdUpdateRequest {
-  maName: string;
-  maUrl: string;
-  maImg: string;
-  maStatus: string;   // 'Y' | 'N'
-  adTier: string;     // 'PREMIUM' | 'GOLD' | 'NORMAL'
-  adTitleLabel: string;
-  maIndx: number;
-  adStartDate?: string;
-  adEndDate?: string;
-}
-
-export interface AdminAdStatsItem {
-  maSeq: number;
+export interface AdminBannerAdRow {
+  bnSeq: number;
+  bnName: string;
+  bnUrl: string;
+  openYn: BannerAdOpenYn;
+  indx: number;
+  bnStartDate: RFC3339UTCDateTime | null;
+  bnEndDate: RFC3339UTCDateTime | null;
+  createdAt: string;
+  updatedAt: string;
+  images: BannerAdImage[];
   viewCount: number;
   clickCount: number;
+}
+
+export type AdminBannerAdListItem = AdminBannerAdRow;
+
+export interface AdminBannerAdSaveRequest {
+  bnName: string;
+  bnUrl: string;
+  openYn: BannerAdOpenYn;
+  indx: number;
+  bnStartDate?: RFC3339UTCDateTime;
+  bnEndDate?: RFC3339UTCDateTime;
+  imageUrls: string[];
 }
 
 // --- Donation ---
