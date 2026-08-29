@@ -26,7 +26,7 @@ Alumni community 차세대 웹 애플리케이션의 통합 UI 디자인 가이�
 
 - **반응형은 모바일 퍼스트** — 기본값이 모바일 레이아웃이며, `md:` → `lg:` 순서로 확장한다.
 
-- **아이콘은 `lucide-react`만 사용**.
+- **아이콘은 별도 지시가 없으면 `lucide-react`만 사용, 단 별도 지시가 있으면 그에 따른다** (예: 브랜드 로고처럼 `lucide-react`가 제공하지 않는 정확한 마크가 필요한 경우, 커스텀 SVG 컴포넌트 예외를 명시적으로 지시받아 사용할 수 있다).
 
 - **HTML 렌더링은 반드시 `HtmlContent` 컴포넌트 경유** (`src/components/common/HtmlContent.tsx`).
 
