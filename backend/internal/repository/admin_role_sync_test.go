@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -89,6 +90,64 @@ func TestSyncAdminRoleForStatusChangeDoesNothingWhenStatusIsUnchanged(t *testing
 	}
 }
 
+func TestUpdateMemberStatusAndAdminRoleRollsBackPromotionWhenRoleUpsertFails(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	roleSyncErr := errors.New("role upsert failed")
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
+		WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow("CCC"))
+	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
+		WithArgs(rootAdminMemberStatus, 42).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO ALUMNI_ADMIN_ROLE[\s\S]*ON DUPLICATE KEY UPDATE`).
+		WithArgs(42, rootAdminRole, 42, 42).
+		WillReturnError(roleSyncErr)
+	mock.ExpectRollback()
+
+	_, err = updateMemberStatusAndAdminRole(sqlx.NewDb(db, "sqlmock"), 42, rootAdminMemberStatus)
+	if !errors.Is(err, roleSyncErr) {
+		t.Fatalf("error = %v, want %v", err, roleSyncErr)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateMemberStatusAndAdminRoleRollsBackDemotionWhenRoleDeleteFails(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	roleSyncErr := errors.New("role delete failed")
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
+		WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow(rootAdminMemberStatus))
+	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
+		WithArgs("CCC", 42).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`DELETE FROM ALUMNI_ADMIN_ROLE[\s\S]*ADMIN_ROLE = \?`).
+		WithArgs(42, rootAdminRole).
+		WillReturnError(roleSyncErr)
+	mock.ExpectRollback()
+
+	_, err = updateMemberStatusAndAdminRole(sqlx.NewDb(db, "sqlmock"), 42, "CCC")
+	if !errors.Is(err, roleSyncErr) {
+		t.Fatalf("error = %v, want %v", err, roleSyncErr)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestUpsertRootAdminMemberCreatesRoleWithMemberAsAuditActor(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -147,6 +206,36 @@ func TestUpsertRootAdminMemberPromotesExistingMember(t *testing.T) {
 	}
 	if usrSeq != 42 {
 		t.Fatalf("usrSeq = %d, want 42", usrSeq)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpsertRootAdminMemberRollsBackExistingMemberUpdateWhenRoleUpsertFails(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewAdminMemberRepository(sqlx.NewDb(db, "sqlmock"))
+	roleSyncErr := errors.New("role upsert failed")
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_SEQ, USR_STATUS[\s\S]*FOR UPDATE`).
+		WithArgs("admin").
+		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ", "USR_STATUS"}).AddRow(42, "CCC"))
+	mock.ExpectExec(`UPDATE WEO_MEMBER[\s\S]*USR_STATUS = 'ZZZ'`).
+		WithArgs("new-hash", "관리자", 42).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO ALUMNI_ADMIN_ROLE[\s\S]*ON DUPLICATE KEY UPDATE`).
+		WithArgs(42, rootAdminRole, 42, 42).
+		WillReturnError(roleSyncErr)
+	mock.ExpectRollback()
+
+	_, err = repo.UpsertRootAdminMember("admin", "new-hash", "관리자")
+	if !errors.Is(err, roleSyncErr) {
+		t.Fatalf("error = %v, want %v", err, roleSyncErr)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
