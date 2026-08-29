@@ -5,11 +5,21 @@ import { cn } from '../../lib/utils';
 import { formatRelativeDate } from '../../utils/date';
 import { useHeroNotice } from '../../hooks/useHeroNotice';
 
-export function HeroSection() {
+interface HeroSectionProps {
+  variant?: 'default' | 'landing';
+}
+
+const HERO_HEIGHT_CLASSES = {
+  default: 'min-h-[260px]',
+  landing: 'min-h-[360px] lg:min-h-[520px]',
+} as const;
+
+export function HeroSection({ variant = 'default' }: HeroSectionProps) {
   const { data: hero, isLoading, isError } = useHeroNotice();
+  const heightClassName = HERO_HEIGHT_CLASSES[variant];
 
   if (isLoading) {
-    return <div className="min-h-[260px] rounded-[20px] skeleton-shimmer" />;
+    return <div className={cn(heightClassName, 'rounded-[20px] skeleton-shimmer')} />;
   }
 
   if (isError || !hero) return null;
@@ -22,7 +32,7 @@ export function HeroSection() {
       className={cn(
         'group relative block overflow-hidden rounded-[20px] animate-fade-in-up',
         'bg-gradient-to-br from-hero-from via-hero-via to-hero-to',
-        'min-h-[260px]'
+        heightClassName,
       )}
     >
       {/* Ambient glow decoration */}
@@ -41,7 +51,7 @@ export function HeroSection() {
       )}
 
       {/* Content */}
-      <div className="relative flex flex-col justify-end h-full min-h-[260px] p-6">
+      <div className={cn('relative flex h-full flex-col justify-end p-6', heightClassName)}>
         {/* Top label */}
         <div className="flex items-center gap-2 mb-auto pt-1">
           {isPinned ? (

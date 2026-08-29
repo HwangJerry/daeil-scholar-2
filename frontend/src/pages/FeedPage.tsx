@@ -1,6 +1,7 @@
 // FeedPage — Main feed with 2-column desktop layout and infinite-scroll notice list
 import { PageMeta } from '../components/seo/PageMeta';
 import { HeroSection } from '../components/feed/HeroSection';
+import { BannerAdSection } from '../components/feed/BannerAdSection';
 import { DonationBanner } from '../components/feed/DonationBanner';
 import { FeedList } from '../components/feed/FeedList';
 import { ScrollToTopButton } from '../components/ui/ScrollToTopButton';
@@ -21,13 +22,17 @@ export function FeedPage() {
           <HeroSection />
         </div>
 
-        <aside className="md:col-start-2 md:row-start-1 md:row-span-2">
+        <div className="md:col-start-1 md:row-start-2">
+          <BannerAdSection />
+        </div>
+
+        <aside className="md:col-start-2 md:row-start-1 md:row-span-3">
           <div className="md:sticky md:top-20">
-          <DonationBanner />
+            <DonationBanner />
           </div>
         </aside>
 
-        <div className="md:col-start-1 md:row-start-2">
+        <div className="md:col-start-1 md:row-start-3">
           <FeedList />
         </div>
       </div>

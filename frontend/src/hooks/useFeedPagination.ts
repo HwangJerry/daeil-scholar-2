@@ -13,8 +13,10 @@ export function useFeedPagination() {
     data,
     fetchNextPage,
     hasNextPage,
+    isError,
     isFetching,
     isFetchingNextPage,
+    refetch,
   } = useInfiniteQuery({
     queryKey: ['feed', heroSeq ?? 'no-hero'],
     queryFn: async ({ pageParam }) => {
@@ -39,7 +41,9 @@ export function useFeedPagination() {
   return {
     items,
     hasMore: hasNextPage ?? false,
+    isError,
     isFetching: isFetching || isFetchingNextPage || !isHeroLoaded,
     loadMore: fetchNextPage,
+    refetch,
   };
 }

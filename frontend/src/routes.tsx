@@ -2,7 +2,7 @@
 import { Navigate, Routes, Route, useLocation } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
 import Layout from './components/layout/Layout';
-import { FeedPage } from './pages/FeedPage';
+import { LandingPage } from './pages/LandingPage';
 import { PostDetailPage } from './pages/PostDetailPage';
 import { AboutPage } from './pages/AboutPage';
 import { GreetingsPage } from './pages/GreetingsPage';
@@ -14,8 +14,9 @@ import { DisclosureListPage } from './pages/DisclosureListPage';
 import { DisclosureDetailPage } from './pages/DisclosureDetailPage';
 import { ModalRoutes } from './ModalRoutes';
 
-const PUBLIC_ROUTES = [
-  { path: '/', element: <FeedPage /> },
+const LANDING_ROUTE = { path: '/', element: <LandingPage /> } as const;
+
+const LAYOUT_ROUTES = [
   { path: '/post/:seq', element: <PostDetailPage /> },
   { path: '/about', element: <AboutPage /> },
   { path: '/greetings', element: <GreetingsPage /> },
@@ -25,8 +26,11 @@ const PUBLIC_ROUTES = [
   { path: '/business', element: <BusinessPage /> },
   { path: '/disclosure', element: <DisclosureListPage /> },
   { path: '/disclosure/:seq', element: <DisclosureDetailPage /> },
-  { path: '*', element: <Navigate to="/" replace /> },
 ] as const;
+
+const FALLBACK_ROUTE = { path: '*', element: <Navigate to="/" replace /> } as const;
+
+const PUBLIC_ROUTES = [LANDING_ROUTE, ...LAYOUT_ROUTES, FALLBACK_ROUTE] as const;
 
 export const PUBLIC_ROUTE_PATHS = PUBLIC_ROUTES.map((route) => route.path);
 
@@ -39,11 +43,13 @@ export default function AppRoutes() {
     <>
       {/* Render background page when a modal is open; otherwise render current location */}
       <Routes location={backgroundLocation ?? location}>
+        <Route path={LANDING_ROUTE.path} element={LANDING_ROUTE.element} />
         <Route element={<Layout />}>
-          {PUBLIC_ROUTES.map((route) => (
+          {LAYOUT_ROUTES.map((route) => (
             <Route key={route.path} path={route.path} element={route.element} />
           ))}
         </Route>
+        <Route path={FALLBACK_ROUTE.path} element={FALLBACK_ROUTE.element} />
       </Routes>
 
       <ModalRoutes />

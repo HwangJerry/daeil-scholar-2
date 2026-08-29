@@ -1,7 +1,35 @@
 // FeedCardSkeleton — Shimmer skeleton matching the unified feed card layout
 import { Bone } from '../ui/Skeleton';
+import { cn } from '../../lib/utils';
 
-export function FeedCardSkeleton() {
+interface FeedCardSkeletonProps {
+  variant?: 'default' | 'compact';
+}
+
+export function FeedCardSkeleton({ variant = 'default' }: FeedCardSkeletonProps) {
+  if (variant === 'compact') {
+    return (
+      <div
+        className={cn(
+          'grid grid-cols-[minmax(0,1fr)_5.5rem] gap-4 border-b border-border-subtle py-5',
+        )}
+      >
+        <div className={cn('space-y-3')}>
+          <div className={cn('flex items-center gap-2')}>
+            <Bone className="h-3 w-12" />
+            <Bone className="h-3 w-16" />
+          </div>
+          <div className={cn('space-y-2')}>
+            <Bone className="h-4 w-4/5" />
+            <Bone className="h-4 w-3/5" />
+          </div>
+          <Bone className="h-3 w-full" />
+        </div>
+        <Bone className="aspect-square w-full rounded-lg" />
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl bg-surface border border-border-subtle overflow-hidden">
       <div className="px-5 pt-5 pb-4 space-y-3">

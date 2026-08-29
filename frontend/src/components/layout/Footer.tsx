@@ -1,7 +1,10 @@
 // Footer — Site-wide footer with foundation info nav, contact details, and copyright
 import { Fragment } from 'react';
 import { Link } from 'react-router-dom';
-import { FOOTER_INFO_LINKS } from '../../constants/aboutContent';
+import {
+  FOOTER_CONTACT_INFO,
+  FOOTER_INFO_LINKS,
+} from '../../constants/aboutContent';
 
 export default function Footer() {
   const year = new Date().getFullYear();
@@ -31,32 +34,34 @@ export default function Footer() {
 
       <ul className="space-y-1 text-2xs text-text-secondary">
         <li>
-          <span className="font-medium">대일외국어고등학교 장학회</span>
+          <span className="font-medium">{FOOTER_CONTACT_INFO.organizationName}</span>
           <span className="mx-2 text-border-subtle">|</span>
-          <span>Tel: 02-543-3558</span>
+          <span>Tel: {FOOTER_CONTACT_INFO.telephone}</span>
           <span className="mx-2 text-border-subtle">|</span>
-          <span>Fax: 02-541-1479</span>
+          <span>Fax: {FOOTER_CONTACT_INFO.fax}</span>
         </li>
         <li>
-          <span>회장: 엄은숙</span>
+          <span>회장: {FOOTER_CONTACT_INFO.chair}</span>
           <span className="mx-2 text-border-subtle">|</span>
-          <span>총괄이사: 조한준</span>
+          <span>총괄이사: {FOOTER_CONTACT_INFO.executiveDirector}</span>
         </li>
-        <li>서울특별시 강남구 언주로 730 동익빌딩 8층</li>
+        <li>{FOOTER_CONTACT_INFO.address}</li>
         <li>
           <a
-            href="mailto:dflhs.scholar@gmail.com"
+            href={`mailto:${FOOTER_CONTACT_INFO.email}`}
             className="underline hover:text-text-primary transition-colors"
           >
-            dflhs.scholar@gmail.com
+            {FOOTER_CONTACT_INFO.email}
           </a>
           <span className="mx-2 text-border-subtle">|</span>
-          <span>고유등록번호: 137-82-84744</span>
+          <span>고유등록번호: {FOOTER_CONTACT_INFO.registrationNumber}</span>
         </li>
-        <li>기부영수증 발급단체명: 대일외국어고등학교 장학회</li>
+        <li>
+          기부영수증 발급단체명: {FOOTER_CONTACT_INFO.donationReceiptOrganizationName}
+        </li>
       </ul>
       <p className="mt-3 text-2xs text-text-placeholder">
-        COPYRIGHT ⓒ {year} 대일외국어고등학교 장학회 ALL RIGHT RESERVED.
+        COPYRIGHT ⓒ {year} {FOOTER_CONTACT_INFO.organizationName} ALL RIGHT RESERVED.
       </p>
     </footer>
   );

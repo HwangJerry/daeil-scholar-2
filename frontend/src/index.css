@@ -1,6 +1,16 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+:root {
+  --landing-header-height: 3.5rem;
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --landing-header-height: 4rem;
+  }
+}
+
 @theme {
   /* Primary — 다크 네이비 */
   --color-primary: #1a1a2e;
@@ -85,6 +95,14 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  [id] {
+    scroll-margin-top: var(--landing-header-height);
+  }
+
   body {
     @apply bg-background font-sans antialiased text-text-secondary text-sm;
   }
@@ -162,6 +180,19 @@
   animation: fade-in 0.25s ease-out both;
 }
 
+@utility landing-scroll-reveal {
+  opacity: 0;
+  transform: translateY(12px);
+  transition-duration: 500ms;
+  transition-property: opacity, transform;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+
+  &[data-revealed="true"] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @utility animate-progress {
   animation: progress-fill 1s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -195,4 +226,26 @@
 
 @utility animate-slide-up {
   animation: slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .landing-page,
+  .landing-page *,
+  .landing-page *::before,
+  .landing-page *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
+  }
+
+  .landing-page .landing-scroll-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
 }

@@ -25,6 +25,18 @@ export const FOOTER_INFO_LINKS: readonly { to: string; label: string }[] = [
   { to: '/disclosure', label: '의무공시' },
 ];
 
+export const FOOTER_CONTACT_INFO = {
+  organizationName: '대일외국어고등학교 장학회',
+  telephone: '02-543-3558',
+  fax: '02-541-1479',
+  chair: '엄은숙',
+  executiveDirector: '조한준',
+  address: '서울특별시 강남구 언주로 730 동익빌딩 8층',
+  email: 'dflhs.scholar@gmail.com',
+  registrationNumber: '137-82-84744',
+  donationReceiptOrganizationName: '대일외국어고등학교 장학회',
+} as const;
+
 export const GREETINGS = {
   salutation: '안녕하세요. 대일외고 장학회장 4기 졸업생 엄은숙 입니다.',
   paragraphs: [
@@ -33,6 +45,11 @@ export const GREETINGS = {
     '저희 장학회 임원들은 이러한 동문들의 뜻을 담아, 보다 안정적으로 기금을 운용하고, 적재적소에 장학금을 전달하여, 대일외고 인들이 훌륭한 인재로 성장하는데 일조할 수 있도록 최선을 다하겠습니다.',
   ],
   closing: '감사합니다',
+  author: {
+    name: '엄은숙',
+    role: '대일외고 장학회장',
+    cohort: '4기 졸업생',
+  },
 } as const;
 
 export const VISION_MISSION = {

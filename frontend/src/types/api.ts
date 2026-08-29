@@ -74,6 +74,20 @@ export interface HeroNotice {
   isPinned: string;
 }
 
+export interface BannerAdImage {
+  bniSeq: number;
+  bnSeq: number;
+  imageUrl: string;
+  sortOrder: number;
+}
+
+export interface BannerAd {
+  bnSeq: number;
+  bnName: string;
+  bnUrl: string;
+  images: BannerAdImage[];
+}
+
 export interface FileAttachment {
   fSeq: number;
   fGate: string;

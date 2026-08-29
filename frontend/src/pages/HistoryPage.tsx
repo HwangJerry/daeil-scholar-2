@@ -1,20 +1,7 @@
 // HistoryPage — Year-grouped timeline of foundation milestones
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../api/client';
 import { Card } from '../components/ui/Card';
 import { InfoPageShell } from '../components/info/InfoPageShell';
-
-interface HistoryItem {
-  heSeq: number;
-  eventDate: string; // "YYYY-MM-DD"
-  text: string;
-  sortOrder: number;
-}
-
-interface HistoryYearGroup {
-  year: number;
-  items: HistoryItem[];
-}
+import { useHistory } from '../hooks/useHistory';
 
 function displayDate(date: string) {
   const parts = date.split('-');
@@ -23,11 +10,7 @@ function displayDate(date: string) {
 }
 
 export function HistoryPage() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['history'],
-    queryFn: () => api.get<HistoryYearGroup[]>('/api/history'),
-    staleTime: 5 * 60_000,
-  });
+  const { data, isLoading, isError } = useHistory();
 
   return (
     <InfoPageShell
