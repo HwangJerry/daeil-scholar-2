@@ -38,7 +38,8 @@ func TestMVPMigrationsAvoidUnsupportedMariaDB101Syntax(t *testing.T) {
 		"check constraint":        regexp.MustCompile(`(?i)\bCHECK\s*\(`),
 	}
 
-	for _, name := range mvpMigrationNames() {
+	migrationNames := append(mvpMigrationNames(), "050_create_banner_ad.sql")
+	for _, name := range migrationNames {
 		t.Run(name, func(t *testing.T) {
 			sql := stripSQLComments(readMigrationFile(t, name))
 			for feature, pattern := range forbidden {
@@ -94,6 +95,43 @@ func TestApplyAllIncludesEveryNumberedMigration(t *testing.T) {
 		marker := fmt.Sprintf("-- %03d:", number)
 		if !strings.Contains(sql, marker) {
 			t.Errorf("apply_all.sql is missing section %s", marker)
+		}
+	}
+}
+
+func TestApplyAllIncludesBannerAdMigrationBeforeHelperCleanup(t *testing.T) {
+	standalone := readMigrationFile(t, "050_create_banner_ad.sql")
+	applyAll := readMigrationFile(t, "apply_all.sql")
+	cleanup := strings.Index(applyAll, "Cleanup: Drop helper procedures")
+	section := strings.Index(applyAll, "-- 050:")
+	if section < 0 {
+		t.Fatal("apply_all.sql is missing section -- 050:")
+	}
+	if cleanup < 0 || section > cleanup {
+		t.Fatal("apply_all.sql section -- 050: must appear before helper cleanup")
+	}
+
+	for _, marker := range []string{
+		"CREATE TABLE IF NOT EXISTS MAIN_BANNER_AD (",
+		"CREATE TABLE IF NOT EXISTS MAIN_BANNER_AD_IMAGE (",
+		"CREATE TABLE IF NOT EXISTS WEO_BANNER_AD_LOG (",
+		"IDX_MBA_OPEN_PERIOD",
+		"FK_MBAI_BN_SEQ",
+		"FK_WBAL_BN_SEQ",
+		"ENUM('VIEW','CLICK')",
+	} {
+		if !strings.Contains(standalone, marker) {
+			t.Errorf("050_create_banner_ad.sql is missing %q", marker)
+		}
+		if !strings.Contains(applyAll[section:cleanup], marker) {
+			t.Errorf("apply_all.sql section 050 is missing %q", marker)
+		}
+	}
+
+	for _, table := range []string{"MAIN_BANNER_AD", "MAIN_BANNER_AD_IMAGE", "WEO_BANNER_AD_LOG"} {
+		verification := fmt.Sprintf("SELECT '%s' AS chk, COUNT(*) AS found FROM information_schema.TABLES", table)
+		if !strings.Contains(applyAll, verification) {
+			t.Errorf("apply_all.sql is missing verification query for %s", table)
 		}
 	}
 }
