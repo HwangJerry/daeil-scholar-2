@@ -5,28 +5,19 @@ import (
 	"time"
 )
 
-// FeedItem represents a single item in the feed (notice or ad).
+// FeedItem represents a single notice item in the feed.
 type FeedItem struct {
 	Type        string `json:"type"`
 	*NoticeItem `json:",omitempty"`
-	*AdItem     `json:",omitempty"`
 }
 
-// MarshalJSON dispatches to a single-embedding struct to avoid JSON field
-// collisions between NoticeItem and AdItem (both declare likeCnt, commentCnt,
-// hit), which would otherwise cause encoding/json to silently drop all three.
+// MarshalJSON preserves the feed item type alongside the embedded notice.
 func (f FeedItem) MarshalJSON() ([]byte, error) {
 	if f.NoticeItem != nil {
 		return json.Marshal(struct {
 			Type string `json:"type"`
 			*NoticeItem
 		}{Type: f.Type, NoticeItem: f.NoticeItem})
-	}
-	if f.AdItem != nil {
-		return json.Marshal(struct {
-			Type string `json:"type"`
-			*AdItem
-		}{Type: f.Type, AdItem: f.AdItem})
 	}
 	return json.Marshal(struct {
 		Type string `json:"type"`
@@ -106,30 +97,6 @@ type LikeToggleResponse struct {
 // CommentCreateRequest is the request body for POST /api/feed/{seq}/comments.
 type CommentCreateRequest struct {
 	Contents string `json:"contents"`
-}
-
-// AdItem represents an ad from MAIN_AD table.
-type AdItem struct {
-	MASeq      int    `db:"MA_SEQ" json:"maSeq"`
-	MAName     string `db:"MA_NAME" json:"maName"`
-	MAURL      string `db:"MA_URL" json:"maUrl"`
-	ImageURL   string `db:"MA_IMG" json:"imageUrl"`
-	AdTier     string `db:"AD_TIER" json:"adTier"`
-	TitleLabel string `db:"AD_TITLE_LABEL" json:"titleLabel"`
-	LikeCnt    int    `db:"like_cnt" json:"likeCnt"`
-	CommentCnt int    `db:"comment_cnt" json:"commentCnt"`
-	Hit        int    `db:"hit" json:"hit"`
-	UserLiked  bool   `db:"user_liked" json:"userLiked"`
-}
-
-// AdComment represents a row in WEO_AD_COMMENT table.
-type AdComment struct {
-	ACSeq    int    `db:"AC_SEQ" json:"acSeq"`
-	MASeq    int    `db:"MA_SEQ" json:"maSeq"`
-	USRSeq   int    `db:"USR_SEQ" json:"usrSeq"`
-	Nickname string `db:"NICKNAME" json:"nickname"`
-	Contents string `db:"CONTENTS" json:"contents"`
-	RegDate  string `db:"REG_DATE" json:"regDate"`
 }
 
 // FileRecord represents a row in WEO_FILES table.

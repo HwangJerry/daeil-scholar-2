@@ -2,6 +2,8 @@
 package service
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,21 +45,16 @@ func (m *mockFeedRepo) GetNextPost(seq int) (*model.PostSibling, error)    { ret
 func (m *mockFeedRepo) GetFilesByPost(seq int) ([]model.FileRecord, error) { return m.files, m.filesErr }
 func (m *mockFeedRepo) GetPostOwnerSeq(seq int) (int, error)               { return m.ownerSeq, nil }
 
-// mockAdRepo provides a minimal AdRepository stub.
-type mockAdRepo struct{}
-
 func newTestFeedService(repo *mockFeedRepo) *FeedService {
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
-	// Pre-populate ad cache so the service never calls the nil adRepo.
-	cacheStore.Set(feedAdsCacheKey, []model.AdItem{}, feedAdsCacheTTL)
-	return &FeedService{repo: repo, adRepo: nil, cache: cacheStore}
+	return NewFeedService(repo, cacheStore)
 }
 
 func TestGetFeed_SizeClampZero(t *testing.T) {
 	repo := &mockFeedRepo{notices: []model.NoticeItem{}}
 	svc := newTestFeedService(repo)
 
-	resp, err := svc.GetFeed(0, 0, nil, 0, 0)
+	resp, err := svc.GetFeed(0, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,22 +75,20 @@ func TestGetFeed_SizeClampLarge(t *testing.T) {
 	repo := &mockFeedRepo{notices: notices}
 	svc := newTestFeedService(repo)
 
-	resp, err := svc.GetFeed(0, 25, nil, 0, 0)
+	resp, err := svc.GetFeed(0, 25, 0, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !resp.HasMore {
 		t.Error("expected HasMore=true when notices > clamped size")
 	}
-	// Items should contain 20 notice items (no ads since adRepo is nil)
-	noticeCount := 0
-	for _, item := range resp.Items {
-		if item.Type == "notice" {
-			noticeCount++
-		}
+	if len(resp.Items) != 20 {
+		t.Errorf("expected 20 notice items after clamping, got %d", len(resp.Items))
 	}
-	if noticeCount != 20 {
-		t.Errorf("expected 20 notice items after clamping, got %d", noticeCount)
+	for i, item := range resp.Items {
+		if item.Type != "notice" || item.NoticeItem == nil {
+			t.Errorf("item %d is not a notice-only feed item: %#v", i, item)
+		}
 	}
 }
 
@@ -119,7 +114,7 @@ func TestGetFeed_HasMoreDetermination(t *testing.T) {
 			repo := &mockFeedRepo{notices: notices}
 			svc := newTestFeedService(repo)
 
-			resp, err := svc.GetFeed(0, tt.size, nil, 0, 0)
+			resp, err := svc.GetFeed(0, tt.size, 0, 0)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -139,7 +134,7 @@ func TestGetFeed_NextCursor(t *testing.T) {
 	repo := &mockFeedRepo{notices: notices}
 	svc := newTestFeedService(repo)
 
-	resp, err := svc.GetFeed(0, 10, nil, 0, 0)
+	resp, err := svc.GetFeed(0, 10, 0, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -153,7 +148,7 @@ func TestGetFeed_EmptyFeed(t *testing.T) {
 	repo := &mockFeedRepo{notices: []model.NoticeItem{}}
 	svc := newTestFeedService(repo)
 
-	resp, err := svc.GetFeed(0, 10, nil, 0, 0)
+	resp, err := svc.GetFeed(0, 10, 0, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -172,8 +167,25 @@ func TestGetFeed_NoticesError(t *testing.T) {
 	repo := &mockFeedRepo{noticesErr: errDB}
 	svc := newTestFeedService(repo)
 
-	_, err := svc.GetFeed(0, 10, nil, 0, 0)
+	_, err := svc.GetFeed(0, 10, 0, 0)
 	if err == nil {
 		t.Fatal("expected error from GetNotices failure")
+	}
+}
+
+func TestGetFeed_SerializesNoticeType(t *testing.T) {
+	repo := &mockFeedRepo{notices: []model.NoticeItem{{SEQ: 42, Subject: "Notice"}}}
+	svc := newTestFeedService(repo)
+
+	resp, err := svc.GetFeed(0, 10, 0, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	payload, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal feed response: %v", err)
+	}
+	if !strings.Contains(string(payload), `"type":"notice"`) {
+		t.Fatalf("expected serialized notice type, got %s", payload)
 	}
 }

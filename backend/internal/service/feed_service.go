@@ -1,4 +1,4 @@
-// feed_service.go — Service layer for news feed: assembly, interleaving, hero notice, and ad retrieval with caching
+// feed_service.go — Service layer for news feed assembly and hero notice caching
 package service
 
 import (
@@ -12,22 +12,19 @@ import (
 
 const (
 	feedHeroCacheTTL = 2 * time.Minute
-	feedAdsCacheTTL  = 5 * time.Minute
 	feedHeroCacheKey = "feed:hero"
-	feedAdsCacheKey  = "feed:ads"
 )
 
 type FeedService struct {
-	repo   repository.FeedQuerier
-	adRepo *repository.AdRepository
-	cache  *cache.Cache
+	repo  repository.FeedQuerier
+	cache *cache.Cache
 }
 
-func NewFeedService(repo repository.FeedQuerier, adRepo *repository.AdRepository, cacheStore *cache.Cache) *FeedService {
-	return &FeedService{repo: repo, adRepo: adRepo, cache: cacheStore}
+func NewFeedService(repo repository.FeedQuerier, cacheStore *cache.Cache) *FeedService {
+	return &FeedService{repo: repo, cache: cacheStore}
 }
 
-func (s *FeedService) GetFeed(cursor int, size int, excludeAdIDs []int, excludeSeq int, userSeq int) (*model.FeedResponse, error) {
+func (s *FeedService) GetFeed(cursor int, size int, excludeSeq int, userSeq int) (*model.FeedResponse, error) {
 	if size <= 0 {
 		size = 10
 	}
@@ -42,82 +39,19 @@ func (s *FeedService) GetFeed(cursor int, size int, excludeAdIDs []int, excludeS
 	if hasMore {
 		notices = notices[:size]
 	}
-	ads, err := s.getActiveAds(excludeAdIDs)
-	if err != nil {
-		ads = []model.AdItem{} // Non-fatal: render feed without ads
+	items := make([]model.FeedItem, 0, len(notices))
+	for i := range notices {
+		items = append(items, model.FeedItem{
+			Type:       "notice",
+			NoticeItem: &notices[i],
+		})
 	}
-	// userLiked enrichment: only for logged-in users with ads present
-	if userSeq > 0 && len(ads) > 0 {
-		// Copy to avoid mutating the cached slice
-		enriched := make([]model.AdItem, len(ads))
-		copy(enriched, ads)
-		ads = enriched
-
-		maSeqs := make([]int, len(ads))
-		for i, ad := range ads {
-			maSeqs[i] = ad.MASeq
-		}
-		if likedSeqs, err := s.adRepo.GetUserLikedAdSeqs(userSeq, maSeqs); err == nil {
-			likedSet := make(map[int]bool, len(likedSeqs))
-			for _, seq := range likedSeqs {
-				likedSet[seq] = true
-			}
-			for i := range ads {
-				ads[i].UserLiked = likedSet[ads[i].MASeq]
-			}
-		}
-		// err is non-fatal: userLiked stays false, feed still renders
-	}
-	items := interleaveFeed(notices, ads)
 	response := &model.FeedResponse{Items: items, HasMore: hasMore}
 	if len(notices) > 0 {
 		last := notices[len(notices)-1]
 		response.NextCursor = "seq_" + strconv.Itoa(last.SEQ)
 	}
 	return response, nil
-}
-
-// getActiveAds returns the cached full ad list, filtering excludeIDs in-memory.
-// When all ads have been excluded (cycle exhausted), returns all ads to restart the cycle.
-func (s *FeedService) getActiveAds(excludeIDs []int) ([]model.AdItem, error) {
-	if v, ok := s.cache.Get(feedAdsCacheKey); ok {
-		if ads, ok := v.([]model.AdItem); ok {
-			filtered := filterAds(ads, excludeIDs)
-			if len(filtered) == 0 && len(ads) > 0 {
-				return ads, nil // cycle reset: all ads shown, restart
-			}
-			return filtered, nil
-		}
-		s.cache.Delete(feedAdsCacheKey)
-	}
-	all, err := s.adRepo.GetActiveAds(nil)
-	if err != nil {
-		return nil, err
-	}
-	s.cache.Set(feedAdsCacheKey, all, feedAdsCacheTTL)
-	filtered := filterAds(all, excludeIDs)
-	if len(filtered) == 0 && len(all) > 0 {
-		return all, nil // cycle reset
-	}
-	return filtered, nil
-}
-
-// filterAds returns ads excluding those whose MASeq is in excludeIDs.
-func filterAds(ads []model.AdItem, excludeIDs []int) []model.AdItem {
-	if len(excludeIDs) == 0 {
-		return ads
-	}
-	excludeSet := make(map[int]struct{}, len(excludeIDs))
-	for _, id := range excludeIDs {
-		excludeSet[id] = struct{}{}
-	}
-	result := make([]model.AdItem, 0, len(ads))
-	for _, ad := range ads {
-		if _, skip := excludeSet[ad.MASeq]; !skip {
-			result = append(result, ad)
-		}
-	}
-	return result
 }
 
 func (s *FeedService) GetHero() (*model.NoticeItem, error) {
@@ -178,19 +112,4 @@ func (s *FeedService) GetPostSiblings(seq int) (*model.PostSiblings, error) {
 		return nil, err
 	}
 	return &model.PostSiblings{Prev: prev, Next: next}, nil
-}
-
-func interleaveFeed(notices []model.NoticeItem, ads []model.AdItem) []model.FeedItem {
-	items := make([]model.FeedItem, 0, len(notices)+len(ads))
-	adIndex := 0
-	for i := range notices {
-		notice := notices[i]
-		items = append(items, model.FeedItem{Type: "notice", NoticeItem: &notice})
-		if len(notices) >= 4 && (i+1)%4 == 0 && adIndex < len(ads) {
-			ad := ads[adIndex]
-			adIndex++
-			items = append(items, model.FeedItem{Type: "ad", AdItem: &ad})
-		}
-	}
-	return items
 }

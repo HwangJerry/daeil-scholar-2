@@ -47,15 +47,14 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	donationRepo := repository.NewDonationRepository(db)
 	alumniRepo := repository.NewAlumniRepository(db)
 	profileRepo := repository.NewProfileRepository(db)
-	adRepo := repository.NewAdRepository(db)
-	adLikeRepo := repository.NewAdLikeRepository(db)
-	adCommentRepo := repository.NewAdCommentRepository(db)
+	bannerAdRepo := repository.NewBannerAdRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
 	fileRepo := repository.NewFileRepository(db)
 	adminNoticeRepo := repository.NewAdminNoticeRepository(db)
 	adminDisclosureRepo := repository.NewAdminDisclosureRepository(db)
 	disclosureRepo := repository.NewDisclosureRepository(db)
 	adminAdRepo := repository.NewAdminAdRepository(db)
+	adminBannerAdRepo := repository.NewAdminBannerAdRepository(db)
 	adminDonationRepo := repository.NewAdminDonationRepository(db)
 	donationImportRepo := repository.NewDonationImportRepository(db)
 	adminMemberRepo := repository.NewAdminMemberRepository(db)
@@ -122,16 +121,14 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		memberService = service.NewMemberServiceWithPasswordCredentials(authRepo, canonicalPasswordService)
 		registrationService = service.NewTransactionalRegistrationService(authRepo, profileRepo, signupRepo)
 	}
-	feedService := service.NewFeedService(feedRepo, adRepo, cacheStore)
+	feedService := service.NewFeedService(feedRepo, cacheStore)
 	ogService := service.NewOGService(feedRepo)
 	sitemapService := service.NewSitemapService(feedRepo, cacheStore)
 	rssService := service.NewRSSService(feedRepo, cacheStore)
 	donationService := service.NewDonationService(donationRepo, cacheStore)
 	alumniService := service.NewAlumniService(alumniRepo, cacheStore)
 	profileService := service.NewProfileService(profileRepo)
-	adService := service.NewAdService(adRepo)
-	adLikeService := service.NewAdLikeService(adLikeRepo)
-	adCommentService := service.NewAdCommentService(adCommentRepo)
+	bannerAdSvc := service.NewBannerAdService(bannerAdRepo)
 	adminNoticeSvc := service.NewAdminNoticeService(adminNoticeRepo, fileRepo)
 	adminDisclosureSvc := service.NewAdminDisclosureService(adminDisclosureRepo, fileRepo)
 	disclosureSvc := service.NewDisclosureService(disclosureRepo)
@@ -145,6 +142,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	visitJob := job.NewVisitAggregationJob(visitRepo, logger)
 	adminDashboardSvc := service.NewAdminDashboardService(adminMemberSvc, adminNoticeSvc, adminAdSvc, donationService, visitService)
 	fileStorage := service.NewFileStorageService(cfg.Upload.BasePath)
+	adminBannerAdSvc := service.NewAdminBannerAdService(adminBannerAdRepo, fileStorage)
 	imageResizer := service.NewImageResizeService(1200)
 	fileRecordSvc := service.NewFileRecordService(fileRepo)
 	uploadOrchestrator := service.NewUploadOrchestrator(fileStorage, imageResizer, fileRecordSvc)
@@ -193,13 +191,11 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		alumni:              handler.NewAlumniHandler(alumniService),
 		profile:             handler.NewProfileHandler(profileService),
 		profileUpload:       handler.NewProfileUploadHandler(profileUploadService),
-		ad:                  handler.NewAdHandler(adService),
-		adLike:              handler.NewAdLikeHandler(adLikeService),
-		adComment:           handler.NewAdCommentHandler(adCommentService),
+		bannerAd:            handler.NewBannerAdHandler(bannerAdSvc, logger),
 		adminNotice:         handler.NewAdminNoticeHandler(adminNoticeSvc, feedPresenter),
 		adminDisclosure:     handler.NewAdminDisclosureHandler(adminDisclosureSvc, feedPresenter),
 		disclosure:          handler.NewDisclosureHandler(disclosureSvc, feedPresenter),
-		adminAd:             handler.NewAdminAdHandler(adminAdSvc),
+		adminBannerAd:       handler.NewAdminBannerAdHandler(adminBannerAdSvc),
 		adminDonation:       handler.NewAdminDonationHandler(adminDonationOrchestrator),
 		adminDonationImport: handler.NewAdminDonationImportHandler(donationImportSvc, cfg.Upload.MaxFileSizeMB),
 		adminMember:         handler.NewAdminMemberHandler(adminMemberSvc),

@@ -26,7 +26,7 @@ func (h *FeedHandler) GetFeed(w http.ResponseWriter, r *http.Request) {
 	if user := middleware.GetAuthUser(r.Context()); user != nil {
 		userSeq = user.USRSeq
 	}
-	feed, err := h.service.GetFeed(parseCursor(q.Get("cursor")), parseIntParam(q.Get("size")), parseExcludeAds(q.Get("exclude_ads")), parseIntParam(q.Get("exclude_seq")), userSeq)
+	feed, err := h.service.GetFeed(parseCursor(q.Get("cursor")), parseIntParam(q.Get("size")), parseIntParam(q.Get("exclude_seq")), userSeq)
 	if err != nil {
 		log.Error().Err(err).Msg("feed list failed")
 		respondError(w, http.StatusInternalServerError, "FEED_FAILED", "Failed to load feed")

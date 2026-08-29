@@ -1,6 +1,6 @@
 // DashboardPage — composes stats grid, recent notices, and quick action links
 import { Link } from 'react-router-dom';
-import { Plus, Megaphone } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Button } from '../components/ui/Button.tsx';
 import { DashboardStatsGrid } from '../components/dashboard/DashboardStatsGrid.tsx';
 import { ActiveUsersChart } from '../components/dashboard/ActiveUsersChart.tsx';
@@ -25,12 +25,6 @@ export function DashboardPage() {
               <Button size="sm">
                 <Plus className="mr-1 h-4 w-4" />
                 새 공지 작성
-              </Button>
-            </Link>
-            <Link to="/ad">
-              <Button variant="secondary" size="sm">
-                <Megaphone className="mr-1 h-4 w-4" />
-                광고 관리
               </Button>
             </Link>
           </div>

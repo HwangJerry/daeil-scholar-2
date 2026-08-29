@@ -7,8 +7,8 @@ import { NoticeListPage } from './pages/NoticeListPage.tsx';
 import { NoticeEditPage } from './pages/NoticeEditPage.tsx';
 import { DisclosureListPage } from './pages/DisclosureListPage.tsx';
 import { DisclosureEditPage } from './pages/DisclosureEditPage.tsx';
-import { AdManagePage } from './pages/AdManagePage.tsx';
-import { AdEditPage } from './pages/AdEditPage.tsx';
+import { BannerAdManagePage } from './pages/BannerAdManagePage.tsx';
+import { BannerAdEditPage } from './pages/BannerAdEditPage.tsx';
 import { MemberListPage } from './pages/MemberListPage.tsx';
 import { MemberDetailPage } from './pages/MemberDetailPage.tsx';
 import { PendingMembersPage } from './pages/PendingMembersPage.tsx';
@@ -35,9 +35,9 @@ export function AppRoutes() {
         <Route path="disclosure" element={<DisclosureListPage />} />
         <Route path="disclosure/new" element={<DisclosureEditPage />} />
         <Route path="disclosure/:seq/edit" element={<DisclosureEditPage />} />
-        <Route path="ad" element={<AdManagePage />} />
-        <Route path="ad/new" element={<AdEditPage />} />
-        <Route path="ad/:maSeq/edit" element={<AdEditPage />} />
+        <Route path="banner-ad" element={<BannerAdManagePage />} />
+        <Route path="banner-ad/new" element={<BannerAdEditPage />} />
+        <Route path="banner-ad/:bnSeq/edit" element={<BannerAdEditPage />} />
         <Route path="member" element={<MemberListPage />} />
         <Route path="member/pending" element={<PendingMembersPage />} />
         <Route path="member/:seq" element={<MemberDetailPage />} />

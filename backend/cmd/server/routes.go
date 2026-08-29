@@ -27,13 +27,11 @@ type handlers struct {
 	alumni              *handler.AlumniHandler
 	profile             *handler.ProfileHandler
 	profileUpload       *handler.ProfileUploadHandler
-	ad                  *handler.AdHandler
-	adLike              *handler.AdLikeHandler
-	adComment           *handler.AdCommentHandler
+	bannerAd            *handler.BannerAdHandler
 	adminNotice         *handler.AdminNoticeHandler
 	adminDisclosure     *handler.AdminDisclosureHandler
 	disclosure          *handler.DisclosureHandler
-	adminAd             *handler.AdminAdHandler
+	adminBannerAd       *handler.AdminBannerAdHandler
 	adminDonation       *handler.AdminDonationHandler
 	adminDonationImport *handler.AdminDonationImportHandler
 	adminMember         *handler.AdminMemberHandler
@@ -173,9 +171,6 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Post("/api/feed/{seq}/like", h.like.ToggleLike)
 		r.Post("/api/feed/{seq}/comments", h.comment.CreateComment)
 		r.Delete("/api/feed/{seq}/comments/{cSeq}", h.comment.DeleteComment)
-		r.Post("/api/ad/{maSeq}/like", h.adLike.ToggleLike)
-		r.Post("/api/ad/{maSeq}/comments", h.adComment.CreateComment)
-		r.Delete("/api/ad/{maSeq}/comments/{acSeq}", h.adComment.DeleteComment)
 		// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
 		// r.Post("/api/donation/subscription", h.subscription.CreateSubscription)
 		// r.Get("/api/donation/subscription", h.subscription.GetMySubscription)
@@ -211,9 +206,9 @@ func registerOptionalAuthRoutes(r chi.Router, h handlers, authService *service.A
 		r.Get("/api/feed/{seq}/comments", h.comment.ListComments)
 		r.Get("/api/disclosure", h.disclosure.GetList)
 		r.Get("/api/disclosure/{seq}", h.disclosure.GetDetail)
-		r.Post("/api/ad/{maSeq}/view", h.ad.TrackView)
-		r.Post("/api/ad/{maSeq}/click", h.ad.TrackClick)
-		r.Get("/api/ad/{maSeq}/comments", h.adComment.ListComments)
+		r.Get("/api/banner-ad/active", h.bannerAd.GetActive)
+		r.Post("/api/banner-ad/{bnSeq}/view", h.bannerAd.TrackView)
+		r.Post("/api/banner-ad/{bnSeq}/click", h.bannerAd.TrackClick)
 		r.Post("/api/visit/beacon", h.visit.Beacon)
 	})
 }
@@ -238,11 +233,12 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Delete("/disclosure/{seq}", h.adminDisclosure.Delete)
 		r.Post("/upload", h.adminUpload.Upload)
 		r.Post("/upload/attachment", h.adminAttachUpload.Upload)
-		r.Get("/ad", h.adminAd.List)
-		r.Post("/ad", h.adminAd.Create)
-		r.Put("/ad/{seq}", h.adminAd.Update)
-		r.Delete("/ad/{seq}", h.adminAd.Delete)
-		r.Get("/ad/stats", h.adminAd.Stats)
+		r.Get("/banner-ad", h.adminBannerAd.List)
+		r.Post("/banner-ad", h.adminBannerAd.Create)
+		r.Put("/banner-ad/{seq}", h.adminBannerAd.Update)
+		r.Delete("/banner-ad/{seq}", h.adminBannerAd.Delete)
+		r.Get("/banner-ad/stats", h.adminBannerAd.Stats)
+		r.Get("/banner-ad/{bnSeq}", h.adminBannerAd.Detail)
 		r.Get("/donation/config", h.adminDonation.GetConfig)
 		r.Put("/donation/config", h.adminDonation.UpdateConfig)
 		r.Get("/donation/history", h.adminDonation.History)
