@@ -58,7 +58,7 @@ func TestLogoutAllReturnsNoContentAndRemovesDeviceAssociations(t *testing.T) {
 	mock.ExpectExec(`UPDATE ALUMNI_MOBILE_REFRESH_TOKEN`).
 		WithArgs(42).
 		WillReturnResult(sqlmock.NewResult(0, 2))
-	mock.ExpectExec(`DELETE FROM ALUMNI_PUSH_DEVICE WHERE USR_SEQ`).
+	mock.ExpectExec(`DELETE FROM ALUMNI_MOBILE_DEVICE_TOKEN WHERE USR_SEQ`).
 		WithArgs(42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 

@@ -141,65 +141,40 @@ func TestAppleEmailPreferenceUpdateCannotReactivateDisconnectingLink(t *testing.
 	}
 }
 
-func TestAnonymizeAccountForDeletionCommitsAllLocalEffectsAtomically(t *testing.T) {
+func TestAnonymizeAccountForDeletionUpdatesOnlyMemberStatus(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 	repo := NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
-	repo.EnablePhoneClaims()
 
-	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_SEQ[\s\S]*FROM WEO_MEMBER[\s\S]*FOR UPDATE`).
+	mock.ExpectExec(`^UPDATE WEO_MEMBER SET USR_STATUS = 'AAA' WHERE USR_SEQ = \?$`).
 		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ", "USR_PHONE"}).AddRow(42, "010-1234-5678"))
-	mock.ExpectQuery(`SELECT NMS_GATE[\s\S]*FOR UPDATE`).
-		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"NMS_GATE"}).AddRow("KT"))
-	for index, pattern := range []string{
-		`UPDATE WEO_ORDER`,
-		`UPDATE ALUMNI_MESSAGE[\s\S]*AM_SENDER_ACCOUNT_SEQ`,
-		`UPDATE ALUMNI_MESSAGE[\s\S]*AM_RECVR_ACCOUNT_SEQ`,
-		`UPDATE AUTH_SESSION_FAMILY`,
-		`UPDATE ALUMNI_MOBILE_REFRESH_TOKEN`,
-		`DELETE FROM WEO_MEMBER_LOG`,
-		`DELETE FROM ALUMNI_PUSH_DEVICE`,
-		`DELETE FROM ALUMNI_PUSH_PREFERENCE`,
-		`DELETE FROM ALUMNI_MEMBER_BLOCK`,
-		`DELETE FROM ALUMNI_USER_TAG`,
-		`DELETE FROM ALUMNI_ADMIN_ROLE`,
-		`DELETE FROM ALUMNI_VERIFICATION`,
-		`DELETE credential[\s\S]*AUTH_PASSWORD_CREDENTIAL`,
-		`UPDATE AUTH_IDENTITY`,
-		`UPDATE AUTH_ACCOUNT_STATE`,
-	} {
-		expectation := mock.ExpectExec(pattern)
-		if index == 0 {
-			expectation.WithArgs(42, sqlmock.AnyArg())
-		} else if index == 1 || index == 2 || index == 8 {
-			expectation.WithArgs(42, 42)
-		} else {
-			expectation.WithArgs(42)
-		}
-		expectation.WillReturnResult(sqlmock.NewResult(0, 1))
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.AnonymizeAccountForDeletion(42); err != nil {
+		t.Fatal(err)
 	}
-	mock.ExpectExec(`DELETE FROM AUTH_PHONE_CLAIM`).WithArgs(42).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`INSERT INTO ALUMNI_SOCIAL_REVOCATION_OUTBOX`).
-		WithArgs(42, "KT", "ACCOUNT_DELETE", 42, "KT", "ACCOUNT_DELETE").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(`DELETE FROM WEO_MEMBER_SOCIAL`).
-		WithArgs(42).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`UPDATE WEO_MEMBER[\s\S]*USR_STATUS = 'AAA'`).
-		WithArgs(42, 42).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectCommit()
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
 
-	providers, err := repo.AnonymizeAccountForDeletion(42)
-	if err != nil || len(providers) != 1 || providers[0] != "KT" {
-		t.Fatalf("providers = %#v, err = %v", providers, err)
+func TestAnonymizeAccountForDeletionRequiresExactlyOneMember(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
+
+	mock.ExpectExec(`^UPDATE WEO_MEMBER SET USR_STATUS = 'AAA' WHERE USR_SEQ = \?$`).
+		WithArgs(42).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	if err := repo.AnonymizeAccountForDeletion(42); err == nil {
+		t.Fatal("account deletion must fail unless exactly one member is updated")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

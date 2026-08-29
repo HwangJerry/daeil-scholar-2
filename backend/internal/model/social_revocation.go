@@ -5,11 +5,10 @@ package model
 import "time"
 
 // SocialRevocationOutboxEntry mirrors a row of ALUMNI_SOCIAL_REVOCATION_OUTBOX,
-// queued by ReserveSocialDisconnect (ACTION=DISCONNECT) or
-// AnonymizeAccountForDeletion (ACTION=ACCOUNT_DELETE) whenever a provider
-// disconnect/account deletion needs an upstream revocation call (Kakao unlink,
-// Apple revoke) processed asynchronously by
-// internal/job/social_revocation_worker.go.
+// queued by ReserveSocialDisconnect (ACTION=DISCONNECT). The worker also
+// understands legacy ACTION=ACCOUNT_DELETE rows created by the earlier account
+// deletion flow. Both actions represent upstream revocation calls (Kakao
+// unlink, Apple revoke) processed asynchronously by the worker.
 type SocialRevocationOutboxEntry struct {
 	OutboxID      int64     `db:"OUTBOX_ID"`
 	USRSeq        int       `db:"USR_SEQ"`

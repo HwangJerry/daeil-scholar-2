@@ -1,15 +1,13 @@
 // social_revocation_worker.go — Background worker draining
 // ALUMNI_SOCIAL_REVOCATION_OUTBOX and calling out to the social provider
-// (Kakao unlink, Apple revoke) so a disconnect/account-deletion actually
-// revokes the upstream token instead of only queuing an outbox row.
+// (Kakao unlink, Apple revoke) so a social disconnect actually revokes the
+// upstream token instead of only queuing an outbox row. ACCOUNT_DELETE support
+// remains for entries queued by the earlier account-deletion implementation.
 //
-// The synchronous disconnect/account-deletion paths (auth_repo.go's
-// ReserveSocialDisconnect+disconnect, account_deletion_repo.go's
-// AnonymizeAccountForDeletion) already attempt the provider call inline and
-// only fall back to this outbox on failure - see
-// SocialAccountLifecycleService.recordRevocationFailure. This worker is the
-// retry path for those failures, plus the sole processor for ACCOUNT_DELETE
-// entries once the synchronous attempt has failed once.
+// The synchronous disconnect path (auth_repo.go's
+// ReserveSocialDisconnect+disconnect) attempts the provider call inline. This
+// worker is the retry path for those failures and drains any existing legacy
+// ACCOUNT_DELETE entries.
 package job
 
 import (
@@ -218,10 +216,9 @@ func (w *SocialRevocationWorker) processEntry(ctx context.Context, entry model.S
 		Msg("social revocation succeeded")
 }
 
-// finalize performs the same local completion the synchronous disconnect/
-// account-deletion paths perform after a successful revoke, dispatched by
+// finalize performs local completion after a successful revoke, dispatched by
 // entry.Action. Both underlying repository methods mark the outbox row
-// DELIVERED themselves as part of the same transaction.
+// DELIVERED themselves.
 func (w *SocialRevocationWorker) finalize(entry model.SocialRevocationOutboxEntry) error {
 	switch entry.Action {
 	case socialRevocationActionDisconnect:

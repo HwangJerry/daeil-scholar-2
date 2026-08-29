@@ -10,7 +10,6 @@ import (
 
 const (
 	revocationActionDisconnect = "DISCONNECT"
-	revocationActionDelete     = "ACCOUNT_DELETE"
 )
 
 var ErrLastLoginMethod = repository.ErrLastLoginMethod
@@ -109,38 +108,9 @@ func (s *SocialAccountLifecycleService) Disconnect(
 	}, nil
 }
 
-func (s *SocialAccountLifecycleService) DeleteAccount(ctx context.Context, usrSeq int) (AccountDeletionResult, error) {
-	providers, err := s.auth.repo.AnonymizeAccountForDeletion(usrSeq)
-	if err != nil {
-		return AccountDeletionResult{}, err
-	}
-	result := AccountDeletionResult{}
-	for _, rawProvider := range providers {
-		provider := model.SocialProvider(rawProvider)
-		credential, loadErr := s.loadCredential(usrSeq, provider)
-		if loadErr != nil || credential == "" {
-			failure := loadErr
-			if failure == nil {
-				failure = errors.New("provider revocation credential is unavailable")
-			}
-			if recordErr := s.auth.repo.RecordAccountDeletionRevocationFailure(usrSeq, rawProvider, failure); recordErr != nil {
-				return AccountDeletionResult{}, errors.Join(failure, recordErr)
-			}
-			result.RevocationPending = true
-			continue
-		}
-		if revokeErr := s.revoke(ctx, provider, credential); revokeErr != nil {
-			if recordErr := s.auth.repo.RecordAccountDeletionRevocationFailure(usrSeq, rawProvider, revokeErr); recordErr != nil {
-				return AccountDeletionResult{}, errors.Join(revokeErr, recordErr)
-			}
-			result.RevocationPending = true
-			continue
-		}
-		if completeErr := s.auth.repo.CompleteAccountDeletionRevocation(usrSeq, rawProvider); completeErr != nil {
-			result.RevocationPending = true
-		}
-	}
-	return result, nil
+func (s *SocialAccountLifecycleService) DeleteAccount(_ context.Context, usrSeq int) (AccountDeletionResult, error) {
+	err := s.auth.repo.AnonymizeAccountForDeletion(usrSeq)
+	return AccountDeletionResult{}, err
 }
 
 func (s *SocialAccountLifecycleService) ApplyAppleNotification(notification AppleServerNotification) error {

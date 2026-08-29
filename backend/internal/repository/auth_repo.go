@@ -840,7 +840,7 @@ func (r *AuthRepository) DeleteExpiredMobileRefreshTokens(revokedBefore time.Tim
 }
 
 func (r *AuthRepository) DeletePushDevicesByUser(usrSeq int) error {
-	_, err := r.DB.Exec(`DELETE FROM ALUMNI_PUSH_DEVICE WHERE USR_SEQ = ?`, usrSeq)
+	_, err := r.DB.Exec(`DELETE FROM ALUMNI_MOBILE_DEVICE_TOKEN WHERE USR_SEQ = ?`, usrSeq)
 	return err
 }
 

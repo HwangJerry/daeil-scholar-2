@@ -470,10 +470,10 @@ func TestAppleNotificationsApplyAccountLifecycle(t *testing.T) {
 			},
 		},
 		{
-			name:      "account deleted blocks login and removes link",
+			name:      "account deleted changes member status",
 			eventType: "account-deleted",
 			expect: func(mock sqlmock.Sqlmock) {
-				expectAccountDeletionTransaction(mock, 42)
+				expectAccountDeletionStatusUpdate(mock, 42)
 			},
 		},
 		{
@@ -524,11 +524,9 @@ func TestAppleNotificationsApplyAccountLifecycle(t *testing.T) {
 func TestAccountDeletionRequiresImmediateDeactivation(t *testing.T) {
 	auth, mock, cleanup := newAuthServiceForTest(t)
 	defer cleanup()
-	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_SEQ[\s\S]*FROM WEO_MEMBER[\s\S]*FOR UPDATE`).
+	mock.ExpectExec(`^UPDATE WEO_MEMBER SET USR_STATUS = 'AAA' WHERE USR_SEQ = \?$`).
 		WithArgs(42).
 		WillReturnError(errors.New("database unavailable"))
-	mock.ExpectRollback()
 	lifecycle := NewSocialAccountLifecycleService(auth, nil)
 
 	result, err := lifecycle.DeleteAccount(context.Background(), 42)
@@ -544,17 +542,10 @@ func TestAccountDeletionRequiresImmediateDeactivation(t *testing.T) {
 	}
 }
 
-func TestAccountDeletionRecordsProviderRevocationAsPendingAfterDeactivation(t *testing.T) {
+func TestAccountDeletionUpdatesOnlyMemberStatus(t *testing.T) {
 	auth, mock, cleanup := newAuthServiceForTest(t)
 	defer cleanup()
-	auth.repo.EnablePhoneClaims()
-	expectAccountDeletionTransaction(mock, 42, "AP")
-	mock.ExpectQuery(`SELECT ENCRYPTED_CREDENTIAL`).
-		WithArgs(42, "AP").
-		WillReturnError(sql.ErrNoRows)
-	mock.ExpectExec(`UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX`).
-		WithArgs(sqlmock.AnyArg(), 42, "AP", revocationActionDelete).
-		WillReturnResult(sqlmock.NewResult(1, 1))
+	expectAccountDeletionStatusUpdate(mock, 42)
 	lifecycle := NewSocialAccountLifecycleService(auth, nil)
 
 	result, err := lifecycle.DeleteAccount(context.Background(), 42)
@@ -562,67 +553,18 @@ func TestAccountDeletionRecordsProviderRevocationAsPendingAfterDeactivation(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.RevocationPending {
-		t.Fatal("provider revocation failure must be explicitly recoverable")
+	if result.RevocationPending {
+		t.Fatal("status-only account deletion must not start provider revocation")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func expectAccountDeletionTransaction(mock sqlmock.Sqlmock, usrSeq int, providers ...string) {
-	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_SEQ[\s\S]*FROM WEO_MEMBER[\s\S]*FOR UPDATE`).
+func expectAccountDeletionStatusUpdate(mock sqlmock.Sqlmock, usrSeq int) {
+	mock.ExpectExec(`^UPDATE WEO_MEMBER SET USR_STATUS = 'AAA' WHERE USR_SEQ = \?$`).
 		WithArgs(usrSeq).
-		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ", "USR_PHONE"}).AddRow(usrSeq, "010-1234-5678"))
-	providerRows := sqlmock.NewRows([]string{"NMS_GATE"})
-	for _, provider := range providers {
-		providerRows.AddRow(provider)
-	}
-	mock.ExpectQuery(`SELECT NMS_GATE[\s\S]*FOR UPDATE`).
-		WithArgs(usrSeq).
-		WillReturnRows(providerRows)
-	for index, pattern := range []string{
-		`UPDATE WEO_ORDER`,
-		`UPDATE ALUMNI_MESSAGE[\s\S]*AM_SENDER_ACCOUNT_SEQ`,
-		`UPDATE ALUMNI_MESSAGE[\s\S]*AM_RECVR_ACCOUNT_SEQ`,
-		`UPDATE AUTH_SESSION_FAMILY`,
-		`UPDATE ALUMNI_MOBILE_REFRESH_TOKEN`,
-		`DELETE FROM WEO_MEMBER_LOG`,
-		`DELETE FROM ALUMNI_PUSH_DEVICE`,
-		`DELETE FROM ALUMNI_PUSH_PREFERENCE`,
-		`DELETE FROM ALUMNI_MEMBER_BLOCK`,
-		`DELETE FROM ALUMNI_USER_TAG`,
-		`DELETE FROM ALUMNI_ADMIN_ROLE`,
-		`DELETE FROM ALUMNI_VERIFICATION`,
-		`DELETE credential[\s\S]*AUTH_PASSWORD_CREDENTIAL`,
-		`UPDATE AUTH_IDENTITY`,
-		`UPDATE AUTH_ACCOUNT_STATE`,
-	} {
-		expectation := mock.ExpectExec(pattern)
-		if index == 0 {
-			expectation.WithArgs(usrSeq, "01012345678")
-		} else if index == 1 || index == 2 || index == 8 {
-			expectation.WithArgs(usrSeq, usrSeq)
-		} else {
-			expectation.WithArgs(usrSeq)
-		}
-		expectation.WillReturnResult(sqlmock.NewResult(0, 1))
-	}
-	mock.ExpectExec(`DELETE FROM AUTH_PHONE_CLAIM`).WithArgs(usrSeq).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	for _, provider := range providers {
-		mock.ExpectExec(`INSERT INTO ALUMNI_SOCIAL_REVOCATION_OUTBOX`).
-			WithArgs(usrSeq, provider, revocationActionDelete, usrSeq, provider, revocationActionDelete).
-			WillReturnResult(sqlmock.NewResult(1, 1))
-	}
-	mock.ExpectExec(`DELETE FROM WEO_MEMBER_SOCIAL`).
-		WithArgs(usrSeq).
-		WillReturnResult(sqlmock.NewResult(0, int64(len(providers))))
-	mock.ExpectExec(`UPDATE WEO_MEMBER[\s\S]*USR_STATUS = 'AAA'`).
-		WithArgs(usrSeq, usrSeq).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectCommit()
 }
 
 func newAuthServiceForTest(t *testing.T) (*AuthService, sqlmock.Sqlmock, func()) {

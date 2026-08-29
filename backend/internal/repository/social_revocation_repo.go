@@ -1,8 +1,8 @@
 // social_revocation_repo.go — Queries against ALUMNI_SOCIAL_REVOCATION_OUTBOX
 // used exclusively by the background drain worker
-// (internal/job/social_revocation_worker.go). The synchronous disconnect/
-// account-deletion paths in auth_repo.go and account_deletion_repo.go enqueue
-// rows here but never read them back; only the worker claims and finalizes them.
+// (internal/job/social_revocation_worker.go). The synchronous disconnect path
+// enqueues rows here but never reads them back; only the worker claims and
+// finalizes them. ACCOUNT_DELETE rows may remain from the earlier deletion flow.
 package repository
 
 import (
