@@ -1,6 +1,7 @@
 // AppDownloadActions — Compact marketplace icons and safe-link behavior
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppDownloadActions } from '../components/landing/AppDownloadActions';
 import {
   createAppDownloadLink,
@@ -17,7 +18,24 @@ const UNAVAILABLE_DOWNLOAD_LINKS: AppDownloadLinks = {
   googlePlay: createAppDownloadLink(''),
 };
 
+function mockMobileViewport(isMobile: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(max-width: 767px)' && isMobile,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  );
+}
+
 describe('AppDownloadActions', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('renders compact icon-only actions with accessible labels', () => {
     render(<AppDownloadActions downloadLinks={AVAILABLE_DOWNLOAD_LINKS} />);
 
@@ -61,20 +79,53 @@ describe('AppDownloadActions', () => {
     expect(googlePlayLink).toHaveAttribute('rel', 'noreferrer');
   });
 
-  it('keeps unavailable destinations disabled with a coming-soon caption', () => {
+  it('opens an AlertDialog for an unavailable marketplace on desktop', async () => {
+    const user = userEvent.setup();
+    mockMobileViewport(false);
     render(<AppDownloadActions downloadLinks={UNAVAILABLE_DOWNLOAD_LINKS} />);
 
-    expect(
-      screen.getByRole('button', {
-        name: 'App Store에서 다운로드, 출시 준비 중',
-      }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole('button', {
-        name: 'Google Play에서 다운로드, 출시 준비 중',
-      }),
-    ).toBeDisabled();
-    expect(screen.getByText('출시 준비 중')).toBeInTheDocument();
+    const appStoreButton = screen.getByRole('button', {
+      name: 'App Store 출시 준비 중 안내 보기',
+    });
+    const googlePlayButton = screen.getByRole('button', {
+      name: 'Google Play 출시 준비 중 안내 보기',
+    });
+
+    expect(appStoreButton).toBeEnabled();
+    expect(googlePlayButton).toBeEnabled();
+    expect(screen.queryByText('출시 준비 중')).not.toBeInTheDocument();
     expect(screen.queryAllByRole('link')).toHaveLength(0);
+
+    await user.click(appStoreButton);
+
+    expect(screen.getByText('출시 준비 중')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'App Store에 곧 출시될 예정입니다. 조금만 기다려 주세요!',
+      ),
+    ).toBeInTheDocument();
+    expect(document.querySelector('.lucide-rocket')).not.toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '확인' }));
+    expect(screen.queryByText('출시 준비 중')).not.toBeInTheDocument();
+  });
+
+  it('opens a BottomSheet for an unavailable marketplace on mobile', async () => {
+    const user = userEvent.setup();
+    mockMobileViewport(true);
+    render(<AppDownloadActions downloadLinks={UNAVAILABLE_DOWNLOAD_LINKS} />);
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Google Play 출시 준비 중 안내 보기',
+      }),
+    );
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Google Play에 곧 출시될 예정입니다. 조금만 기다려 주세요!',
+      ),
+    ).toBeInTheDocument();
   });
 });

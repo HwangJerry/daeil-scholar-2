@@ -33,14 +33,15 @@ describe('SupportSection', () => {
 
     expect(
       screen.getByRole('button', {
-        name: 'App Store에서 다운로드, 출시 준비 중',
+        name: 'App Store 출시 준비 중 안내 보기',
       }),
-    ).toBeDisabled();
+    ).toBeEnabled();
     expect(
       screen.getByRole('button', {
-        name: 'Google Play에서 다운로드, 출시 준비 중',
+        name: 'Google Play 출시 준비 중 안내 보기',
       }),
-    ).toBeDisabled();
+    ).toBeEnabled();
+    expect(screen.queryByText('출시 준비 중')).not.toBeInTheDocument();
     expect(
       screen.queryByRole('link', { name: /App Store에서 다운로드/ }),
     ).not.toBeInTheDocument();
