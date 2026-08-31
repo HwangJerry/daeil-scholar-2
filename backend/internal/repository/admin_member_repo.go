@@ -167,6 +167,9 @@ func (r *AdminMemberRepository) UpsertRootAdminMember(usrID, passwordHash, name 
 		if err := syncAdminRoleForMemberInsertTx(tx, usrSeq, rootAdminMemberStatus); err != nil {
 			return 0, err
 		}
+		if err := syncVerificationForMemberInsertTx(tx, usrSeq, rootAdminMemberStatus, "", ""); err != nil {
+			return 0, err
+		}
 	} else {
 		if _, err := tx.Exec(`
 			UPDATE WEO_MEMBER
@@ -176,6 +179,9 @@ func (r *AdminMemberRepository) UpsertRootAdminMember(usrID, passwordHash, name 
 			return 0, err
 		}
 		if err := syncAdminRoleForStatusChangeTx(tx, usrSeq, existing.Status, rootAdminMemberStatus); err != nil {
+			return 0, err
+		}
+		if err := syncVerificationForStatusChangeTx(tx, usrSeq, existing.Status, rootAdminMemberStatus); err != nil {
 			return 0, err
 		}
 	}

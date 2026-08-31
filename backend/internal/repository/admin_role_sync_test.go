@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -90,6 +91,128 @@ func TestSyncAdminRoleForStatusChangeDoesNothingWhenStatusIsUnchanged(t *testing
 	}
 }
 
+func TestSyncVerificationForStatusChangeUpsertsLegacyStatusMapping(t *testing.T) {
+	tests := []struct {
+		name                   string
+		oldStatus              string
+		newStatus              string
+		wantVerificationStatus model.VerificationStatus
+		wantRejectionReason    any
+		wantApprovedFields     int
+	}{
+		{
+			name:                   "BAA rejected",
+			oldStatus:              pendingMemberStatus,
+			newStatus:              rejectedMemberStatus,
+			wantVerificationStatus: model.VerificationRejected,
+			wantRejectionReason:    legacyMemberStatusRejectionReason,
+		},
+		{
+			name:                   "BBB pending",
+			oldStatus:              rejectedMemberStatus,
+			newStatus:              pendingMemberStatus,
+			wantVerificationStatus: model.VerificationPending,
+		},
+		{
+			name:                   "CCC approved",
+			oldStatus:              pendingMemberStatus,
+			newStatus:              approvedMemberStatus,
+			wantVerificationStatus: model.VerificationApproved,
+			wantApprovedFields:     1,
+		},
+		{
+			name:                   "ZZZ approved",
+			oldStatus:              approvedMemberStatus,
+			newStatus:              rootAdminMemberStatus,
+			wantVerificationStatus: model.VerificationApproved,
+			wantApprovedFields:     1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+
+			mock.ExpectBegin()
+			mock.ExpectExec(`INSERT INTO ALUMNI_VERIFICATION[\s\S]*NULLIF\(TRIM\(USR_FN\), ''\)[\s\S]*NULLIF\(TRIM\(USR_DEPT\), ''\)[\s\S]*ON DUPLICATE KEY UPDATE`).
+				WithArgs(
+					tt.wantVerificationStatus,
+					tt.wantRejectionReason,
+					tt.wantApprovedFields,
+					tt.wantApprovedFields,
+					42,
+				).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectCommit()
+
+			tx, err := sqlx.NewDb(db, "sqlmock").Beginx()
+			if err != nil {
+				t.Fatal(err)
+			}
+			oldStatus := sql.NullString{String: tt.oldStatus, Valid: true}
+			if err := syncVerificationForStatusChangeTx(tx, 42, oldStatus, tt.newStatus); err != nil {
+				t.Fatal(err)
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestSyncVerificationForStatusChangeIgnoresUnchangedAndUnmappedStatuses(t *testing.T) {
+	tests := []struct {
+		name      string
+		oldStatus sql.NullString
+		newStatus string
+	}{
+		{
+			name:      "unchanged mapped status",
+			oldStatus: sql.NullString{String: approvedMemberStatus, Valid: true},
+			newStatus: approvedMemberStatus,
+		},
+		{
+			name:      "changed unmapped status",
+			oldStatus: sql.NullString{String: approvedMemberStatus, Valid: true},
+			newStatus: "AAA",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+
+			mock.ExpectBegin()
+			mock.ExpectCommit()
+
+			tx, err := sqlx.NewDb(db, "sqlmock").Beginx()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := syncVerificationForStatusChangeTx(tx, 42, tt.oldStatus, tt.newStatus); err != nil {
+				t.Fatal(err)
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestUpdateMemberStatusAndAdminRoleRollsBackPromotionWhenRoleUpsertFails(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -148,6 +271,38 @@ func TestUpdateMemberStatusAndAdminRoleRollsBackDemotionWhenRoleDeleteFails(t *t
 	}
 }
 
+func TestUpdateMemberStatusAndAdminRoleRollsBackWhenVerificationSyncFails(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	verificationSyncErr := errors.New("verification upsert failed")
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
+		WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow(pendingMemberStatus))
+	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
+		WithArgs(approvedMemberStatus, 42).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`DELETE FROM ALUMNI_ADMIN_ROLE[\s\S]*ADMIN_ROLE = \?`).
+		WithArgs(42, rootAdminRole).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`INSERT INTO ALUMNI_VERIFICATION[\s\S]*ON DUPLICATE KEY UPDATE`).
+		WithArgs(model.VerificationApproved, nil, 1, 1, 42).
+		WillReturnError(verificationSyncErr)
+	mock.ExpectRollback()
+
+	_, err = updateMemberStatusAndAdminRole(sqlx.NewDb(db, "sqlmock"), 42, approvedMemberStatus)
+	if !errors.Is(err, verificationSyncErr) {
+		t.Fatalf("error = %v, want %v", err, verificationSyncErr)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestUpsertRootAdminMemberCreatesRoleWithMemberAsAuditActor(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -165,6 +320,9 @@ func TestUpsertRootAdminMemberCreatesRoleWithMemberAsAuditActor(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(42, 1))
 	mock.ExpectExec(`INSERT INTO ALUMNI_ADMIN_ROLE[\s\S]*ON DUPLICATE KEY UPDATE`).
 		WithArgs(42, rootAdminRole, 42, 42).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO ALUMNI_VERIFICATION[\s\S]*VALUES[\s\S]*NULLIF\(TRIM\(\?\), ''\)`).
+		WithArgs(42, model.VerificationApproved, "", "", nil, 1, "", 1, "").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
@@ -197,6 +355,9 @@ func TestUpsertRootAdminMemberPromotesExistingMember(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO ALUMNI_ADMIN_ROLE[\s\S]*ON DUPLICATE KEY UPDATE`).
 		WithArgs(42, rootAdminRole, 42, 42).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO ALUMNI_VERIFICATION[\s\S]*ON DUPLICATE KEY UPDATE`).
+		WithArgs(model.VerificationApproved, nil, 1, 1, 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
