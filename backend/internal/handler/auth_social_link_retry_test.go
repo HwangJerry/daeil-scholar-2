@@ -157,3 +157,104 @@ func TestSocialLinkReturnsConflictForAlreadyLinkedSocialAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSocialLinkReturnsPhoneOwnershipConflictBasedOnName(t *testing.T) {
+	tests := []struct {
+		name              string
+		existingName      string
+		requestedName     string
+		expectedErrorCode string
+	}{
+		{
+			name:              "different name keeps phone taken response",
+			existingName:      "김동문",
+			requestedName:     "홍동문",
+			expectedErrorCode: "PHONE_TAKEN",
+		},
+		{
+			name:              "matching name requires ownership confirmation",
+			existingName:      "홍 길동",
+			requestedName:     "홍길동",
+			expectedErrorCode: "OWNERSHIP_CONFIRMATION_REQUIRED",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			sqlxDB := sqlx.NewDb(db, "sqlmock")
+			cfg := &config.Config{
+				Server: config.ServerConfig{AllowedOrigin: "http://localhost"},
+				JWT: config.JWTConfig{
+					Secret:          "test-secret",
+					MaxAge:          time.Hour,
+					AccessTokenTTL:  15 * time.Minute,
+					RefreshTokenTTL: 30 * 24 * time.Hour,
+				},
+			}
+			authRepo := repository.NewAuthRepository(sqlxDB)
+			auth := service.NewAuthService(
+				authRepo,
+				repository.NewSessionRepository(sqlxDB),
+				cfg,
+				cache.New(time.Minute, time.Minute),
+				zerolog.Nop(),
+			)
+			tokenStore := service.NewSocialLinkTokenStore(cache.New(time.Minute, time.Minute))
+			if _, err := tokenStore.Put("phone-conflict-token", model.SocialLinkData{
+				Provider: "KT",
+				SocialID: "subject",
+				Email:    "member@example.com",
+			}, time.Minute); err != nil {
+				t.Fatal(err)
+			}
+			handler := NewAuthHandler(
+				auth,
+				service.NewMemberService(authRepo),
+				nil,
+				cache.New(time.Minute, time.Minute),
+				tokenStore,
+				cfg,
+				zerolog.Nop(),
+			)
+
+			mock.ExpectQuery(`WHERE \(USR_PHONE = \? OR`).
+				WithArgs("01012345678", "01012345678").
+				WillReturnRows(sqlmock.NewRows([]string{
+					"USR_SEQ", "USR_ID", "USR_NAME", "USR_STATUS", "USR_PHONE",
+					"USR_FN", "USR_EMAIL", "USR_NICK", "USR_PHOTO",
+				}).AddRow(42, "existing-member", test.existingName, "CCC", "01012345678", "31", "existing@example.com", nil, nil))
+
+			request := httptest.NewRequest(
+				http.MethodPost,
+				"/api/auth/social/link",
+				strings.NewReader(`{
+					"token":"phone-conflict-token",
+					"mode":"new",
+					"name":"`+test.requestedName+`",
+					"email":"member@example.com",
+					"phone":"010-1234-5678",
+					"fn":"31",
+					"fmDept":"영어"
+				}`),
+			)
+			response := httptest.NewRecorder()
+
+			handler.SocialLink(response, request)
+
+			if response.Code != http.StatusConflict {
+				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+			}
+			if !strings.Contains(response.Body.String(), `"code":"`+test.expectedErrorCode+`"`) {
+				t.Fatalf("body = %s", response.Body.String())
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

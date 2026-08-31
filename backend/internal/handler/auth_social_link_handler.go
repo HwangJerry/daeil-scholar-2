@@ -157,6 +157,8 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, service.ErrInvalidPhone):
 			respondError(w, http.StatusBadRequest, "INVALID_PHONE", "유효한 전화번호를 입력해주세요")
+		case errors.Is(err, service.ErrOwnershipConfirmationRequired):
+			respondError(w, http.StatusConflict, "OWNERSHIP_CONFIRMATION_REQUIRED", "이미 가입된 계정이 있습니다. 기존 계정으로 로그인한 뒤 [내 정보 > 로그인 수단 관리]에서 이 소셜 계정을 연결해주세요.")
 		case errors.Is(err, service.ErrPhoneAlreadyRegistered):
 			respondError(w, http.StatusConflict, "PHONE_TAKEN", "이미 가입된 전화번호입니다. 기존 계정으로 로그인해주세요.")
 		case errors.Is(err, service.ErrSocialAccountAlreadyLinked):
