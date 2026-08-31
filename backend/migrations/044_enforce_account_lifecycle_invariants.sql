@@ -104,13 +104,14 @@ DROP TEMPORARY TABLE IF EXISTS _044_phone_claim_conflicts;
 CREATE TEMPORARY TABLE _044_phone_claim_conflicts AS
 SELECT CANONICAL_PHONE
 FROM _044_phone_claim_source
+WHERE CHAR_LENGTH(CANONICAL_PHONE) > 0
 GROUP BY CANONICAL_PHONE
 HAVING CHAR_LENGTH(CANONICAL_PHONE) NOT BETWEEN 7 AND 15 OR COUNT(*) > 1;
 
 DROP TEMPORARY TABLE IF EXISTS _044_phone_claim_guard;
 CREATE TEMPORARY TABLE _044_phone_claim_guard (GUARD_ID TINYINT NOT NULL PRIMARY KEY);
 INSERT INTO _044_phone_claim_guard (GUARD_ID) VALUES (1);
--- Deliberately raises duplicate-key error 1062 for empty or duplicate claims.
+-- Deliberately raises duplicate-key error 1062 for malformed or duplicate claims.
 INSERT INTO _044_phone_claim_guard (GUARD_ID)
 SELECT 1 FROM _044_phone_claim_conflicts LIMIT 1;
 DROP TEMPORARY TABLE _044_phone_claim_guard;
@@ -128,7 +129,8 @@ CREATE TABLE AUTH_PHONE_CLAIM (
 
 INSERT INTO AUTH_PHONE_CLAIM (CANONICAL_PHONE, ACCOUNT_ID, CREATED_AT)
 SELECT CANONICAL_PHONE, ACCOUNT_ID, NOW()
-FROM _044_phone_claim_source;
+FROM _044_phone_claim_source
+WHERE CHAR_LENGTH(CANONICAL_PHONE) > 0;
 
 DROP TEMPORARY TABLE _044_phone_claim_source;
 

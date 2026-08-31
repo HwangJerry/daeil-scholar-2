@@ -37,4 +37,7 @@ func TestAccountLifecycleMigrationDefinesCanonicalPhoneAuthority(t *testing.T) {
 			t.Fatalf("migration 044 missing %q", required)
 		}
 	}
+	if count := strings.Count(sql, "WHERE CHAR_LENGTH(CANONICAL_PHONE) > 0"); count != 2 {
+		t.Fatalf("migration 044 must exclude empty canonical phones from conflict detection and claim insertion, found %d filters", count)
+	}
 }
