@@ -84,9 +84,9 @@ func TestAnonymizeAccountForDeletionUpdatesStatusAndRevokesRootRole(t *testing.T
 	repo := NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT USR_STATUS,[\s\S]*USR_FN[\s\S]*USR_DEPT[\s\S]*FOR UPDATE`).
 		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow("ZZZ"))
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS", "USR_FN", "USR_DEPT"}).AddRow("ZZZ", "29", "영어"))
 	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
 		WithArgs("AAA", 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -112,9 +112,9 @@ func TestAnonymizeAccountForDeletionRequiresExactlyOneMember(t *testing.T) {
 	repo := NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT USR_STATUS,[\s\S]*USR_FN[\s\S]*USR_DEPT[\s\S]*FOR UPDATE`).
 		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow("CCC"))
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS", "USR_FN", "USR_DEPT"}).AddRow("CCC", "29", "영어"))
 	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
 		WithArgs("AAA", 42).
 		WillReturnResult(sqlmock.NewResult(0, 0))

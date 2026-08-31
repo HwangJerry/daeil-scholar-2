@@ -537,9 +537,9 @@ func TestAccountDeletionRequiresImmediateDeactivation(t *testing.T) {
 	auth, mock, cleanup := newAuthServiceForTest(t)
 	defer cleanup()
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT USR_STATUS,[\s\S]*USR_FN[\s\S]*USR_DEPT[\s\S]*FOR UPDATE`).
 		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow("CCC"))
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS", "USR_FN", "USR_DEPT"}).AddRow("CCC", "29", "영어"))
 	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
 		WithArgs("AAA", 42).
 		WillReturnError(errors.New("database unavailable"))
@@ -580,9 +580,9 @@ func TestAccountDeletionUpdatesStatusAndRevokesRootRole(t *testing.T) {
 
 func expectAccountDeletionStatusUpdate(mock sqlmock.Sqlmock, usrSeq int) {
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT USR_STATUS,[\s\S]*USR_FN[\s\S]*USR_DEPT[\s\S]*FOR UPDATE`).
 		WithArgs(usrSeq).
-		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow("ZZZ"))
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS", "USR_FN", "USR_DEPT"}).AddRow("ZZZ", "29", "영어"))
 	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
 		WithArgs("AAA", usrSeq).
 		WillReturnResult(sqlmock.NewResult(0, 1))

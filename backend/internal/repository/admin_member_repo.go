@@ -139,9 +139,11 @@ func (r *AdminMemberRepository) UpsertRootAdminMember(usrID, passwordHash, name 
 	var existing struct {
 		Seq    int            `db:"USR_SEQ"`
 		Status sql.NullString `db:"USR_STATUS"`
+		FN     string         `db:"USR_FN"`
+		Dept   string         `db:"USR_DEPT"`
 	}
 	err = tx.Get(&existing, `
-		SELECT USR_SEQ, USR_STATUS
+		SELECT USR_SEQ, USR_STATUS, IFNULL(USR_FN, '') AS USR_FN, IFNULL(USR_DEPT, '') AS USR_DEPT
 		FROM WEO_MEMBER
 		WHERE USR_ID = ?
 		FOR UPDATE
@@ -181,7 +183,7 @@ func (r *AdminMemberRepository) UpsertRootAdminMember(usrID, passwordHash, name 
 		if err := syncAdminRoleForStatusChangeTx(tx, usrSeq, existing.Status, rootAdminMemberStatus); err != nil {
 			return 0, err
 		}
-		if err := syncVerificationForStatusChangeTx(tx, usrSeq, existing.Status, rootAdminMemberStatus); err != nil {
+		if err := syncVerificationForStatusChangeTx(tx, usrSeq, existing.Status, rootAdminMemberStatus, existing.FN, existing.Dept); err != nil {
 			return 0, err
 		}
 	}

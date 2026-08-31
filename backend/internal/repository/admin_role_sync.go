@@ -27,33 +27,7 @@ func syncAdminRoleForMemberInsertTx(tx *sqlx.Tx, usrSeq int, status string) erro
 // syncVerificationForMemberInsertTx mirrors the ALUMNI_VERIFICATION portion of
 // TRG_WEO_MEMBER_AUTH_PRINCIPAL_INSERT for a newly inserted member.
 func syncVerificationForMemberInsertTx(tx *sqlx.Tx, usrSeq int, status, fn, dept string) error {
-	verificationStatus, rejectionReason, approvedAcademicFields, shouldSync := verificationValuesForMemberStatus(status)
-	if !shouldSync {
-		return nil
-	}
-
-	_, err := tx.Exec(`
-		INSERT INTO ALUMNI_VERIFICATION (
-			USR_SEQ, STATUS, COHORT, DEPARTMENT, REJECTION_REASON,
-			APPROVED_COHORT, APPROVED_DEPARTMENT, CREATED_AT, UPDATED_AT
-		) VALUES (
-			?, ?, NULLIF(TRIM(?), ''), NULLIF(TRIM(?), ''), ?,
-			CASE WHEN ? = 1 THEN NULLIF(TRIM(?), '') ELSE NULL END,
-			CASE WHEN ? = 1 THEN NULLIF(TRIM(?), '') ELSE NULL END,
-			NOW(), NOW()
-		)
-	`,
-		usrSeq,
-		verificationStatus,
-		fn,
-		dept,
-		rejectionReason,
-		approvedAcademicFields,
-		fn,
-		approvedAcademicFields,
-		dept,
-	)
-	return err
+	return upsertVerificationTx(tx, usrSeq, status, fn, dept)
 }
 
 // syncAdminRoleForStatusChangeTx mirrors the ALUMNI_ADMIN_ROLE portion of
@@ -76,15 +50,17 @@ func syncAdminRoleForStatusChangeTx(tx *sqlx.Tx, usrSeq int, oldStatus sql.NullS
 }
 
 // syncVerificationForStatusChangeTx mirrors the ALUMNI_VERIFICATION portion of
-// TRG_WEO_MEMBER_AUTH_PRINCIPAL_UPDATE. The member row has already been updated,
-// so the INSERT ... SELECT reads the trigger's NEW.USR_FN and NEW.USR_DEPT values.
-func syncVerificationForStatusChangeTx(tx *sqlx.Tx, usrSeq int, oldStatus sql.NullString, newStatus string) error {
+// TRG_WEO_MEMBER_AUTH_PRINCIPAL_UPDATE.
+func syncVerificationForStatusChangeTx(tx *sqlx.Tx, usrSeq int, oldStatus sql.NullString, newStatus, fn, dept string) error {
 	statusUnchanged := oldStatus.Valid && oldStatus.String == newStatus
 	if statusUnchanged {
 		return nil
 	}
+	return upsertVerificationTx(tx, usrSeq, newStatus, fn, dept)
+}
 
-	verificationStatus, rejectionReason, approvedAcademicFields, shouldSync := verificationValuesForMemberStatus(newStatus)
+func upsertVerificationTx(tx *sqlx.Tx, usrSeq int, status, fn, dept string) error {
+	verificationStatus, rejectionReason, approvedAcademicFields, shouldSync := verificationValuesForMemberStatus(status)
 	if !shouldSync {
 		return nil
 	}
@@ -93,19 +69,12 @@ func syncVerificationForStatusChangeTx(tx *sqlx.Tx, usrSeq int, oldStatus sql.Nu
 		INSERT INTO ALUMNI_VERIFICATION (
 			USR_SEQ, STATUS, COHORT, DEPARTMENT, REJECTION_REASON,
 			APPROVED_COHORT, APPROVED_DEPARTMENT, CREATED_AT, UPDATED_AT
+		) VALUES (
+			?, ?, NULLIF(TRIM(?), ''), NULLIF(TRIM(?), ''), ?,
+			CASE WHEN ? = 1 THEN NULLIF(TRIM(?), '') ELSE NULL END,
+			CASE WHEN ? = 1 THEN NULLIF(TRIM(?), '') ELSE NULL END,
+			NOW(), NOW()
 		)
-		SELECT
-			USR_SEQ,
-			?,
-			NULLIF(TRIM(USR_FN), ''),
-			NULLIF(TRIM(USR_DEPT), ''),
-			?,
-			CASE WHEN ? = 1 THEN NULLIF(TRIM(USR_FN), '') ELSE NULL END,
-			CASE WHEN ? = 1 THEN NULLIF(TRIM(USR_DEPT), '') ELSE NULL END,
-			NOW(),
-			NOW()
-		FROM WEO_MEMBER
-		WHERE USR_SEQ = ?
 		ON DUPLICATE KEY UPDATE
 			STATUS = VALUES(STATUS),
 			COHORT = VALUES(COHORT),
@@ -114,7 +83,17 @@ func syncVerificationForStatusChangeTx(tx *sqlx.Tx, usrSeq int, oldStatus sql.Nu
 			APPROVED_COHORT = VALUES(APPROVED_COHORT),
 			APPROVED_DEPARTMENT = VALUES(APPROVED_DEPARTMENT),
 			UPDATED_AT = NOW()
-	`, verificationStatus, rejectionReason, approvedAcademicFields, approvedAcademicFields, usrSeq)
+	`,
+		usrSeq,
+		verificationStatus,
+		fn,
+		dept,
+		rejectionReason,
+		approvedAcademicFields,
+		fn,
+		approvedAcademicFields,
+		dept,
+	)
 	return err
 }
 
@@ -151,10 +130,14 @@ func updateMemberStatusAndAdminRole(db *sqlx.DB, usrSeq int, newStatus string) (
 	}
 	defer tx.Rollback()
 
-	var oldStatus sql.NullString
+	var member struct {
+		Status sql.NullString `db:"USR_STATUS"`
+		FN     string         `db:"USR_FN"`
+		Dept   string         `db:"USR_DEPT"`
+	}
 	memberExists := true
-	if err := tx.Get(&oldStatus, `
-		SELECT USR_STATUS
+	if err := tx.Get(&member, `
+		SELECT USR_STATUS, IFNULL(USR_FN, '') AS USR_FN, IFNULL(USR_DEPT, '') AS USR_DEPT
 		FROM WEO_MEMBER
 		WHERE USR_SEQ = ?
 		FOR UPDATE
@@ -174,10 +157,10 @@ func updateMemberStatusAndAdminRole(db *sqlx.DB, usrSeq int, newStatus string) (
 		return 0, err
 	}
 	if memberExists && affected > 0 {
-		if err := syncAdminRoleForStatusChangeTx(tx, usrSeq, oldStatus, newStatus); err != nil {
+		if err := syncAdminRoleForStatusChangeTx(tx, usrSeq, member.Status, newStatus); err != nil {
 			return 0, err
 		}
-		if err := syncVerificationForStatusChangeTx(tx, usrSeq, oldStatus, newStatus); err != nil {
+		if err := syncVerificationForStatusChangeTx(tx, usrSeq, member.Status, newStatus, member.FN, member.Dept); err != nil {
 			return 0, err
 		}
 	}

@@ -131,6 +131,8 @@ func TestSyncVerificationForStatusChangeUpsertsLegacyStatusMapping(t *testing.T)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			fn := "29"
+			dept := "영어"
 			db, mock, err := sqlmock.New()
 			if err != nil {
 				t.Fatal(err)
@@ -138,13 +140,17 @@ func TestSyncVerificationForStatusChangeUpsertsLegacyStatusMapping(t *testing.T)
 			defer db.Close()
 
 			mock.ExpectBegin()
-			mock.ExpectExec(`INSERT INTO ALUMNI_VERIFICATION[\s\S]*NULLIF\(TRIM\(USR_FN\), ''\)[\s\S]*NULLIF\(TRIM\(USR_DEPT\), ''\)[\s\S]*ON DUPLICATE KEY UPDATE`).
+			mock.ExpectExec(`INSERT INTO ALUMNI_VERIFICATION[\s\S]*VALUES[\s\S]*NULLIF\(TRIM\(\?\), ''\)[\s\S]*ON DUPLICATE KEY UPDATE`).
 				WithArgs(
+					42,
 					tt.wantVerificationStatus,
+					fn,
+					dept,
 					tt.wantRejectionReason,
 					tt.wantApprovedFields,
+					fn,
 					tt.wantApprovedFields,
-					42,
+					dept,
 				).
 				WillReturnResult(sqlmock.NewResult(0, 1))
 			mock.ExpectCommit()
@@ -154,7 +160,7 @@ func TestSyncVerificationForStatusChangeUpsertsLegacyStatusMapping(t *testing.T)
 				t.Fatal(err)
 			}
 			oldStatus := sql.NullString{String: tt.oldStatus, Valid: true}
-			if err := syncVerificationForStatusChangeTx(tx, 42, oldStatus, tt.newStatus); err != nil {
+			if err := syncVerificationForStatusChangeTx(tx, 42, oldStatus, tt.newStatus, fn, dept); err != nil {
 				t.Fatal(err)
 			}
 			if err := tx.Commit(); err != nil {
@@ -200,7 +206,7 @@ func TestSyncVerificationForStatusChangeIgnoresUnchangedAndUnmappedStatuses(t *t
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := syncVerificationForStatusChangeTx(tx, 42, tt.oldStatus, tt.newStatus); err != nil {
+			if err := syncVerificationForStatusChangeTx(tx, 42, tt.oldStatus, tt.newStatus, "", ""); err != nil {
 				t.Fatal(err)
 			}
 			if err := tx.Commit(); err != nil {
@@ -222,9 +228,9 @@ func TestUpdateMemberStatusAndAdminRoleRollsBackPromotionWhenRoleUpsertFails(t *
 	roleSyncErr := errors.New("role upsert failed")
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT USR_STATUS,[\s\S]*USR_FN[\s\S]*USR_DEPT[\s\S]*FOR UPDATE`).
 		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow("CCC"))
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS", "USR_FN", "USR_DEPT"}).AddRow("CCC", "29", "영어"))
 	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
 		WithArgs(rootAdminMemberStatus, 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -251,9 +257,9 @@ func TestUpdateMemberStatusAndAdminRoleRollsBackDemotionWhenRoleDeleteFails(t *t
 	roleSyncErr := errors.New("role delete failed")
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT USR_STATUS,[\s\S]*USR_FN[\s\S]*USR_DEPT[\s\S]*FOR UPDATE`).
 		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow(rootAdminMemberStatus))
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS", "USR_FN", "USR_DEPT"}).AddRow(rootAdminMemberStatus, "29", "영어"))
 	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
 		WithArgs("CCC", 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -280,9 +286,9 @@ func TestUpdateMemberStatusAndAdminRoleRollsBackWhenVerificationSyncFails(t *tes
 	verificationSyncErr := errors.New("verification upsert failed")
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_STATUS[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT USR_STATUS,[\s\S]*USR_FN[\s\S]*USR_DEPT[\s\S]*FOR UPDATE`).
 		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS"}).AddRow(pendingMemberStatus))
+		WillReturnRows(sqlmock.NewRows([]string{"USR_STATUS", "USR_FN", "USR_DEPT"}).AddRow(pendingMemberStatus, "29", "영어"))
 	mock.ExpectExec(`UPDATE WEO_MEMBER SET USR_STATUS = \? WHERE USR_SEQ = \?`).
 		WithArgs(approvedMemberStatus, 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -290,7 +296,7 @@ func TestUpdateMemberStatusAndAdminRoleRollsBackWhenVerificationSyncFails(t *tes
 		WithArgs(42, rootAdminRole).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO ALUMNI_VERIFICATION[\s\S]*ON DUPLICATE KEY UPDATE`).
-		WithArgs(model.VerificationApproved, nil, 1, 1, 42).
+		WithArgs(42, model.VerificationApproved, "29", "영어", nil, 1, "29", 1, "영어").
 		WillReturnError(verificationSyncErr)
 	mock.ExpectRollback()
 
@@ -312,7 +318,7 @@ func TestUpsertRootAdminMemberCreatesRoleWithMemberAsAuditActor(t *testing.T) {
 	repo := NewAdminMemberRepository(sqlx.NewDb(db, "sqlmock"))
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_SEQ, USR_STATUS[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT USR_SEQ, USR_STATUS,[\s\S]*USR_FN[\s\S]*USR_DEPT[\s\S]*FOR UPDATE`).
 		WithArgs("admin").
 		WillReturnError(sql.ErrNoRows)
 	mock.ExpectExec(`INSERT INTO WEO_MEMBER`).
@@ -347,9 +353,9 @@ func TestUpsertRootAdminMemberPromotesExistingMember(t *testing.T) {
 	repo := NewAdminMemberRepository(sqlx.NewDb(db, "sqlmock"))
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_SEQ, USR_STATUS[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT USR_SEQ, USR_STATUS,[\s\S]*USR_FN[\s\S]*USR_DEPT[\s\S]*FOR UPDATE`).
 		WithArgs("admin").
-		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ", "USR_STATUS"}).AddRow(42, "CCC"))
+		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ", "USR_STATUS", "USR_FN", "USR_DEPT"}).AddRow(42, "CCC", "29", "영어"))
 	mock.ExpectExec(`UPDATE WEO_MEMBER[\s\S]*USR_STATUS = 'ZZZ'`).
 		WithArgs("new-hash", "관리자", 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -357,7 +363,7 @@ func TestUpsertRootAdminMemberPromotesExistingMember(t *testing.T) {
 		WithArgs(42, rootAdminRole, 42, 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO ALUMNI_VERIFICATION[\s\S]*ON DUPLICATE KEY UPDATE`).
-		WithArgs(model.VerificationApproved, nil, 1, 1, 42).
+		WithArgs(42, model.VerificationApproved, "29", "영어", nil, 1, "29", 1, "영어").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
@@ -383,9 +389,9 @@ func TestUpsertRootAdminMemberRollsBackExistingMemberUpdateWhenRoleUpsertFails(t
 	roleSyncErr := errors.New("role upsert failed")
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`SELECT USR_SEQ, USR_STATUS[\s\S]*FOR UPDATE`).
+	mock.ExpectQuery(`SELECT USR_SEQ, USR_STATUS,[\s\S]*USR_FN[\s\S]*USR_DEPT[\s\S]*FOR UPDATE`).
 		WithArgs("admin").
-		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ", "USR_STATUS"}).AddRow(42, "CCC"))
+		WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ", "USR_STATUS", "USR_FN", "USR_DEPT"}).AddRow(42, "CCC", "29", "영어"))
 	mock.ExpectExec(`UPDATE WEO_MEMBER[\s\S]*USR_STATUS = 'ZZZ'`).
 		WithArgs("new-hash", "관리자", 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
