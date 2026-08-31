@@ -158,24 +158,21 @@ func TestSocialLinkReturnsConflictForAlreadyLinkedSocialAccount(t *testing.T) {
 	}
 }
 
-func TestSocialLinkReturnsPhoneOwnershipConflictBasedOnName(t *testing.T) {
+func TestSocialLinkRequiresOwnershipConfirmationForExistingPhoneRegardlessOfName(t *testing.T) {
 	tests := []struct {
-		name              string
-		existingName      string
-		requestedName     string
-		expectedErrorCode string
+		name          string
+		existingName  string
+		requestedName string
 	}{
 		{
-			name:              "different name keeps phone taken response",
-			existingName:      "김동문",
-			requestedName:     "홍동문",
-			expectedErrorCode: "PHONE_TAKEN",
+			name:          "different name",
+			existingName:  "김동문",
+			requestedName: "홍동문",
 		},
 		{
-			name:              "matching name requires ownership confirmation",
-			existingName:      "홍 길동",
-			requestedName:     "홍길동",
-			expectedErrorCode: "OWNERSHIP_CONFIRMATION_REQUIRED",
+			name:          "matching name",
+			existingName:  "홍 길동",
+			requestedName: "홍길동",
 		},
 	}
 
@@ -249,7 +246,7 @@ func TestSocialLinkReturnsPhoneOwnershipConflictBasedOnName(t *testing.T) {
 			if response.Code != http.StatusConflict {
 				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 			}
-			if !strings.Contains(response.Body.String(), `"code":"`+test.expectedErrorCode+`"`) {
+			if !strings.Contains(response.Body.String(), `"code":"OWNERSHIP_CONFIRMATION_REQUIRED"`) {
 				t.Fatalf("body = %s", response.Body.String())
 			}
 			if err := mock.ExpectationsWereMet(); err != nil {

@@ -3,7 +3,6 @@ package service
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
@@ -39,9 +38,9 @@ type SocialLinkParams struct {
 }
 
 var (
-	// ErrPhoneAlreadyRegistered is returned from mode=new when the phone belongs to another member.
+	// ErrPhoneAlreadyRegistered is returned when a concurrent phone claim is detected during account creation.
 	ErrPhoneAlreadyRegistered = errors.New("phone already registered to another member")
-	// ErrOwnershipConfirmationRequired is returned when an existing member has the same phone and name.
+	// ErrOwnershipConfirmationRequired is returned when an existing member has the same phone.
 	ErrOwnershipConfirmationRequired = errors.New("ownership confirmation required")
 	// ErrSocialAccountAlreadyLinked is returned when the social identity belongs to another member.
 	ErrSocialAccountAlreadyLinked = errors.New("social account already linked to another member")
@@ -71,12 +70,7 @@ func (s *AuthService) createNewSocialAccount(params SocialLinkParams, memberSvc 
 		return nil, false, err
 	}
 	if existing != nil {
-		existingName := strings.Join(strings.Fields(existing.USRName), "")
-		requestedName := strings.Join(strings.Fields(params.Name), "")
-		if existingName == requestedName {
-			return nil, false, ErrOwnershipConfirmationRequired
-		}
-		return nil, false, ErrPhoneAlreadyRegistered
+		return nil, false, ErrOwnershipConfirmationRequired
 	}
 	newUser, err := s.repo.CreateSocialAccount(repository.SocialAccountFields{
 		Provider:            params.Provider,
