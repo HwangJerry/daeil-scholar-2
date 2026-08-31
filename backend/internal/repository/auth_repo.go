@@ -3,6 +3,8 @@ package repository
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -12,13 +14,15 @@ import (
 )
 
 var (
-	ErrRefreshTokenInvalid  = errors.New("refresh token is invalid")
-	ErrRefreshTokenReplay   = errors.New("refresh token replay detected")
-	ErrChallengeInvalid     = errors.New("apple challenge is invalid")
-	ErrAuthorizationReplay  = errors.New("authorization code replay detected")
-	ErrPhoneAlreadyClaimed  = errors.New("canonical phone already claimed")
-	ErrInvalidPhone         = errors.New("canonical phone is invalid")
-	ErrPhoneClaimsMigrating = errors.New("phone claim migration is in progress")
+	ErrRefreshTokenInvalid         = errors.New("refresh token is invalid")
+	ErrRefreshTokenReplay          = errors.New("refresh token replay detected")
+	ErrChallengeInvalid            = errors.New("apple challenge is invalid")
+	ErrAuthorizationReplay         = errors.New("authorization code replay detected")
+	ErrPhoneAlreadyClaimed         = errors.New("canonical phone already claimed")
+	ErrSocialIdentityAlreadyLinked = errors.New("social identity already linked")
+	ErrLastLoginMethod             = errors.New("cannot disconnect the last login method")
+	ErrInvalidPhone                = errors.New("canonical phone is invalid")
+	ErrPhoneClaimsMigrating        = errors.New("phone claim migration is in progress")
 )
 
 // MariaDB 10.1 has no REGEXP_REPLACE. This compatibility expression is kept in
@@ -29,6 +33,7 @@ const legacyCanonicalPhoneSQL = "REPLACE(REPLACE(TRIM(USR_PHONE), '-', ''), ' ',
 
 type AuthRepository struct {
 	DB                      *sqlx.DB
+	canonicalIdentityReady  atomic.Bool
 	phoneClaimsReady        atomic.Bool
 	phoneClaimAutoDetection atomic.Bool
 }
@@ -57,6 +62,10 @@ type SocialAccountFields struct {
 
 func NewAuthRepository(db *sqlx.DB) *AuthRepository {
 	return &AuthRepository{DB: db}
+}
+
+func (r *AuthRepository) EnableCanonicalIdentityWrites() {
+	r.canonicalIdentityReady.Store(true)
 }
 
 func (r *AuthRepository) EnablePhoneClaims() {
@@ -191,6 +200,7 @@ func (r *AuthRepository) CreateSocialAccount(fields SocialAccountFields) (*model
 		return nil, err
 	}
 	defer tx.Rollback()
+	canonicalIdentityEnabled := r.canonicalIdentityReady.Load()
 	phoneClaimsEnabled, err := r.phoneClaimsEnabledTx(tx)
 	if err != nil {
 		return nil, err
@@ -224,11 +234,21 @@ func (r *AuthRepository) CreateSocialAccount(fields SocialAccountFields) (*model
 			return nil, err
 		}
 	}
+	if canonicalIdentityEnabled {
+		if err := insertActiveAccountStateTx(tx, fields.USRSeq); err != nil {
+			return nil, err
+		}
+	}
 	if err := insertAlumniVerificationCompanionTx(tx, fields.USRSeq); err != nil {
 		return nil, err
 	}
 	if err := insertSocialConnectionTx(tx, fields); err != nil {
 		return nil, err
+	}
+	if canonicalIdentityEnabled {
+		if err := insertSocialIdentityTx(tx, fields); err != nil {
+			return nil, err
+		}
 	}
 
 	user, err := getMemberBySequenceTx(tx, fields.USRSeq)
@@ -254,7 +274,7 @@ func insertSocialConnectionTx(tx *sqlx.Tx, fields SocialAccountFields) error {
 		INSERT INTO WEO_MEMBER_SOCIAL (USR_SEQ, NMS_GATE, NMS_ID, NMS_EMAIL, REG_DATE)
 		VALUES (?, ?, ?, ?, NOW())
 	`, fields.USRSeq, fields.Provider, fields.SocialID, fields.SocialEmail); err != nil {
-		return err
+		return classifySocialIdentityInsertError(err)
 	}
 	if fields.EncryptedCredential == "" {
 		return nil
@@ -268,6 +288,47 @@ func insertSocialConnectionTx(tx *sqlx.Tx, fields SocialAccountFields) error {
 			UPDATED_AT = NOW()
 	`, fields.USRSeq, fields.Provider, fields.EncryptedCredential)
 	return err
+}
+
+func insertSocialIdentityTx(tx *sqlx.Tx, fields SocialAccountFields) error {
+	provider, err := canonicalSocialIdentityProvider(fields.Provider)
+	if err != nil {
+		return err
+	}
+
+	normalizedEmail := strings.ToLower(strings.TrimSpace(fields.Email))
+	var emailValue any
+	if normalizedEmail != "" {
+		emailValue = normalizedEmail
+	}
+	_, err = tx.Exec(`
+		INSERT INTO AUTH_IDENTITY
+			(ACCOUNT_ID, PROVIDER, SUBJECT_KEY, NORMALIZED_EMAIL, STATUS, VERIFIED_AT, CREATED_AT, UPDATED_AT)
+		VALUES (?, ?, ?, ?, 'ACTIVE', NOW(), NOW(), NOW())
+	`, fields.USRSeq, string(provider), fields.SocialID, emailValue)
+	return classifySocialIdentityInsertError(err)
+}
+
+func classifySocialIdentityInsertError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var mysqlErr *mysql.MySQLError
+	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+		return fmt.Errorf("%w: %w", ErrSocialIdentityAlreadyLinked, err)
+	}
+	return err
+}
+
+func canonicalSocialIdentityProvider(provider string) (model.IdentityProvider, error) {
+	switch model.SocialProvider(provider) {
+	case model.SocialProviderKakao:
+		return model.IdentityProviderKakao, nil
+	case model.SocialProviderApple:
+		return model.IdentityProviderApple, nil
+	default:
+		return "", model.ErrUnsupportedIdentityProvider
+	}
 }
 
 func getMemberBySequenceTx(tx *sqlx.Tx, usrSeq int) (*model.User, error) {
@@ -309,17 +370,72 @@ func (r *AuthRepository) ListSocialProviders(usrSeq int) ([]string, error) {
 }
 
 func (r *AuthRepository) DeleteSocialConnection(usrSeq int, provider string) error {
+	return r.deleteSocialConnection(usrSeq, provider, true)
+}
+
+func (r *AuthRepository) ForceDeleteSocialConnection(usrSeq int, provider string) error {
+	return r.deleteSocialConnection(usrSeq, provider, false)
+}
+
+func (r *AuthRepository) deleteSocialConnection(usrSeq int, provider string, enforceLastLoginMethod bool) error {
 	tx, err := r.DB.Beginx()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
+	var activeProviders []string
+	if err := tx.Select(&activeProviders, `
+		SELECT NMS_GATE
+		FROM WEO_MEMBER_SOCIAL
+		WHERE USR_SEQ = ? AND NMS_STATUS IN ('Y', 'ACTIVE')
+		FOR UPDATE
+	`, usrSeq); err != nil {
+		return err
+	}
+
+	var hasPassword bool
+	if err := tx.Get(&hasPassword, `
+		SELECT CASE
+			WHEN COALESCE(TRIM(USR_PWD), '') <> '' THEN 1
+			ELSE 0
+		END
+		FROM WEO_MEMBER
+		WHERE USR_SEQ = ?
+		FOR UPDATE
+	`, usrSeq); err != nil {
+		return err
+	}
+
+	targetIsActive := false
+	for _, activeProvider := range activeProviders {
+		if activeProvider == provider {
+			targetIsActive = true
+			break
+		}
+	}
+	if enforceLastLoginMethod && targetIsActive && !hasPassword && len(activeProviders) == 1 {
+		return ErrLastLoginMethod
+	}
+
 	if _, err := tx.Exec(`
 		DELETE FROM WEO_MEMBER_SOCIAL
 		WHERE USR_SEQ = ? AND NMS_GATE = ?
 	`, usrSeq, provider); err != nil {
 		return err
+	}
+	if r.canonicalIdentityReady.Load() {
+		canonicalProvider, err := canonicalSocialIdentityProvider(provider)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`
+			UPDATE AUTH_IDENTITY
+			SET STATUS = 'REVOKED', REVOKED_AT = NOW(), UPDATED_AT = NOW()
+			WHERE ACCOUNT_ID = ? AND PROVIDER = ? AND STATUS = 'ACTIVE'
+		`, usrSeq, string(canonicalProvider)); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.Exec(`
 		DELETE FROM ALUMNI_SOCIAL_CREDENTIAL

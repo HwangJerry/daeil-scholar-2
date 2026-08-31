@@ -1,5 +1,5 @@
 -- Migration 043: Finalize canonical identity authority during an approved maintenance window.
--- Deferred after a planning change: unapplied in production; future application timing will be decided separately.
+-- Application planned: foundation for account unification (email/Kakao/Apple linking).
 -- Target: MariaDB 10.1.38. Apply only after migration 042 and a verified T06 backfill run.
 -- Application and legacy writers must be frozen before this migration runs.
 -- Login-statistics rows in WEO_MEMBER_LOG are retained; removing legacy-session lookup from

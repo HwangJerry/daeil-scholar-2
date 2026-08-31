@@ -83,7 +83,7 @@ func (s *SocialAccountLifecycleService) ApplyAppleNotification(notification Appl
 		if err := s.auth.repo.DeleteLegacySessionsByUser(user.USRSeq); err != nil {
 			return err
 		}
-		return s.auth.repo.DeleteSocialConnection(user.USRSeq, string(model.SocialProviderApple))
+		return s.auth.repo.ForceDeleteSocialConnection(user.USRSeq, string(model.SocialProviderApple))
 	case "account-deleted":
 		_, err := s.DeleteAccount(context.Background(), user.USRSeq)
 		return err

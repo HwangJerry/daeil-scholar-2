@@ -1,8 +1,10 @@
 // auth.ts — Authentication API client functions.
 import { api } from './client';
 import type {
+  AccountConnections,
   AuthUser,
   LoginRequest,
+  SocialDisconnectResponse,
   SocialLinkPrefillResponse,
   SocialLinkPhotoUploadResponse,
 } from '../types/api';
@@ -33,6 +35,18 @@ export function legacyLogin(req: LoginRequest): Promise<AuthUser> {
 /** New member registration with ID/password. */
 export function register(req: RegisterRequest): Promise<AuthUser> {
   return api.post<AuthUser>('/api/auth/register', req);
+}
+
+/** Fetch the login methods currently connected to the authenticated account. */
+export function getAccountConnections(): Promise<AccountConnections> {
+  return api.get<AccountConnections>('/api/auth/account/connections');
+}
+
+/** Disconnect a social login method from the authenticated account. */
+export function disconnectSocial(
+  provider: 'kakao' | 'apple',
+): Promise<SocialDisconnectResponse> {
+  return api.del<SocialDisconnectResponse>(`/api/auth/social/${provider}`);
 }
 
 /** Fetch cached social-provider data (email/nickname/profileImage) for the signup form. */

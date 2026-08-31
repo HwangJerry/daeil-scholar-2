@@ -75,6 +75,9 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	if err != nil {
 		return nil, err
 	}
+	if canonicalPasswordReady {
+		authRepo.EnableCanonicalIdentityWrites()
+	}
 	phoneClaimsReady, err := repository.PhoneClaimsWriteReady(db)
 	if err != nil {
 		return nil, err

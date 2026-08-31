@@ -37,8 +37,12 @@ type SocialLinkParams struct {
 	EncryptedCredential string
 }
 
-// ErrPhoneAlreadyRegistered is returned from mode=new when the phone belongs to another member.
-var ErrPhoneAlreadyRegistered = errors.New("phone already registered to another member")
+var (
+	// ErrPhoneAlreadyRegistered is returned from mode=new when the phone belongs to another member.
+	ErrPhoneAlreadyRegistered = errors.New("phone already registered to another member")
+	// ErrSocialAccountAlreadyLinked is returned when the social identity belongs to another member.
+	ErrSocialAccountAlreadyLinked = errors.New("social account already linked to another member")
+)
 
 // LinkSocialAccount creates a new member from a verified social identity.
 // Returns the created user, whether a new member was created, or an error.
@@ -88,6 +92,9 @@ func (s *AuthService) createNewSocialAccount(params SocialLinkParams, memberSvc 
 	})
 	if errors.Is(err, repository.ErrPhoneAlreadyClaimed) {
 		return nil, false, ErrPhoneAlreadyRegistered
+	}
+	if errors.Is(err, repository.ErrSocialIdentityAlreadyLinked) {
+		return nil, false, ErrSocialAccountAlreadyLinked
 	}
 	if errors.Is(err, repository.ErrInvalidPhone) {
 		return nil, false, ErrInvalidPhone

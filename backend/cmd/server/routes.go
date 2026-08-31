@@ -148,6 +148,9 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 	r.Group(func(r chi.Router) {
 		r.Use(mw.AuthMiddleware(authService))
 		r.Get("/api/auth/me", h.auth.Me)
+		r.Get("/api/auth/account/connections", h.auth.GetAccountConnections)
+		r.Post("/api/auth/identities/link/{provider}", h.auth.LinkIdentity)
+		r.Delete("/api/auth/social/{provider}", h.auth.DisconnectSocial)
 		r.Post("/api/auth/logout", h.auth.Logout)
 		r.Post("/api/auth/logout/all", h.auth.LogoutAll)
 		r.Delete("/api/auth/account", h.auth.DeleteAccount)

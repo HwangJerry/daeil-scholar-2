@@ -447,7 +447,7 @@ func TestAppleNotificationsApplyAccountLifecycle(t *testing.T) {
 		expect    func(sqlmock.Sqlmock)
 	}{
 		{
-			name:      "consent revoked disconnects and ends sessions",
+			name:      "consent revoked force disconnects apple-only account and ends sessions",
 			eventType: "consent-revoked",
 			expect: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec(`UPDATE ALUMNI_MOBILE_REFRESH_TOKEN`).
@@ -457,8 +457,17 @@ func TestAppleNotificationsApplyAccountLifecycle(t *testing.T) {
 					WithArgs(42).
 					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectBegin()
+				mock.ExpectQuery(`SELECT NMS_GATE[\s\S]*NMS_STATUS IN \('Y', 'ACTIVE'\)[\s\S]*FOR UPDATE`).
+					WithArgs(42).
+					WillReturnRows(sqlmock.NewRows([]string{"NMS_GATE"}).AddRow("AP"))
+				mock.ExpectQuery(`COALESCE\(TRIM\(USR_PWD\), ''\) <> ''[\s\S]*FOR UPDATE`).
+					WithArgs(42).
+					WillReturnRows(sqlmock.NewRows([]string{"has_password"}).AddRow(0))
 				mock.ExpectExec(`DELETE FROM WEO_MEMBER_SOCIAL`).
 					WithArgs(42, "AP").
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec(`UPDATE AUTH_IDENTITY[\s\S]*STATUS = 'REVOKED'[\s\S]*REVOKED_AT = NOW\(\)[\s\S]*ACCOUNT_ID = \?[\s\S]*PROVIDER = \?[\s\S]*STATUS = 'ACTIVE'`).
+					WithArgs(42, "APPLE").
 					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectExec(`DELETE FROM ALUMNI_SOCIAL_CREDENTIAL`).
 					WithArgs(42, "AP").
@@ -501,6 +510,9 @@ func TestAppleNotificationsApplyAccountLifecycle(t *testing.T) {
 			auth, mock, cleanup := newAuthServiceForTest(t)
 			defer cleanup()
 			auth.repo.EnablePhoneClaims()
+			if test.eventType == "consent-revoked" {
+				auth.repo.EnableCanonicalIdentityWrites()
+			}
 			mock.ExpectQuery(`FROM WEO_MEMBER_SOCIAL`).
 				WithArgs("AP", "apple-subject").
 				WillReturnRows(memberRows("CCC"))

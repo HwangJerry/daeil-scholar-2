@@ -275,7 +275,7 @@ WHERE filename IN (
     '042_prepare_canonical_auth_cutover.sql'
 );
 SET @canonical_contract_failures = @canonical_contract_failures + IF(
-    @canonical_history_fingerprint = '9e3a7e972f9efdc2556a000b9c3b34e450e7e5c10e7a7ea4d6a03d2bc7bbd2f1',
+    @canonical_history_fingerprint = '10eb9562321138d0f24729bfd317e4e5156f16561505fa9ed2d54ecd9f84a3c0',
     0, 1
 );
 

@@ -11,6 +11,16 @@ export interface AuthUser {
   usrStatus: string;
 }
 
+export interface AccountConnections {
+  providers: string[];
+  hasPassword: boolean;
+}
+
+export interface SocialDisconnectResponse {
+  status: 'disconnected' | 'notConnected';
+  connections: AccountConnections;
+}
+
 export interface NoticeItem {
   type: 'notice';
   seq: number;

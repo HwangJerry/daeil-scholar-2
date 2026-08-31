@@ -30,6 +30,17 @@ func TestAuthenticatedRoutesIncludeAlumniVerificationEndpoints(t *testing.T) {
 	}
 }
 
+func TestAuthenticatedRoutesIncludeIdentityLinkEndpoint(t *testing.T) {
+	router := chi.NewRouter()
+	registerAuthRoutes(router, handlers{}, nil)
+
+	found := routesForTest(t, router)
+	route := http.MethodPost + " /api/auth/identities/link/{provider}"
+	if !found[route] {
+		t.Fatalf("missing route %s", route)
+	}
+}
+
 func TestAlumniWidgetIsMountedOnlyInApprovedAuthenticatedRoutes(t *testing.T) {
 	publicRouter := chi.NewRouter()
 	registerPublicRoutes(publicRouter, handlers{}, cache.New(0, 0))

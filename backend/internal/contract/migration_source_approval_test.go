@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const approvedCandidateManifestSHA256 = "82e6e73dba569cfc8816d354848000b44cc51a4b6df25b114c11c1397e4ab87a"
+const approvedCandidateManifestSHA256 = "907a095d158ab17e05040a8ee03a07bce9b506a4818155b467cccf3deb4d8a43"
 
 func TestMigrationRunnerApprovesEveryFutureMigrationIncluding052(t *testing.T) {
 	manifestPath := filepath.Join("..", "..", "migrations", "testdata", "canonical_identity_candidate_lineage.sha256")

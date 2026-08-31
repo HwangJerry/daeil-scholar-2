@@ -166,6 +166,7 @@ func TestFinalizeSocialDisconnectAdvancesActiveDisconnect(t *testing.T) {
 		WithArgs(42, "KT").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectBegin()
+	expectFinalizeDisconnectLoginMethodLock(mock)
 	mock.ExpectExec(`DELETE FROM WEO_MEMBER_SOCIAL`).
 		WithArgs(42, "KT").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -204,6 +205,7 @@ func TestFinalizeSocialDisconnectToleratesAlreadyFinalizePending(t *testing.T) {
 		WithArgs(42, "KT").
 		WillReturnRows(sqlmock.NewRows([]string{"NMS_STATUS"}).AddRow("FINALIZE_PENDING"))
 	mock.ExpectBegin()
+	expectFinalizeDisconnectLoginMethodLock(mock)
 	mock.ExpectExec(`DELETE FROM WEO_MEMBER_SOCIAL`).
 		WithArgs(42, "KT").
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -241,6 +243,7 @@ func TestFinalizeSocialDisconnectToleratesAlreadyDeleted(t *testing.T) {
 		WithArgs(42, "KT").
 		WillReturnError(sql.ErrNoRows)
 	mock.ExpectBegin()
+	expectFinalizeDisconnectLoginMethodLock(mock)
 	mock.ExpectExec(`DELETE FROM WEO_MEMBER_SOCIAL`).
 		WithArgs(42, "KT").
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -284,4 +287,13 @@ func TestFinalizeSocialDisconnectRejectsUnexpectedState(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func expectFinalizeDisconnectLoginMethodLock(mock sqlmock.Sqlmock) {
+	mock.ExpectQuery(`SELECT NMS_GATE[\s\S]*NMS_STATUS IN \('Y', 'ACTIVE'\)[\s\S]*FOR UPDATE`).
+		WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{"NMS_GATE"}))
+	mock.ExpectQuery(`COALESCE\(TRIM\(USR_PWD\), ''\) <> ''[\s\S]*FOR UPDATE`).
+		WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{"has_password"}).AddRow(0))
 }

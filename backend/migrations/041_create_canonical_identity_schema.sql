@@ -1,5 +1,5 @@
 -- Migration 041: Create the canonical account-state and identity authority.
--- Deferred after a planning change: unapplied in production; future application timing will be decided separately.
+-- Application planned: foundation for account unification (email/Kakao/Apple linking).
 -- Target: MariaDB 10.1.38. Apply only after migration 040 converted WEO_MEMBER to InnoDB.
 -- Provider subjects and verified EMAIL login identities are global authorities.
 -- Profile/provider metadata is non-authoritative and must never be used for automatic linking.

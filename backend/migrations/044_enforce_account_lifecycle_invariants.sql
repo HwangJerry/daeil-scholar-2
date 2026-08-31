@@ -1,5 +1,5 @@
 -- Migration 044: Database authorities for signup phone ownership and account lifecycle.
--- Deferred after a planning change: unapplied in production; future application timing will be decided separately.
+-- Application planned: foundation for account unification (email/Kakao/Apple linking).
 -- Target: MariaDB 10.1.38. Apply after canonical identity cutover migration 043.
 
 -- Account deletion relies on rollback across every touched table. Fail before
