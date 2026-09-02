@@ -72,6 +72,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	passwordMutationRepo := repository.NewPasswordMutationRepository(db)
 	visitRepo := repository.NewVisitRepository(db)
 	mobileAppEventRepo := repository.NewMobileAppEventRepository(db)
+	appSettingRepo := repository.NewAppSettingRepository(db)
 	canonicalPasswordReady, err := repository.CanonicalPasswordWriteReady(db)
 	if err != nil {
 		return nil, err
@@ -93,6 +94,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
 	socialLinkTokens := service.NewSocialLinkTokenStore(cacheStore)
+	appSettingService := service.NewAppSettingService(appSettingRepo, cacheStore)
 
 	realtimeHub := realtime.NewHub(logger)
 	var messageNotifier service.MessageNotifier = service.NewRealtimeMessageNotifier(realtimeHub)
@@ -230,6 +232,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		adminErrorReport:    handler.NewAdminErrorReportHandler(logger, debugHook),
 		mobileAppEvent:      handler.NewMobileAppEventHandler(mobileAppEventService),
 		sentryMonitoring:    handler.NewSentryMonitoringHandler(sentryMonitoringService),
+		appSetting:          handler.NewAppSettingHandler(appSettingService),
 	}
 
 	return &deps{
