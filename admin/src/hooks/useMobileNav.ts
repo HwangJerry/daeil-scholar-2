@@ -1,16 +1,16 @@
-// useMobileNav — Zustand store for mobile navigation drawer open/close state
+// useMobileNav — Zustand store for the mobile more-menu sheet state
 import { create } from 'zustand';
 
 interface MobileNavState {
   isOpen: boolean;
-  open: () => void;
+  setOpen: (isOpen: boolean) => void;
   close: () => void;
   toggle: () => void;
 }
 
 export const useMobileNav = create<MobileNavState>((set) => ({
   isOpen: false,
-  open: () => set({ isOpen: true }),
+  setOpen: (isOpen) => set({ isOpen }),
   close: () => set({ isOpen: false }),
   toggle: () => set((s) => ({ isOpen: !s.isOpen })),
 }));
