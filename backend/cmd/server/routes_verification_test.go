@@ -43,7 +43,7 @@ func TestAuthenticatedRoutesIncludeIdentityLinkEndpoint(t *testing.T) {
 
 func TestAlumniWidgetIsMountedOnlyInApprovedAuthenticatedRoutes(t *testing.T) {
 	publicRouter := chi.NewRouter()
-	registerPublicRoutes(publicRouter, handlers{}, cache.New(0, 0))
+	registerPublicRoutes(publicRouter, handlers{}, nil, cache.New(0, 0))
 	if routesForTest(t, publicRouter)[http.MethodGet+" /api/alumni/widget"] {
 		t.Fatal("widget remains publicly mounted")
 	}
@@ -102,6 +102,44 @@ func TestApprovedRoutesIncludeCanonicalPushEndpoints(t *testing.T) {
 	} {
 		if !found[route] {
 			t.Fatalf("missing route %s", route)
+		}
+	}
+}
+
+func TestMobileEventCollectionIsPublicAndAdminSummaryIsAdminOnly(t *testing.T) {
+	publicRouter := chi.NewRouter()
+	registerPublicRoutes(publicRouter, handlers{}, nil, cache.New(0, 0))
+	if !routesForTest(t, publicRouter)[http.MethodPost+" /api/mobile/events"] {
+		t.Fatal("mobile event collection route is not publicly mounted")
+	}
+	if routesForTest(t, publicRouter)[http.MethodGet+" /api/admin/mobile-events/summary"] {
+		t.Fatal("admin mobile event summary is publicly mounted")
+	}
+
+	adminRouter := chi.NewRouter()
+	registerAdminRoutes(adminRouter, handlers{}, nil, nil)
+	if !routesForTest(t, adminRouter)[http.MethodGet+" /api/admin/mobile-events/summary"] {
+		t.Fatal("admin mobile event summary route is missing")
+	}
+}
+
+func TestSentryMonitoringRoutesAreAdminOnly(t *testing.T) {
+	publicRouter := chi.NewRouter()
+	registerPublicRoutes(publicRouter, handlers{}, nil, cache.New(0, 0))
+	adminRouter := chi.NewRouter()
+	registerAdminRoutes(adminRouter, handlers{}, nil, nil)
+
+	publicRoutes := routesForTest(t, publicRouter)
+	adminRoutes := routesForTest(t, adminRouter)
+	for _, route := range []string{
+		http.MethodGet + " /api/admin/monitoring/crash-summary",
+		http.MethodGet + " /api/admin/monitoring/performance-summary",
+	} {
+		if publicRoutes[route] {
+			t.Fatalf("admin monitoring route is public: %s", route)
+		}
+		if !adminRoutes[route] {
+			t.Fatalf("admin monitoring route is missing: %s", route)
 		}
 	}
 }

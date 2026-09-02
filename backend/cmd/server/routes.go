@@ -57,6 +57,8 @@ type handlers struct {
 	adminSubscription   *handler.AdminSubscriptionHandler
 	visit               *handler.VisitHandler
 	adminErrorReport    *handler.AdminErrorReportHandler
+	mobileAppEvent      *handler.MobileAppEventHandler
+	sentryMonitoring    *handler.SentryMonitoringHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
@@ -97,7 +99,7 @@ func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthS
 		r.Use(mw.MaxBodySize(defaultMaxBodySizeBytes))
 		r.Use(mw.CSRFMiddleware(allowedOrigins))
 
-		registerPublicRoutes(r, h, cacheStore)
+		registerPublicRoutes(r, h, authService, cacheStore)
 		registerAuthRoutes(r, h, authService)
 		registerOptionalAuthRoutes(r, h, authService)
 		registerAdminRoutes(r, h, authService, cfg)
@@ -115,7 +117,7 @@ func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthS
 }
 
 // registerPublicRoutes registers unauthenticated public endpoints.
-func registerPublicRoutes(r chi.Router, h handlers, cacheStore *cache.Cache) {
+func registerPublicRoutes(r chi.Router, h handlers, authService *service.AuthService, cacheStore *cache.Cache) {
 	r.Get("/api/health", h.health.Check)
 	r.Get("/api/feed/hero", h.feed.GetHero)
 	r.Get("/api/donation/summary", h.donation.GetSummary)
@@ -141,6 +143,7 @@ func registerPublicRoutes(r chi.Router, h handlers, cacheStore *cache.Cache) {
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/password/reset-request", h.passwordReset.RequestReset)
 	r.Post("/api/auth/password/reset-confirm", h.passwordReset.ConfirmReset)
 	r.Get("/api/auth/password/validate-token", h.passwordReset.ValidateToken)
+	r.With(mw.OptionalAuthMiddleware(authService)).Post("/api/mobile/events", h.mobileAppEvent.Collect)
 }
 
 // registerAuthRoutes registers endpoints that require authentication.
@@ -259,6 +262,9 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Put("/job-category/{seq}", h.adminJobCat.Update)
 		r.Delete("/job-category/{seq}", h.adminJobCat.Delete)
 		r.Post("/errors/report", h.adminErrorReport.Report)
+		r.Get("/mobile-events/summary", h.mobileAppEvent.Summary)
+		r.Get("/monitoring/crash-summary", h.sentryMonitoring.CrashSummary)
+		r.Get("/monitoring/performance-summary", h.sentryMonitoring.PerformanceSummary)
 		r.Get("/history", h.history.AdminList)
 		r.Post("/history", h.history.AdminCreate)
 		r.Put("/history/{seq}", h.history.AdminUpdate)

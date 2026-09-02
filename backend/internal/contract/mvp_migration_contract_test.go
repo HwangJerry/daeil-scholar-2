@@ -202,6 +202,14 @@ func mvpMigrationContracts() []migrationContract {
 			name:     "052_add_push_preference_message_preview.sql",
 			required: []string{"ALUMNI_PUSH_PREFERENCE", "MESSAGE_PREVIEW_ENABLED"},
 		},
+		{
+			name: "053_create_mobile_app_event_table.sql",
+			required: []string{
+				"ALUMNI_MOBILE_APP_EVENT", "PLATFORM", "EVENT_TYPE", "USER_ID",
+				"APP_VERSION", "OS_VERSION", "DEVICE_MODEL", "OCCURRED_AT", "CREATED_AT",
+				"PLATFORM     VARCHAR", "IDX_AME_PLATFORM", "IDX_AME_EVENT_TYPE", "IDX_AME_OCCURRED_AT",
+			},
+		},
 	}
 }
 

@@ -20,9 +20,25 @@ type Config struct {
 	SMTP           SMTPConfig
 	DebugAgent     DebugAgentConfig
 	Push           PushConfig
+	Sentry         SentryConfig
 	PGAuditLogPath string
 	Environment    string // "dev" exposes manual subscription billing trigger; "prod" hides it
 	VisitIPSalt    string
+}
+
+// SentryConfig holds read-only API credentials and mobile project slugs used
+// by the admin monitoring proxy.
+type SentryConfig struct {
+	AuthToken      string
+	Organization   string
+	IOSProject     string
+	AndroidProject string
+}
+
+// Configured reports whether every value required by the monitoring proxy is
+// present. The server can still start when this is false; handlers return 503.
+func (c SentryConfig) Configured() bool {
+	return c.AuthToken != "" && c.Organization != "" && c.IOSProject != "" && c.AndroidProject != ""
 }
 
 // DebugAgentConfig holds settings for the external Debug Agent error pipeline.
@@ -228,6 +244,12 @@ func Load() *Config {
 			APNSTeamID:         getEnv("APNS_TEAM_ID", ""),
 			APNSKeyID:          getEnv("APNS_KEY_ID", ""),
 			APNSPrivateKeyFile: getEnv("APNS_PRIVATE_KEY_FILE", ""),
+		},
+		Sentry: SentryConfig{
+			AuthToken:      getEnv("SENTRY_AUTH_TOKEN", ""),
+			Organization:   getEnv("SENTRY_ORG", ""),
+			IOSProject:     getEnv("SENTRY_IOS_PROJECT", ""),
+			AndroidProject: getEnv("SENTRY_ANDROID_PROJECT", ""),
 		},
 		PGAuditLogPath: getEnv("PG_AUDIT_LOG_PATH", "/var/logs/pg/pg-audit.log"),
 		Environment:    getEnv("ENV", "prod"),

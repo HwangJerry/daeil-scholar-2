@@ -71,6 +71,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	signupRepo := repository.NewSignupRepository(db)
 	passwordMutationRepo := repository.NewPasswordMutationRepository(db)
 	visitRepo := repository.NewVisitRepository(db)
+	mobileAppEventRepo := repository.NewMobileAppEventRepository(db)
 	canonicalPasswordReady, err := repository.CanonicalPasswordWriteReady(db)
 	if err != nil {
 		return nil, err
@@ -142,6 +143,9 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	donationImportSvc := service.NewDonationImportService(donationImportRepo, adminDonationSvc, cfg.JWT.Secret, adminDonationOrchestrator)
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
 	visitService := service.NewVisitService(visitRepo, cacheStore, cfg.VisitIPSalt, logger)
+	mobileAppEventService := service.NewMobileAppEventService(mobileAppEventRepo)
+	sentryClient := service.NewSentryClient(cfg.Sentry, cacheStore)
+	sentryMonitoringService := service.NewSentryMonitoringService(sentryClient, cfg.Sentry)
 	visitJob := job.NewVisitAggregationJob(visitRepo, logger)
 	adminDashboardSvc := service.NewAdminDashboardService(adminMemberSvc, adminNoticeSvc, adminAdSvc, donationService, visitService)
 	fileStorage := service.NewFileStorageService(cfg.Upload.BasePath)
@@ -224,6 +228,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		realtime:            handler.NewRealtimeHandler(realtimeHub, logger),
 		visit:               handler.NewVisitHandler(visitService, logger, cfg.Server.IsSecure()),
 		adminErrorReport:    handler.NewAdminErrorReportHandler(logger, debugHook),
+		mobileAppEvent:      handler.NewMobileAppEventHandler(mobileAppEventService),
+		sentryMonitoring:    handler.NewSentryMonitoringHandler(sentryMonitoringService),
 	}
 
 	return &deps{
