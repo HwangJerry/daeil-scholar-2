@@ -17,6 +17,7 @@ import { JobCategoryPage } from './pages/JobCategoryPage.tsx';
 import { DonationMonitorPage } from './pages/DonationMonitorPage.tsx';
 import { HistoryManagePage } from './pages/HistoryManagePage.tsx';
 import { AppMonitoringPage } from './pages/AppMonitoringPage.tsx';
+import { AppSettingsPage } from './pages/AppSettingsPage.tsx';
 
 export function AppRoutes() {
   return (
@@ -46,6 +47,7 @@ export function AppRoutes() {
         <Route path="history" element={<HistoryManagePage />} />
         <Route path="donation" element={<DonationMonitorPage />} />
         <Route path="app-monitoring" element={<AppMonitoringPage />} />
+        <Route path="app-settings" element={<AppSettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
