@@ -1,3 +1,4 @@
+// DonationOrdersSection tests — verifies responsive order summaries and canonical filters
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -43,7 +44,7 @@ function renderSection() {
 describe('DonationOrdersSection', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('renders canonical order fields and sends canonical filters', async () => {
+  it('renders desktop and mobile order summaries and sends canonical filters', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -54,10 +55,10 @@ describe('DonationOrdersSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText('홍길동')).toBeInTheDocument();
-    expect(screen.getByText('30기 / 경영학과')).toBeInTheDocument();
+    expect(await screen.findAllByText('홍길동')).toHaveLength(2);
+    expect(screen.getAllByText('30기 / 경영학과')).toHaveLength(2);
     expect(screen.getByText('010-1234-5678')).toBeInTheDocument();
-    expect(screen.getByText('#7')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '홍길동 기부 주문 상세 열기' })).toBeInTheDocument();
 
     await user.type(screen.getByRole('textbox', { name: '기부자명 검색' }), '김');
 
