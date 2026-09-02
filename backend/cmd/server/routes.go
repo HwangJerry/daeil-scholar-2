@@ -59,6 +59,7 @@ type handlers struct {
 	adminErrorReport    *handler.AdminErrorReportHandler
 	mobileAppEvent      *handler.MobileAppEventHandler
 	sentryMonitoring    *handler.SentryMonitoringHandler
+	appSetting          *handler.AppSettingHandler
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
@@ -121,6 +122,7 @@ func registerPublicRoutes(r chi.Router, h handlers, authService *service.AuthSer
 	r.Get("/api/health", h.health.Check)
 	r.Get("/api/feed/hero", h.feed.GetHero)
 	r.Get("/api/donation/summary", h.donation.GetSummary)
+	r.Get("/api/settings/public", h.appSetting.Public)
 	r.Get("/api/auth/kakao", h.auth.KakaoLogin)
 	r.Get("/api/auth/kakao/callback", h.auth.KakaoCallback)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/kakao/mobile", h.auth.KakaoMobileLogin)
@@ -265,6 +267,8 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Get("/mobile-events/summary", h.mobileAppEvent.Summary)
 		r.Get("/monitoring/crash-summary", h.sentryMonitoring.CrashSummary)
 		r.Get("/monitoring/performance-summary", h.sentryMonitoring.PerformanceSummary)
+		r.Get("/settings", h.appSetting.List)
+		r.Put("/settings/{key}", h.appSetting.Update)
 		r.Get("/history", h.history.AdminList)
 		r.Post("/history", h.history.AdminCreate)
 		r.Put("/history/{seq}", h.history.AdminUpdate)

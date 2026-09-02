@@ -210,6 +210,15 @@ func mvpMigrationContracts() []migrationContract {
 				"PLATFORM     VARCHAR", "IDX_AME_PLATFORM", "IDX_AME_EVENT_TYPE", "IDX_AME_OCCURRED_AT",
 			},
 		},
+		{
+			name: "054_create_app_settings.sql",
+			required: []string{
+				"CREATE TABLE IF NOT EXISTS app_settings", "AS_KEY", "AS_VALUE",
+				"AS_DESCRIPTION", "AS_PUBLIC", "UPDATED_AT", "UPDATED_BY",
+				"kakao_open_chat_url", "https://open.kakao.com/o/gNLYTuui",
+				"아이디/비밀번호 찾기 문의용 카카오톡 오픈채팅 URL", "'Y'",
+			},
+		},
 	}
 }
 
