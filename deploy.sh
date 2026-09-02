@@ -259,8 +259,8 @@ parse_inline_environment() {
   done
 }
 
-# Return the last value for a key. EnvironmentFile entries are loaded first and
-# inline Environment entries second, so the more specific inline value wins.
+# Return the last value for a key. Inline Environment entries are loaded first
+# and EnvironmentFile entries second, so the EnvironmentFile value wins.
 get_service_env_value() {
   local key="$1"
   printf '%s\n' "${SERVICE_ENV_ENTRIES}" | awk -F '\t' -v key="${key}" '
@@ -301,11 +301,11 @@ if [[ "${DEPLOY_BACKEND}" == "true" && (
     fi
   fi
 
-  # Later entries win during lookup, matching systemd's more-specific inline
-  # Environment values taking precedence over EnvironmentFile values.
+  # Later entries win during lookup, matching systemd's EnvironmentFile values
+  # taking precedence over inline Environment values.
   SERVICE_ENV_ENTRIES=$(
-    printf '%s\n' "${ENV_FILE_CONTENT}" | parse_environment_file
     printf '%s\n' "${UNIT_CONTENT}" | parse_inline_environment
+    printf '%s\n' "${ENV_FILE_CONTENT}" | parse_environment_file
   )
 fi
 
