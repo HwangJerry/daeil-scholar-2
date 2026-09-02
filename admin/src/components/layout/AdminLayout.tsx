@@ -1,4 +1,4 @@
-// AdminLayout — shell with sidebar, mobile drawer, header, and main content area
+// AdminLayout — responsive shell with desktop and mobile admin navigation
 import { Outlet } from 'react-router-dom';
 import { AdminHeader } from './AdminHeader.tsx';
 import { AdminSidebar } from './AdminSidebar.tsx';
@@ -11,7 +11,7 @@ export function AdminLayout() {
       <MobileNavDrawer />
       <div className="flex flex-1 flex-col">
         <AdminHeader />
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-6">
           <Outlet />
         </main>
       </div>
