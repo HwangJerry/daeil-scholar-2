@@ -465,3 +465,66 @@ export interface HistoryUpsertRequest {
   text: string;
   sortOrder: number;
 }
+
+// --- App Monitoring ---
+
+export type MobilePlatform = 'ios' | 'android';
+
+export type MobileEventType =
+  | 'signup_start'
+  | 'signup_complete'
+  | 'apply_complete';
+
+export interface SentryIssueSummary {
+  title: string;
+  occurrenceCount: number;
+  link: string;
+}
+
+export interface SentryPlatformCrashSummary {
+  platform: MobilePlatform;
+  project: string;
+  crashFreeSessionRate: number | null;
+  recentIssueCount: number;
+  recentIssueCountIsCapped: boolean;
+  recentIssueOccurrenceCount: number;
+  topIssues: SentryIssueSummary[];
+}
+
+export interface SentryCrashSummaryResponse {
+  statsPeriod: string;
+  platforms: SentryPlatformCrashSummary[];
+}
+
+export interface SentryAppStartMetric {
+  operation: string;
+  count: number;
+  averageTimeMs: number;
+  p50TimeMs: number;
+  p95TimeMs: number;
+}
+
+export interface SentryPlatformPerformanceSummary {
+  platform: MobilePlatform;
+  project: string;
+  appStart: SentryAppStartMetric[];
+}
+
+export interface SentryPerformanceSummaryResponse {
+  statsPeriod: string;
+  platforms: SentryPlatformPerformanceSummary[];
+}
+
+export interface MobileEventSummaryItem {
+  platform: MobilePlatform;
+  eventType: MobileEventType;
+  count: number;
+}
+
+export interface MobileEventSummaryResponse {
+  from: string;
+  to: string;
+  platform?: MobilePlatform;
+  eventType?: MobileEventType;
+  items: MobileEventSummaryItem[];
+}
