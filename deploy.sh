@@ -212,8 +212,67 @@ placeholder_value() {
   esac
 }
 
+# Trim leading and trailing whitespace from a value.
+trim_whitespace() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "${value}"
+}
+
+# Remove one matching pair of single or double quotes from a value.
+strip_outer_quotes() {
+  local value="$1"
+  if [[ ${#value} -ge 2 ]]; then
+    if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]] ||
+       [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+  fi
+  printf '%s' "${value}"
+}
+
+# Convert KEY=value lines from a systemd EnvironmentFile into tab-separated
+# entries. Comments and malformed lines are ignored.
+parse_environment_file() {
+  local line key value
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    [[ "${line}" =~ ^[[:space:]]*# ]] && continue
+    if [[ "${line}" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      value=$(trim_whitespace "${BASH_REMATCH[2]}")
+      value=$(strip_outer_quotes "${value}")
+      printf '%s\t%s\n' "${key}" "${value}"
+    fi
+  done
+}
+
+# Convert the unit's Environment="KEY=value" lines into the same format.
+parse_inline_environment() {
+  local line
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    if [[ "${line}" =~ ^[[:space:]]*Environment=\"([A-Za-z_][A-Za-z0-9_]*)=(.*)\"[[:space:]]*$ ]]; then
+      printf '%s\t%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+    fi
+  done
+}
+
+# Return the last value for a key. Inline Environment entries are loaded first
+# and EnvironmentFile entries second, so the EnvironmentFile value wins.
+get_service_env_value() {
+  local key="$1"
+  printf '%s\n' "${SERVICE_ENV_ENTRIES}" | awk -F '\t' -v key="${key}" '
+    $1 == key { found = 1; value = substr($0, length($1) + 2) }
+    END { if (found) print value }
+  '
+}
+
 # Read systemd unit once; reused by env validation AND migration drift check below.
 UNIT_CONTENT=""
+ENV_FILE_CONTENT=""
+SERVICE_ENV_ENTRIES=""
 if [[ "${DEPLOY_BACKEND}" == "true" && (
       "${SKIP_ENV_CHECK:-0}" != "1" ||
       "${SKIP_DEBUG_AGENT_CHECK:-0}" != "1" ||
@@ -225,6 +284,29 @@ if [[ "${DEPLOY_BACKEND}" == "true" && (
     echo "  Hint: ensure the service file exists and is world-readable (chmod 644)." >&2
     exit 1
   fi
+
+  ENV_FILE_SPEC=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE \
+    's/^[[:space:]]*EnvironmentFile[[:space:]]*=[[:space:]]*(.*)$/\1/p' | head -n 1)
+  if [[ -n "${ENV_FILE_SPEC}" ]]; then
+    ENV_FILE_SPEC=$(trim_whitespace "${ENV_FILE_SPEC}")
+    ENV_FILE_SPEC=$(strip_outer_quotes "${ENV_FILE_SPEC}")
+    ENV_FILE_SPEC="${ENV_FILE_SPEC#-}"
+    ENV_FILE_PATH=$(strip_outer_quotes "${ENV_FILE_SPEC}")
+    if [[ -n "${ENV_FILE_PATH}" ]]; then
+      printf -v ENV_FILE_PATH_QUOTED '%q' "${ENV_FILE_PATH}"
+      if ! ENV_FILE_CONTENT=$(ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" \
+        "sudo cat -- ${ENV_FILE_PATH_QUOTED}" 2>&1); then
+        ENV_FILE_CONTENT=""
+      fi
+    fi
+  fi
+
+  # Later entries win during lookup, matching systemd's EnvironmentFile values
+  # taking precedence over inline Environment values.
+  SERVICE_ENV_ENTRIES=$(
+    printf '%s\n' "${UNIT_CONTENT}" | parse_inline_environment
+    printf '%s\n' "${ENV_FILE_CONTENT}" | parse_environment_file
+  )
 fi
 
 if [[ "${DEPLOY_BACKEND}" != "true" ]]; then
@@ -237,9 +319,9 @@ else
   MISSING=()
   PLACEHOLDERS=()
   for key in "${REQUIRED_KEYS[@]}"; do
-    # Match Environment="KEY=VALUE" and capture VALUE. Empty value counts as missing
-    # because config.go's getEnv() falls back to defaults when the var is empty.
-    value=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE "s/^Environment=\"${key}=(.*)\"$/\1/p" | head -n 1)
+    # Empty value counts as missing because config.go's getEnv() falls back to
+    # defaults when the var is empty.
+    value=$(get_service_env_value "${key}")
     if [[ -z "${value}" ]]; then
       MISSING+=("${key}")
       continue
@@ -299,7 +381,7 @@ else
   da_present=()
   da_missing=()
   for key in "${DA_KEYS[@]}"; do
-    value=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE "s/^Environment=\"${key}=(.*)\"$/\1/p" | head -n 1)
+    value=$(get_service_env_value "${key}")
     if [[ -z "${value}" ]]; then
       da_empty_count=$((da_empty_count + 1))
       da_missing+=("${key}")
@@ -356,9 +438,9 @@ elif [[ "${SKIP_MIGRATION_CHECK:-0}" == "1" ]]; then
 else
   echo "=== Checking migration drift on ${TARGET} ==="
 
-  DB_USER_VAL=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE 's/^Environment="DB_USER=(.*)"$/\1/p' | head -n 1)
-  DB_PASS_VAL=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE 's/^Environment="DB_PASSWORD=(.*)"$/\1/p' | head -n 1)
-  DB_NAME_VAL=$(printf '%s\n' "${UNIT_CONTENT}" | sed -nE 's/^Environment="DB_NAME=(.*)"$/\1/p' | head -n 1)
+  DB_USER_VAL=$(get_service_env_value DB_USER)
+  DB_PASS_VAL=$(get_service_env_value DB_PASSWORD)
+  DB_NAME_VAL=$(get_service_env_value DB_NAME)
 
   if [[ -z "${DB_USER_VAL}" || -z "${DB_NAME_VAL}" ]]; then
     echo "✗ Could not extract DB_USER/DB_NAME from systemd unit." >&2
