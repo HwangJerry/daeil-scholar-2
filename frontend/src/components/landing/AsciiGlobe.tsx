@@ -14,7 +14,19 @@ const MAX_DEVICE_PIXEL_RATIO = 2;
 const GLOBE_RADIUS_RATIO = 0.46;
 const MIN_FONT_SIZE_PX = 6;
 const FONT_RADIUS_DIVISOR = 17;
-const MIN_POINT_OPACITY = 0.45;
+const RIM_OPACITY = 0.22;
+const RIM_LINE_WIDTH_DIVISOR = 140;
+
+// Fixed directional light (already unit length) so the globe shows a clear
+// day/night terminator as it spins, instead of a flat camera-facing glow.
+// The light sits well off the view axis (large x/y, modest z) so the dot
+// product swings from near-1 on the sunlit side to near-0 well before the
+// limb, instead of only dimming at the very edge. Character choice still
+// keys off raw view-facing depth (broad, even coverage of the continents);
+// this vector only drives the shading contrast.
+const LIGHT_DIRECTION = { x: -0.72, y: 0.48, z: 0.5 };
+const AMBIENT_OPACITY_FLOOR = 0.03;
+const LIGHT_CONTRAST_EXPONENT = 4.2;
 
 const GLOBE_POINTS = createAsciiGlobePoints();
 
@@ -42,6 +54,17 @@ function drawGlobe(
   const fontSize = Math.max(MIN_FONT_SIZE_PX, radius / FONT_RADIUS_DIVISOR);
 
   context.clearRect(0, 0, width, height);
+
+  // A sphere's silhouette is a perfect circle under orthographic projection
+  // regardless of rotation — draw it once so the point cloud reads as a
+  // solid globe rather than a scattered constellation.
+  context.globalAlpha = RIM_OPACITY;
+  context.strokeStyle = surfaceColor || computedStyle.color;
+  context.lineWidth = Math.max(1, radius / RIM_LINE_WIDTH_DIVISOR);
+  context.beginPath();
+  context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  context.stroke();
+
   context.fillStyle = surfaceColor || computedStyle.color;
   context.font = `${computedStyle.fontWeight} ${fontSize}px ${computedStyle.fontFamily}`;
   context.textAlign = 'center';
@@ -53,10 +76,20 @@ function drawGlobe(
     const z = point.cosLatitude * Math.sin(rotatedLongitude);
     if (z <= 0) continue;
 
-    const character = getAsciiGlobeCharacter(point.isLand, z);
+    const lightDot = Math.max(
+      0,
+      x * LIGHT_DIRECTION.x + point.sinLatitude * LIGHT_DIRECTION.y + z * LIGHT_DIRECTION.z,
+    );
+    const shade = lightDot ** LIGHT_CONTRAST_EXPONENT;
+
+    // Ocean fades to genuinely blank glyphs on the dark side (not just low
+    // alpha) so the terminator reads as real negative space against the
+    // hero's navy background; land keeps a faint outline so the coastline
+    // silhouette never fully disappears as the globe turns.
+    const character = getAsciiGlobeCharacter(point.isLand, shade);
     if (!character) continue;
 
-    context.globalAlpha = MIN_POINT_OPACITY + z * (1 - MIN_POINT_OPACITY);
+    context.globalAlpha = AMBIENT_OPACITY_FLOOR + shade * (1 - AMBIENT_OPACITY_FLOOR);
     context.fillText(
       character,
       centerX + x * radius,

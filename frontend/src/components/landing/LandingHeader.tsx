@@ -12,13 +12,19 @@ type LandingNavItem = {
 };
 
 const LANDING_NAV_ITEMS: readonly LandingNavItem[] = [
-  { id: 'download', label: '앱 다운로드', href: '#download' },
+  { id: 'download', label: '모바일앱', href: '#download' },
   { id: 'news', label: '최근 소식', href: '#news' },
   { id: 'about', label: '장학회 소개', href: '#about' },
   { id: 'business', label: '장학사업', href: '#business' },
 ];
 
-const LANDING_SECTION_IDS = LANDING_NAV_ITEMS.map((item) => item.id);
+const ABOUT_SECTION_IDS = ['about', 'greeting', 'vision', 'history', 'organization'];
+const LANDING_SECTION_IDS = [
+  'download',
+  'news',
+  ...ABOUT_SECTION_IDS,
+  'business',
+];
 const MOBILE_MENU_ID = 'landing-mobile-navigation';
 
 interface LandingNavigationProps {
@@ -33,7 +39,11 @@ function LandingNavigation({
   onNavigate,
 }: LandingNavigationProps) {
   return LANDING_NAV_ITEMS.map((item) => {
-    const isActive = activeSectionId === item.id;
+    const isAboutSectionActive =
+      item.id === 'about' &&
+      activeSectionId !== null &&
+      ABOUT_SECTION_IDS.includes(activeSectionId);
+    const isActive = isAboutSectionActive || activeSectionId === item.id;
 
     return (
       <a

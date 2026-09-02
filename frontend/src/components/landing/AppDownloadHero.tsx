@@ -1,5 +1,4 @@
 // AppDownloadHero — App marketplace CTA hero focused on the download message
-import { ArrowDown } from 'lucide-react';
 import {
   APP_DOWNLOAD_LINKS,
   type AppDownloadLinks,
@@ -44,7 +43,7 @@ export function AppDownloadHero({ downloadLinks = APP_DOWNLOAD_LINKS }: AppDownl
                   'text-xs font-semibold uppercase tracking-[0.24em] text-primary-muted',
                 )}
               >
-                DAEIL ALUMNI COMMUNITY
+                DAEIL SCHOLARSHIP FOUNDATION
               </p>
               <h1
                 id="app-download-heading"
@@ -76,11 +75,16 @@ export function AppDownloadHero({ downloadLinks = APP_DOWNLOAD_LINKS }: AppDownl
         <a
           href="#news"
           className={cn(
-            'mt-8 inline-flex min-h-11 w-fit items-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-primary-muted transition-colors hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-muted focus-visible:ring-offset-2 focus-visible:ring-offset-hero-from',
+            'mx-auto mt-8 inline-flex min-h-11 self-center flex-col items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-primary-muted transition-colors hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-muted focus-visible:ring-offset-2 focus-visible:ring-offset-hero-from',
           )}
         >
           최근 소식 보기
-          <ArrowDown aria-hidden="true" className={cn('size-4')} />
+          <span
+            aria-hidden="true"
+            className={cn(
+              'h-8 w-px origin-top bg-current animate-scroll-indicator motion-reduce:animate-none',
+            )}
+          />
         </a>
       </div>
     </section>

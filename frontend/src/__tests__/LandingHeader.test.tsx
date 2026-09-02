@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LandingHeader } from '../components/landing/LandingHeader';
 
-const NAVIGATION_LABELS = ['앱 다운로드', '최근 소식', '장학회 소개', '장학사업'];
+const NAVIGATION_LABELS = ['모바일앱', '최근 소식', '장학회 소개', '장학사업'];
 let intersectionObserverCallback: IntersectionObserverCallback | undefined;
 
 class IntersectionObserverMock {
@@ -67,7 +67,7 @@ describe('LandingHeader', () => {
       name: '랜딩 페이지 모바일',
     });
     const downloadLink = within(mobileNavigation).getByRole('link', {
-      name: '앱 다운로드',
+      name: '모바일앱',
     });
     await user.tab();
     expect(downloadLink).toHaveFocus();
@@ -113,7 +113,7 @@ describe('LandingHeader', () => {
       'page',
     );
     expect(
-      within(desktopNavigation).getByRole('link', { name: '앱 다운로드' }),
+      within(desktopNavigation).getByRole('link', { name: '모바일앱' }),
     ).not.toHaveAttribute('aria-current');
   });
 });

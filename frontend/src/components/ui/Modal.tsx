@@ -5,9 +5,15 @@ interface ModalProps {
   children: React.ReactNode;
   onClose: () => void;
   maxWidth?: string;
+  align?: 'start' | 'center';
 }
 
-export function Modal({ children, onClose, maxWidth = 'max-w-2xl' }: ModalProps) {
+export function Modal({
+  children,
+  onClose,
+  maxWidth = 'max-w-2xl',
+  align = 'start',
+}: ModalProps) {
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -19,7 +25,7 @@ export function Modal({ children, onClose, maxWidth = 'max-w-2xl' }: ModalProps)
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm">
       <div
-        className="flex min-h-full items-start justify-center px-4 py-10"
+        className={`flex min-h-full ${align === 'center' ? 'items-center' : 'items-start'} justify-center px-4 py-10`}
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose();
         }}

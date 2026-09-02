@@ -1,17 +1,24 @@
 // asciiGlobe — Pure sampling and character-selection helpers for the landing globe
 import { WORLD_LAND_MASK } from '../constants/worldLandMask';
 
-const LATITUDE_STEPS = 32;
-const LONGITUDE_STEPS = 64;
+const LATITUDE_STEPS = 48;
+const LONGITUDE_STEPS = 96;
 const FULL_LATITUDE_DEGREES = 180;
 const FULL_LONGITUDE_DEGREES = 360;
 const NORTH_POLE_DEGREES = 90;
 const WESTERN_EDGE_DEGREES = -180;
 const DEGREES_TO_RADIANS = Math.PI / 180;
 
-const LOW_BRIGHTNESS_LIMIT = 0.25;
-const MEDIUM_BRIGHTNESS_LIMIT = 0.5;
-const HIGH_BRIGHTNESS_LIMIT = 0.75;
+const LAND_LOW_BRIGHTNESS_LIMIT = 0.25;
+const LAND_MEDIUM_BRIGHTNESS_LIMIT = 0.5;
+const LAND_HIGH_BRIGHTNESS_LIMIT = 0.75;
+
+// Ocean is shown too (not just land) so the point cloud reads as a full sphere
+// rather than floating continents — the low limit sits well below land's so
+// most of the visible hemisphere still carries a faint '·' texture.
+const OCEAN_LOW_BRIGHTNESS_LIMIT = 0.1;
+const OCEAN_MEDIUM_BRIGHTNESS_LIMIT = 0.4;
+const OCEAN_HIGH_BRIGHTNESS_LIMIT = 0.7;
 
 export interface AsciiGlobePoint {
   cosLatitude: number;
@@ -71,14 +78,14 @@ export function createAsciiGlobePoints(): readonly AsciiGlobePoint[] {
 
 export function getAsciiGlobeCharacter(isLand: boolean, brightness: number) {
   if (isLand) {
-    if (brightness < LOW_BRIGHTNESS_LIMIT) return '·';
-    if (brightness < MEDIUM_BRIGHTNESS_LIMIT) return 'x';
-    if (brightness < HIGH_BRIGHTNESS_LIMIT) return '#';
+    if (brightness < LAND_LOW_BRIGHTNESS_LIMIT) return '·';
+    if (brightness < LAND_MEDIUM_BRIGHTNESS_LIMIT) return 'x';
+    if (brightness < LAND_HIGH_BRIGHTNESS_LIMIT) return '#';
     return '@';
   }
 
-  if (brightness < LOW_BRIGHTNESS_LIMIT) return '';
-  if (brightness < MEDIUM_BRIGHTNESS_LIMIT) return '·';
-  if (brightness < HIGH_BRIGHTNESS_LIMIT) return 'x';
+  if (brightness < OCEAN_LOW_BRIGHTNESS_LIMIT) return '';
+  if (brightness < OCEAN_MEDIUM_BRIGHTNESS_LIMIT) return '·';
+  if (brightness < OCEAN_HIGH_BRIGHTNESS_LIMIT) return 'x';
   return 'X';
 }

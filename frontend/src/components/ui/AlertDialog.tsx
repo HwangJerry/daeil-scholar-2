@@ -68,7 +68,7 @@ export function AlertDialog({ open, ...contentProps }: AlertDialogProps) {
   if (!open) return null;
 
   return (
-    <Modal onClose={contentProps.onConfirm} maxWidth="max-w-sm">
+    <Modal onClose={contentProps.onConfirm} maxWidth="max-w-sm" align="center">
       <AlertDialogContent {...contentProps} />
     </Modal>
   );

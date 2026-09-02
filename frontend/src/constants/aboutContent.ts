@@ -100,6 +100,7 @@ export interface OrgPerson {
 export interface OrgGroup {
   name: string;
   lead?: OrgPerson;
+  coLead?: OrgPerson;
   members?: OrgPerson[];
   subgroups?: { title: string; members: OrgPerson[] }[];
 }
@@ -110,12 +111,17 @@ export const ORG_CHAIR: OrgPerson = {
   role: '정동회계법인 본부장',
 };
 
+// Featured alongside the board's lead (장대용 부회장) — same object reference is
+// reused inside ORG_GROUPS.이사회.members so components can exclude it by identity.
+const ORG_BOARD_CO_LEAD: OrgPerson = { name: '조한준', cohort: '10기·러', role: '총괄이사' };
+
 export const ORG_GROUPS: readonly OrgGroup[] = [
   {
     name: '이사회',
     lead: { name: '장대용', cohort: '7기·중', role: '부회장' },
+    coLead: ORG_BOARD_CO_LEAD,
     members: [
-      { name: '조한준', cohort: '10기·러', role: '총괄이사' },
+      ORG_BOARD_CO_LEAD,
       { name: '김민정', cohort: '6기·독', role: '(주)크레파스솔루션 대표' },
       { name: '김 웅', cohort: '2기·독', role: '(주)티에스인베스트먼트 대표' },
       { name: '김형주', cohort: '13기·중', role: '(주)봉우 대표' },

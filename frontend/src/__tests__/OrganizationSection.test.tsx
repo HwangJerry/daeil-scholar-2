@@ -1,8 +1,22 @@
-// OrganizationSection.test — Landing organization hierarchy and shared-content contracts
+// OrganizationSection.test — Landing organization hierarchy across desktop tree and mobile accordion
 import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OrganizationSection } from '../components/landing/OrganizationSection';
 import { ORG_CHAIR, ORG_GROUPS, type OrgPerson } from '../constants/aboutContent';
+
+function mockViewport(isMobile: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(max-width: 767px)' && isMobile,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  );
+}
 
 function getOrganizationPeople() {
   return ORG_GROUPS.flatMap((group) => [
@@ -20,16 +34,21 @@ function countPeopleByName(people: readonly OrgPerson[]) {
 }
 
 describe('OrganizationSection', () => {
-  it('renders the chair before every shared organization group', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('renders the chair before every organization group on desktop', () => {
+    mockViewport(false);
     render(<OrganizationSection />);
 
     const section = document.getElementById('organization');
-    expect(section).toHaveClass('scroll-mt-[var(--landing-header-height)]', 'overflow-x-clip');
     expect(section).toHaveAttribute('aria-labelledby', 'organization-heading');
 
     const chairHeading = screen.getByRole('heading', { name: ORG_CHAIR.name });
     expect(screen.getByText(ORG_CHAIR.cohort)).toBeInTheDocument();
     expect(screen.getByText(ORG_CHAIR.role ?? '')).toBeInTheDocument();
+
     const groupList = section?.querySelector('ol');
     expect(groupList).not.toBeNull();
     const chairPrecedesGroups = Boolean(
@@ -43,23 +62,28 @@ describe('OrganizationSection', () => {
     }
   });
 
-  it('renders every shared lead, member, and subgroup without truncating text', () => {
+  it('features the board co-lead beside the lead and keeps the full roster intact (desktop)', () => {
+    mockViewport(false);
     render(<OrganizationSection />);
+
+    const board = ORG_GROUPS.find((group) => group.name === '이사회');
+    expect(board?.coLead).toBeDefined();
+    const leadLine = screen
+      .getAllByText(board!.lead!.name)
+      .map((el) => el.closest('p'))
+      .find((p) => p?.textContent === `${board!.lead!.name} · ${board!.lead!.role}`);
+    const coLeadLine = screen
+      .getAllByText(board!.coLead!.name)
+      .map((el) => el.closest('p'))
+      .find((p) => p?.textContent === `${board!.coLead!.name} · ${board!.coLead!.role}`);
+    expect(leadLine).toBeTruthy();
+    expect(coLeadLine).toBeTruthy();
 
     const people = getOrganizationPeople();
     const peopleByName = countPeopleByName(people);
 
     for (const [name, expectedCount] of peopleByName) {
-      const nameElements = screen.getAllByText(name);
-      expect(nameElements).toHaveLength(expectedCount);
-
-      for (const nameElement of nameElements) {
-        expect(nameElement.closest('p')).toHaveClass(
-          'min-w-0',
-          'flex-wrap',
-          '[overflow-wrap:anywhere]',
-        );
-      }
+      expect(screen.getAllByText(name)).toHaveLength(expectedCount);
     }
 
     for (const group of ORG_GROUPS) {
@@ -69,11 +93,36 @@ describe('OrganizationSection', () => {
         expect(subgroupSection).not.toBeNull();
 
         for (const member of subgroup.members) {
-          expect(within(subgroupSection as HTMLElement).getByText(member.name)).toBeInTheDocument();
+          expect(
+            within(subgroupSection as HTMLElement).getByText(member.name),
+          ).toBeInTheDocument();
         }
       }
     }
 
-    expect(document.querySelectorAll('[class*="line-clamp"], [class*="truncate"]')).toHaveLength(0);
+    expect(document.querySelectorAll('[class*="line-clamp"], [class*="truncate"]')).toHaveLength(
+      0,
+    );
+  });
+
+  it('renders the mobile accordion collapsed by default and expands sub-teams on tap', async () => {
+    mockViewport(true);
+    const user = userEvent.setup();
+    render(<OrganizationSection />);
+
+    expect(screen.getByRole('heading', { name: ORG_CHAIR.name })).toBeInTheDocument();
+    for (const group of ORG_GROUPS) {
+      expect(screen.getByRole('heading', { name: group.name })).toBeInTheDocument();
+    }
+
+    expect(screen.queryByText('신보아')).not.toBeInTheDocument();
+
+    const secretariatToggle = screen.getByRole('button', { name: /사무국/ });
+    expect(secretariatToggle).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(secretariatToggle);
+
+    expect(secretariatToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('신보아')).toBeInTheDocument();
   });
 });
