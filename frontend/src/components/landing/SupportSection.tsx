@@ -46,7 +46,7 @@ export function SupportSection({
             <h2
               id="support-heading"
               className={cn(
-                'mt-4 font-serif text-3xl font-bold leading-tight tracking-tight text-surface sm:text-4xl md:text-5xl',
+                'mt-4 font-serif text-3xl font-bold leading-tight tracking-tight text-surface sm:text-4xl md:text-5xl lg:whitespace-nowrap',
               )}
             >
               후배들의 가능성을 함께 열어주세요.
