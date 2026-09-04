@@ -110,6 +110,28 @@ describe('AppDownloadActions', () => {
     expect(screen.queryByText('출시 준비 중')).not.toBeInTheDocument();
   });
 
+  it('portals the desktop dialog to the viewport layer', async () => {
+    const user = userEvent.setup();
+    mockMobileViewport(false);
+    const { container } = render(
+      <section className="landing-scroll-reveal">
+        <AppDownloadActions downloadLinks={UNAVAILABLE_DOWNLOAD_LINKS} />
+      </section>,
+    );
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'App Store 출시 준비 중 안내 보기',
+      }),
+    );
+
+    const dialogTitle = screen.getByRole('heading', { name: '출시 준비 중' });
+    const viewportLayer = dialogTitle.closest<HTMLElement>('.fixed.inset-0');
+
+    expect(container).not.toContainElement(viewportLayer);
+    expect(viewportLayer?.parentElement).toBe(document.body);
+  });
+
   it('opens a BottomSheet for an unavailable marketplace on mobile', async () => {
     const user = userEvent.setup();
     mockMobileViewport(true);
