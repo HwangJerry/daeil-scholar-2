@@ -12,7 +12,7 @@ export default function Footer() {
   return (
     <footer className="mt-12 border-t border-border-subtle px-6 py-8 text-center">
       <nav
-        aria-label="장학회 소개"
+        aria-label="장학회 정보"
         className="mb-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-2xs"
       >
         {FOOTER_INFO_LINKS.map((link, index) => (

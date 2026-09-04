@@ -16,12 +16,6 @@ export const ABOUT_LINKS: readonly AboutLink[] = [
 ];
 
 export const FOOTER_INFO_LINKS: readonly { to: string; label: string }[] = [
-  { to: '/about', label: '장학회 소개' },
-  { to: '/greetings', label: '인사말' },
-  { to: '/vision', label: '비전' },
-  { to: '/history', label: '연혁' },
-  { to: '/organization', label: '조직도' },
-  { to: '/business', label: '사업소개' },
   { to: '/disclosure', label: '의무공시' },
 ];
 

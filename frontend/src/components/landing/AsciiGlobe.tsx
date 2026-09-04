@@ -2,33 +2,47 @@
 import { useEffect, useRef } from 'react';
 import {
   createAsciiGlobePoints,
+  createAsciiGlobeStars,
   getAsciiGlobeCharacter,
+  isAsciiGlobeLandAt,
+  type AsciiGlobePoint,
 } from '../../lib/asciiGlobe';
 import { cn } from '../../lib/utils';
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
-const ROTATION_SPEED_RADIANS_PER_SECOND = 0.12;
-const INITIAL_ROTATION_Y = -Math.PI / 6;
+const TARGET_FRAME_RATE = 30;
+const TARGET_FRAME_INTERVAL_MS = 1000 / TARGET_FRAME_RATE;
+const ROTATION_SPEED_RADIANS_PER_SECOND = 0.18;
+const INITIAL_ROTATION_Y = -Math.PI / 9;
+const EARTH_AXIS_TILT_RADIANS = -Math.PI / 24;
 const MAX_FRAME_DELTA_SECONDS = 0.1;
 const MAX_DEVICE_PIXEL_RATIO = 2;
-const GLOBE_RADIUS_RATIO = 0.46;
-const MIN_FONT_SIZE_PX = 6;
-const FONT_RADIUS_DIVISOR = 17;
-const RIM_OPACITY = 0.22;
-const RIM_LINE_WIDTH_DIVISOR = 140;
+const GLOBE_RADIUS_RATIO = 0.4;
+const COMPACT_CANVAS_BREAKPOINT_PX = 240;
+const COMPACT_GRID_SIZE = 56;
+const LARGE_GRID_SIZE = 76;
+const COMPACT_FONT_RADIUS_DIVISOR = 22;
+const LARGE_FONT_RADIUS_DIVISOR = 30;
+const MIN_FONT_SIZE_PX = 3.4;
+const STAR_FONT_SIZE_DIVISOR = 120;
+const MIN_STAR_FONT_SIZE_PX = 2.5;
+const AMBIENT_LIGHT = 0.13;
+const LIGHT_CONTRAST_EXPONENT = 1.45;
+const LAND_BASE_OPACITY = 0.34;
+const OCEAN_BASE_OPACITY = 0.15;
+const LAND_LIGHT_OPACITY = 0.66;
+const OCEAN_LIGHT_OPACITY = 0.48;
+const LIMB_OPACITY_FLOOR = 0.46;
+const LIMB_FADE_DEPTH = 0.2;
+const RADIANS_TO_DEGREES = 180 / Math.PI;
 
-// Fixed directional light (already unit length) so the globe shows a clear
-// day/night terminator as it spins, instead of a flat camera-facing glow.
-// The light sits well off the view axis (large x/y, modest z) so the dot
-// product swings from near-1 on the sunlit side to near-0 well before the
-// limb, instead of only dimming at the very edge. Character choice still
-// keys off raw view-facing depth (broad, even coverage of the continents);
-// this vector only drives the shading contrast.
-const LIGHT_DIRECTION = { x: -0.72, y: 0.48, z: 0.5 };
-const AMBIENT_OPACITY_FLOOR = 0.03;
-const LIGHT_CONTRAST_EXPONENT = 4.2;
+// Camera-space light: high and left, matching the reference's bright crescent
+// while keeping enough frontal light for recognizable land masses.
+const LIGHT_DIRECTION = { x: -0.5, y: -0.32, z: 0.8 };
 
-const GLOBE_POINTS = createAsciiGlobePoints();
+const COMPACT_GLOBE_POINTS = createAsciiGlobePoints(COMPACT_GRID_SIZE);
+const LARGE_GLOBE_POINTS = createAsciiGlobePoints(LARGE_GRID_SIZE);
+const BACKGROUND_STARS = createAsciiGlobeStars();
 
 interface CanvasDimensions {
   width: number;
@@ -39,6 +53,59 @@ interface AsciiGlobeProps {
   className?: string;
 }
 
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function smoothstep(edgeStart: number, edgeEnd: number, value: number) {
+  const normalizedValue = clamp(
+    (value - edgeStart) / (edgeEnd - edgeStart),
+    0,
+    1,
+  );
+
+  return normalizedValue * normalizedValue * (3 - 2 * normalizedValue);
+}
+
+function getSurfaceLocation(point: AsciiGlobePoint, rotationY: number) {
+  const tiltCosine = Math.cos(EARTH_AXIS_TILT_RADIANS);
+  const tiltSine = Math.sin(EARTH_AXIS_TILT_RADIANS);
+  const untiltedY =
+    point.normalizedY * tiltCosine + point.normalizedZ * tiltSine;
+  const untiltedZ =
+    -point.normalizedY * tiltSine + point.normalizedZ * tiltCosine;
+  const latitudeDegrees = Math.asin(untiltedY) * RADIANS_TO_DEGREES;
+  const longitudeDegrees =
+    (Math.atan2(untiltedZ, point.normalizedX) - rotationY) *
+    RADIANS_TO_DEGREES;
+
+  return { latitudeDegrees, longitudeDegrees };
+}
+
+function drawBackgroundStars(
+  context: CanvasRenderingContext2D,
+  dimensions: CanvasDimensions,
+  color: string,
+) {
+  const { width, height } = dimensions;
+  const fontSize = Math.max(
+    MIN_STAR_FONT_SIZE_PX,
+    Math.min(width, height) / STAR_FONT_SIZE_DIVISOR,
+  );
+
+  context.fillStyle = color;
+  context.font = `${fontSize}px monospace`;
+
+  for (const star of BACKGROUND_STARS) {
+    context.globalAlpha = star.opacity;
+    context.fillText(
+      star.character,
+      width / 2 + star.normalizedX * width * 0.49,
+      height / 2 + star.normalizedY * height * 0.49,
+    );
+  }
+}
+
 function drawGlobe(
   canvas: HTMLCanvasElement,
   context: CanvasRenderingContext2D,
@@ -46,54 +113,61 @@ function drawGlobe(
   rotationY: number,
 ) {
   const { width, height } = dimensions;
+  const isCompactCanvas = Math.min(width, height) < COMPACT_CANVAS_BREAKPOINT_PX;
+  const points = isCompactCanvas ? COMPACT_GLOBE_POINTS : LARGE_GLOBE_POINTS;
+  const fontRadiusDivisor = isCompactCanvas
+    ? COMPACT_FONT_RADIUS_DIVISOR
+    : LARGE_FONT_RADIUS_DIVISOR;
   const radius = Math.min(width, height) * GLOBE_RADIUS_RATIO;
   const centerX = width / 2;
   const centerY = height / 2;
   const computedStyle = getComputedStyle(canvas);
-  const surfaceColor = computedStyle.getPropertyValue('--color-surface').trim();
-  const fontSize = Math.max(MIN_FONT_SIZE_PX, radius / FONT_RADIUS_DIVISOR);
+  const surfaceColor =
+    computedStyle.getPropertyValue('--color-surface').trim() ||
+    computedStyle.color;
+  const fontSize = Math.max(MIN_FONT_SIZE_PX, radius / fontRadiusDivisor);
 
   context.clearRect(0, 0, width, height);
-
-  // A sphere's silhouette is a perfect circle under orthographic projection
-  // regardless of rotation — draw it once so the point cloud reads as a
-  // solid globe rather than a scattered constellation.
-  context.globalAlpha = RIM_OPACITY;
-  context.strokeStyle = surfaceColor || computedStyle.color;
-  context.lineWidth = Math.max(1, radius / RIM_LINE_WIDTH_DIVISOR);
-  context.beginPath();
-  context.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  context.stroke();
-
-  context.fillStyle = surfaceColor || computedStyle.color;
-  context.font = `${computedStyle.fontWeight} ${fontSize}px ${computedStyle.fontFamily}`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
+  drawBackgroundStars(context, dimensions, surfaceColor);
 
-  for (const point of GLOBE_POINTS) {
-    const rotatedLongitude = point.longitudeRadians + rotationY;
-    const x = point.cosLatitude * Math.cos(rotatedLongitude);
-    const z = point.cosLatitude * Math.sin(rotatedLongitude);
-    if (z <= 0) continue;
+  context.fillStyle = surfaceColor;
+  context.font = `${computedStyle.fontWeight} ${fontSize}px ${computedStyle.fontFamily}`;
 
+  for (const point of points) {
     const lightDot = Math.max(
       0,
-      x * LIGHT_DIRECTION.x + point.sinLatitude * LIGHT_DIRECTION.y + z * LIGHT_DIRECTION.z,
+      point.normalizedX * LIGHT_DIRECTION.x +
+        point.normalizedY * LIGHT_DIRECTION.y +
+        point.normalizedZ * LIGHT_DIRECTION.z,
     );
-    const shade = lightDot ** LIGHT_CONTRAST_EXPONENT;
+    const brightness =
+      AMBIENT_LIGHT +
+      lightDot ** LIGHT_CONTRAST_EXPONENT * (1 - AMBIENT_LIGHT);
+    const { latitudeDegrees, longitudeDegrees } = getSurfaceLocation(
+      point,
+      rotationY,
+    );
+    const isLand = isAsciiGlobeLandAt(latitudeDegrees, longitudeDegrees);
+    const character = getAsciiGlobeCharacter(
+      isLand,
+      brightness,
+      point.textureNoise,
+    );
+    const surfaceOpacity = isLand
+      ? LAND_BASE_OPACITY + brightness * LAND_LIGHT_OPACITY
+      : OCEAN_BASE_OPACITY + brightness * OCEAN_LIGHT_OPACITY;
+    const limbOpacity =
+      LIMB_OPACITY_FLOOR +
+      smoothstep(0, LIMB_FADE_DEPTH, point.normalizedZ) *
+        (1 - LIMB_OPACITY_FLOOR);
 
-    // Ocean fades to genuinely blank glyphs on the dark side (not just low
-    // alpha) so the terminator reads as real negative space against the
-    // hero's navy background; land keeps a faint outline so the coastline
-    // silhouette never fully disappears as the globe turns.
-    const character = getAsciiGlobeCharacter(point.isLand, shade);
-    if (!character) continue;
-
-    context.globalAlpha = AMBIENT_OPACITY_FLOOR + shade * (1 - AMBIENT_OPACITY_FLOOR);
+    context.globalAlpha = surfaceOpacity * limbOpacity;
     context.fillText(
       character,
-      centerX + x * radius,
-      centerY - point.sinLatitude * radius,
+      centerX + point.normalizedX * radius,
+      centerY + point.normalizedY * radius,
     );
   }
 
@@ -135,15 +209,25 @@ export function AsciiGlobe({ className }: AsciiGlobeProps) {
       animationFrameId = null;
       if (prefersReducedMotion || !isDocumentVisible || !isInViewport) return;
 
-      if (lastFrameTime !== null) {
+      const previousFrameTime = lastFrameTime;
+      const isFirstFrame = previousFrameTime === null;
+      const elapsedMilliseconds =
+        previousFrameTime === null
+          ? TARGET_FRAME_INTERVAL_MS
+          : frameTime - previousFrameTime;
+      const shouldRenderFrame =
+        isFirstFrame || elapsedMilliseconds >= TARGET_FRAME_INTERVAL_MS;
+
+      if (shouldRenderFrame) {
         const elapsedSeconds = Math.min(
-          (frameTime - lastFrameTime) / 1000,
+          elapsedMilliseconds / 1000,
           MAX_FRAME_DELTA_SECONDS,
         );
         rotationY += ROTATION_SPEED_RADIANS_PER_SECOND * elapsedSeconds;
+        lastFrameTime = frameTime;
+        renderFrame();
       }
-      lastFrameTime = frameTime;
-      renderFrame();
+
       animationFrameId = window.requestAnimationFrame(animate);
     };
 

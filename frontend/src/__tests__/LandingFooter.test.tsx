@@ -9,6 +9,15 @@ import {
   FOOTER_INFO_LINKS,
 } from '../constants/aboutContent';
 
+const REMOVED_FOOTER_MENU_LABELS = [
+  '장학회 소개',
+  '인사말',
+  '비전',
+  '연혁',
+  '조직도',
+  '사업소개',
+] as const;
+
 function renderWithRouter(component: React.ReactNode) {
   return render(<MemoryRouter>{component}</MemoryRouter>);
 }
@@ -34,6 +43,9 @@ describe('LandingFooter', () => {
       'href',
       disclosureLink?.to,
     );
+    REMOVED_FOOTER_MENU_LABELS.forEach((label) => {
+      expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument();
+    });
   });
 
   it('keeps the site-wide footer backed by the same contact data', () => {
@@ -48,5 +60,12 @@ describe('LandingFooter', () => {
     expect(container).toHaveTextContent(
       FOOTER_CONTACT_INFO.donationReceiptOrganizationName,
     );
+    expect(screen.getByRole('link', { name: '의무공시' })).toHaveAttribute(
+      'href',
+      '/disclosure',
+    );
+    REMOVED_FOOTER_MENU_LABELS.forEach((label) => {
+      expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument();
+    });
   });
 });
