@@ -29,7 +29,12 @@ export function LandingFooter() {
 
           <address className={cn('grid gap-5 not-italic sm:grid-cols-2')}>
             <div className={cn('flex gap-3')}>
-              <Phone aria-hidden="true" className={cn('mt-0.5 size-4 shrink-0 text-surface')} />
+              <span
+                aria-hidden="true"
+                className={cn('flex min-h-11 shrink-0 items-center')}
+              >
+                <Phone className={cn('size-4 text-surface')} />
+              </span>
               <p className={cn('text-body-sm leading-6')}>
                 <a
                   href={`tel:${FOOTER_CONTACT_INFO.telephone}`}
@@ -44,7 +49,12 @@ export function LandingFooter() {
               </p>
             </div>
             <div className={cn('flex gap-3')}>
-              <Mail aria-hidden="true" className={cn('mt-0.5 size-4 shrink-0 text-surface')} />
+              <span
+                aria-hidden="true"
+                className={cn('flex min-h-11 shrink-0 items-center')}
+              >
+                <Mail className={cn('size-4 text-surface')} />
+              </span>
               <a
                 href={`mailto:${FOOTER_CONTACT_INFO.email}`}
                 className={cn(
