@@ -48,7 +48,7 @@ export function LandingFooter() {
                 Fax {FOOTER_CONTACT_INFO.fax}
               </p>
             </div>
-            <div className={cn('flex gap-3')}>
+            <div className={cn('flex items-start gap-3')}>
               <span
                 aria-hidden="true"
                 className={cn('flex min-h-11 shrink-0 items-center')}
