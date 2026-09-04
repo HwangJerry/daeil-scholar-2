@@ -59,4 +59,23 @@ describe('AppDownloadHero', () => {
     expect(screen.queryByRole('figure')).not.toBeInTheDocument();
     expect(screen.queryAllByRole('img')).toHaveLength(0);
   });
+
+  it('layers an enlarged mobile globe behind the hero content', () => {
+    const { container } = render(
+      <AppDownloadHero downloadLinks={UNAVAILABLE_DOWNLOAD_LINKS} />,
+    );
+    const globe = container.querySelector('canvas')?.parentElement;
+    const heading = screen.getByRole('heading', {
+      name: '대일의 오늘과 내일을 잇습니다.',
+    });
+
+    expect(globe).toHaveClass(
+      'absolute',
+      'z-0',
+      'size-[440px]',
+      'sm:size-[500px]',
+      'md:relative',
+    );
+    expect(heading.parentElement).toHaveClass('relative', 'z-10');
+  });
 });

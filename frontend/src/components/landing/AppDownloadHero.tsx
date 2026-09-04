@@ -34,10 +34,10 @@ export function AppDownloadHero({ downloadLinks = APP_DOWNLOAD_LINKS }: AppDownl
         <div className={cn('flex flex-1 items-center')}>
           <div
             className={cn(
-              'grid w-full items-center gap-7 md:grid-cols-[minmax(0,1fr)_340px] md:gap-8 lg:grid-cols-[minmax(0,1fr)_390px] lg:gap-10',
+              'relative isolate grid w-full items-center md:grid-cols-[minmax(0,1fr)_340px] md:gap-8 lg:grid-cols-[minmax(0,1fr)_390px] lg:gap-10',
             )}
           >
-            <div className={cn('w-full max-w-[620px]')}>
+            <div className={cn('relative z-10 w-full max-w-[620px]')}>
               <p
                 className={cn(
                   'text-xs font-semibold uppercase tracking-[0.24em] text-primary-muted',
@@ -68,14 +68,18 @@ export function AppDownloadHero({ downloadLinks = APP_DOWNLOAD_LINKS }: AppDownl
               />
             </div>
 
-            <AsciiGlobe className={cn('justify-self-center md:justify-self-end')} />
+            <AsciiGlobe
+              className={cn(
+                'pointer-events-none absolute left-[62%] top-1/2 z-0 -translate-x-1/2 -translate-y-1/2 opacity-40 sm:left-[68%] sm:opacity-45 md:relative md:left-auto md:top-auto md:translate-x-0 md:translate-y-0 md:justify-self-end md:opacity-100',
+              )}
+            />
           </div>
         </div>
 
         <a
           href="#news"
           className={cn(
-            'mx-auto mt-8 inline-flex min-h-11 self-center flex-col items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-primary-muted transition-colors hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-muted focus-visible:ring-offset-2 focus-visible:ring-offset-hero-from',
+            'relative z-10 mx-auto mt-8 inline-flex min-h-11 self-center flex-col items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-primary-muted transition-colors hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-muted focus-visible:ring-offset-2 focus-visible:ring-offset-hero-from',
           )}
         >
           최근 소식 보기

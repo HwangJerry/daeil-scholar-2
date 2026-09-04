@@ -35,6 +35,7 @@ const OCEAN_LIGHT_OPACITY = 0.48;
 const LIMB_OPACITY_FLOOR = 0.46;
 const LIMB_FADE_DEPTH = 0.2;
 const RADIANS_TO_DEGREES = 180 / Math.PI;
+const UPSIDE_DOWN_AXIS_MULTIPLIER = -1;
 
 // Camera-space light: high and left, matching the reference's bright crescent
 // while keeping enough frontal light for recognizable land masses.
@@ -162,12 +163,14 @@ function drawGlobe(
       LIMB_OPACITY_FLOOR +
       smoothstep(0, LIMB_FADE_DEPTH, point.normalizedZ) *
         (1 - LIMB_OPACITY_FLOOR);
+    const displayX = point.normalizedX * UPSIDE_DOWN_AXIS_MULTIPLIER;
+    const displayY = point.normalizedY * UPSIDE_DOWN_AXIS_MULTIPLIER;
 
     context.globalAlpha = surfaceOpacity * limbOpacity;
     context.fillText(
       character,
-      centerX + point.normalizedX * radius,
-      centerY + point.normalizedY * radius,
+      centerX + displayX * radius,
+      centerY + displayY * radius,
     );
   }
 
@@ -308,7 +311,7 @@ export function AsciiGlobe({ className }: AsciiGlobeProps) {
     <div
       aria-hidden="true"
       className={cn(
-        'relative size-[180px] shrink-0 sm:size-[210px] md:size-[340px] lg:size-[390px]',
+        'relative size-[440px] shrink-0 sm:size-[500px] md:size-[340px] lg:size-[390px]',
         className,
       )}
     >
