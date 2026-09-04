@@ -13,13 +13,13 @@ export default function Footer() {
     <footer className="mt-12 border-t border-border-subtle px-6 py-8 text-center">
       <nav
         aria-label="장학회 정보"
-        className="mb-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-2xs"
+        className="mb-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-2"
       >
         {FOOTER_INFO_LINKS.map((link, index) => (
           <Fragment key={link.to}>
             <Link
               to={link.to}
-              className="text-text-secondary underline-offset-4 hover:text-text-primary hover:underline transition-colors"
+              className="inline-flex min-h-12 items-center rounded-full border border-border-subtle px-5 text-base font-semibold text-text-primary transition-colors hover:border-text-secondary hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               {link.label}
             </Link>

@@ -39,9 +39,15 @@ describe('LandingFooter', () => {
       'href',
       `mailto:${FOOTER_CONTACT_INFO.email}`,
     );
-    expect(screen.getByRole('link', { name: '의무공시' })).toHaveAttribute(
-      'href',
-      disclosureLink?.to,
+    const mandatoryDisclosureLink = screen.getByRole('link', {
+      name: '의무공시',
+    });
+    expect(mandatoryDisclosureLink).toHaveAttribute('href', disclosureLink?.to);
+    expect(mandatoryDisclosureLink).toHaveClass(
+      'min-h-12',
+      'px-5',
+      'text-base',
+      'font-semibold',
     );
     REMOVED_FOOTER_MENU_LABELS.forEach((label) => {
       expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument();
@@ -60,9 +66,15 @@ describe('LandingFooter', () => {
     expect(container).toHaveTextContent(
       FOOTER_CONTACT_INFO.donationReceiptOrganizationName,
     );
-    expect(screen.getByRole('link', { name: '의무공시' })).toHaveAttribute(
-      'href',
-      '/disclosure',
+    const mandatoryDisclosureLink = screen.getByRole('link', {
+      name: '의무공시',
+    });
+    expect(mandatoryDisclosureLink).toHaveAttribute('href', '/disclosure');
+    expect(mandatoryDisclosureLink).toHaveClass(
+      'min-h-12',
+      'px-5',
+      'text-base',
+      'font-semibold',
     );
     REMOVED_FOOTER_MENU_LABELS.forEach((label) => {
       expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument();

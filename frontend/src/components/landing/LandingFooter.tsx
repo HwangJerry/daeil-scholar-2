@@ -63,13 +63,13 @@ export function LandingFooter() {
 
         <div className={cn('grid gap-8 py-10 md:grid-cols-[minmax(0,1fr)_auto] md:items-start')}>
           <nav aria-label="장학회 정보">
-            <ul className={cn('flex flex-wrap gap-x-5 gap-y-3 text-xs')}>
+            <ul className={cn('flex flex-wrap gap-x-5 gap-y-3')}>
               {FOOTER_INFO_LINKS.map((link) => (
                 <li key={link.to}>
                   <Link
                     to={link.to}
                     className={cn(
-                      'inline-flex min-h-11 items-center rounded-sm transition-colors hover:text-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-muted focus-visible:ring-offset-2 focus-visible:ring-offset-primary',
+                      'inline-flex min-h-12 items-center rounded-full border border-primary-muted/50 px-5 text-base font-semibold text-surface transition-colors hover:border-surface hover:bg-surface/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-muted focus-visible:ring-offset-2 focus-visible:ring-offset-primary',
                     )}
                   >
                     {link.label}
