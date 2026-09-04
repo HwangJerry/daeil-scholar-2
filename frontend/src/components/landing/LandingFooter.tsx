@@ -31,7 +31,7 @@ export function LandingFooter() {
             <div className={cn('flex gap-3')}>
               <span
                 aria-hidden="true"
-                className={cn('flex min-h-11 shrink-0 items-center')}
+                className={cn('flex min-h-11 shrink-0 self-start items-center')}
               >
                 <Phone className={cn('size-4 text-surface')} />
               </span>
