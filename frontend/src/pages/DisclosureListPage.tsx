@@ -1,119 +1,152 @@
-// DisclosureListPage — 공익법인 의무공시 목록 (단순 표/리스트 + 첨부 강조)
-import { Link } from 'react-router-dom';
-import { Paperclip, Eye } from 'lucide-react';
-import { Card } from '../components/ui/Card';
-import { InfoPageShell } from '../components/info/InfoPageShell';
+// DisclosureListPage — Editorial public-disclosure archive with complete query states
+import { AlertCircle, ArrowRight, Files, LoaderCircle } from 'lucide-react';
+import { DisclosureListItem } from '../components/disclosure/DisclosureListItem';
+import { DisclosurePageHeader } from '../components/disclosure/DisclosurePageHeader';
+import { DisclosureStatePanel } from '../components/disclosure/DisclosureStatePanel';
+import { PageMeta } from '../components/seo/PageMeta';
+import { Bone } from '../components/ui/Skeleton';
+import { Button } from '../components/ui/Button';
 import { useDisclosureList } from '../hooks/useDisclosureList';
-import type { DisclosureItem } from '../types/api';
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}.${m}.${day}`;
-}
+const DISCLOSURE_SKELETON_COUNT = 5;
 
-function DesktopRow({ item }: { item: DisclosureItem }) {
+function DisclosureListSkeleton() {
   return (
-    <Link
-      to={`/disclosure/${item.seq}`}
-      className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 px-4 py-3.5 text-sm border-b border-border-subtle last:border-b-0 hover:bg-surface-hover transition-colors"
-    >
-      <span className="font-medium text-text-primary truncate">{item.subject}</span>
-      <span className="text-text-tertiary whitespace-nowrap">{formatDate(item.regDate)}</span>
-      <span className="inline-flex items-center gap-1 text-text-tertiary whitespace-nowrap min-w-[3rem] justify-end">
-        {item.attachmentCount > 0 && (
-          <>
-            <Paperclip className="h-3.5 w-3.5" />
-            {item.attachmentCount}
-          </>
-        )}
-      </span>
-      <span className="inline-flex items-center gap-1 text-text-placeholder whitespace-nowrap">
-        <Eye className="h-3.5 w-3.5" />
-        {item.hit}
-      </span>
-    </Link>
-  );
-}
-
-function MobileRow({ item }: { item: DisclosureItem }) {
-  return (
-    <Link
-      to={`/disclosure/${item.seq}`}
-      className="block px-4 py-3 border-b border-border-subtle last:border-b-0 hover:bg-surface-hover transition-colors"
-    >
-      <h3 className="font-medium text-text-primary text-body-md leading-snug line-clamp-2">{item.subject}</h3>
-      <div className="mt-1.5 flex items-center gap-2 text-2xs text-text-tertiary">
-        <span>{formatDate(item.regDate)}</span>
-        {item.attachmentCount > 0 && (
-          <>
-            <span className="text-border-subtle">·</span>
-            <span className="inline-flex items-center gap-0.5">
-              <Paperclip className="h-3 w-3" />
-              {item.attachmentCount}
-            </span>
-          </>
-        )}
-        <span className="text-border-subtle">·</span>
-        <span className="inline-flex items-center gap-0.5">
-          <Eye className="h-3 w-3" />
-          {item.hit}
-        </span>
-      </div>
-    </Link>
+    <div role="status" aria-label="의무공시 목록 불러오는 중">
+      {Array.from({ length: DISCLOSURE_SKELETON_COUNT }, (_, index) => (
+        <div
+          key={index}
+          className="grid min-h-32 gap-5 border-b border-border py-7 last:border-b-0 md:grid-cols-[minmax(0,1fr)_12rem_2.75rem] md:items-center md:gap-10"
+        >
+          <div className="space-y-3">
+            <Bone className="h-2.5 w-28" />
+            <Bone className="h-7 w-2/3" />
+            <Bone className="h-3.5 w-1/2" />
+          </div>
+          <Bone className="h-3.5 w-36" />
+          <Bone className="hidden size-11 rounded-full md:block" />
+        </div>
+      ))}
+    </div>
   );
 }
 
 export function DisclosureListPage() {
-  const { items, hasMore, isFetching, loadMore } = useDisclosureList();
+  const {
+    items,
+    hasMore,
+    isError,
+    isFetching,
+    isLoading,
+    loadMore,
+    refetch,
+  } = useDisclosureList();
+
+  const hasItems = items.length > 0;
+  const archiveCountLabel = (() => {
+    if (!hasItems) return '공시 자료를 확인해 주세요.';
+    if (hasMore) return `현재 ${items.length}개의 공시 자료`;
+    return `총 ${items.length}개의 공시 자료`;
+  })();
 
   return (
-    <InfoPageShell
-      title="의무공시"
-      subtitle="공익법인 의무공시 자료를 공개합니다."
-      canonicalPath="/disclosure"
-    >
-      <Card variant="default" padding="none">
-        {items.length === 0 && !isFetching ? (
-          <p className="px-4 py-12 text-center text-sm text-text-tertiary">
-            등록된 공시 자료가 없습니다.
-          </p>
-        ) : (
-          <>
-            <div className="hidden md:block">
-              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 border-b border-border-subtle bg-surface-muted px-4 py-2.5 text-2xs font-medium text-text-tertiary">
-                <span>제목</span>
-                <span className="whitespace-nowrap">작성일</span>
-                <span className="whitespace-nowrap min-w-[3rem] text-right">첨부</span>
-                <span className="whitespace-nowrap">조회</span>
-              </div>
-              {items.map((item) => (
-                <DesktopRow key={item.seq} item={item} />
-              ))}
-            </div>
-            <div className="md:hidden">
-              {items.map((item) => (
-                <MobileRow key={item.seq} item={item} />
-              ))}
-            </div>
-          </>
-        )}
-      </Card>
+    <>
+      <PageMeta
+        title="의무공시"
+        description="대일외국어고등학교 장학회의 공익법인 의무공시 자료를 확인하세요."
+        canonicalPath="/disclosure"
+      />
+      <DisclosurePageHeader
+        title="의무공시"
+        description="장학회의 운영과 재정 정보를 투명하게 공개합니다. 연도별 공시 자료와 원본 문서를 확인할 수 있습니다."
+      />
 
-      {hasMore && (
-        <div className="text-center">
-          <button
-            onClick={() => loadMore()}
-            disabled={isFetching}
-            className="rounded-lg border border-border-subtle bg-surface px-5 py-2 text-sm text-text-secondary hover:bg-surface-hover transition-colors disabled:opacity-50"
-          >
-            {isFetching ? '불러오는 중...' : '더 보기'}
-          </button>
+      <section
+        aria-labelledby="disclosure-archive-heading"
+        className="bg-background px-5 py-14 sm:px-8 md:px-6 md:py-20"
+      >
+        <div className="mx-auto max-w-[1080px]">
+          <header className="mb-8 flex flex-col gap-3 border-b border-border pb-7 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-2xs font-semibold uppercase tracking-[0.2em] text-text-placeholder">
+                Archive
+              </p>
+              <h2
+                id="disclosure-archive-heading"
+                className="mt-2 font-serif text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl"
+              >
+                연도별 공개 자료
+              </h2>
+            </div>
+            <p className="text-body-sm text-text-tertiary">{archiveCountLabel}</p>
+          </header>
+
+          {isLoading && <DisclosureListSkeleton />}
+
+          {!isLoading && isError && !hasItems && (
+            <DisclosureStatePanel
+              icon={AlertCircle}
+              title="공시 자료를 불러오지 못했습니다"
+              description="네트워크 연결을 확인한 뒤 다시 시도해 주세요."
+              onRetry={() => void refetch()}
+            />
+          )}
+
+          {!isLoading && !isError && !hasItems && (
+            <DisclosureStatePanel
+              icon={Files}
+              title="등록된 공시 자료가 없습니다"
+              description="새로운 공시 자료가 등록되면 이곳에서 확인할 수 있습니다."
+            />
+          )}
+
+          {hasItems && (
+            <>
+              <ol aria-label="의무공시 자료 목록">
+                {items.map((item) => (
+                  <DisclosureListItem key={item.seq} item={item} />
+                ))}
+              </ol>
+
+              {isError && (
+                <div
+                  role="alert"
+                  className="mt-6 flex flex-col gap-3 rounded-lg border border-error-border bg-error-subtle px-4 py-3 text-body-sm text-error-text sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <span>추가 공시 자료를 불러오지 못했습니다.</span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
+                    다시 시도
+                  </Button>
+                </div>
+              )}
+
+              {hasMore && !isError && (
+                <div className="mt-10 flex justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void loadMore()}
+                    disabled={isFetching}
+                    className="min-h-11 min-w-40"
+                  >
+                    {isFetching ? (
+                      <>
+                        <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                        불러오는 중
+                      </>
+                    ) : (
+                      <>
+                        공시 자료 더 보기
+                        <ArrowRight aria-hidden="true" className="size-4" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
         </div>
-      )}
-    </InfoPageShell>
+      </section>
+    </>
   );
 }

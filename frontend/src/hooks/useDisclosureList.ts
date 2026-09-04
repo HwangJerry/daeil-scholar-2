@@ -10,8 +10,11 @@ export function useDisclosureList() {
     data,
     fetchNextPage,
     hasNextPage,
+    isError,
     isFetching,
     isFetchingNextPage,
+    isLoading,
+    refetch,
   } = useInfiniteQuery({
     queryKey: ['disclosure', 'list'],
     queryFn: async ({ pageParam }) => {
@@ -30,7 +33,10 @@ export function useDisclosureList() {
   return {
     items,
     hasMore: hasNextPage ?? false,
+    isError,
     isFetching: isFetching || isFetchingNextPage,
+    isLoading,
     loadMore: fetchNextPage,
+    refetch,
   };
 }

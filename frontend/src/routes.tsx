@@ -2,6 +2,7 @@
 import { Navigate, Routes, Route, useLocation } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
 import Layout from './components/layout/Layout';
+import { EditorialLayout } from './components/layout/EditorialLayout';
 import { LandingPage } from './pages/LandingPage';
 import { PostDetailPage } from './pages/PostDetailPage';
 import { AboutPage } from './pages/AboutPage';
@@ -24,13 +25,21 @@ const LAYOUT_ROUTES = [
   { path: '/history', element: <HistoryPage /> },
   { path: '/organization', element: <OrganizationPage /> },
   { path: '/business', element: <BusinessPage /> },
+] as const;
+
+const EDITORIAL_ROUTES = [
   { path: '/disclosure', element: <DisclosureListPage /> },
   { path: '/disclosure/:seq', element: <DisclosureDetailPage /> },
 ] as const;
 
 const FALLBACK_ROUTE = { path: '*', element: <Navigate to="/" replace /> } as const;
 
-const PUBLIC_ROUTES = [LANDING_ROUTE, ...LAYOUT_ROUTES, FALLBACK_ROUTE] as const;
+const PUBLIC_ROUTES = [
+  LANDING_ROUTE,
+  ...LAYOUT_ROUTES,
+  ...EDITORIAL_ROUTES,
+  FALLBACK_ROUTE,
+] as const;
 
 export const PUBLIC_ROUTE_PATHS = PUBLIC_ROUTES.map((route) => route.path);
 
@@ -46,6 +55,11 @@ export default function AppRoutes() {
         <Route path={LANDING_ROUTE.path} element={LANDING_ROUTE.element} />
         <Route element={<Layout />}>
           {LAYOUT_ROUTES.map((route) => (
+            <Route key={route.path} path={route.path} element={route.element} />
+          ))}
+        </Route>
+        <Route element={<EditorialLayout />}>
+          {EDITORIAL_ROUTES.map((route) => (
             <Route key={route.path} path={route.path} element={route.element} />
           ))}
         </Route>

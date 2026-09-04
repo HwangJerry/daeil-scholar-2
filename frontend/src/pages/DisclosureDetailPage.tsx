@@ -1,33 +1,61 @@
-// DisclosureDetailPage — 공익법인 의무공시 상세 (본문 + 첨부 다운로드)
-import { useParams, Link } from 'react-router-dom';
-import { Eye, ArrowLeft } from 'lucide-react';
-import { useDisclosureDetail } from '../hooks/useDisclosureDetail';
-import { PageMeta } from '../components/seo/PageMeta';
+// DisclosureDetailPage — Editorial disclosure document with download-focused attachments
+import { ArrowLeft, Eye, FileQuestion } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
 import { HtmlContent } from '../components/common/HtmlContent';
-import { FileAttachments } from '../components/post/FileAttachments';
-import Footer from '../components/layout/Footer';
-import { AboutBackLink } from '../components/info/AboutBackLink';
+import { DisclosureAttachmentList } from '../components/disclosure/DisclosureAttachmentList';
+import { DisclosurePageHeader } from '../components/disclosure/DisclosurePageHeader';
+import { PageMeta } from '../components/seo/PageMeta';
+import { Bone } from '../components/ui/Skeleton';
+import { useDisclosureDetail } from '../hooks/useDisclosureDetail';
+import { formatAbsoluteDate } from '../utils/date';
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}.${m}.${day}`;
-}
-
-function DetailSkeleton() {
+function DisclosureDetailSkeleton() {
   return (
-    <div className="mx-auto max-w-3xl space-y-4 rounded-xl bg-surface p-6 shadow-card border border-border-subtle">
-      <div className="h-6 w-3/4 rounded skeleton-shimmer" />
-      <div className="h-4 w-1/2 rounded skeleton-shimmer" />
-      <div className="space-y-2">
-        <div className="h-4 rounded skeleton-shimmer" />
-        <div className="h-4 rounded skeleton-shimmer" />
-        <div className="h-4 w-2/3 rounded skeleton-shimmer" />
+    <div role="status" aria-label="의무공시 상세 불러오는 중">
+      <div className="border-b border-border-subtle bg-surface px-5 py-14 sm:px-8 md:px-6 md:py-20">
+        <div className="mx-auto max-w-[1080px] space-y-5">
+          <Bone className="h-4 w-32" />
+          <Bone className="h-3 w-36" />
+          <Bone className="h-12 w-3/4 max-w-2xl" />
+          <Bone className="h-4 w-52" />
+        </div>
+      </div>
+      <div className="px-5 py-14 sm:px-8 md:px-6 md:py-20">
+        <div className="mx-auto max-w-4xl space-y-4">
+          <Bone className="h-5 w-full" />
+          <Bone className="h-5 w-4/5" />
+          <Bone className="h-5 w-2/3" />
+        </div>
       </div>
     </div>
+  );
+}
+
+function DisclosureDetailError() {
+  return (
+    <>
+      <DisclosurePageHeader
+        title="공시 자료를 찾을 수 없습니다"
+        description="요청한 공시 자료가 없거나 일시적으로 불러올 수 없습니다."
+      />
+      <div className="bg-background px-5 py-14 sm:px-8 md:px-6 md:py-20">
+        <div className="mx-auto flex max-w-[1080px] flex-col items-center border-y border-border px-6 py-14 text-center">
+          <span className="inline-flex size-12 items-center justify-center rounded-full bg-primary-light text-primary">
+            <FileQuestion aria-hidden="true" className="size-5" />
+          </span>
+          <p className="mt-4 max-w-sm text-body-sm leading-relaxed text-text-tertiary">
+            주소를 다시 확인하거나 의무공시 목록에서 원하는 자료를 선택해 주세요.
+          </p>
+          <Link
+            to="/disclosure"
+            className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            의무공시 목록
+          </Link>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -37,22 +65,19 @@ export function DisclosureDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="px-4 py-6 pb-20">
-        <DetailSkeleton />
-      </div>
+      <>
+        <PageMeta title="의무공시 자료" canonicalPath={`/disclosure/${seq ?? ''}`} />
+        <DisclosureDetailSkeleton />
+      </>
     );
   }
 
   if (isError || !post) {
     return (
-      <div className="px-4 py-6 pb-20">
-        <div className="mx-auto max-w-3xl rounded-xl bg-surface p-6 text-center shadow-card border border-border-subtle">
-          <p className="text-sm text-text-tertiary">공시 자료를 찾을 수 없습니다.</p>
-          <Link to="/disclosure" className="mt-3 inline-block text-sm text-primary hover:underline">
-            의무공시 목록으로
-          </Link>
-        </div>
-      </div>
+      <>
+        <PageMeta title="공시 자료를 찾을 수 없습니다" canonicalPath="/disclosure" />
+        <DisclosureDetailError />
+      </>
     );
   }
 
@@ -68,44 +93,62 @@ export function DisclosureDetailPage() {
           { name: post.subject, url: `/disclosure/${post.seq}` },
         ]}
       />
-      <div className="px-4 py-6 pb-20 animate-fade-in-up">
-        <div className="mx-auto mb-4 max-w-3xl">
-          <AboutBackLink />
-        </div>
-        <article className="mx-auto max-w-3xl overflow-hidden rounded-xl bg-surface shadow-md border-transparent">
-          <div className="p-5 md:p-6">
-            <header className="mb-5">
-              <h1 className="mb-3 text-xl font-bold font-serif text-text-primary leading-snug">
-                {post.subject}
-              </h1>
-              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-text-tertiary">
-                <span className="text-text-secondary font-medium">{post.regName}</span>
-                <span>·</span>
-                <span>{formatDate(post.regDate)}</span>
-                <span>·</span>
-                <span className="inline-flex items-center gap-1">
-                  <Eye className="h-3.5 w-3.5" />
-                  {post.hit}
-                </span>
-              </div>
-            </header>
 
-            <HtmlContent html={post.contentHtml} className="text-text-secondary" />
-            <FileAttachments files={post.files} />
-
-            <div className="mt-8 border-t border-border-subtle pt-4">
-              <Link
-                to="/disclosure"
-                className="inline-flex items-center gap-1.5 text-sm text-text-tertiary hover:text-primary transition-colors"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                목록으로
-              </Link>
+      <header className="border-b border-border-subtle bg-surface px-5 py-14 sm:px-8 md:px-6 md:py-20">
+        <div className="mx-auto max-w-[1080px]">
+          <Link
+            to="/disclosure"
+            className="inline-flex min-h-11 items-center gap-2 rounded-md text-body-sm font-medium text-text-tertiary transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          >
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            의무공시 목록
+          </Link>
+          <p className="mt-8 text-xs font-semibold uppercase tracking-[0.24em] text-text-placeholder">
+            Public Disclosure
+          </p>
+          <h1 className="mt-3 max-w-4xl font-serif text-3xl font-bold leading-tight tracking-tight text-text-primary sm:text-4xl md:text-5xl">
+            {post.subject}
+          </h1>
+          <dl className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-caption text-text-tertiary">
+            <div>
+              <dt className="sr-only">작성자</dt>
+              <dd className="font-medium text-text-secondary">{post.regName}</dd>
             </div>
+            <div>
+              <dt className="sr-only">등록일</dt>
+              <dd>
+                <time dateTime={post.regDate}>{formatAbsoluteDate(post.regDate)}</time>
+              </dd>
+            </div>
+            <div className="inline-flex items-center gap-1.5">
+              <dt className="sr-only">조회수</dt>
+              <Eye aria-hidden="true" className="size-3.5" />
+              <dd>{post.hit}</dd>
+            </div>
+          </dl>
+        </div>
+      </header>
+
+      <section aria-label="공시 자료 본문" className="bg-background px-5 py-14 sm:px-8 md:px-6 md:py-20">
+        <article className="mx-auto max-w-4xl">
+          <HtmlContent
+            html={post.contentHtml}
+            className="prose-headings:font-serif prose-headings:text-text-primary prose-p:leading-8 prose-p:text-text-secondary"
+          />
+
+          <DisclosureAttachmentList files={post.files} />
+
+          <div className="mt-14 border-t border-border pt-8">
+            <Link
+              to="/disclosure"
+              className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm font-medium text-text-secondary transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            >
+              <ArrowLeft aria-hidden="true" className="size-4" />
+              의무공시 목록으로 돌아가기
+            </Link>
           </div>
         </article>
-        <Footer />
-      </div>
+      </section>
     </>
   );
 }
