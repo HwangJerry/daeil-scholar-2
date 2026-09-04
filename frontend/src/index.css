@@ -2,12 +2,16 @@
 @plugin "@tailwindcss/typography";
 
 :root {
-  --landing-header-height: 3.5rem;
+  --landing-header-content-height: 3.5rem;
+  --landing-header-safe-area-top: env(safe-area-inset-top, 0px);
+  --landing-header-height: calc(
+    var(--landing-header-content-height) + var(--landing-header-safe-area-top)
+  );
 }
 
 @media (min-width: 48rem) {
   :root {
-    --landing-header-height: 4rem;
+    --landing-header-content-height: 4rem;
   }
 }
 

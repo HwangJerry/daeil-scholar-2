@@ -31,7 +31,7 @@ export function LandingPage() {
         href="#main-content"
         onClick={focusMainContent}
         className={cn(
-          'fixed left-4 top-3 z-[60] inline-flex min-h-11 -translate-y-[calc(100%+1rem)] items-center rounded-md bg-surface px-4 py-2 text-sm font-semibold text-primary shadow-nav transition-transform focus:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          'fixed left-4 top-[calc(var(--landing-header-safe-area-top)+0.75rem)] z-[60] inline-flex min-h-11 -translate-y-[calc(100%+1rem+var(--landing-header-safe-area-top))] items-center rounded-md bg-surface px-4 py-2 text-sm font-semibold text-primary shadow-nav transition-transform focus:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         )}
       >
         본문으로 건너뛰기

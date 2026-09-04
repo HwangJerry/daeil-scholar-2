@@ -98,8 +98,8 @@ export function PublicSiteHeader({
   }, [isMenuOpen]);
 
   return (
-    <header className="landing-header fixed inset-x-0 top-0 z-50 border-b border-border-subtle bg-surface/90 shadow-xs backdrop-blur-sm">
-      <div className="mx-auto flex h-14 max-w-[1080px] items-center justify-between px-4 md:h-16 md:px-6">
+    <header className="landing-header fixed inset-x-0 top-0 z-50 border-b border-border-subtle bg-surface/90 pt-[var(--landing-header-safe-area-top)] shadow-xs backdrop-blur-sm">
+      <div className="mx-auto flex h-[var(--landing-header-content-height)] max-w-[1080px] items-center justify-between px-4 md:px-6">
         <a
           href="/"
           aria-label="대일외국어고등학교 장학회 홈"

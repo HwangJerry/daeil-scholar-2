@@ -24,9 +24,14 @@ describe('LandingHeader', () => {
   });
 
   it('renders safely when landing sections do not exist yet', () => {
-    render(<LandingHeader />);
+    const { container } = render(<LandingHeader />);
 
     const desktopNavigation = screen.getByRole('navigation', { name: '랜딩 페이지' });
+    const header = container.querySelector('header');
+    const headerContent = header?.firstElementChild;
+
+    expect(header).toHaveClass('pt-[var(--landing-header-safe-area-top)]');
+    expect(headerContent).toHaveClass('h-[var(--landing-header-content-height)]');
     expect(within(desktopNavigation).getAllByRole('link')).toHaveLength(4);
     expect(screen.getByRole('button', { name: '메뉴 열기' })).toHaveAttribute(
       'aria-expanded',
