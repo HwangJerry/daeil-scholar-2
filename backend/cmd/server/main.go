@@ -95,6 +95,7 @@ func main() {
 	visitJob := d.visitJob
 	visitJob.Start()
 	d.privacyRetentionJob.Start()
+	d.accountErasureJob.Start()
 	blockedMessageCleanup := d.blockedMessageCleanup
 	blockedMessageCleanup.Start()
 	socialRevocationWorker := d.socialRevocationWorker
@@ -112,6 +113,7 @@ func main() {
 	emailWorker.Stop()
 	// subscriptionBillingJob.Stop()
 	visitJob.Stop()
+	d.accountErasureJob.Stop()
 	d.privacyRetentionJob.Stop()
 	blockedMessageCleanup.Stop()
 	socialRevocationWorker.Stop()

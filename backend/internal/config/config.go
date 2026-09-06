@@ -10,6 +10,7 @@ import (
 
 // Config holds all application configuration loaded from environment variables.
 type Config struct {
+	AccountErasure        AccountErasureConfig
 	Server                ServerConfig
 	DB                    DBConfig
 	Kakao                 KakaoConfig
@@ -25,6 +26,17 @@ type Config struct {
 	Environment           string // "dev" exposes manual subscription billing trigger; "prod" hides it
 	VisitIPSalt           string
 	MessageBlockedPhrases []string
+}
+
+// AccountErasureConfig holds private server-side automation integrations.
+type AccountErasureConfig struct {
+	LedgerConfirmed          bool
+	ReceiptOriginalsSeparate bool
+	LedgerYearEndMonth       int
+	LedgerEvidence           string
+	ExternalURL              string
+	ExternalToken            string
+	ArchiveKey               string
 }
 
 // SentryConfig holds read-only API credentials and mobile project slugs used
@@ -246,6 +258,7 @@ func Load() *Config {
 			APNSKeyID:          getEnv("APNS_KEY_ID", ""),
 			APNSPrivateKeyFile: getEnv("APNS_PRIVATE_KEY_FILE", ""),
 		},
+		AccountErasure: AccountErasureConfig{LedgerConfirmed: getBoolEnv("DONATION_LEDGER_RETENTION_CONFIRMED", false), ReceiptOriginalsSeparate: getBoolEnv("DONATION_RECEIPT_ORIGINALS_SEPARATE", false), LedgerYearEndMonth: getIntEnv("DONATION_LEDGER_YEAR_END_MONTH", 0), LedgerEvidence: getEnv("DONATION_LEDGER_RETENTION_EVIDENCE", ""), ExternalURL: getEnv("ACCOUNT_ERASURE_EXTERNAL_URL", ""), ExternalToken: getEnv("ACCOUNT_ERASURE_EXTERNAL_TOKEN", ""), ArchiveKey: getEnv("DONATION_ARCHIVE_KEY", "")},
 		Sentry: SentryConfig{
 			AuthToken:      getEnv("SENTRY_AUTH_TOKEN", ""),
 			Organization:   getEnv("SENTRY_ORG", ""),

@@ -7,6 +7,18 @@ import { fetchAccountDeletions, resolveAccountDeletion, verifyAccountDeletion, t
 const QUEUE_PAGE_SIZE = 50;
 const QUEUE_REFRESH_MS = 60_000;
 const STATUS_LABELS: Record<DeletionStatus, string> = { pending: '접수', processing: '처리 중', completed: '완료' };
+const AUTO_BLOCKERS: Record<string, string> = {
+  DONATION_RETENTION_REVIEW_REQUIRED: '기부 자료의 보존 근거와 기간을 확인해야 합니다.',
+  INVALID_DONATION_RETENTION_DECISION: '기부 자료의 보존 날짜 또는 근거를 수정해야 합니다.',
+  DONATION_ARCHIVE_KEY_REQUIRED: '기부 자료 보관소의 암호화 설정이 필요합니다.',
+  EXTERNAL_ERASURE_PROCESSOR_REQUIRED: '외부 서비스·백업 삭제 연동이 필요합니다.',
+  EXTERNAL_ERASURE_PENDING: '외부 서비스·백업 삭제 완료를 기다리고 있습니다.',
+  PROVIDER_REVOCATION_PENDING: 'Apple·카카오 연결 해제 완료를 기다리고 있습니다.',
+  UNHANDLED_ACCOUNT_REFERENCE: '자동 처리 범위 밖에 남은 회원 관련 자료를 확인해야 합니다.',
+  BILLING_REVOCATION_REVIEW_REQUIRED: '기존 정기결제 연결을 확인해야 합니다.',
+  FILE_PATH_REVIEW_REQUIRED: '파일 경로 또는 소유 관계 확인이 필요합니다.',
+  FILE_DELETE_RETRY_REQUIRED: '파일 삭제를 다시 시도합니다.',
+};
 const CHECKS = [
   ['resultNotified', '삭제 검증 후 이용자에게 처리 결과·보존 내역·이의제기 방법을 개별 안내하고 증빙을 남겼습니다.'],
   ['filesErased', '프로필·업로드 파일과 공유 사본을 실제로 삭제했습니다.'],
@@ -27,7 +39,7 @@ function DeletionReview({ item }: { item: AccountDeletion }) {
     otherIdentifiersChecked: false, evidenceReference: '', retainedRecords: '', retentionUntil: '',
   });
   const mutation = useMutation({
-    mutationFn: (action: 'start' | 'complete') => resolveAccountDeletion(item.requestId, action === 'start' ? { action } : evidence),
+    mutationFn: (action: 'start' | 'complete' | 'automatic' | 'manual') => resolveAccountDeletion(item.requestId, action === 'complete' ? evidence : { action }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['account-deletions'] }),
   });
   const verification = useQuery({ queryKey: ['account-deletion-verification', item.requestId], queryFn: () => verifyAccountDeletion(item.requestId), enabled: false });
@@ -39,8 +51,18 @@ function DeletionReview({ item }: { item: AccountDeletion }) {
       <h2 className="text-lg font-semibold text-dark-slate">접수번호 {item.requestId} · {STATUS_LABELS[item.status]}</h2>
       <p className="text-sm text-cool-gray">회원 번호 {item.userSeq ?? '삭제됨'} · 접수 {new Date(item.requestedAt).toLocaleString('ko-KR')}</p>
       <p className="text-sm text-dark-slate">처리 목표 {new Date(item.targetAt).toLocaleDateString('ko-KR')} · 결과 안내 기한 {new Date(item.dueAt).toLocaleDateString('ko-KR')}{overdue && ' · 기한 경과 — 즉시 확인 필요'}</p>
-      {item.status === 'pending' && <Button disabled={mutation.isPending} onClick={() => mutation.mutate('start')}>삭제 작업 시작 · 소셜 권한 철회 요청</Button>}
-      {item.status === 'processing' && (
+      {item.status !== 'completed' && (
+        <div className="space-y-3">
+          <p className="text-sm text-dark-slate">처리 방식: {item.processingMode === 'automatic' ? '자동' : '수동'} · 자동 작업 상태: {item.autoStage || '대기'}</p>
+          {item.autoCode && <p role="status" className="text-sm text-dark-slate">{AUTO_BLOCKERS[item.autoCode] ?? '서버 관리자의 확인이 필요합니다.'} <span className="break-all">({item.autoCode})</span> 원인을 해결하면 자동으로 재시도합니다.</p>}
+          <div className="flex flex-wrap gap-3">
+            <Button variant="outline" disabled={mutation.isPending || item.processingMode === 'manual'} onClick={() => mutation.mutate('manual')}>자동 처리 중지 · 수동으로 전환</Button>
+            <Button variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate('automatic')}>자동 처리 시작 · 재개</Button>
+          </div>
+        </div>
+      )}
+      {item.status === 'pending' && item.processingMode !== 'automatic' && <Button disabled={mutation.isPending} onClick={() => mutation.mutate('start')}>삭제 작업 시작 · 소셜 권한 철회 요청</Button>}
+      {item.status === 'processing' && item.processingMode !== 'automatic' && (
         <>
           <p className="text-sm text-cool-gray">계정·관련 데이터는 운영 절차에 따라 수동으로 삭제하세요. 이 화면의 확인 버튼은 데이터를 삭제하지 않습니다. 법정 보존 자료는 별도 보관소에 옮기고 근거·범위·만료일을 기록해야 합니다.</p>
           <Button variant="outline" disabled={verification.isFetching} onClick={() => { void verification.refetch(); }}>남은 데이터 조회</Button>
@@ -80,7 +102,7 @@ export function AccountDeletionsPage() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold text-dark-slate">계정 삭제 요청</h1>
-      <p className="text-sm text-cool-gray">담당: 황제철 · ghkdwp018@naver.com. 통상 3일 내 처리, 접수일부터 10일 내 결과 안내. 작업 시작과 완료는 root 권한이 필요합니다. 자동 이메일 발송은 없습니다. 담당자가 결과를 개별 통지하고 발송 증빙을 남겨야 합니다. 이용자는 앱의 확인번호로도 결과를 조회합니다.</p>
+      <p className="text-sm text-cool-gray">담당: 황제철 · ghkdwp018@naver.com. 통상 3일 내 처리, 접수일부터 10일 내 결과 안내. 작업 시작과 완료는 root 권한이 필요합니다. 새 요청은 자동으로 처리합니다. 기존 수동 요청은 수동 방식을 유지하며 언제든 전환할 수 있습니다. 자동 완료 결과는 앱의 확인번호로 게시합니다. 자동 이메일 발송은 없습니다. 수동 처리 시 담당자가 개별 통지하고 증빙을 남깁니다. 진행 중인 작업 단계가 끝난 뒤 수동 전환이 반영될 수 있습니다.</p>
       <label className="block text-sm text-dark-slate">상태{' '}
         <select value={status} onChange={(event) => { setStatus(event.target.value as DeletionStatus); setBefore(0); }} className="rounded-lg border border-border-light bg-surface p-2">
           {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}

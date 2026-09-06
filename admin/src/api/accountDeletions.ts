@@ -13,6 +13,9 @@ export interface AccountDeletion {
   retainedRecords: string;
   retentionUntil: string | null;
   evidenceReference: string;
+  processingMode?: "automatic" | "manual";
+  autoStage?: string;
+  autoCode?: string;
 }
 export interface DeletionEvidence {
   action: 'complete';
@@ -32,6 +35,6 @@ export function fetchAccountDeletions(status: DeletionStatus, before: number) {
 export function verifyAccountDeletion(id: number) {
   return api.get<{ items: DeletionFootprint[] }>(`/api/admin/account-deletions/${id}/verification`);
 }
-export function resolveAccountDeletion(id: number, evidence: DeletionEvidence | { action: 'start' }) {
+export function resolveAccountDeletion(id: number, evidence: DeletionEvidence | { action: 'start' | 'automatic' | 'manual' }) {
   return api.put<void>(`/api/admin/account-deletions/${id}`, evidence);
 }

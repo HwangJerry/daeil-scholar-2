@@ -4,13 +4,15 @@ These changes are prepared locally. They are not a production deployment or App 
 
 ## Active scope — operator decision
 
-The current task is iOS App Review readiness. Additional Korean-law/tax analysis, electronic donation receipt verification, and policy version-history features are deferred at the operator's request. Do not request those documents as prerequisites for continuing this task. This scope decision does not establish legal compliance or guarantee App Review approval.
+The current task adds automatic account erasure while retaining the existing manual workflow. On 2026-09-07 the operator explicitly brought Korean donation-record retention law back into scope. The current implementation and remaining production integrations are documented in [AUTOMATIC_ACCOUNT_ERASURE.md](AUTOMATIC_ACCOUNT_ERASURE.md). Organization-specific fiscal-year and receipt facts remain unconfirmed; this does not establish legal compliance or guarantee App Review approval.
 
 Use Apple's explicit review requirements for the active checklist. A detailed country-by-country transfer table or a universal seven-day backup/30-day Sentry period is not specified by Guideline 5.1.1(i). Accurate collection/use/sharing disclosures, equivalent third-party protection, retention/deletion and consent-withdrawal explanations remain in scope. Existing promises in the app/policy must match the actual candidate and operator workflow.
 
-The repository-specific [Apple account deletion scope review](APPLE_ACCOUNT_DELETION_SCOPE.md) defines the proposed erasure targets, policy wording, and verification gaps. In particular, the existing footprint scan misses `VD_USR_SEQ`, `O_ACCOUNT_USR_SEQ`, indirect identifiers and historical upload ownership; its zero count alone does not prove complete erasure. The review is a specification, not an implemented erasure engine or production validation.
+The repository-specific [Apple account deletion scope review](APPLE_ACCOUNT_DELETION_SCOPE.md) defines the proposed erasure targets, policy wording, and verification gaps. In particular, the existing footprint scan misses `VD_USR_SEQ`, `O_ACCOUNT_USR_SEQ`, indirect identifiers and historical upload ownership; its zero count alone does not prove complete erasure. That review predates the automatic engine. The automatic implementation now covers these explicit columns, durable file work and reviewed donation retention; external/legacy verification remains an integration prerequisite, not a production validation result.
 
 ## Implemented
+
+- Automatic account erasure now preserves existing manual requests and permits root takeover/resume. It verifies provider revocation and reviewed donation retention, requires external erasure evidence, deletes app records in a transaction, retries durable file work, and publishes private receipt confirmation. Full production automation is not ready until the real Sentry/backup/legacy processor and organization-specific retention settings are connected. See [the automatic erasure runbook](AUTOMATIC_ACCOUNT_ERASURE.md).
 
 - Public `/register` and `/register/complete` routes restore the app's email signup. Both bypass the temporary web maintenance gate without unlocking other routes. The signup page initializes its own auth state. Completion tells users to return to the native app after operator approval.
 - `POST /api/message-reports` accepts a message ID, reason, and optional details. Only approved, authenticated recipients can report visible, undeleted incoming messages. Evidence is selected in SQL, never supplied by the caller. Repeated reports retain the original record.
@@ -21,7 +23,7 @@ The repository-specific [Apple account deletion scope review](APPLE_ACCOUNT_DELE
 
 ## Deployment order
 
-1. Candidate source manifest SHA-256: `8232f1eff1f4287a36b5fd5823eaa3a31b5f339fc0ca523f953de1f25e4219b1`. The source manifest, regression pin, and environment example include migrations 055 and 056. Production approval/environment settings have not been changed. Review migration numbering against any concurrently developed backend changes; this branch adds `055_create_message_reports.sql` and `056_create_account_deletion_requests.sql`.
+1. Candidate source manifest SHA-256: `6390297e236d59afe37da53185fe4052d1f3ce70da53e2808f1fba69de72aed8`. The source manifest, regression pin, and environment example include migrations 055–057. Production approval/environment settings have not been changed. Review migration numbering against any concurrently developed backend changes; this branch adds `055_create_message_reports.sql` and `056_create_account_deletion_requests.sql`.
 2. Apply those additive migrations using the project's normal migration procedure. No production migration has been executed by this task.
 3. Deploy the backend and both SPAs together. Confirm signup works with an empty browser session and that `/api/message-reports` exists before distributing the new iOS build.
 4. Give a designated moderator an existing operator/root account. Confirm ordinary members cannot load `/api/admin/message-reports`.
@@ -46,9 +48,11 @@ The repository-specific [Apple account deletion scope review](APPLE_ACCOUNT_DELE
 5. Verify donation collection opens outside the app in the system browser and does not unlock digital benefits. The app must remain free for the external-fundraising route under 3.2.2(iv). Apple-approved in-app nonprofit fundraising would be a separate route; Korean public-benefit designation alone does not establish Apple approval.
 6. Verify password/Apple/Kakao login, production API configuration and production APNs in the candidate. Provide an approved working reviewer account and clear review notes, including the manual deletion steps and timing.
 
-Retained operator details: 대일외국어고등학교 장학회; privacy contact 엄은숙; request handler 황제철 at ghkdwp018@naver.com. Detailed Korean-law research remains reference material in the privacy documents, not an additional active research task. Do not resume production deployment merely because the review scope changed; the earlier deployment cancellation remains effective.
+Retained operator details: 대일외국어고등학교 장학회; privacy contact 엄은숙; request handler 황제철 at ghkdwp018@naver.com. Korean donation retention is in scope under the latest instruction; see the automatic erasure runbook for the implemented conditional rules. Do not resume production deployment merely because the review scope changed; the earlier deployment cancellation remains effective.
 
 ## Validation
+
+- Automatic-erasure follow-up: Go suite and vet pass, including disposable MariaDB 10.1.38 automatic/manual lifecycle tests, rollback on unknown references, retained archive expiry and donation aggregate preservation. Frontend 139 tests, both SPA builds and changed-file ESLint pass. Five public Playwright checks and administrator automatic/manual transition checks pass on mobile and desktop; a long error-code overflow was fixed. The iOS Debug simulator build passes. Real provider APIs, external processor and production deployment remain unverified.
 
 - Manual deletion follow-up: Debug iOS build succeeds and 122 tests pass; frontend 139 unit tests, both SPA builds, changed-file ESLint and 5 public Playwright regressions pass. Backend tests/vet and the pinned MariaDB 10.1.38 manual-deletion lifecycle test pass. Tests use synthetic data; actual Apple/Kakao revocation, production delivery and external/backup deletion are unverified.
 - iOS token compliance has zero violations. The workspace-wide design-system gate still reports existing web literals and the unrelated feed heading contract mismatch; those sources were not changed in this task.

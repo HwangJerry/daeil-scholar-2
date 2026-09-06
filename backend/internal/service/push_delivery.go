@@ -123,6 +123,14 @@ func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryIte
 	}
 	for _, target := range targets {
 		for attempt := 0; attempt < 3; attempt++ {
+			if guard, ok := n.store.(interface {
+				MessageStillAvailable(int, int, int64) (bool, error)
+			}); ok {
+				available, checkErr := guard.MessageStillAvailable(item.senderSeq, item.recvrSeq, item.accepted.MessageID)
+				if checkErr != nil || !available {
+					return
+				}
+			}
 			err = n.provider.Send(ctx, target, payload)
 			if err == nil {
 				break

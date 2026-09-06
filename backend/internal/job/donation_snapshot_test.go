@@ -20,6 +20,7 @@ func TestDonationSnapshotUsesCanonicalReceivedDonationAggregate(t *testing.T) {
 	job := NewDonationSnapshotJob(repo, zerolog.Nop())
 	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*COUNT\(DISTINCT CASE.*O_TYPE = 'A'.*O_LIFECYCLE_STATUS IN \('completed', 'partially_refunded'\)`).
 		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(75000), 2))
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM information_schema.TABLES`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"DC_GOAL", "DC_MANUAL_ADJ", "DC_MANUAL_DONOR_CNT",
