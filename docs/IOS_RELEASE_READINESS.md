@@ -2,6 +2,12 @@
 
 These changes are prepared locally. They are not a production deployment or App Store submission.
 
+## Active scope — operator decision
+
+The current task is iOS App Review readiness. Additional Korean-law/tax analysis, electronic donation receipt verification, and policy version-history features are deferred at the operator's request. Do not request those documents as prerequisites for continuing this task. This scope decision does not establish legal compliance or guarantee App Review approval.
+
+Use Apple's explicit review requirements for the active checklist. A detailed country-by-country transfer table or a universal seven-day backup/30-day Sentry period is not specified by Guideline 5.1.1(i). Accurate collection/use/sharing disclosures, equivalent third-party protection, retention/deletion and consent-withdrawal explanations remain in scope. Existing promises in the app/policy must match the actual candidate and operator workflow.
+
 ## Implemented
 
 - Public `/register` and `/register/complete` routes restore the app's email signup. Both bypass the temporary web maintenance gate without unlocking other routes. The signup page initializes its own auth state. Completion tells users to return to the native app after operator approval.
@@ -18,7 +24,7 @@ These changes are prepared locally. They are not a production deployment or App 
 3. Deploy the backend and both SPAs together. Confirm signup works with an empty browser session and that `/api/message-reports` exists before distributing the new iOS build.
 4. Give a designated moderator an existing operator/root account. Confirm ordinary members cannot load `/api/admin/message-reports`.
 5. Create a synthetic conversation between two disposable approved accounts. Report a received message, confirm queue receipt, remove it, refresh both clients, and verify the removal marker. Do not test with real users' messages.
-6. Test and distribute a newly signed candidate after the remaining external-service settings and real deletion operations are verified. The previous IPA does not contain these fixes.
+6. Test and distribute a newly signed candidate after the active App Review checks below are verified. The previous IPA does not contain these fixes.
 
 ## Moderator operation
 
@@ -29,14 +35,16 @@ These changes are prepared locally. They are not a production deployment or App 
 - Approve retention/access rules for report evidence and moderator decisions. Resolved report evidence is now purged after 90 days; delete it earlier when no longer needed or on a valid deletion request. Lawfully retained evidence must be separated before resolving a report.
 - Review filter misses and false positives; update additional phrases deliberately.
 
-## Decisions blocking release
+## Active App Review release checks
 
-1. Confirm external-browser donations, or provide evidence of Apple-approved nonprofit fundraising and Apple Pay support before requesting an in-app alternative.
-2. Operator details confirmed (2026-09-06): organization `대일외국어고등학교 장학회`, privacy officer `엄은숙`, privacy-request handler `황제철` at `ghkdwp018@naver.com`. General support/moderation still uses `ghkdwp018@gmail.com`. These are reflected in the privacy page and draft. HappyNanum supplies donation records to the foundation; exact received fields and contractual role remain to be confirmed. See `PRIVACY_RETENTION_REVIEW.md` for researched retention duties and their limits.
-3. Revised operator decision (2026-09-06): accept deletion requests in the app and have the designated handler actually delete the data manually. This supersedes blanket indefinite retention as the intended policy. Member deletion targets and report/receipt retention are reflected in this release; external-service/backup settings and the foundation's tax status remain unverified.
-4. Manual deletion is implemented locally: in-app durable requests, a root-only processing workflow, private status receipts, database/provider completion guards, and evidence/receipt expiry. The administrator must perform actual DB/files/backups/external-service erasure and individually notify the user; the console does not automatically erase those records or send email. See `MANUAL_ACCOUNT_DELETION_RUNBOOK.md`. Disposable MariaDB tests verify the workflow; production provider revocation, backup/Sentry erasure and operator readiness still require a real release-candidate test.
-5. The public privacy page and native policy link are implemented. Resolve external-service contracts/storage/transfers/retention and the foundation's tax status before treating the policy as final. Deploy it with the corresponding backend/admin workflow, not ahead of that workflow. App Store Connect App Privacy remains a separate task. Its displayed date is a revision date, not an asserted production effective date.
-6. Verify password/Apple/Kakao login and production APNs on an installed TestFlight candidate; prepare an approved reviewer account.
+1. Publish a publicly accessible privacy policy and verify links from the installed app and App Store Connect. Check disclosures of collected data, collection methods, purposes, third-party access/protection, retention/deletion and consent withdrawal against the actual app and SDK configuration. The current policy's third-party-protection and withdrawal explanations need this focused check; do not replace unknown facts with unsupported assurances. Source: https://developer.apple.com/app-store/review/guidelines/#privacy (5.1.1).
+2. Match App Store Connect App Privacy responses to app/backend/SDK data collection. Inspect the new archive's app-owned PrivacyInfo.xcprivacy and bundled SDK manifests. Local source/build tests do not replace archive inspection.
+3. Deploy the deletion/reporting backend and admin workflow before distributing the corresponding candidate. On a disposable account verify in-app deletion request, access termination, actual manual erasure, applicable Apple-token revocation, communicated timing and completion confirmation. Manual processing is permitted; status-only disablement is insufficient. Source: https://developer.apple.com/support/offering-account-deletion-in-your-app/ . The admin console tracks and verifies work; it does not automatically erase all records or send result emails.
+4. Verify filtering, reporting, timely moderation, blocking and reachable support in the installed candidate (Guideline 1.2). The operator checks the report queue and ghkdwp018@gmail.com daily and handles reports within 48 hours.
+5. Verify donation collection opens outside the app in the system browser and does not unlock digital benefits. The app must remain free for the external-fundraising route under 3.2.2(iv). Apple-approved in-app nonprofit fundraising would be a separate route; Korean public-benefit designation alone does not establish Apple approval.
+6. Verify password/Apple/Kakao login, production API configuration and production APNs in the candidate. Provide an approved working reviewer account and clear review notes, including the manual deletion steps and timing.
+
+Retained operator details: 대일외국어고등학교 장학회; privacy contact 엄은숙; request handler 황제철 at ghkdwp018@naver.com. Detailed Korean-law research remains reference material in the privacy documents, not an additional active research task. Do not resume production deployment merely because the review scope changed; the earlier deployment cancellation remains effective.
 
 ## Validation
 
