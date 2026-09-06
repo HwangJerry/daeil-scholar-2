@@ -23,6 +23,11 @@ function renderWithRouter(component: React.ReactNode) {
 }
 
 describe('LandingFooter', () => {
+  it.each([['landing', <LandingFooter />], ['site-wide', <Footer />]])('provides a privacy policy link in the %s footer', (_, footer) => {
+    renderWithRouter(footer);
+    expect(screen.getByRole('link', { name: '개인정보처리방침' })).toHaveAttribute('href', '/privacy');
+  });
+
   it('renders the shared contact details and mandatory disclosure link', () => {
     const { container } = renderWithRouter(<LandingFooter />);
     const disclosureLink = FOOTER_INFO_LINKS.find(

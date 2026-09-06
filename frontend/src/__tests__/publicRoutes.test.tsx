@@ -16,6 +16,7 @@ describe('public MVP route allowlist', () => {
       '/disclosure',
       '/disclosure/:seq',
       '/support',
+      '/privacy',
       '/register',
       '/register/complete',
       '*',
