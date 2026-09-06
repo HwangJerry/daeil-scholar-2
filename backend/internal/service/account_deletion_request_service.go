@@ -72,6 +72,15 @@ func (s *AccountDeletionRequestService) Resolve(id int64, operator int, request 
 	if id <= 0 || operator <= 0 {
 		return &model.ValidationError{Msg: "올바른 요청을 선택해주세요."}
 	}
+	if request.Action == "automatic" || request.Action == "manual" {
+		store, ok := s.Store.(interface {
+			SetErasureMode(int64, int, string) error
+		})
+		if !ok {
+			return &model.ValidationError{Msg: "자동 처리 저장소가 준비되지 않았습니다."}
+		}
+		return store.SetErasureMode(id, operator, request.Action)
+	}
 	if request.Action == "start" {
 		return s.Store.Start(id, operator)
 	}

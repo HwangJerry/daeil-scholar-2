@@ -12,7 +12,10 @@ import (
 var ErrDeletionIncomplete = errors.New("account erasure verification incomplete")
 var ErrDeletionReceiptConflict = errors.New("existing deletion request uses a different receipt")
 
-type AccountDeletionRequestRepository struct{ DB *sqlx.DB }
+type AccountDeletionRequestRepository struct {
+	DB                        *sqlx.DB
+	DonationRetentionTemplate func(int, time.Time) (model.DonationRetentionDecision, error)
+}
 
 const deletionReceiptColumns = `REQUEST_ID, STATUS, REQUESTED_AT, TARGET_AT, DUE_AT,
     COMPLETED_AT, RETAINED_RECORDS, RETENTION_UNTIL`
@@ -64,6 +67,9 @@ func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string
 	if err = tx.Get(&result, `SELECT `+deletionReceiptColumns+` FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE USR_SEQ = ?`, usrSeq); err != nil {
 		return result, err
 	}
+	if _, err = tx.Exec(`INSERT IGNORE INTO ALUMNI_ACCOUNT_ERASURE (REQUEST_ID, MODE, STAGE, NEXT_ATTEMPT_AT, UPDATED_AT) VALUES (?, 'automatic', 'queued', UTC_TIMESTAMP(), UTC_TIMESTAMP())`, result.ID); err != nil {
+		return result, err
+	}
 	normalizeDeletionReceiptTimes(&result)
 	return result, tx.Commit()
 }
@@ -80,7 +86,10 @@ func (r *AccountDeletionRequestRepository) Receipt(hash string) (model.AccountDe
 
 func (r *AccountDeletionRequestRepository) List(status string, before int64) ([]model.AccountDeletionQueueItem, error) {
 	items := []model.AccountDeletionQueueItem{}
-	err := r.DB.Select(&items, `SELECT `+deletionReceiptColumns+`, USR_SEQ, EVIDENCE_REFERENCE
+	err := r.DB.Select(&items, `SELECT `+deletionReceiptColumns+`, USR_SEQ, EVIDENCE_REFERENCE,
+        COALESCE((SELECT MODE FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID),'manual') AS PROCESSING_MODE,
+        COALESCE((SELECT STAGE FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID),'') AS AUTO_STAGE,
+        COALESCE((SELECT LAST_CODE FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID),'') AS AUTO_CODE
         FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE STATUS = ? AND (? = 0 OR REQUEST_ID < ?)
         ORDER BY REQUEST_ID DESC LIMIT 50`, status, before, before)
 	for i := range items {
@@ -111,6 +120,11 @@ func (r *AccountDeletionRequestRepository) Start(id int64, operator int) error {
             AND o.CREATED_AT >= (SELECT REQUESTED_AT FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID = ?))`, usrSeq, id)
 	if err != nil {
 		return err
+	}
+	if operator > 0 {
+		if _, err = tx.Exec(`UPDATE ALUMNI_ACCOUNT_ERASURE SET MODE='manual' WHERE REQUEST_ID=?`, id); err != nil {
+			return err
+		}
 	}
 	_, err = tx.Exec(`UPDATE ALUMNI_ACCOUNT_DELETION_REQUEST SET STATUS = 'processing', OPERATOR_SEQ = ? WHERE REQUEST_ID = ?`, operator, id)
 	if err != nil {

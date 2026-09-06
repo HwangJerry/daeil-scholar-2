@@ -33,7 +33,18 @@ func (o *UploadOrchestrator) Upload(file multipart.File, header *multipart.FileH
 		width, height = dims.Width, dims.Height
 	}
 
-	fSeq, _ := o.record.Record(stored, header.Filename, gate)
+	fSeq, err := o.record.Record(stored, header.Filename, gate)
+	if err != nil {
+		_ = o.storage.DeleteUploadedURL(stored.URLPath, gate)
+		return nil, err
+	}
 
 	return &UploadResult{URL: stored.URLPath, Width: width, Height: height, FSeq: fSeq}, nil
+}
+
+func (o *UploadOrchestrator) Discard(result *UploadResult, gate string) error {
+	if err := o.storage.DeleteUploadedURL(result.URL, gate); err != nil {
+		return err
+	}
+	return o.record.repo.DeleteUnassignedUpload(result.FSeq)
 }

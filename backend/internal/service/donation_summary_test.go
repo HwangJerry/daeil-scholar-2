@@ -69,6 +69,7 @@ func TestDonationSummaryFallsBackToLiveCalculationWithManualOverwrite(t *testing
 	mock.ExpectQuery(`(?s)FROM DONATION_SNAPSHOT.*ORDER BY DS_DATE DESC`).WillReturnRows(donationSnapshotRows())
 	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*COUNT\(DISTINCT CASE.*O_TYPE = 'A'.*O_LIFECYCLE_STATUS IN \('completed', 'partially_refunded'\)`).
 		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(180000), 12))
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM information_schema.TABLES`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("Y", 25))
 
 	summary, err := donationService.GetSummary()
@@ -100,6 +101,7 @@ func TestDonationSummaryIgnoresCacheWhenSnapshotIsStale(t *testing.T) {
 	cacheStore.Set("donation_summary", &model.DonationSummary{DisplayAmount: 10000, DonorCount: 1}, 5*time.Minute)
 	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*COUNT\(DISTINCT CASE.*O_TYPE = 'A'`).
 		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(50000), 2))
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM information_schema.TABLES`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("N", 0))
 
 	summary, err := donationService.GetSummary()

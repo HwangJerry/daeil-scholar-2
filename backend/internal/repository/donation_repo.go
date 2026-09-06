@@ -123,6 +123,21 @@ func getReceivedDonationAggregate(queryer sqlx.Queryer) (int64, int, error) {
 	if err != nil {
 		return 0, 0, err
 	}
+	var hasTotal int
+	if err := sqlx.Get(queryer, &hasTotal, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_ERASED_DONATION_TOTAL'`); err != nil {
+		return 0, 0, err
+	}
+	if hasTotal > 0 {
+		var erased struct {
+			Amount int64 `db:"TOTAL_AMOUNT"`
+			Count  int   `db:"DONOR_COUNT"`
+		}
+		if err := sqlx.Get(queryer, &erased, `SELECT TOTAL_AMOUNT,DONOR_COUNT FROM ALUMNI_ERASED_DONATION_TOTAL WHERE ID=1`); err != nil {
+			return 0, 0, err
+		}
+		aggregate.TotalAmount += erased.Amount
+		aggregate.DonorCount += erased.Count
+	}
 	return aggregate.TotalAmount, aggregate.DonorCount, nil
 }
 

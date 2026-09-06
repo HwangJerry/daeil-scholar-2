@@ -122,6 +122,7 @@ func TestSnapshotRefreshFailureForcesCanonicalLiveSummary(t *testing.T) {
 
 	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*COUNT\(DISTINCT CASE.*O_TYPE = 'A'`).
 		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(50000), 1))
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM information_schema.TABLES`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("N", 0))
 	summary, err := donationService.GetSummary()
 	if err != nil {
@@ -230,6 +231,7 @@ func TestDonationConfigUpdateRollsBackWhenSnapshotUpsertFails(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*COUNT\(DISTINCT CASE.*O_TYPE = 'A'`).
 		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(180000), 3))
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM information_schema.TABLES`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("N", 0))
 	snapshotErr := errors.New("snapshot write failed")
 	mock.ExpectExec(`(?s)INSERT INTO DONATION_SNAPSHOT.*ON DUPLICATE KEY UPDATE`).

@@ -17,7 +17,7 @@ type Receipt = {
   retainedRecords: string;
   retentionUntil: string | null;
 };
-const STATUS_LABELS = { pending: '삭제 요청 접수', processing: '담당자가 처리 중입니다', completed: '계정 삭제 완료' };
+const STATUS_LABELS = { pending: '삭제 요청 접수', processing: '계정 삭제 처리 중입니다', completed: '계정 삭제 완료' };
 const dateLabel = (value: string) => new Date(value).toLocaleDateString('ko-KR');
 
 export function AccountDeletionPage() {
@@ -77,7 +77,7 @@ export function AccountDeletionPage() {
                 {receipt.retentionUntil && <p className="text-sm text-text-secondary">보존 종료일: {dateLabel(receipt.retentionUntil)}. 항목별 기한은 위 안내를 확인해주세요.</p>}
               </>
             ) : (
-              <p className="leading-8 text-text-secondary">계정 이용은 중지되었습니다. 담당자가 {dateLabel(receipt.targetAt)}까지 삭제를 목표로 처리하며, {dateLabel(receipt.dueAt)}까지 결과를 안내합니다. 법령에 따라 보존할 자료는 범위와 근거를 별도로 안내합니다.</p>
+              <p className="leading-8 text-text-secondary">계정 이용은 중지되었습니다. 자동 삭제를 진행하며 필요한 경우 담당자가 확인합니다. {dateLabel(receipt.targetAt)}까지 삭제를 목표로 처리하며, {dateLabel(receipt.dueAt)}까지 결과를 안내합니다. 법령에 따라 보존할 자료는 범위와 근거를 별도로 안내합니다.</p>
             )}
           </Card>
         )}

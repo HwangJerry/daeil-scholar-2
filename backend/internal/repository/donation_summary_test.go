@@ -17,6 +17,7 @@ func TestGetReceivedDonationAggregateUsesCanonicalNetLedgerAndDonorIdentity(t *t
 	repo := repository.NewDonationRepository(sqlx.NewDb(db, "sqlmock"))
 	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*COUNT\(DISTINCT CASE.*O_ACCOUNT_USR_SEQ IS NOT NULL.*O_DONOR_NAME.*O_DONOR_PHONE.*FROM WEO_ORDER.*O_TYPE = 'A'.*O_LIFECYCLE_STATUS IN \('completed', 'partially_refunded'\)`).
 		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(180000), 3))
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM information_schema.TABLES`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	total, donorCount, err := repo.GetReceivedDonationAggregate()
 	if err != nil {
@@ -42,6 +43,7 @@ func TestGetReceivedDonationAggregateReturnsZeroForEmptyLedger(t *testing.T) {
 	repo := repository.NewDonationRepository(sqlx.NewDb(db, "sqlmock"))
 	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*O_TYPE = 'A'.*O_LIFECYCLE_STATUS IN \('completed', 'partially_refunded'\)`).
 		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(0), 0))
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM information_schema.TABLES`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	total, donorCount, err := repo.GetReceivedDonationAggregate()
 	if err != nil {

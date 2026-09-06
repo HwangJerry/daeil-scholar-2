@@ -36,6 +36,7 @@ type deps struct {
 	subscriptionBillingJob *job.SubscriptionBillingJob
 	visitJob               *job.VisitAggregationJob
 	privacyRetentionJob    *job.PrivacyRetentionJob
+	accountErasureJob      *job.AccountErasureJob
 	blockedMessageCleanup  *job.BlockedMessageCleanupJob
 	pushDelivery           *service.PushDeliveryNotifier
 	socialRevocationWorker *job.SocialRevocationWorker
@@ -239,7 +240,15 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		appSetting:          handler.NewAppSettingHandler(appSettingService),
 	}
 
+	seal, _ := service.DonationArchiveSealer(cfg.AccountErasure.ArchiveKey)
+	erasureService := &service.AutomaticErasureService{
+		Store:    &repository.AccountDeletionRequestRepository{DB: db, DonationRetentionTemplate: service.LedgerRetentionTemplate(cfg.AccountErasure.LedgerConfirmed, cfg.AccountErasure.ReceiptOriginalsSeparate, cfg.AccountErasure.LedgerYearEndMonth, cfg.AccountErasure.LedgerEvidence)},
+		External: &service.HTTPErasureProcessor{Endpoint: cfg.AccountErasure.ExternalURL, Token: cfg.AccountErasure.ExternalToken},
+		Files:    &service.AccountErasureFiles{UploadRoot: cfg.Upload.BasePath, LegacyRoot: cfg.Upload.LegacyPath, SiteOrigin: cfg.Server.SiteBaseURL},
+		Seal:     seal, InvalidateCache: cacheStore.Flush,
+	}
 	return &deps{
+		accountErasureJob:      job.NewAccountErasureJob(erasureService, logger),
 		authService:            authService,
 		handlers:               h,
 		cacheStore:             cacheStore,

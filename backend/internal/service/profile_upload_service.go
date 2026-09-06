@@ -22,7 +22,8 @@ func (s *ProfileUploadService) UploadProfilePhoto(usrSeq int, file multipart.Fil
 	if err != nil {
 		return "", err
 	}
-	if err := s.repo.UpdateProfilePhoto(usrSeq, result.URL); err != nil {
+	if err := s.repo.AssignProfileUpload(usrSeq, result.FSeq, result.URL, false); err != nil {
+		_ = s.orchestrator.Discard(result, "profile")
 		return "", err
 	}
 	return result.URL, nil
@@ -34,7 +35,8 @@ func (s *ProfileUploadService) UploadBizCard(usrSeq int, file multipart.File, he
 	if err != nil {
 		return "", err
 	}
-	if err := s.repo.UpdateBizCard(usrSeq, result.URL); err != nil {
+	if err := s.repo.AssignProfileUpload(usrSeq, result.FSeq, result.URL, true); err != nil {
+		_ = s.orchestrator.Discard(result, "bizcard")
 		return "", err
 	}
 	return result.URL, nil

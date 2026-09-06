@@ -25,7 +25,7 @@ func deletionFootprint(tx *sqlx.Tx, usrSeq int) ([]model.AccountDeletionFootprin
         WHERE c.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE = 'BASE TABLE'
         AND c.TABLE_NAME <> 'ALUMNI_ACCOUNT_DELETION_REQUEST'
         AND c.COLUMN_NAME IN ('USR_SEQ','ACCOUNT_ID','USER_ID','AM_SENDER_SEQ','AM_RECVR_SEQ',
-            'REPORTER_SEQ','REPORTED_SEQ','BLOCKER_USR_SEQ','BLOCKED_USR_SEQ')
+            'REPORTER_SEQ','REPORTED_SEQ','BLOCKER_USR_SEQ','BLOCKED_USR_SEQ','VD_USR_SEQ','O_ACCOUNT_USR_SEQ')
         ORDER BY c.TABLE_NAME, c.COLUMN_NAME`)
 	if err != nil {
 		return nil, err
@@ -84,6 +84,25 @@ func (r *AccountDeletionRequestRepository) Complete(id int64, operator int, evid
         WHERE REQUEST_ID = ? AND STATUS = 'processing' AND USR_SEQ <> ? FOR UPDATE`, id, operator); err != nil {
 		return err
 	}
+	var automation struct {
+		Mode     string `db:"MODE"`
+		Stage    string `db:"STAGE"`
+		Evidence string `db:"EXTERNAL_EVIDENCE"`
+	}
+	if err = tx.Get(&automation, `SELECT MODE,STAGE,EXTERNAL_EVIDENCE FROM ALUMNI_ACCOUNT_ERASURE WHERE REQUEST_ID=? FOR UPDATE`, id); err != nil {
+		return err
+	}
+	if operator == 0 {
+		var pendingFiles int
+		if err = tx.Get(&pendingFiles, `SELECT COUNT(*) FROM ALUMNI_ERASURE_FILE WHERE REQUEST_ID=?`, id); err != nil {
+			return err
+		}
+		if automation.Mode != "automatic" || automation.Stage != "database_erased" || automation.Evidence == "" || pendingFiles > 0 {
+			return ErrDeletionIncomplete
+		}
+	} else if automation.Mode != "manual" {
+		return ErrDeletionIncomplete
+	}
 	footprint, err := deletionFootprint(tx, usrSeq)
 	if err != nil {
 		return err
@@ -91,20 +110,8 @@ func (r *AccountDeletionRequestRepository) Complete(id int64, operator int, evid
 	if len(footprint) > 0 {
 		return ErrDeletionIncomplete
 	}
-	var missingProof int
-	err = tx.Get(&missingProof, `SELECT
-        (APPLE_REQUIRED = 1 AND NOT EXISTS (SELECT 1 FROM ALUMNI_SOCIAL_REVOCATION_OUTBOX
-            WHERE USR_SEQ = ? AND PROVIDER = 'AP' AND ACTION = 'ACCOUNT_DELETE' AND STATUS = 'DELIVERED'
-            AND CREATED_AT >= ALUMNI_ACCOUNT_DELETION_REQUEST.REQUESTED_AT)) +
-        (KAKAO_REQUIRED = 1 AND NOT EXISTS (SELECT 1 FROM ALUMNI_SOCIAL_REVOCATION_OUTBOX
-            WHERE USR_SEQ = ? AND PROVIDER = 'KT' AND ACTION = 'ACCOUNT_DELETE' AND STATUS = 'DELIVERED'
-            AND CREATED_AT >= ALUMNI_ACCOUNT_DELETION_REQUEST.REQUESTED_AT))
-        FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID = ?`, usrSeq, usrSeq, id)
-	if err != nil {
+	if err = verifyDeletionProviders(tx, id, usrSeq); err != nil {
 		return err
-	}
-	if missingProof != 0 {
-		return ErrDeletionIncomplete
 	}
 	if _, err = tx.Exec(`DELETE FROM ALUMNI_SOCIAL_REVOCATION_OUTBOX WHERE USR_SEQ = ? AND STATUS = 'DELIVERED'`, usrSeq); err != nil {
 		return err
@@ -120,5 +127,30 @@ func (r *AccountDeletionRequestRepository) Complete(id int64, operator int, evid
 	if err != nil {
 		return err
 	}
+	if _, err = tx.Exec(`DELETE FROM ALUMNI_ERASURE_FILE WHERE REQUEST_ID=?`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE ALUMNI_ACCOUNT_ERASURE SET STAGE='completed',LAST_CODE='',EXTERNAL_EVIDENCE='',UPDATED_AT=UTC_TIMESTAMP() WHERE REQUEST_ID=?`, id); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+func verifyDeletionProviders(tx *sqlx.Tx, id int64, usrSeq int) error {
+	var missingProof int
+	err := tx.Get(&missingProof, `SELECT
+        (APPLE_REQUIRED = 1 AND NOT EXISTS (SELECT 1 FROM ALUMNI_SOCIAL_REVOCATION_OUTBOX
+            WHERE USR_SEQ = ? AND PROVIDER = 'AP' AND ACTION = 'ACCOUNT_DELETE' AND STATUS = 'DELIVERED'
+            AND CREATED_AT >= ALUMNI_ACCOUNT_DELETION_REQUEST.REQUESTED_AT)) +
+        (KAKAO_REQUIRED = 1 AND NOT EXISTS (SELECT 1 FROM ALUMNI_SOCIAL_REVOCATION_OUTBOX
+            WHERE USR_SEQ = ? AND PROVIDER = 'KT' AND ACTION = 'ACCOUNT_DELETE' AND STATUS = 'DELIVERED'
+            AND CREATED_AT >= ALUMNI_ACCOUNT_DELETION_REQUEST.REQUESTED_AT))
+        FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID = ?`, usrSeq, usrSeq, id)
+	if err != nil {
+		return err
+	}
+	if missingProof != 0 {
+		return ErrDeletionIncomplete
+	}
+	return nil
 }
