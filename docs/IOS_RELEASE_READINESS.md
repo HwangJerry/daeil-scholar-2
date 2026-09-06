@@ -21,6 +21,7 @@ These changes are prepared locally. They are not a production deployment or App 
 
 ## Moderator operation still required
 
+- Official operator contact confirmed on 2026-09-06: `ghkdwp018@gmail.com`. This confirms the contact address, not a moderator assignment or response commitment.
 - Assign a person and backup to monitor the queue and the public support channel.
 - Agree a response target and a repeat-offender/suspension process. The queue refreshes automatically while open; this implementation does not send emails or staff notifications.
 - Review reports, record a decision, and contact the reporter through the approved support process when needed. Reporter contact details are not exposed to the reported user.
@@ -30,9 +31,9 @@ These changes are prepared locally. They are not a production deployment or App 
 ## Decisions blocking release
 
 1. Confirm external-browser donations, or provide evidence of Apple-approved nonprofit fundraising and Apple Pay support before requesting an in-app alternative.
-2. Confirm the responsible organization and public privacy/support contact. The existing support page uses `ghkdwp018@gmail.com`; the foundation footer uses `dflhs.scholar@gmail.com`. These may have different owners.
-3. Approve retention per data category: ordinary profiles and uploaded images; sent/received messages; donation receipts/ledger; security records; report evidence; backups. Specify purpose, duration, and responsible person for any retained category.
-4. Implement and verify actual account erasure and provider-token revocation. Current `AnonymizeAccountForDeletion` only changes account status, and the legacy revocation worker does not receive new deletion jobs. Do not call this fixed.
+2. Confirm the responsible organization's official name and privacy-responsible person/team. The operator confirmed `ghkdwp018@gmail.com` as the official contact; the privacy draft now uses it. The foundation footer's separate address has not been changed.
+3. The operator explicitly requested retaining all records and changing only the user's status on withdrawal (2026-09-06). Preserve that backend behavior. No retention end date or legal basis was supplied; external-service and backup retention still require verification.
+4. Account deletion remains blocked under that retention decision. Current `AnonymizeAccountForDeletion` changes account status to `AAA`, and the legacy revocation worker does not receive new deletion jobs. Apple requires account/associated personal-data deletion except legally required retention, and Sign in with Apple token revocation. Changing only status is insufficient. A revised retention decision and verified implementation are needed before marking this complete; no erasure change is authorized by the latest instruction. Native withdrawal copy now accurately describes record retention and the absence of automatic social unlinking. Source: https://developer.apple.com/support/offering-account-deletion-in-your-app/ (checked 2026-09-06).
 5. Finalize the privacy-policy draft, publish at a public HTTPS URL, add native/web links, and complete App Store Connect App Privacy separately.
 6. Verify password/Apple/Kakao login and production APNs on an installed TestFlight candidate; prepare an approved reviewer account.
 
