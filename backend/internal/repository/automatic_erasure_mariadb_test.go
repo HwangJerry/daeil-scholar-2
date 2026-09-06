@@ -37,6 +37,22 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 		}
 		db.MustExec(string(data))
 	}
+	// Exercise the actual legacy engine transition twice without touching unrelated tables.
+	db.MustExec(`ALTER TABLE WEO_ORDER ENGINE=MyISAM; CREATE TABLE UNRELATED_LEGACY (ID INT) ENGINE=MyISAM; INSERT INTO UNRELATED_LEGACY VALUES (1)`)
+	ddl, err := os.ReadFile("../../migrations/058_convert_erasure_tables_to_innodb.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	migrationSQL := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(ddl), "DELIMITER //", ""), "DELIMITER ;", ""), "END//", "END;")
+	db.MustExec(migrationSQL)
+	db.MustExec(migrationSQL)
+	var engine string
+	if err = db.Get(&engine, `SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_ORDER'`); err != nil || engine != "InnoDB" {
+		t.Fatal("conversion failed", engine, err)
+	}
+	if err = db.Get(&engine, `SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='UNRELATED_LEGACY'`); err != nil || engine != "MyISAM" {
+		t.Fatal("unrelated table converted")
+	}
 	repo := &AccountDeletionRequestRepository{DB: db}
 	receipt, err := repo.Create(42, strings.Repeat("a", 64))
 	if err != nil {
