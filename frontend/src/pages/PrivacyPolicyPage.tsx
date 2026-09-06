@@ -118,7 +118,7 @@ export function PrivacyPolicyPage() {
             </Card>
             <p>회원정보·프로필·사진·쪽지와 계정에 연결된 인증정보는 이용 목적이 끝나거나 삭제 요청이 접수되면 지체 없이 삭제합니다. Apple·카카오 연결에 대한 권한 철회도 함께 처리합니다. 법령에 따라 남겨야 하는 자료는 필요한 항목만 별도로 보관하며 다른 서비스 이용에 쓰지 않습니다.</p>
             <dl className="divide-y divide-border">
-              <div className="py-4"><dt className="font-semibold text-text-primary">기부금 영수증과 회계 자료</dt><dd className="mt-2 text-sm leading-7">법인세법 제112조의2가 적용되는 기부자별 발급명세는 발급일부터 5년간 보관합니다. 전자기부금영수증 등 법정 예외는 해당 규정에 따릅니다. 상속세 및 증여세법 제51조가 적용되는 공익법인등의 장부와 중요한 증명서류는 해당 사업연도 종료일부터 10년간 보관합니다. 이 기간을 모든 기부 내역이나 회원정보에 일괄 적용하지 않으며, 장학회에 적용되는 보존 의무와 자료의 성격에 따라 항목별로 관리합니다.</dd></div>
+              <div className="py-4"><dt className="font-semibold text-text-primary">기부금 영수증과 회계 자료</dt><dd className="mt-2 text-sm leading-7">소득세법 제160조의3 또는 법인세법 제112조의2에 따른 보관 의무가 적용되는 기부자별 발급명세는 발급일부터 5년간 보관합니다. 전자기부금영수증 등 법정 예외는 해당 규정에 따릅니다. 상속세 및 증여세법 제51조가 적용되는 공익법인등의 장부와 중요한 증명서류는 해당 사업연도 종료일부터 10년간 보관합니다. 이 기간을 모든 기부 내역이나 회원정보에 일괄 적용하지 않으며, 장학회에 적용되는 보존 의무와 자료의 성격에 따라 항목별로 관리합니다.</dd></div>
               <div className="py-4"><dt className="font-semibold text-text-primary">신고 자료</dt><dd className="mt-2 text-sm leading-7">신고 처리와 이용자 보호에 필요한 동안 보관하며, 처리 완료 후 최대 90일 이내 삭제합니다. 그 전에 보관 목적이 끝나거나 유효한 삭제 요청이 있으면 더 일찍 삭제합니다. 법령상 보존 의무가 있는 증거는 근거와 종료일을 정하여 별도 보관합니다.</dd></div>
               <div className="py-4"><dt className="font-semibold text-text-primary">방문 기록과 삭제 요청 확인 자료</dt><dd className="mt-2 text-sm leading-7">방문 상세 기록은 90일 후 정리하고 개인을 식별할 수 없는 집계만 유지합니다. 삭제 완료 시 접수증에서 회원 번호 연결을 제거하며, 처리 결과 조회를 위해 완료 후 30일간 확인 자료를 보관한 뒤 삭제합니다.</dd></div>
             </dl>
