@@ -43,6 +43,6 @@ These changes are prepared locally. They are not a production deployment or App 
 - Frontend and admin production builds pass. Both report bundle-size warnings.
 - iOS Debug build and unsigned Release device build pass. Packaged manifest/config validation passes; five negative/positive release-validator tests pass.
 - iOS design-system compliance: zero violations. Workspace-wide design validation has pre-existing web literal violations. The visual guard reports four missing capture/baseline pairs.
-- Full frontend suite: 133 tests passed. iOS simulator suite: 114 tests passed on iOS 18.4; an iOS 26 runner failed during bootstrap before tests started.
+- Full frontend suite: 133 tests passed. iOS simulator suite: 119 tests passed on iOS 18.4 after integrating the concurrently completed logout-response fix; an iOS 26 runner failed during bootstrap before tests started.
 - Pinned MariaDB 10.1.38 report lifecycle integration passed: unauthorized/hidden/deleted-message reporting rejected; duplicate evidence preserved; content removed and audit evidence retained; repeat resolution rejected.
 - This is not physical-device or App Store sign-off.
