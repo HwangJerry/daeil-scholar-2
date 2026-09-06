@@ -1,5 +1,6 @@
 // RegisterPage — Member registration page with admin approval notice.
 import { Navigate, Link } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { PageMeta } from '../components/seo/PageMeta';
 import { RegisterForm } from '../components/auth/RegisterForm';
@@ -7,9 +8,10 @@ import { useBlockBack } from '../hooks/useBlockBack';
 
 export function RegisterPage() {
   useBlockBack();
-  const { isLoggedIn, isLoading } = useAuth();
+  const { isLoggedIn, isLoading, fetchUser } = useAuth();
+  useEffect(() => { void fetchUser(); }, [fetchUser]);
 
-  if (isLoading) return null;
+  if (isLoading) return <p role="status" className="px-5 py-10 text-center text-text-secondary">가입 정보를 확인하는 중...</p>;
   if (isLoggedIn) return <Navigate to="/" replace />;
 
   return (
@@ -26,10 +28,10 @@ export function RegisterPage() {
 
         <div className="mt-4 text-center">
           <Link
-            to="/login"
+            to="/support"
             className="text-xs text-text-muted hover:text-text-secondary transition-colors"
           >
-            로그인으로 돌아가기
+            가입 문의
           </Link>
         </div>
       </div>

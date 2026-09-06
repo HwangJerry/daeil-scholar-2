@@ -92,6 +92,21 @@ export function AppSupportPage() {
         </div>
       </section>
 
+      <section aria-labelledby="message-safety-heading" className="px-5 pb-12 sm:px-8 md:px-6">
+        <div className="mx-auto max-w-[1080px] rounded-xl border border-border bg-surface p-7">
+          <h2 id="message-safety-heading" className="font-serif text-2xl font-semibold">메시지 신고 및 차단</h2>
+          <p className="mt-4 text-sm leading-7 text-text-secondary">
+            괴롭힘, 위협, 스팸 또는 부적절한 메시지를 받았다면 해당 메시지를 길게 눌러 ‘메시지 신고’를 선택하세요.
+            대화 상단 메뉴에서도 최근 받은 메시지를 신고할 수 있습니다. 신고 화면에서 대상 메시지를 확인한 뒤 사유를 선택해 주세요.
+          </p>
+          <p className="mt-3 text-sm leading-7 text-text-secondary">
+            상대방의 메시지를 받지 않으려면 대화 상단 메뉴에서 ‘차단’을 선택하세요.
+            신고 기능이 보이지 않거나 추가 도움이 필요하면 위 연락처로 문의해 주세요.
+            신고자 정보는 상대방에게 공개하지 않으며, 신고된 메시지와 설명은 운영자가 검토합니다.
+          </p>
+        </div>
+      </section>
+
       <section aria-labelledby="support-details-heading" className="px-5 pb-14 sm:px-8 md:px-6 md:pb-20">
         <div className="mx-auto grid max-w-[1080px] gap-8 border-t border-border pt-10 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] md:gap-16 md:pt-12">
           <div>

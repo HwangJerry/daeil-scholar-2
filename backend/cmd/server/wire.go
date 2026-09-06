@@ -168,6 +168,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	commentService := service.NewCommentService(commentRepo)
 	personalDonationService := service.NewPersonalDonationService(personalDonationRepo)
 	messageService := service.NewMessageService(messageRepo, profileRepo, messageNotifier)
+	messageService.ConfigureContentFilter(cfg.MessageBlockedPhrases)
 	memberBlockService := service.NewMemberBlockService(memberBlockRepo)
 	pushService := service.NewPushService(pushRepo)
 	blockedMessageCleanup := job.NewBlockedMessageCleanupJob(memberBlockRepo, logger)
@@ -214,6 +215,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		socialLinkPhoto:     handler.NewSocialLinkPhotoHandler(uploadOrchestrator, socialLinkTokens, logger),
 		personalDonation:    handler.NewPersonalDonationHandler(personalDonationService),
 		message:             handler.NewMessageHandler(messageService),
+		messageReport:       &handler.MessageReportHandler{Service: &service.MessageReportService{Store: &repository.MessageReportRepository{DB: db}}},
 		memberBlock:         handler.NewMemberBlockHandler(memberBlockService),
 		push:                handler.NewPushHandler(pushService),
 		payment:             handler.NewPaymentHandler(donateService, cfg.EasyPay),

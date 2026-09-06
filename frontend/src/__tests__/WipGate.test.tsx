@@ -1,4 +1,4 @@
-// WipGate.test — App support remains public without unlocking the rest of the site
+// WipGate.test — App signup and support remain public without unlocking the site.
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter } from 'react-router-dom';
@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 describe('public support during maintenance', () => {
-  it.each(['/support', '/support/'])('opens %s without granting access to other pages', async (path) => {
+  it.each(['/support', '/support/', '/register', '/register/', '/register/complete'])('opens %s without granting access to other pages', async (path) => {
     const { WipGate } = await import('../components/common/WipGate');
     const user = userEvent.setup();
 

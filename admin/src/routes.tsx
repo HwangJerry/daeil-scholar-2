@@ -18,6 +18,7 @@ import { DonationMonitorPage } from './pages/DonationMonitorPage.tsx';
 import { HistoryManagePage } from './pages/HistoryManagePage.tsx';
 import { AppMonitoringPage } from './pages/AppMonitoringPage.tsx';
 import { AppSettingsPage } from './pages/AppSettingsPage.tsx';
+import { MessageReportsPage } from './pages/MessageReportsPage';
 
 export function AppRoutes() {
   return (
@@ -48,6 +49,7 @@ export function AppRoutes() {
         <Route path="donation" element={<DonationMonitorPage />} />
         <Route path="app-monitoring" element={<AppMonitoringPage />} />
         <Route path="app-settings" element={<AppSettingsPage />} />
+        <Route path="message-reports" element={<MessageReportsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

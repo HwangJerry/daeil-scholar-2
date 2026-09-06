@@ -7,6 +7,7 @@ import { Button } from '../ui/Button';
 
 const STORAGE_KEY = 'wip-unlock';
 const EXPECTED_CODE = (import.meta.env.VITE_WIP_ADMIN_CODE ?? '') as string;
+const APP_PUBLIC_PATHS = new Set(['/support', '/register', '/register/complete']);
 
 function readUnlocked(): boolean {
   if (!EXPECTED_CODE) return true;
@@ -32,8 +33,8 @@ export function WipGate({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const isSupportPage = pathname === '/support' || pathname === '/support/';
-  if (unlocked || isSupportPage) return <>{children}</>;
+  const isAppPublicPage = APP_PUBLIC_PATHS.has(pathname.replace(/\/$/, ''));
+  if (unlocked || isAppPublicPage) return <>{children}</>;
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();

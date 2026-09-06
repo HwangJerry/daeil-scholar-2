@@ -20,7 +20,7 @@ export function useRegisterSubmit() {
     setState({ error: '', submitting: true });
     try {
       await register(req);
-      navigate('/login/legacy?registered=true', { replace: true });
+      navigate('/register/complete', { replace: true });
     } catch (err) {
       const message = (() => {
         if (!(err instanceof ApiClientError)) return '회원가입에 실패했습니다. 다시 시도해주세요.';
