@@ -36,3 +36,7 @@
 추가 근거: [개인정보 보호법 시행령 제43조](https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0043&lsiSeq=283503&urlMode=lsScJoRltInfoR)의 정정·삭제 결과 10일 이내 통지, [개인정보의 안전성 확보조치 기준 제8조](https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000281400&chrClsCd=010201)의 접속기록 보존 의무를 확인했다. 3일·7일·30일·90일 권장안은 이 법령이 일괄 지정한 기간이 아니다.
 
 Sentry의 실제 기간은 [요금제·데이터 종류별로 다를 수 있으며](https://www.sentry.help/en/articles/13964987-what-is-the-process-for-us-to-submit-a-data-deletion-request-on-our-client-s-behalf), 30일로 마음대로 변경할 수 있다고 가정하지 않는다.
+
+## 공개 자료 및 서버 설정 후속 확인
+
+`PRIVACY_VERIFICATION_EVIDENCE.md`에서 2025년 공익단체 재지정 공고(명단 29번, 2025~2030년), 기부 파서의 실제 처리 항목, Sentry 수집 설정, 운영 서버의 제한된 백업 예약 작업 조회 결과를 정리했다. 공익단체 지정 사실과 법인세법상 지위를 혼동하지 않으며, 발급명세 보관에는 소득세법 제160조의3의 적용 가능성도 반영했다. 샘플 파일·지정 공고의 사용자 재제출은 요청하지 않는다. 전자영수증의 실제 발급, Sentry/호스팅 백업 계약·설정은 미확인이다.
