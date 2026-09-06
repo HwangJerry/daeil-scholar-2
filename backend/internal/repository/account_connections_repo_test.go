@@ -47,7 +47,7 @@ func TestLinkSocialIdentityWritesLegacyAndCanonicalConnections(t *testing.T) {
 				WillReturnResult(sqlmock.NewResult(1, 1))
 			if test.canonicalEnabled {
 				mock.ExpectExec(`INSERT INTO AUTH_IDENTITY`).
-					WithArgs(42, string(test.canonical), fields.SocialID, "member@example.com").
+					WithArgs(42, string(test.canonical), fields.SocialID, nil).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			}
 			mock.ExpectCommit()
@@ -72,7 +72,7 @@ func TestLinkSocialIdentityClassifiesLegacyDuplicateForServiceRetry(t *testing.T
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
-		WillReturnError(&mysql.MySQLError{Number: 1062, Message: "duplicate provider subject"})
+		WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry 'KT-subject' for key 'UK_PROVIDER_SUBJECT'"})
 	mock.ExpectRollback()
 
 	err = repo.LinkSocialIdentity(repository.SocialAccountFields{
@@ -108,14 +108,14 @@ func TestLinkSocialIdentityRollsBackLegacyInsertWhenCanonicalIdentityIsDuplicate
 		SocialEmail: "member@example.com",
 		Email:       "member@example.com",
 	}
-	duplicateErr := &mysql.MySQLError{Number: 1062, Message: "duplicate canonical identity"}
+	duplicateErr := &mysql.MySQLError{Number: 1062, Message: "Duplicate entry 'KAKAO-subject' for key 'UQ_AUTH_IDENTITY_PROVIDER_SUBJECT'"}
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
 		WithArgs(42, string(model.SocialProviderKakao), fields.SocialID, fields.SocialEmail).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(`INSERT INTO AUTH_IDENTITY`).
-		WithArgs(42, string(model.IdentityProviderKakao), fields.SocialID, fields.Email).
+		WithArgs(42, string(model.IdentityProviderKakao), fields.SocialID, nil).
 		WillReturnError(duplicateErr)
 	mock.ExpectRollback()
 

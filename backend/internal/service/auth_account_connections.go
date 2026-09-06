@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
@@ -13,6 +14,7 @@ var (
 	ErrLastLoginMethod            = errors.New("cannot disconnect the last login method")
 	ErrSocialIdentityVerification = errors.New("social identity verification failed")
 	ErrSocialCredentialStorage    = errors.New("social credential storage unavailable")
+	ErrSocialConnectionConflict   = errors.New("social identity collision without an active connection")
 )
 
 func (s *SocialAuthService) LinkIdentity(
@@ -71,7 +73,12 @@ func (s *SocialAuthService) LinkIdentity(
 		if lookupErr != nil {
 			return model.AccountConnections{}, lookupErr
 		}
-		if existing != nil && existing.USRSeq == usrSeq {
+		if existing == nil {
+			// Preserve diagnostics without classifying an inconsistent/revoked
+			// identity as a confirmed link to another member.
+			return model.AccountConnections{}, fmt.Errorf("%w: %v", ErrSocialConnectionConflict, err)
+		}
+		if existing.USRSeq == usrSeq {
 			return s.auth.GetAccountConnections(usrSeq)
 		}
 		return model.AccountConnections{}, ErrSocialAccountAlreadyLinked

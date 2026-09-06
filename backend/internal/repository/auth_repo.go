@@ -296,16 +296,14 @@ func insertSocialIdentityTx(tx *sqlx.Tx, fields SocialAccountFields) error {
 		return err
 	}
 
-	normalizedEmail := strings.ToLower(strings.TrimSpace(fields.Email))
-	var emailValue any
-	if normalizedEmail != "" {
-		emailValue = normalizedEmail
-	}
+	// NORMALIZED_EMAIL is an EMAIL login authority, not provider metadata.
+	// Social emails remain in WEO_MEMBER_SOCIAL.NMS_EMAIL so multiple login
+	// methods can use the same email without claiming another identity's key.
 	_, err = tx.Exec(`
 		INSERT INTO AUTH_IDENTITY
 			(ACCOUNT_ID, PROVIDER, SUBJECT_KEY, NORMALIZED_EMAIL, STATUS, VERIFIED_AT, CREATED_AT, UPDATED_AT)
 		VALUES (?, ?, ?, ?, 'ACTIVE', NOW(), NOW(), NOW())
-	`, fields.USRSeq, string(provider), fields.SocialID, emailValue)
+	`, fields.USRSeq, string(provider), fields.SocialID, nil)
 	return classifySocialIdentityInsertError(err)
 }
 
@@ -313,8 +311,24 @@ func classifySocialIdentityInsertError(err error) error {
 	if err == nil {
 		return nil
 	}
+	const duplicateEntryCode = 1062
 	var mysqlErr *mysql.MySQLError
-	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+	if !errors.As(err, &mysqlErr) || mysqlErr.Number != duplicateEntryCode {
+		return err
+	}
+	// Duplicate email, account/provider and primary-key errors do not prove
+	// that this provider subject belongs to another member.
+	const keyMarker = " for key "
+	keyOffset := strings.LastIndex(mysqlErr.Message, keyMarker)
+	if keyOffset < 0 {
+		return err
+	}
+	key := strings.Trim(mysqlErr.Message[keyOffset+len(keyMarker):], "'`")
+	if qualifier := strings.LastIndex(key, "."); qualifier >= 0 {
+		key = key[qualifier+1:]
+	}
+	switch key {
+	case "UK_PROVIDER_SUBJECT", "UQ_AUTH_IDENTITY_PROVIDER_SUBJECT":
 		return fmt.Errorf("%w: %w", ErrSocialIdentityAlreadyLinked, err)
 	}
 	return err
