@@ -10,20 +10,21 @@ import (
 
 // Config holds all application configuration loaded from environment variables.
 type Config struct {
-	Server         ServerConfig
-	DB             DBConfig
-	Kakao          KakaoConfig
-	Apple          AppleConfig
-	JWT            JWTConfig
-	Upload         UploadConfig
-	EasyPay        EasyPayConfig
-	SMTP           SMTPConfig
-	DebugAgent     DebugAgentConfig
-	Push           PushConfig
-	Sentry         SentryConfig
-	PGAuditLogPath string
-	Environment    string // "dev" exposes manual subscription billing trigger; "prod" hides it
-	VisitIPSalt    string
+	Server                ServerConfig
+	DB                    DBConfig
+	Kakao                 KakaoConfig
+	Apple                 AppleConfig
+	JWT                   JWTConfig
+	Upload                UploadConfig
+	EasyPay               EasyPayConfig
+	SMTP                  SMTPConfig
+	DebugAgent            DebugAgentConfig
+	Push                  PushConfig
+	Sentry                SentryConfig
+	PGAuditLogPath        string
+	Environment           string // "dev" exposes manual subscription billing trigger; "prod" hides it
+	VisitIPSalt           string
+	MessageBlockedPhrases []string
 }
 
 // SentryConfig holds read-only API credentials and mobile project slugs used
@@ -251,9 +252,10 @@ func Load() *Config {
 			IOSProject:     getEnv("SENTRY_IOS_PROJECT", ""),
 			AndroidProject: getEnv("SENTRY_ANDROID_PROJECT", ""),
 		},
-		PGAuditLogPath: getEnv("PG_AUDIT_LOG_PATH", "/var/logs/pg/pg-audit.log"),
-		Environment:    getEnv("ENV", "prod"),
-		VisitIPSalt:    getEnv("VISIT_IP_SALT", ""),
+		PGAuditLogPath:        getEnv("PG_AUDIT_LOG_PATH", "/var/logs/pg/pg-audit.log"),
+		Environment:           getEnv("ENV", "prod"),
+		MessageBlockedPhrases: strings.Split(getEnv("MESSAGE_BLOCKED_PHRASES", ""), ","),
+		VisitIPSalt:           getEnv("VISIT_IP_SALT", ""),
 	}
 }
 

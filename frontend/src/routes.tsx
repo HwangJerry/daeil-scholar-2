@@ -14,6 +14,8 @@ import { BusinessPage } from './pages/BusinessPage';
 import { DisclosureListPage } from './pages/DisclosureListPage';
 import { DisclosureDetailPage } from './pages/DisclosureDetailPage';
 import { AppSupportPage } from './pages/AppSupportPage';
+import { RegisterPage } from './pages/RegisterPage';
+import { RegistrationCompletePage } from './pages/RegistrationCompletePage';
 import { ModalRoutes } from './ModalRoutes';
 
 const LANDING_ROUTE = { path: '/', element: <LandingPage /> } as const;
@@ -32,6 +34,8 @@ const EDITORIAL_ROUTES = [
   { path: '/disclosure', element: <DisclosureListPage /> },
   { path: '/disclosure/:seq', element: <DisclosureDetailPage /> },
   { path: '/support', element: <AppSupportPage /> },
+  { path: '/register', element: <RegisterPage /> },
+  { path: '/register/complete', element: <RegistrationCompletePage /> },
 ] as const;
 
 const FALLBACK_ROUTE = { path: '*', element: <Navigate to="/" replace /> } as const;

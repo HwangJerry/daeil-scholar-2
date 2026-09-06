@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { PUBLIC_ROUTE_PATHS } from '../routes';
 
 describe('public MVP route allowlist', () => {
-  it('contains only notices, foundation information, and app support routes', () => {
+  it('includes mobile signup while keeping authenticated community routes disabled', () => {
     expect(PUBLIC_ROUTE_PATHS).toEqual([
       '/',
       '/post/:seq',
@@ -16,6 +16,8 @@ describe('public MVP route allowlist', () => {
       '/disclosure',
       '/disclosure/:seq',
       '/support',
+      '/register',
+      '/register/complete',
       '*',
     ]);
 
@@ -24,7 +26,6 @@ describe('public MVP route allowlist', () => {
       '/alumni',
       '/messages',
       '/login',
-      '/register',
       '/me',
       '/mypage',
     ]) {

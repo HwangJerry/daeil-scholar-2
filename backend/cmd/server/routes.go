@@ -41,6 +41,7 @@ type handlers struct {
 	socialLinkPhoto     *handler.SocialLinkPhotoHandler
 	personalDonation    *handler.PersonalDonationHandler
 	message             *handler.MessageHandler
+	messageReport       *handler.MessageReportHandler
 	memberBlock         *handler.MemberBlockHandler
 	push                *handler.PushHandler
 	payment             *handler.PaymentHandler
@@ -181,6 +182,7 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		// r.Get("/api/donation/subscription", h.subscription.GetMySubscription)
 		// r.Delete("/api/donation/subscription", h.subscription.CancelSubscription)
 		r.With(mw.ApprovedAlumniMiddleware).Post("/api/messages", h.message.Send)
+		r.With(mw.ApprovedAlumniMiddleware).Post("/api/message-reports", h.messageReport.Create)
 		r.With(mw.ApprovedAlumniMiddleware).Get("/api/messages/inbox", h.message.GetInbox)
 		r.With(mw.ApprovedAlumniMiddleware).Get("/api/messages/outbox", h.message.GetOutbox)
 		r.With(mw.ApprovedAlumniMiddleware).Put("/api/messages/{seq}/read", h.message.MarkAsRead)
@@ -224,6 +226,8 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Use(mw.AuthMiddleware(authService))
 		r.Use(mw.AdminAuthMiddleware)
 		r.Get("/dashboard", h.adminDashboard.Dashboard)
+		r.Get("/message-reports", h.messageReport.List)
+		r.Put("/message-reports/{id}", h.messageReport.Resolve)
 		r.Get("/stats/active-users", h.adminDashboard.ActiveUsers)
 		r.Get("/feed", h.adminNotice.List)
 		r.Get("/feed/{seq}", h.adminNotice.Detail)

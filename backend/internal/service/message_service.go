@@ -14,9 +14,10 @@ const maxMessageLength = 1000
 
 // MessageService handles direct messaging business logic.
 type MessageService struct {
-	repo        repository.MessageQuerier
-	profileRepo repository.ProfileQuerier
-	notifier    MessageNotifier
+	repo          repository.MessageQuerier
+	profileRepo   repository.ProfileQuerier
+	notifier      MessageNotifier
+	contentFilter MessageContentFilter
 }
 
 // NewMessageService creates a new MessageService.
@@ -24,7 +25,7 @@ func NewMessageService(repo repository.MessageQuerier, profileRepo repository.Pr
 	if notifier == nil {
 		notifier = nopMessageNotifier{}
 	}
-	return &MessageService{repo: repo, profileRepo: profileRepo, notifier: notifier}
+	return &MessageService{repo: repo, profileRepo: profileRepo, notifier: notifier, contentFilter: NewMessageContentFilter(nil)}
 }
 
 // SendMessage validates and accepts a message idempotently, then triggers a
@@ -45,6 +46,9 @@ func (s *MessageService) SendMessage(senderSeq int, senderName string, req model
 	}
 	if existing != nil {
 		return existing, nil
+	}
+	if !s.contentFilter.Allows(req.Content) {
+		return nil, &model.ValidationError{Msg: "욕설·위협 등 부적절한 표현이 포함되어 전송할 수 없습니다. 내용을 수정해주세요."}
 	}
 	recipientSeq := req.RecipientUserSeq()
 	if recipientSeq <= 0 {
