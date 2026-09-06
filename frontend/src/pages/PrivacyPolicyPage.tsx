@@ -111,14 +111,19 @@ export function PrivacyPolicyPage() {
 
           <PolicySection id="retention">
             <Card className="border-border bg-primary-light p-6 shadow-none">
-              <h3 className="text-base font-semibold text-primary">회원 탈퇴 시 기록 보관 안내</h3>
+              <h3 className="text-base font-semibold text-primary">계정 삭제는 담당자가 직접 처리합니다</h3>
               <p className="mt-3 text-sm leading-7 text-primary">
-                현재 회원 탈퇴는 계정 이용을 중지하는 방식입니다. 탈퇴 후 로그인이 차단되지만, 회원정보·프로필·쪽지·기부 내역·신고 기록은 탈퇴만으로 삭제되지 않습니다. 이 기록들의 보관 종료 시점은 별도로 정해져 있지 않습니다.
+                앱에서 ‘회원 탈퇴 및 계정 삭제 요청’을 접수하면 계정 이용이 중지됩니다. 담당자가 통상 접수일로부터 3일 이내 삭제를 목표로 처리하며, 10일 이내 처리 결과와 법정 보존 내역을 안내합니다. 앱 로그인 화면의 ‘계정 삭제 처리 현황’에서도 결과를 확인할 수 있습니다.
               </p>
             </Card>
-            <p>소셜 계정 연결도 탈퇴 시 자동으로 해제되지 않습니다. 개인정보 삭제나 처리정지를 원하시면 개인정보 보호 담당자에게 요청할 수 있습니다. 요청에 따른 삭제 범위와 처리 일정은 담당자에게 확인해 주세요.</p>
-            <p>탈퇴에 따른 기록 보관과 별도로, 방문 상세 기록은 90일이 지난 자료를 정리하며 집계 통계는 유지합니다. 만료된 인증정보와 차단으로 전달되지 않은 메시지는 각각의 정리 절차에 따라 삭제됩니다.</p>
-            <p>서버 백업과 외부 진단 서비스의 보관 기간은 현재 확인 중입니다. 확인되는 내용은 이 페이지에 반영하겠습니다.</p>
+            <p>회원정보·프로필·사진·쪽지와 계정에 연결된 인증정보는 이용 목적이 끝나거나 삭제 요청이 접수되면 지체 없이 삭제합니다. Apple·카카오 연결에 대한 권한 철회도 함께 처리합니다. 법령에 따라 남겨야 하는 자료는 필요한 항목만 별도로 보관하며 다른 서비스 이용에 쓰지 않습니다.</p>
+            <dl className="divide-y divide-border">
+              <div className="py-4"><dt className="font-semibold text-text-primary">기부금 영수증과 회계 자료</dt><dd className="mt-2 text-sm leading-7">법인세법 제112조의2가 적용되는 기부자별 발급명세는 발급일부터 5년간 보관합니다. 전자기부금영수증 등 법정 예외는 해당 규정에 따릅니다. 상속세 및 증여세법 제51조가 적용되는 공익법인등의 장부와 중요한 증명서류는 해당 사업연도 종료일부터 10년간 보관합니다. 이 기간을 모든 기부 내역이나 회원정보에 일괄 적용하지 않으며, 장학회에 적용되는 보존 의무와 자료의 성격에 따라 항목별로 관리합니다.</dd></div>
+              <div className="py-4"><dt className="font-semibold text-text-primary">신고 자료</dt><dd className="mt-2 text-sm leading-7">신고 처리와 이용자 보호에 필요한 동안 보관하며, 처리 완료 후 최대 90일 이내 삭제합니다. 그 전에 보관 목적이 끝나거나 유효한 삭제 요청이 있으면 더 일찍 삭제합니다. 법령상 보존 의무가 있는 증거는 근거와 종료일을 정하여 별도 보관합니다.</dd></div>
+              <div className="py-4"><dt className="font-semibold text-text-primary">방문 기록과 삭제 요청 확인 자료</dt><dd className="mt-2 text-sm leading-7">방문 상세 기록은 90일 후 정리하고 개인을 식별할 수 없는 집계만 유지합니다. 삭제 완료 시 접수증에서 회원 번호 연결을 제거하며, 처리 결과 조회를 위해 완료 후 30일간 확인 자료를 보관한 뒤 삭제합니다.</dd></div>
+            </dl>
+            <p>서버 백업과 Sentry의 실제 보관 기간·저장 지역은 확인 중입니다. 계정 삭제 작업에는 백업·업로드 파일·외부 서비스의 해당 개인 데이터 확인도 포함됩니다. 삭제가 확인되지 않은 요청은 완료로 처리하지 않습니다.</p>
+            <Button asChild variant="outline"><Link to="/account-deletion">계정 삭제 처리 현황 확인</Link></Button>
           </PolicySection>
 
           <PolicySection id="services">
@@ -137,7 +142,7 @@ export function PrivacyPolicyPage() {
           <PolicySection id="choices">
             <p>프로필 화면에서 정보를 수정하고 전화번호·이메일 공개 여부를 변경할 수 있습니다. 기기의 설정에서는 앱 알림 권한을 변경할 수 있습니다.</p>
             <p>개인정보 열람, 정정, 삭제, 처리정지에 관한 요청은 본인 또는 적법한 대리인이 아래 이메일로 보낼 수 있습니다. 요청 내용을 확인하는 데 필요한 본인 확인이나 대리권 확인이 이루어질 수 있습니다.</p>
-            <p>앱에서 서비스 탈퇴를 원하시면 ‘마이페이지 → 계정 설정 → 회원 탈퇴’를 이용해 주세요. 탈퇴 후 정보가 보관되는 방식은 위 ‘얼마나 보관하나요?’ 항목에서 확인할 수 있습니다.</p>
+            <p>앱의 ‘마이페이지 → 계정 설정 → 회원 탈퇴 및 계정 삭제 요청’에서 별도 이메일 발송 없이 요청할 수 있습니다. 동문 인증 대기 화면에서도 삭제 요청이 가능합니다. 삭제·보존 내역에 이의가 있으면 아래 개인정보 요청 접수 이메일로 연락해 주세요.</p>
           </PolicySection>
 
           <PolicySection id="cookies">

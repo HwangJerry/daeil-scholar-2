@@ -3,6 +3,7 @@ import { Activity, LayoutDashboard, FileText, ScrollText, Images, Users, UserChe
 
 export const NAV_ITEMS = [
   { to: '/message-reports', icon: FileText, label: '메시지 신고', end: true },
+  { to: '/account-deletions', icon: FileText, label: '계정 삭제 요청', end: true },
   { to: '/', icon: LayoutDashboard, label: '대시보드', end: true },
   { to: '/notice', icon: FileText, label: '공지 관리', end: false },
   { to: '/disclosure', icon: ScrollText, label: '의무공시', end: false },

@@ -19,6 +19,7 @@ import { HistoryManagePage } from './pages/HistoryManagePage.tsx';
 import { AppMonitoringPage } from './pages/AppMonitoringPage.tsx';
 import { AppSettingsPage } from './pages/AppSettingsPage.tsx';
 import { MessageReportsPage } from './pages/MessageReportsPage';
+import { AccountDeletionsPage } from './pages/AccountDeletionsPage';
 
 export function AppRoutes() {
   return (
@@ -50,6 +51,7 @@ export function AppRoutes() {
         <Route path="app-monitoring" element={<AppMonitoringPage />} />
         <Route path="app-settings" element={<AppSettingsPage />} />
         <Route path="message-reports" element={<MessageReportsPage />} />
+        <Route path="account-deletions" element={<AccountDeletionsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
