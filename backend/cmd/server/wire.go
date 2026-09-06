@@ -35,6 +35,7 @@ type deps struct {
 	emailService           *service.EmailService
 	subscriptionBillingJob *job.SubscriptionBillingJob
 	visitJob               *job.VisitAggregationJob
+	privacyRetentionJob    *job.PrivacyRetentionJob
 	blockedMessageCleanup  *job.BlockedMessageCleanupJob
 	pushDelivery           *service.PushDeliveryNotifier
 	socialRevocationWorker *job.SocialRevocationWorker
@@ -216,6 +217,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		personalDonation:    handler.NewPersonalDonationHandler(personalDonationService),
 		message:             handler.NewMessageHandler(messageService),
 		messageReport:       &handler.MessageReportHandler{Service: &service.MessageReportService{Store: &repository.MessageReportRepository{DB: db}}},
+		accountDeletion:     &handler.AccountDeletionRequestHandler{Service: &service.AccountDeletionRequestService{Store: &repository.AccountDeletionRequestRepository{DB: db}}, Auth: authService},
 		memberBlock:         handler.NewMemberBlockHandler(memberBlockService),
 		push:                handler.NewPushHandler(pushService),
 		payment:             handler.NewPaymentHandler(donateService, cfg.EasyPay),
@@ -251,6 +253,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		emailService:           emailService,
 		subscriptionBillingJob: subscriptionBillingJob,
 		visitJob:               visitJob,
+		privacyRetentionJob:    job.NewPrivacyRetentionJob(&repository.AccountDeletionRequestRepository{DB: db}, logger),
 		blockedMessageCleanup:  blockedMessageCleanup,
 		pushDelivery:           pushDelivery,
 		socialRevocationWorker: socialRevocationWorker,

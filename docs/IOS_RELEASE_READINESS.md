@@ -13,12 +13,12 @@ These changes are prepared locally. They are not a production deployment or App 
 
 ## Deployment order
 
-1. Candidate source manifest SHA-256: `979a1fe9f4a2416bbb4cdada329fe7d6a1a163d5d403d522656cea954770029a`. The source manifest, regression pin, and environment example include migration 055. Production approval/environment settings have not been changed. Review migration numbering against any concurrently developed backend changes; this branch adds `055_create_message_reports.sql`.
-2. Apply that additive migration using the project's normal migration procedure. No production migration has been executed by this task.
+1. Candidate source manifest SHA-256: `8232f1eff1f4287a36b5fd5823eaa3a31b5f339fc0ca523f953de1f25e4219b1`. The source manifest, regression pin, and environment example include migrations 055 and 056. Production approval/environment settings have not been changed. Review migration numbering against any concurrently developed backend changes; this branch adds `055_create_message_reports.sql` and `056_create_account_deletion_requests.sql`.
+2. Apply those additive migrations using the project's normal migration procedure. No production migration has been executed by this task.
 3. Deploy the backend and both SPAs together. Confirm signup works with an empty browser session and that `/api/message-reports` exists before distributing the new iOS build.
 4. Give a designated moderator an existing operator/root account. Confirm ordinary members cannot load `/api/admin/message-reports`.
 5. Create a synthetic conversation between two disposable approved accounts. Report a received message, confirm queue receipt, remove it, refresh both clients, and verify the removal marker. Do not test with real users' messages.
-6. Test and distribute a newly signed candidate after the remaining policy/deletion decisions are resolved. The previous IPA does not contain these fixes.
+6. Test and distribute a newly signed candidate after the remaining external-service settings and real deletion operations are verified. The previous IPA does not contain these fixes.
 
 ## Moderator operation
 
@@ -26,19 +26,22 @@ These changes are prepared locally. They are not a production deployment or App 
 - Verify the operator's existing administrator account can access the deployed queue. No password needs to be shared. A backup during absences and a repeat-offender/suspension process remain to be specified.
 - The queue refreshes automatically while open; this implementation does not send emails or staff notifications. The daily manual check is part of the confirmed operating procedure. The public support source now states the daily review and 48-hour target; verify it after deployment.
 - Review reports, record a decision, and contact the reporter through the approved support process when needed. Reporter contact details are not exposed to the reported user.
-- Approve retention/access rules for report evidence and moderator decisions. There is no automatic evidence purge until that policy is specified.
+- Approve retention/access rules for report evidence and moderator decisions. Resolved report evidence is now purged after 90 days; delete it earlier when no longer needed or on a valid deletion request. Lawfully retained evidence must be separated before resolving a report.
 - Review filter misses and false positives; update additional phrases deliberately.
 
 ## Decisions blocking release
 
 1. Confirm external-browser donations, or provide evidence of Apple-approved nonprofit fundraising and Apple Pay support before requesting an in-app alternative.
 2. Operator details confirmed (2026-09-06): organization `대일외국어고등학교 장학회`, privacy officer `엄은숙`, privacy-request handler `황제철` at `ghkdwp018@naver.com`. General support/moderation still uses `ghkdwp018@gmail.com`. These are reflected in the privacy page and draft. HappyNanum supplies donation records to the foundation; exact received fields and contractual role remain to be confirmed. See `PRIVACY_RETENTION_REVIEW.md` for researched retention duties and their limits.
-3. Revised operator decision (2026-09-06): accept deletion requests in the app and have the designated handler actually delete the data manually. This supersedes blanket indefinite retention as the intended policy. Category-specific retention periods are being proposed; external-service/backup settings and the foundation's tax status remain unverified.
-4. Account deletion implementation is still incomplete. Current `AnonymizeAccountForDeletion` changes account status to `AAA`, and the legacy revocation worker does not receive new deletion jobs. Implement a durable in-app request, handler access, actual personal-data deletion, legally required record separation, Apple-token revocation, and result notification; test with disposable accounts before updating public copy to describe it as operational. Manual processing is the accepted direction, not an already working deletion flow. Source: https://developer.apple.com/support/offering-account-deletion-in-your-app/ (checked 2026-09-06).
-5. Review and deploy the implemented `/privacy` page after resolving policy details. Web footer links are implemented; add the native policy link and complete App Store Connect App Privacy separately. The operator does not know Sentry storage/retention or backup retention; inspect actual service settings/contracts before treating the policy as final. Its displayed date is the document revision date, not an asserted production effective date.
+3. Revised operator decision (2026-09-06): accept deletion requests in the app and have the designated handler actually delete the data manually. This supersedes blanket indefinite retention as the intended policy. Member deletion targets and report/receipt retention are reflected in this release; external-service/backup settings and the foundation's tax status remain unverified.
+4. Manual deletion is implemented locally: in-app durable requests, a root-only processing workflow, private status receipts, database/provider completion guards, and evidence/receipt expiry. The administrator must perform actual DB/files/backups/external-service erasure and individually notify the user; the console does not automatically erase those records or send email. See `MANUAL_ACCOUNT_DELETION_RUNBOOK.md`. Disposable MariaDB tests verify the workflow; production provider revocation, backup/Sentry erasure and operator readiness still require a real release-candidate test.
+5. The public privacy page and native policy link are implemented. Resolve external-service contracts/storage/transfers/retention and the foundation's tax status before treating the policy as final. Deploy it with the corresponding backend/admin workflow, not ahead of that workflow. App Store Connect App Privacy remains a separate task. Its displayed date is a revision date, not an asserted production effective date.
 6. Verify password/Apple/Kakao login and production APNs on an installed TestFlight candidate; prepare an approved reviewer account.
 
 ## Validation
+
+- Manual deletion follow-up: Debug iOS build succeeds and 122 tests pass; frontend 139 unit tests, both SPA builds, changed-file ESLint and 5 public Playwright regressions pass. Backend tests/vet and the pinned MariaDB 10.1.38 manual-deletion lifecycle test pass. Tests use synthetic data; actual Apple/Kakao revocation, production delivery and external/backup deletion are unverified.
+- iOS token compliance has zero violations. The workspace-wide design-system gate still reports existing web literals and the unrelated feed heading contract mismatch; those sources were not changed in this task.
 
 - Privacy-page follow-up: frontend production build and changed-file ESLint pass; 12 footer/public-route/maintenance tests and two Playwright navigation/reload regressions pass. Browser checks at 375/768/1440px pass for footer access, section links, hash reload, trailing-slash entry, maintenance isolation, and horizontal overflow. The visit beacon was stubbed for isolated browser checks; without a running backend, the skill captures report its expected local 500 response. No production API was used.
 - Full backend `go test ./...` and `go vet ./...` pass, including migration-source approval, invalid input, recipient authorization, admin authorization, and rollback checks.

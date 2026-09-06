@@ -42,6 +42,7 @@ type handlers struct {
 	personalDonation    *handler.PersonalDonationHandler
 	message             *handler.MessageHandler
 	messageReport       *handler.MessageReportHandler
+	accountDeletion     *handler.AccountDeletionRequestHandler
 	memberBlock         *handler.MemberBlockHandler
 	push                *handler.PushHandler
 	payment             *handler.PaymentHandler
@@ -124,6 +125,7 @@ func registerPublicRoutes(r chi.Router, h handlers, authService *service.AuthSer
 	r.Get("/api/feed/hero", h.feed.GetHero)
 	r.Get("/api/donation/summary", h.donation.GetSummary)
 	r.Get("/api/settings/public", h.appSetting.Public)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/account-deletion/receipt", h.accountDeletion.Receipt)
 	r.Get("/api/auth/kakao", h.auth.KakaoLogin)
 	r.Get("/api/auth/kakao/callback", h.auth.KakaoCallback)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/kakao/mobile", h.auth.KakaoMobileLogin)
@@ -159,7 +161,8 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.Delete("/api/auth/social/{provider}", h.auth.DisconnectSocial)
 		r.Post("/api/auth/logout", h.auth.Logout)
 		r.Post("/api/auth/logout/all", h.auth.LogoutAll)
-		r.Delete("/api/auth/account", h.auth.DeleteAccount)
+		r.Delete("/api/auth/account", h.accountDeletion.Create)
+		r.Post("/api/auth/account/deletion-requests", h.accountDeletion.Create)
 		r.Get("/api/alumni/verification", h.profile.GetAlumniVerification)
 		r.Put("/api/alumni/verification", h.profile.PutAlumniVerification)
 		r.With(mw.ApprovedAlumniMiddleware).Get("/api/alumni", h.alumni.Search)
@@ -228,6 +231,9 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Get("/dashboard", h.adminDashboard.Dashboard)
 		r.Get("/message-reports", h.messageReport.List)
 		r.Put("/message-reports/{id}", h.messageReport.Resolve)
+		r.Get("/account-deletions", h.accountDeletion.List)
+		r.With(mw.RootOnlyMiddleware).Get("/account-deletions/{id}/verification", h.accountDeletion.Verify)
+		r.With(mw.RootOnlyMiddleware).Put("/account-deletions/{id}", h.accountDeletion.Resolve)
 		r.Get("/stats/active-users", h.adminDashboard.ActiveUsers)
 		r.Get("/feed", h.adminNotice.List)
 		r.Get("/feed/{seq}", h.adminNotice.Detail)

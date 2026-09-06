@@ -14,6 +14,7 @@ import { BusinessPage } from './pages/BusinessPage';
 import { DisclosureListPage } from './pages/DisclosureListPage';
 import { DisclosureDetailPage } from './pages/DisclosureDetailPage';
 import { AppSupportPage } from './pages/AppSupportPage';
+import { AccountDeletionPage } from './pages/AccountDeletionPage';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { RegistrationCompletePage } from './pages/RegistrationCompletePage';
@@ -36,6 +37,7 @@ const EDITORIAL_ROUTES = [
   { path: '/disclosure/:seq', element: <DisclosureDetailPage /> },
   { path: '/support', element: <AppSupportPage /> },
   { path: '/privacy', element: <PrivacyPolicyPage /> },
+  { path: '/account-deletion', element: <AccountDeletionPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/register/complete', element: <RegistrationCompletePage /> },
 ] as const;

@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 describe('public support during maintenance', () => {
-  it.each(['/support', '/support/', '/privacy', '/privacy/', '/register', '/register/', '/register/complete'])('opens %s without granting access to other pages', async (path) => {
+  it.each(['/support', '/support/', '/privacy', '/privacy/', '/account-deletion', '/account-deletion/', '/register', '/register/', '/register/complete'])('opens %s without granting access to other pages', async (path) => {
     const { WipGate } = await import('../components/common/WipGate');
     const user = userEvent.setup();
 

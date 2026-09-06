@@ -43,7 +43,7 @@ const NAVIGATION_GROUPS = [
   {
     id: 'member',
     label: '회원',
-    routes: ['/member', '/member/pending', '/message-reports'],
+    routes: ['/member', '/member/pending', '/message-reports', '/account-deletions'],
   },
   {
     id: 'settings',
