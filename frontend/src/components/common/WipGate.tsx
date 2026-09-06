@@ -7,7 +7,7 @@ import { Button } from '../ui/Button';
 
 const STORAGE_KEY = 'wip-unlock';
 const EXPECTED_CODE = (import.meta.env.VITE_WIP_ADMIN_CODE ?? '') as string;
-const APP_PUBLIC_PATHS = new Set(['/support', '/register', '/register/complete']);
+const APP_PUBLIC_PATHS = new Set(['/support', '/privacy', '/register', '/register/complete']);
 
 function readUnlocked(): boolean {
   if (!EXPECTED_CODE) return true;
