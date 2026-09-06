@@ -127,7 +127,7 @@ func TestSocialLinkReturnsConflictForAlreadyLinkedSocialAccount(t *testing.T) {
 	mock.ExpectExec(`INSERT INTO ALUMNI_VERIFICATION`).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
-		WillReturnError(&mysql.MySQLError{Number: 1062, Message: "duplicate provider subject"})
+		WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry 'KT-subject' for key 'UK_PROVIDER_SUBJECT'"})
 	mock.ExpectRollback()
 
 	request := httptest.NewRequest(

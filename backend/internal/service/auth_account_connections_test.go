@@ -122,7 +122,7 @@ func TestLinkIdentityReturnsSuccessWhenConcurrentLinkWinnerIsSameMember(t *testi
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
 		WithArgs(42, "KT", "provider-subject", "").
-		WillReturnError(&mysql.MySQLError{Number: 1062, Message: "concurrent link won"})
+		WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry 'KT-subject' for key 'UK_PROVIDER_SUBJECT'"})
 	mock.ExpectRollback()
 	mock.ExpectQuery(`FROM WEO_MEMBER_SOCIAL`).
 		WithArgs("KT", "provider-subject").
@@ -156,7 +156,7 @@ func TestLinkIdentityRejectsWhenConcurrentLinkWinnerIsAnotherMember(t *testing.T
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
 		WithArgs(42, "KT", "provider-subject", "").
-		WillReturnError(&mysql.MySQLError{Number: 1062, Message: "concurrent link won"})
+		WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry 'KT-subject' for key 'UK_PROVIDER_SUBJECT'"})
 	mock.ExpectRollback()
 	mock.ExpectQuery(`FROM WEO_MEMBER_SOCIAL`).
 		WithArgs("KT", "provider-subject").
@@ -218,6 +218,36 @@ func TestLinkIdentityRejectsInvalidProvider(t *testing.T) {
 	_, err := social.LinkIdentity(context.Background(), 42, "naver", model.KakaoAuthorization{AccessToken: "token"})
 	if !errors.Is(err, ErrInvalidSocialProvider) {
 		t.Fatalf("error = %v, want ErrInvalidSocialProvider", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLinkIdentityDoesNotClaimAnotherOwnerWhenConflictHasNoActiveConnection(t *testing.T) {
+	auth, mock, cleanup := newAuthServiceForTest(t)
+	defer cleanup()
+	auth.repo.EnableCanonicalIdentityWrites()
+	mock.ExpectQuery(`FROM WEO_MEMBER_SOCIAL`).
+		WithArgs("KT", "provider-subject").
+		WillReturnError(sql.ErrNoRows)
+	mock.ExpectBegin()
+	mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(`INSERT INTO AUTH_IDENTITY`).
+		WillReturnError(&mysql.MySQLError{
+			Number: 1062, Message: "Duplicate entry 'KAKAO-subject' for key 'UQ_AUTH_IDENTITY_PROVIDER_SUBJECT'",
+		})
+	mock.ExpectRollback()
+	mock.ExpectQuery(`FROM WEO_MEMBER_SOCIAL`).
+		WithArgs("KT", "provider-subject").
+		WillReturnError(sql.ErrNoRows)
+
+	_, err := newLinkIdentityService(auth, 42).LinkIdentity(
+		context.Background(), 42, "kakao", model.KakaoAuthorization{AccessToken: "token"},
+	)
+	if !errors.Is(err, ErrSocialConnectionConflict) || errors.Is(err, ErrSocialAccountAlreadyLinked) {
+		t.Fatalf("expected unresolved connection conflict, not another-account ownership: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

@@ -19,17 +19,17 @@ func TestCreateSocialAccountWritesCanonicalIdentityWhenReady(t *testing.T) {
 		normalizedEmail any
 	}{
 		{
-			name:            "kakao normalizes email",
+			name:            "kakao keeps provider email out of email authority",
 			legacyProvider:  string(model.SocialProviderKakao),
 			canonical:       model.IdentityProviderKakao,
 			email:           "  Member@Example.COM ",
-			normalizedEmail: "member@example.com",
+			normalizedEmail: nil,
 		},
 		{
-			name:            "apple stores missing email as null",
+			name:            "apple keeps provider email out of email authority",
 			legacyProvider:  string(model.SocialProviderApple),
 			canonical:       model.IdentityProviderApple,
-			email:           "  ",
+			email:           "Member@Example.COM",
 			normalizedEmail: nil,
 		},
 	}
@@ -147,7 +147,7 @@ func TestCreateSocialAccountClassifiesDuplicateSocialIdentity(t *testing.T) {
 			name: "legacy social connection",
 			expectSocialInsert: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
-					WillReturnError(&mysql.MySQLError{Number: 1062, Message: "duplicate provider subject"})
+					WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry 'KT-subject' for key 'UK_PROVIDER_SUBJECT'"})
 			},
 		},
 		{
@@ -157,7 +157,7 @@ func TestCreateSocialAccountClassifiesDuplicateSocialIdentity(t *testing.T) {
 				mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 				mock.ExpectExec(`INSERT INTO AUTH_IDENTITY`).
-					WillReturnError(&mysql.MySQLError{Number: 1062, Message: "duplicate canonical identity"})
+					WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry 'KAKAO-subject' for key 'UQ_AUTH_IDENTITY_PROVIDER_SUBJECT'"})
 			},
 		},
 	}
