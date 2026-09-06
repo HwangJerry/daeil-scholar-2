@@ -157,8 +157,9 @@ export function PrivacyPolicyPage() {
               <dl className="space-y-4 text-sm leading-7">
                 <div><dt className="text-text-secondary">운영 단체</dt><dd className="font-semibold text-text-primary">{PRIVACY_CONTACT.organization}</dd></div>
                 <div><dt className="text-text-secondary">개인정보 보호 담당자</dt><dd className="font-semibold text-text-primary">{PRIVACY_CONTACT.officer}</dd></div>
+                <div><dt className="text-text-secondary">개인정보 요청 처리 담당자</dt><dd className="font-semibold text-text-primary">{PRIVACY_CONTACT.requestHandler}</dd></div>
                 <div>
-                  <dt className="text-text-secondary">문의 이메일</dt>
+                  <dt className="text-text-secondary">개인정보 요청 접수 이메일</dt>
                   <dd><a className="inline-flex min-h-11 items-center break-all rounded-sm font-semibold text-primary underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" href={`mailto:${PRIVACY_CONTACT.email}`}>{PRIVACY_CONTACT.email}</a></dd>
                 </div>
               </dl>

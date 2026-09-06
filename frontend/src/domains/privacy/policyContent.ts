@@ -2,7 +2,8 @@
 export const PRIVACY_CONTACT = {
   organization: '대일외국어고등학교 장학회',
   officer: '엄은숙',
-  email: 'ghkdwp018@gmail.com',
+  requestHandler: '황제철',
+  email: 'ghkdwp018@naver.com',
 } as const;
 
 export const PRIVACY_UPDATED_AT = '2026-09-06';
@@ -42,7 +43,7 @@ export const PRIVACY_COLLECTION = [
   {
     title: '기부 내역',
     information: '회원과 연결된 기부 내역과 금액',
-    purpose: '기부 현황과 본인의 기부 내역을 안내합니다. 외부 기부 페이지에서 입력하는 정보는 해당 운영자의 안내도 확인해 주세요.',
+    purpose: '해피나눔에서 전달받은 기부 내역을 회원과 연결하여 기부 현황과 본인의 기부 내역을 안내합니다. 기부 페이지에서 입력하는 정보는 해피나눔의 안내도 확인해 주세요.',
   },
   {
     title: '알림과 서비스 운영',
@@ -55,6 +56,7 @@ export const PRIVACY_EXTERNAL_SERVICES = [
   { name: 'Apple · 카카오', description: '소셜 로그인 과정에서 계정 인증과 동의한 정보의 전달에 이용합니다. iOS 알림은 Apple 푸시 서비스를 통해 전달합니다.' },
   { name: 'Sentry', description: '앱 오류와 실행·네트워크 성능을 확인하기 위해 진단 정보를 전송합니다.' },
   { name: '가비아', description: '웹사이트와 API 서버 운영을 위한 호스팅 환경을 이용합니다.' },
-  { name: 'Google · jsDelivr', description: '웹 글꼴을 불러올 때 이용합니다. 글꼴 요청 과정에서 IP 주소와 브라우저 요청 정보가 해당 서비스에 전달될 수 있습니다. 이메일 문의에는 Google의 Gmail을 이용합니다.' },
-  { name: '외부 기부 서비스', description: '기부를 진행하면 외부 기부 페이지로 이동합니다. 결제·기부 신청 정보의 처리 내용은 해당 페이지의 개인정보 안내를 확인해 주세요.' },
+  { name: 'Google · jsDelivr', description: '웹 글꼴을 불러올 때 이용합니다. 글꼴 요청 과정에서 IP 주소와 브라우저 요청 정보가 해당 서비스에 전달될 수 있습니다. 일반 앱 이용 문의에는 Google의 Gmail을 이용합니다.' },
+  { name: '네이버', description: '개인정보 열람·정정·삭제·처리정지 요청을 네이버 메일로 접수합니다. 요청에 적어 보내신 연락처와 문의 내용이 메일 서비스에서 처리됩니다.' },
+  { name: '해피나눔', description: '기부 신청을 위한 외부 서비스를 이용하며, 장학회는 해피나눔에서 기부 내역을 전달받아 현황과 회원별 내역을 관리합니다. 결제·기부 신청 정보의 처리 내용은 해피나눔의 개인정보 안내도 확인해 주세요.' },
 ] as const;

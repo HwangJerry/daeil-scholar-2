@@ -16,7 +16,7 @@ for (const width of [375, 1440]) {
     await page.reload();
     await expect(page.getByRole('heading', { name: '개인정보 문의는 어디로 하나요?' })).toBeInViewport();
     await expect.poll(() => page.locator('#contact').evaluate((element) => element.getBoundingClientRect().top)).toBeGreaterThanOrEqual(60);
-    await expect(page.locator('#contact').getByRole('link', { name: 'ghkdwp018@gmail.com' })).toHaveAttribute('href', 'mailto:ghkdwp018@gmail.com');
+    await expect(page.locator('#contact').getByRole('link', { name: 'ghkdwp018@naver.com' })).toHaveAttribute('href', 'mailto:ghkdwp018@naver.com');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }
