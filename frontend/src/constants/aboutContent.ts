@@ -17,6 +17,7 @@ export const ABOUT_LINKS: readonly AboutLink[] = [
 
 export const FOOTER_INFO_LINKS: readonly { to: string; label: string }[] = [
   { to: '/disclosure', label: '의무공시' },
+  { to: '/support', label: '앱 이용 문의' },
 ];
 
 export const FOOTER_CONTACT_INFO = {

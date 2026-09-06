@@ -1,5 +1,6 @@
 // WipGate — Temporary "Work in Progress" overlay gating the app behind an admin code
 import { useRef, useState, type FormEvent } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
@@ -25,12 +26,14 @@ function persistUnlocked() {
 }
 
 export function WipGate({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
   const [unlocked, setUnlocked] = useState<boolean>(readUnlocked);
   const [code, setCode] = useState('');
   const [error, setError] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  if (unlocked) return <>{children}</>;
+  const isSupportPage = pathname === '/support' || pathname === '/support/';
+  if (unlocked || isSupportPage) return <>{children}</>;
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();

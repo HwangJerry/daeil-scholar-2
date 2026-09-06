@@ -1,8 +1,9 @@
+// publicRoutes.test — Public information and app support route boundaries
 import { describe, expect, it } from 'vitest';
 import { PUBLIC_ROUTE_PATHS } from '../routes';
 
 describe('public MVP route allowlist', () => {
-  it('contains only notices and foundation information routes', () => {
+  it('contains only notices, foundation information, and app support routes', () => {
     expect(PUBLIC_ROUTE_PATHS).toEqual([
       '/',
       '/post/:seq',
@@ -14,6 +15,7 @@ describe('public MVP route allowlist', () => {
       '/business',
       '/disclosure',
       '/disclosure/:seq',
+      '/support',
       '*',
     ]);
 

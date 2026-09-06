@@ -89,6 +89,16 @@ export function SupportSection({
               downloadLinks={downloadLinks}
               className={cn('mt-6')}
             />
+            <p className={cn('mt-5 text-body-sm leading-6 text-primary-muted')}>
+              앱 이용에 도움이 필요하신가요?
+              <a
+                href="/support"
+                className={cn('inline-flex min-h-11 items-center gap-1 rounded-sm text-surface underline underline-offset-4 hover:text-primary-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-muted sm:ml-2')}
+              >
+                앱 이용 문의
+                <ArrowUpRight aria-hidden="true" className={cn('size-4')} />
+              </a>
+            </p>
           </div>
         </div>
       </div>
