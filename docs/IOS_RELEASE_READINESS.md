@@ -8,6 +8,8 @@ The current task is iOS App Review readiness. Additional Korean-law/tax analysis
 
 Use Apple's explicit review requirements for the active checklist. A detailed country-by-country transfer table or a universal seven-day backup/30-day Sentry period is not specified by Guideline 5.1.1(i). Accurate collection/use/sharing disclosures, equivalent third-party protection, retention/deletion and consent-withdrawal explanations remain in scope. Existing promises in the app/policy must match the actual candidate and operator workflow.
 
+The repository-specific [Apple account deletion scope review](APPLE_ACCOUNT_DELETION_SCOPE.md) defines the proposed erasure targets, policy wording, and verification gaps. In particular, the existing footprint scan misses `VD_USR_SEQ`, `O_ACCOUNT_USR_SEQ`, indirect identifiers and historical upload ownership; its zero count alone does not prove complete erasure. The review is a specification, not an implemented erasure engine or production validation.
+
 ## Implemented
 
 - Public `/register` and `/register/complete` routes restore the app's email signup. Both bypass the temporary web maintenance gate without unlocking other routes. The signup page initializes its own auth state. Completion tells users to return to the native app after operator approval.
