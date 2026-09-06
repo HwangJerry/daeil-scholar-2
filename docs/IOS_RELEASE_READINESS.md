@@ -19,11 +19,11 @@ These changes are prepared locally. They are not a production deployment or App 
 5. Create a synthetic conversation between two disposable approved accounts. Report a received message, confirm queue receipt, remove it, refresh both clients, and verify the removal marker. Do not test with real users' messages.
 6. Test and distribute a newly signed candidate after the remaining policy/deletion decisions are resolved. The previous IPA does not contain these fixes.
 
-## Moderator operation still required
+## Moderator operation
 
-- Official operator contact confirmed on 2026-09-06: `ghkdwp018@gmail.com`. This confirms the contact address, not a moderator assignment or response commitment.
-- Assign a person and backup to monitor the queue and the public support channel.
-- Agree a response target and a repeat-offender/suspension process. The queue refreshes automatically while open; this implementation does not send emails or staff notifications.
+- Confirmed by the operator on 2026-09-06: the operator personally handles reports, checks `ghkdwp018@gmail.com` and the administrator report queue daily, and processes reports within 48 hours.
+- Verify the operator's existing administrator account can access the deployed queue. No password needs to be shared. A backup during absences and a repeat-offender/suspension process remain to be specified.
+- The queue refreshes automatically while open; this implementation does not send emails or staff notifications. The daily manual check is part of the confirmed operating procedure. The public support source now states the daily review and 48-hour target; verify it after deployment.
 - Review reports, record a decision, and contact the reporter through the approved support process when needed. Reporter contact details are not exposed to the reported user.
 - Approve retention/access rules for report evidence and moderator decisions. There is no automatic evidence purge until that policy is specified.
 - Review filter misses and false positives; update additional phrases deliberately.
