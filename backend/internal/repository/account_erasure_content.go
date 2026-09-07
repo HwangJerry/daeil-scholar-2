@@ -9,7 +9,11 @@ import (
 	"strings"
 )
 
-var managedContentFile = regexp.MustCompile(`(?:https?://[^\s"'<>]+)?/(?:uploads|files|upload|old/upload)/[^\s"'<>\)\]]+`)
+var managedContentFile = regexp.MustCompile(`(?:(?:https?:)?//[^\s"'<>]+)?/(?:uploads|files|upload|old/upload)/[^\s"'<>\)\]]+`)
+
+// Explicit attributes also cover relative and percent-encoded managed paths.
+var contentAttributeURL = regexp.MustCompile(`(?i)(?:src|href|poster)\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))`)
+var contentMarkdownURL = regexp.MustCompile(`\]\(<?([^\s)>]+)>?(?:\s+[^)]*)?\)`)
 
 func managedContentURLs(value string) []string {
 	values := []string{value}
@@ -40,4 +44,33 @@ func postErasureURLs(tx *sqlx.Tx, s erasureSchema, user int) ([]string, error) {
 		}
 	}
 	return urls, nil
+}
+
+func survivingContentURLs(value string) []string {
+	urls := managedContentURLs(value)
+	trimmed := strings.TrimSpace(value)
+	if !strings.ContainsAny(trimmed, " \t\r\n<>\"'") {
+		for _, prefix := range []string{"/", "files/", "upload/", "uploads/", "old/upload/", "https://", "http://"} {
+			if strings.HasPrefix(trimmed, prefix) {
+				urls = append(urls, trimmed)
+				break
+			}
+		}
+	}
+	values := []string{value}
+	if decoded, err := base64.StdEncoding.DecodeString(value); err == nil {
+		values = append(values, string(decoded))
+	}
+	for _, v := range values {
+		for _, pattern := range []*regexp.Regexp{contentAttributeURL, contentMarkdownURL} {
+			for _, match := range pattern.FindAllStringSubmatch(html.UnescapeString(v), -1) {
+				for _, candidate := range match[1:] {
+					if candidate != "" {
+						urls = append(urls, candidate)
+					}
+				}
+			}
+		}
+	}
+	return urls
 }

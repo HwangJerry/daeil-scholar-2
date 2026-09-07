@@ -5,6 +5,8 @@ Python 3.6 compatible. Never prints service environment values. Database restore
 is deliberately manual; application rollback must not overwrite newer records.
 """
 import argparse
+from contextlib import contextmanager
+import fcntl
 import gzip
 import hashlib
 import json
@@ -15,6 +17,7 @@ import shutil
 import subprocess
 import tarfile
 import time
+import tempfile
 import urllib.request
 
 SERVICE = 'alumni-backend'
@@ -24,6 +27,35 @@ ROLLOUT_ENV = Path('/app/backend/release-rollout.env')
 ROLLOUT_UNIT = Path('/etc/systemd/system/alumni-backend.service.d/90-release-rollout.conf')
 HTTPD_CONFIG = Path('/etc/httpd/conf.d/alumni.conf')
 SHIMS = ('_set_docroot.php', '_legacy_docroot.php', '_legacy_url_rewriter.php')
+
+
+@contextmanager
+def release_lock(path=Path('/var/lock/daeil-release.lock')):
+    # One host-wide lock for deployment, activation and pause. Never unlink the
+    # lock file: replacing its inode would let a second process bypass the lock.
+    fd = os.open(str(path), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError('another release operation is running; retry after it finishes')
+        yield
+    finally:
+        os.close(fd)
+
+
+def atomic_text(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.' + path.name + '-', dir=str(path.parent))
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, str(path))
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def run(args, **kwargs):
@@ -139,10 +171,10 @@ def set_rollout(enabled, test_user=0):
     values = {key: enabled for key in GATES}
     if test_user:
         values['PRIVACY_RETENTION_ENABLED'] = False
-    ROLLOUT_ENV.write_text(''.join(key + '=' + ('true' if value else 'false') + '\n' for key, value in values.items()) + 'ACCOUNT_ERASURE_TEST_USER_SEQ=' + str(test_user) + '\n')
+    atomic_text(ROLLOUT_ENV, ''.join(key + '=' + ('true' if value else 'false') + '\n' for key, value in values.items()) + 'ACCOUNT_ERASURE_TEST_USER_SEQ=' + str(test_user) + '\n')
     ROLLOUT_ENV.chmod(0o600)
     ROLLOUT_UNIT.parent.mkdir(parents=True, exist_ok=True)
-    ROLLOUT_UNIT.write_text('[Service]\nEnvironmentFile=' + str(ROLLOUT_ENV) + '\n')
+    atomic_text(ROLLOUT_UNIT, '[Service]\nEnvironmentFile=' + str(ROLLOUT_ENV) + '\n')
     run(['systemctl', 'daemon-reload'])
 
 
@@ -323,6 +355,21 @@ def deploy(root, apply_schema):
 
 
 def change_rollout(root, enabled, test_user=0):
+    # Emergency pause does not depend on the DB, a live backend or old release
+    # metadata. Stop the worker first so failed configuration/restart stays safe.
+    if not enabled:
+        try:
+            try:
+                run(['systemctl', 'stop', SERVICE])
+            finally:
+                set_rollout(False)
+            run(['systemctl', 'start', SERVICE])
+            verify_rollout(False, 0)
+        except BaseException:
+            run(['systemctl', 'stop', SERVICE])
+            raise
+        print('Rollout verified: paused (service health must be checked separately)')
+        return
     result = json.loads((root / 'result.json').read_text())
     if not result['status'].startswith('DEPLOYED'):
         raise ValueError('release has not passed deployment verification')
@@ -330,23 +377,28 @@ def change_rollout(root, enabled, test_user=0):
     if sha256(Path('/app/backend/server')) != manifest['files']['backend/server']:
         raise ValueError('release binary is no longer installed')
     env = process_environment()
-    if enabled:
-        validate_activation(Path('/app/backend/server'), env)
-    previous = ROLLOUT_ENV.read_bytes()
+    validate_activation(Path('/app/backend/server'), env)
     try:
-        set_rollout(enabled, test_user)
+        set_rollout(True, test_user)
         run(['systemctl', 'restart', SERVICE])
         healthy(env)
-        current = process_environment()
-        expected = {'ACCOUNT_ERASURE_REQUESTS_ENABLED': enabled, 'ACCOUNT_ERASURE_WORKER_ENABLED': enabled,
-                    'PRIVACY_RETENTION_ENABLED': enabled and not test_user}
-        if any(current.get(key) != ('true' if value else 'false') for key, value in expected.items()) or current.get('ACCOUNT_ERASURE_TEST_USER_SEQ') != str(test_user):
-            raise RuntimeError('rollout environment did not take effect')
+        verify_rollout(True, test_user)
     except BaseException:
-        ROLLOUT_ENV.write_bytes(previous)
-        run(['systemctl', 'restart', SERVICE])
+        # Never restore a previously enabled worker after failed activation.
+        try:
+            set_rollout(False)
+        finally:
+            run(['systemctl', 'stop', SERVICE])
         raise
-    print('Rollout verified: ' + ('test account only' if test_user else ('all accounts' if enabled else 'paused')))
+    print('Rollout verified: ' + ('test account only' if test_user else 'all accounts'))
+
+
+def verify_rollout(enabled, test_user):
+    current = process_environment()
+    expected = {'ACCOUNT_ERASURE_REQUESTS_ENABLED': enabled, 'ACCOUNT_ERASURE_WORKER_ENABLED': enabled,
+                'PRIVACY_RETENTION_ENABLED': enabled and not test_user}
+    if any(current.get(key) != ('true' if value else 'false') for key, value in expected.items()) or current.get('ACCOUNT_ERASURE_TEST_USER_SEQ') != str(test_user):
+        raise RuntimeError('rollout environment did not take effect')
 
 
 if __name__ == '__main__':
@@ -360,14 +412,15 @@ if __name__ == '__main__':
     args = parser.parse_args()
     os.umask(0o077)
     try:
-        if args.activate_test_user is not None:
-            if args.activate_test_user <= 0:
-                raise ValueError('test user must be a positive disposable account ID')
-            change_rollout(Path(args.directory), True, args.activate_test_user)
-        elif args.activate_all_users or args.pause_erasure:
-            change_rollout(Path(args.directory), args.activate_all_users)
-        else:
-            deploy(Path(args.directory), args.apply_migrations)
+        with release_lock():
+            if args.activate_test_user is not None:
+                if args.activate_test_user <= 0:
+                    raise ValueError('test user must be a positive disposable account ID')
+                change_rollout(Path(args.directory), True, args.activate_test_user)
+            elif args.activate_all_users or args.pause_erasure:
+                change_rollout(Path(args.directory), args.activate_all_users)
+            else:
+                deploy(Path(args.directory), args.apply_migrations)
     except Exception as error:
         # Do not echo subprocess commands or service environments.
         print('Release stopped: ' + (str(error) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__))

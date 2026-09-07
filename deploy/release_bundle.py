@@ -27,6 +27,9 @@ def digest(path):
 
 def verify(root):
     root = Path(root)
+    review = root / 'REVIEW_STATUS.json'
+    if review.exists() and json.loads(review.read_text()).get('status', '').startswith('HOLD'):
+        raise ValueError('release is on review hold; prepare a corrected candidate')
     manifest = json.loads((root / 'manifest.json').read_text())
     if manifest.get('format') != 1 or not re.fullmatch(r'[0-9a-f]{40}', manifest.get('commit', '')):
         raise ValueError('invalid release manifest')

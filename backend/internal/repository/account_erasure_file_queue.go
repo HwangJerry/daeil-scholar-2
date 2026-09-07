@@ -79,7 +79,7 @@ func queueErasureFiles(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork, origin
 		if !ownership[local] {
 			return &model.ErasureBlocked{Code: "FILE_OWNERSHIP_REVIEW_REQUIRED"}
 		}
-		if err := rejectOtherErasureFileReferences(tx, s, local, origin, w.UserSeq); err != nil {
+		if err := rejectOtherErasureFileReferences(tx, s, local, origin, &w.UserSeq); err != nil {
 			return err
 		}
 		sum := sha256.Sum256([]byte(local))
