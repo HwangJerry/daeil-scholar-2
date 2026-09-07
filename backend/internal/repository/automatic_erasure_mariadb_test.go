@@ -197,15 +197,73 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if err != nil || total != 150 || donors != 2 {
 		t.Fatalf("aggregate lost: %d %d %v", total, donors, err)
 	}
+
+	// Reviewed historical files join the existing queue after database erasure.
+	plan := model.ErasureHistoricalFilePlan{RequestID: receipt.ID, UserSeq: 42, Evidence: "synthetic-inventory-42", OwnershipVerified: true, RetentionRespected: true, Files: []string{"/files/profile/old42.jpg"}}
+	beforeFiles, err := repo.ErasureFiles(receipt.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.QueueHistoricalErasureFiles(plan, false); err != nil {
+		t.Fatal("dry-run", err)
+	}
+	afterFiles, err := repo.ErasureFiles(receipt.ID)
+	if err != nil || len(afterFiles) != len(beforeFiles) {
+		t.Fatal("dry-run mutated queue", err)
+	}
+	wrongPlan := plan
+	wrongPlan.UserSeq = 43
+	if repo.QueueHistoricalErasureFiles(wrongPlan, true) == nil {
+		t.Fatal("wrong request owner accepted")
+	}
+	db.MustExec(`UPDATE WEO_MEMBER SET USR_PHOTO='https://app.example.org/files/profile/old42.jpg' WHERE USR_SEQ=43`)
+	if repo.QueueHistoricalErasureFiles(plan, true) == nil {
+		t.Fatal("another member's profile queued")
+	}
+	db.MustExec(`UPDATE WEO_MEMBER SET USR_PHOTO='' WHERE USR_SEQ=43`)
+	db.MustExec(`CREATE TABLE WEO_BOARDBBS (SEQ INT PRIMARY KEY,USR_SEQ INT,CONTENTS TEXT) ENGINE=InnoDB; INSERT INTO WEO_BOARDBBS VALUES (1,43,TO_BASE64('<img src="/files/profile/old42.jpg">'))`)
+	if repo.QueueHistoricalErasureFiles(plan, true) == nil {
+		t.Fatal("another post's embedded file queued")
+	}
+	db.MustExec(`DELETE FROM WEO_BOARDBBS`)
+	if err = repo.SetErasureMode(receipt.ID, 7, "manual"); err != nil {
+		t.Fatal(err)
+	}
+	if repo.QueueHistoricalErasureFiles(plan, true) == nil {
+		t.Fatal("manual takeover ignored by queue")
+	}
+	if err = repo.SetErasureMode(receipt.ID, 7, "automatic"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err = repo.QueueHistoricalErasureFiles(plan, true); err != nil {
+			t.Fatal("enqueue/retry", err)
+		}
+	}
+	afterFiles, err = repo.ErasureFiles(receipt.ID)
+	if err != nil || len(afterFiles) != len(beforeFiles)+1 {
+		t.Fatal("queue was not idempotent", err)
+	}
+	targets, err = repo.ErasureTargets(receipt.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range targets {
+		if target.Name == "historical_files" && (target.Verified() || target.Evidence != "reviewed-file-plan:synthetic-inventory-42") {
+			t.Fatal("inventory falsely completed target", target)
+		}
+	}
 	if err = repo.FinishAutomaticErasure(work); err == nil {
 		t.Fatal("unfinished file work accepted")
 	}
 	files, err := repo.ErasureFiles(receipt.ID)
-	if err != nil || len(files) != 1 {
+	if err != nil || len(files) != 2 {
 		t.Fatal(files, err)
 	}
-	if err = repo.ErasureFileDone(files[0].ID); err != nil {
-		t.Fatal(err)
+	for _, file := range files {
+		if err = repo.ErasureFileDone(file.ID); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err = repo.FinishAutomaticErasure(work); err == nil {
 		t.Fatal("missing external evidence accepted")

@@ -245,7 +245,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 	erasureService := &service.AutomaticErasureService{
 		Store:         &repository.AccountDeletionRequestRepository{DB: db, DonationRetentionTemplate: service.LedgerRetentionTemplate(cfg.AccountErasure.LedgerConfirmed, cfg.AccountErasure.ReceiptOriginalsSeparate, cfg.AccountErasure.LedgerYearEndMonth, cfg.AccountErasure.LedgerEvidence)},
 		External:      &service.HTTPErasureProcessor{Endpoint: cfg.AccountErasure.ExternalURL, Token: cfg.AccountErasure.ExternalToken},
-		Files:         &service.AccountErasureFiles{UploadRoot: cfg.Upload.BasePath, LegacyRoot: cfg.Upload.LegacyPath, SiteOrigin: cfg.Server.SiteBaseURL},
+		Files:         &service.AccountErasureFiles{UploadRoot: cfg.Upload.BasePath, LegacyRoot: cfg.AccountErasure.LegacyRoot, SiteOrigin: cfg.Server.SiteBaseURL},
 		ContextCipher: contextCipher,
 		Seal:          seal, InvalidateCache: cacheStore.Flush,
 	}

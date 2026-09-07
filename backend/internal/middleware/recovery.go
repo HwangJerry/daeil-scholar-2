@@ -11,8 +11,8 @@ import (
 )
 
 // Recoverer returns middleware that intercepts handler panics, logs them
-// through the supplied zerolog logger (so the standard log pipeline still
-// works), forwards the recovered value + stack trace to the Debug Agent if
+// through the supplied zerolog logger, forwards a constant panic label and
+// stack trace (without the recovered value) to the Debug Agent if
 // hook is non-nil, and responds with a generic 500 JSON error.
 //
 // hook may be nil — in that case only the local zerolog log is emitted.
@@ -26,13 +26,13 @@ func Recoverer(logger zerolog.Logger, hook *observability.Hook) func(http.Handle
 				}
 				stack := debug.Stack()
 				logger.Error().
-					Interface("panic", rec).
-					Str("path", r.URL.Path).
+					Str("panic", "http handler panicked").
+					Str("path", logRoute(r)).
 					Str("method", r.Method).
 					Bytes("stack", stack).
 					Msg("http handler panicked")
-				hook.ReportPanic(rec, stack, map[string]interface{}{
-					"path":   r.URL.Path,
+				hook.ReportPanic("http handler panicked", stack, map[string]interface{}{
+					"path":   logRoute(r),
 					"method": r.Method,
 				})
 				w.Header().Set("Content-Type", "application/json")

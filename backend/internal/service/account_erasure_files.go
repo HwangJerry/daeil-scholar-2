@@ -11,18 +11,25 @@ import (
 
 type AccountErasureFiles struct{ UploadRoot, LegacyRoot, SiteOrigin string }
 
-func (s *AccountErasureFiles) EraseURL(raw string) error {
+// InspectURL validates storage without modifying it. Missing leaf files are retry-safe;
+// a missing/misconfigured root is never evidence of successful deletion.
+func (s *AccountErasureFiles) InspectURL(raw string) error {
+	_, err := s.managedPath(raw)
+	return err
+}
+
+func (s *AccountErasureFiles) managedPath(raw string) (string, error) {
 	blocked := &model.ErasureBlocked{Code: "FILE_PATH_REVIEW_REQUIRED"}
 	u, err := url.Parse(raw)
 	if err != nil || u.RawQuery != "" || u.Fragment != "" {
-		return blocked
+		return "", blocked
 	}
 	if u.IsAbs() || u.Host != "" {
 		origin, e := url.Parse(s.SiteOrigin)
 		if e != nil || origin.Host == "" || u.Host != origin.Host || u.Scheme != origin.Scheme {
 			// Remote provider avatars are independent provider assets. The
 			// external processor must resolve any app-owned remote uploads.
-			return blocked
+			return "", blocked
 		}
 	}
 	root, relative := "", ""
@@ -34,14 +41,24 @@ func (s *AccountErasureFiles) EraseURL(raw string) error {
 		root = s.LegacyRoot
 		relative = strings.TrimPrefix(u.Path, "/files/")
 	default:
-		return blocked
+		return "", blocked
 	}
 	if root == "" || relative == "" || strings.Contains(relative, "\\") || filepath.Clean(relative) != relative || strings.HasPrefix(relative, "../") {
-		return blocked
+		return "", blocked
 	}
 	abs, err := filepath.Abs(root)
 	if err != nil {
-		return blocked
+		return "", blocked
+	}
+	// Canonical ancestors are required too: Lstat(root) alone misses a link in
+	// a parent directory. Operators configure a verified physical storage root.
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil || resolved != abs {
+		return "", blocked
+	}
+	rootInfo, err := os.Stat(abs)
+	if err != nil || !rootInfo.IsDir() {
+		return "", blocked
 	}
 	// Refuse symlinks anywhere under the configured storage root, including the leaf.
 	current := abs
@@ -49,24 +66,29 @@ func (s *AccountErasureFiles) EraseURL(raw string) error {
 		current = filepath.Join(current, part)
 		info, e := os.Lstat(current)
 		if os.IsNotExist(e) {
-			return nil
+			return "", nil
 		}
 		if e != nil {
-			return blocked
+			return "", blocked
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return blocked
+			return "", blocked
 		}
 	}
 	info, err := os.Stat(current)
 	if err != nil {
-		return blocked
+		return "", blocked
 	}
 	if !info.Mode().IsRegular() {
-		return blocked
+		return "", blocked
 	}
-	if err = os.Remove(current); err != nil && !os.IsNotExist(err) {
-		return &model.ErasureBlocked{Code: "FILE_DELETE_RETRY_REQUIRED"}
+	return current, nil
+}
+
+func (s *AccountErasureFiles) EraseURL(raw string) error {
+	current, err := s.managedPath(raw)
+	if err != nil || current == "" {
+		return err
 	}
-	return nil
+	return unlinkErasureFile(current)
 }

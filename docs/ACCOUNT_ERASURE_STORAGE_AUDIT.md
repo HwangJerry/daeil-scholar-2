@@ -34,3 +34,17 @@
 근거: [개인정보 보호법 제21조](https://www.law.go.kr/lsLinkCommonInfo.do?lsJoLnkSeq=1027063705)는 불필요해진 개인정보의 파기 및 법정 보존 자료의 분리 관리를 규정한다. [소득세법 시행령 제208조의3](https://www.law.go.kr/lsLinkCommonInfo.do?lsJoLnkSeq=1032472419)의 기부자별 발급명세 항목에는 성명 등과 기부금액·기부일자·발급일자가 있으며 연락처의 일괄 장기 보존 의무를 이 조항에서 확인하지 못했다. [Apple 계정 삭제 안내](https://developer.apple.com/support/offering-account-deletion-in-your-app/)는 법적으로 유지해야 하는 자료를 삭제 예외로 설명한다.
 
 채택된 기준은 migration 061의 영수증 업무 확인과 기존 관리자 삭제 화면, 공개 방침·접수증에 반영했다. 외부 원본의 실제 연락처 정리는 담당자가 수행하고 증빙을 등록한다. 앱이 엑셀이나 해피나눔을 직접 수정한다고 주장하지 않는다.
+
+## 과거 파일·로그 추가 확인 — 2026-09-07
+
+운영 서버를 다시 읽기 전용으로 확인했다. `/var/www/uploads`와 실제 레거시 `/var/www/html/upload`에서 깊이 2 이내 일반 파일은 각각 76개·364개였다. 회원별 소유권 목록이 아니며 두 레거시 경로를 별도 사본으로 세지 않는다. `alumni-backend` 계정으로 두 루트의 쓰기 가능 여부가 참이었다. 실제 하위 파일 삭제·권한 변경은 수행하지 않았다.
+
+소스의 요청 로그가 실제 URL을 기록하므로 회원/메시지 번호와 파일명이 남을 수 있었다. 새 요청 로그·panic 로그는 등록된 라우트 템플릿을 사용하며, panic 값 원문은 로그/Debug Agent에 전달하지 않도록 수정했다. 기존 로그를 삭제한 것은 아니며 다른 서비스 로그의 전송 내용까지 최소화됐다고 판정하지 않는다.
+
+PG 감사 로그는 승인 응답의 카드 번호·거래 식별자와 오류 문자열을 저장할 수 있다. Apache 설정의 `combined` 로그는 별도 경로다. Debug Agent는 설정 시 외부 오류 전송을 한다. 실제 활성 여부·수신 자료와 법정 보존 대상 거래 증빙을 확인한 뒤 처리해야 하므로 `external_data`/`other_identifiers`를 이번 작업에서 완료하지 않았다.
+
+확인된 과거 업로드를 실제 삭제 작업에 연결하는 도구와 제한은 [운영 절차](HISTORICAL_FILE_ERASURE_RUNBOOK.md)에 기록했다.
+
+실행 중인 백엔드 프로세스의 환경 변수는 값 원문 없이 설정 여부만 확인했다. `DEBUG_AGENT_ENDPOINT`, `SENTRY_AUTH_TOKEN`은 설정되어 있다. `ACCOUNT_ERASURE_EXTERNAL_URL`, `ACCOUNT_ERASURE_EXTERNAL_TOKEN`, `ACCOUNT_ERASURE_CONTEXT_KEY`, `DONATION_ARCHIVE_KEY`, `ACCOUNT_ERASURE_LEGACY_ROOT`는 미설정이다. 기존 프로세스 관측이며 아직 배포하지 않은 코드의 동작을 증명하지 않는다.
+
+Sentry의 [프로젝트 오류 이벤트 조회 API](https://docs.sentry.io/api/events/list-a-projects-error-events/)로 출시용 두 프로젝트를 `statsPeriod=14d` 범위에서 읽기 전용 조회했다. `daeil-ios-release`, `daeil-android-release` 모두 오류 이벤트 0건이며 추가 페이지가 없었다. 인증 토큰·이벤트 원문은 출력·저장하지 않았다. 이 결과는 해당 조회 시점/범위의 오류 이벤트에 한정한다. 다른 데이터 유형, 공급자 백업, 향후 Release 페이로드의 개인정보 유무까지 검증한 것은 아니다.

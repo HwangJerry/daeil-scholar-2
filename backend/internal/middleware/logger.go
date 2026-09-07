@@ -1,3 +1,4 @@
+// logger.go — Request metrics without raw URLs or user identifiers.
 package middleware
 
 import (
@@ -21,7 +22,7 @@ func RequestLogger(logger zerolog.Logger) func(http.Handler) http.Handler {
 			}
 			evt.
 				Str("method", r.Method).
-				Str("path", r.URL.Path).
+				Str("path", logRoute(r)).
 				Int("status", status).
 				Dur("duration", time.Since(start)).
 				Msg("request")

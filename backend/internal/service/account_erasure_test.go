@@ -73,7 +73,10 @@ func TestDonationArchiveAuthenticatedEncryption(t *testing.T) {
 }
 
 func TestErasureFilesRejectTraversalSymlinkAndForeignOrigins(t *testing.T) {
-	root := t.TempDir()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	outside := t.TempDir()
 	os.WriteFile(filepath.Join(outside, "keep"), []byte("other user"), 0600)
 	os.Mkdir(filepath.Join(root, "profile"), 0700)

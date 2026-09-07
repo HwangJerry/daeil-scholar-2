@@ -34,6 +34,7 @@ type AccountErasureConfig struct {
 	ReceiptOriginalsSeparate bool
 	LedgerYearEndMonth       int
 	LedgerEvidence           string
+	LegacyRoot               string
 	ExternalURL              string
 	ExternalToken            string
 	ArchiveKey               string
@@ -259,7 +260,7 @@ func Load() *Config {
 			APNSKeyID:          getEnv("APNS_KEY_ID", ""),
 			APNSPrivateKeyFile: getEnv("APNS_PRIVATE_KEY_FILE", ""),
 		},
-		AccountErasure: AccountErasureConfig{ContextKey: getEnv("ACCOUNT_ERASURE_CONTEXT_KEY", ""), LedgerConfirmed: getBoolEnv("DONATION_LEDGER_RETENTION_CONFIRMED", false), ReceiptOriginalsSeparate: getBoolEnv("DONATION_RECEIPT_ORIGINALS_SEPARATE", false), LedgerYearEndMonth: getIntEnv("DONATION_LEDGER_YEAR_END_MONTH", 0), LedgerEvidence: getEnv("DONATION_LEDGER_RETENTION_EVIDENCE", ""), ExternalURL: getEnv("ACCOUNT_ERASURE_EXTERNAL_URL", ""), ExternalToken: getEnv("ACCOUNT_ERASURE_EXTERNAL_TOKEN", ""), ArchiveKey: getEnv("DONATION_ARCHIVE_KEY", "")},
+		AccountErasure: AccountErasureConfig{LegacyRoot: getEnv("ACCOUNT_ERASURE_LEGACY_ROOT", getEnv("UPLOAD_LEGACY_PATH", "/var/www/legacy/files")), ContextKey: getEnv("ACCOUNT_ERASURE_CONTEXT_KEY", ""), LedgerConfirmed: getBoolEnv("DONATION_LEDGER_RETENTION_CONFIRMED", false), ReceiptOriginalsSeparate: getBoolEnv("DONATION_RECEIPT_ORIGINALS_SEPARATE", false), LedgerYearEndMonth: getIntEnv("DONATION_LEDGER_YEAR_END_MONTH", 0), LedgerEvidence: getEnv("DONATION_LEDGER_RETENTION_EVIDENCE", ""), ExternalURL: getEnv("ACCOUNT_ERASURE_EXTERNAL_URL", ""), ExternalToken: getEnv("ACCOUNT_ERASURE_EXTERNAL_TOKEN", ""), ArchiveKey: getEnv("DONATION_ARCHIVE_KEY", "")},
 		Sentry: SentryConfig{
 			AuthToken:      getEnv("SENTRY_AUTH_TOKEN", ""),
 			Organization:   getEnv("SENTRY_ORG", ""),
