@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"errors"
 	"github.com/dflh-saf/backend/internal/model"
 	"net/http"
 	"net/http/httptest"
@@ -44,7 +45,8 @@ func TestReviewSurvivingReferencesMustPreventUnlink(t *testing.T) {
 			repo := &AccountDeletionRequestRepository{DB: db, SiteOrigin: "https://app.example.org"}
 			called := false
 			err := repo.EraseFileIfUnreferenced(model.ErasureWork{RequestID: 1, UserSeq: 42}, model.ErasureFile{ID: 1, URL: "/files/shared.jpg"}, func(string) error { called = true; return nil })
-			if err == nil || called {
+			var blocked *model.ErasureBlocked
+			if !errors.As(err, &blocked) || blocked.Code != "FILE_STILL_REFERENCED" || called {
 				t.Fatalf("surviving reference ignored: unlink invoked=%v error=%v", called, err)
 			}
 		})
