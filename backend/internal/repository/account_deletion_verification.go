@@ -93,6 +93,13 @@ func (r *AccountDeletionRequestRepository) Complete(id int64, operator int, evid
 		return err
 	}
 	if operator == 0 {
+		verified, e := verifiedErasureTargets(tx, id)
+		if e != nil {
+			return e
+		}
+		if !verified {
+			return ErrDeletionIncomplete
+		}
 		var pendingFiles int
 		if err = tx.Get(&pendingFiles, `SELECT COUNT(*) FROM ALUMNI_ERASURE_FILE WHERE REQUEST_ID=?`, id); err != nil {
 			return err
@@ -126,6 +133,11 @@ func (r *AccountDeletionRequestRepository) Complete(id int64, operator int, evid
 		operator, evidence.EvidenceReference, evidence.RetainedRecords, retentionUntil, id)
 	if err != nil {
 		return err
+	}
+	if operator != 0 {
+		if _, err = tx.Exec(`UPDATE ALUMNI_ERASURE_TARGET SET STATUS='complete',EVIDENCE_REFERENCE='manual-completion: see request evidence',LAST_CODE='',UPDATED_AT=UTC_TIMESTAMP() WHERE REQUEST_ID=? AND STATUS NOT IN ('complete','not_applicable')`, id); err != nil {
+			return err
+		}
 	}
 	if _, err = tx.Exec(`DELETE FROM ALUMNI_ERASURE_CONTEXT WHERE REQUEST_ID=?`, id); err != nil {
 		return err

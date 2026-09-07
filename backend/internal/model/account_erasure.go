@@ -20,6 +20,7 @@ type ErasureFile struct {
 
 // Sent only to the configured trusted erasure processor, never ordinary logs.
 type ErasureExternalSubject struct {
+	RequiredTargets  []string                    `json:"requiredTargets,omitempty"`
 	Retentions       []DonationRetentionDecision `json:"donationRetentions"`
 	RequestID        int64                       `json:"requestId"`
 	UserSeq          int                         `json:"userSeq"`

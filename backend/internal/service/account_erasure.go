@@ -19,6 +19,9 @@ type AutomaticErasureStore interface {
 	RecordExternalErasure(int64, string) error
 	SaveErasureContext(int64, []byte) error
 	LoadErasureContext(int64) ([]byte, error)
+	ErasureTargets(int64) ([]model.ErasureTarget, error)
+	BeginErasureTargets(int64) error
+	RecordErasureTargets(int64, []model.ErasureTarget) error
 	EraseDatabase(model.ErasureWork, func([]byte) ([]byte, error), func(model.DonationRetentionDecision) error) error
 	ErasureFiles(int64) ([]model.ErasureFile, error)
 	ErasureFileDone(int64) error

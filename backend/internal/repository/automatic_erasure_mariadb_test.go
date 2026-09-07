@@ -31,7 +31,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
     INSERT INTO WEO_VISIT_DAILY VALUES (42,'visitor42'),(43,'visitor43');
     INSERT INTO WEO_ORDER VALUES (1,42,42,'Synthetic Donor','01000000042','2025-01-01',100,0,100,'happy_nanum','fake-tx-1','completed','A'),(2,43,43,'Other Donor','01000000043','2025-01-01',50,0,50,'happy_nanum','fake-tx-2','completed','A');
     INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
-	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql"} {
+	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql"} {
 		data, err := os.ReadFile("../../migrations/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -103,6 +103,15 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if err = repo.PrepareErasure(work, validate); err == nil {
 		t.Fatal("missing legal decision ignored")
 	}
+	templateCalled := false
+	repo.DonationRetentionTemplate = func(id int, date time.Time) (model.DonationRetentionDecision, error) {
+		templateCalled = true
+		return model.DonationRetentionDecision{}, nil
+	}
+	if err = repo.PrepareErasure(work, validate); err == nil || templateCalled {
+		t.Fatal("registration date used as statutory retention clock")
+	}
+	repo.DonationRetentionTemplate = nil
 	start := time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC)
 	until := start.AddDate(10, 0, 0)
 	if err = repo.SaveDonationRetention(model.DonationRetentionDecision{OrderID: 1, Basis: "ledger_10y", BasisDate: &start, Until: &until, Evidence: "synthetic-review"}); err != nil {
@@ -113,6 +122,40 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	}
 	if err = repo.SaveErasureContext(receipt.ID, []byte("synthetic-encrypted-context")); err != nil {
 		t.Fatal(err)
+	}
+	targets, err := repo.ErasureTargets(receipt.ID)
+	if err != nil || len(targets) != 4 {
+		t.Fatal("targets not initialized", err)
+	}
+	if err = repo.RecordErasureTargets(receipt.ID, []model.ErasureTarget{{Name: "external_data", Status: "not_applicable", Evidence: "synthetic-inventory"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.SetErasureMode(receipt.ID, 7, "manual"); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.BeginErasureTargets(receipt.ID); err == nil {
+		t.Fatal("manual target processed")
+	}
+	if err = repo.RecordErasureTargets(receipt.ID, []model.ErasureTarget{{Name: "backups", Status: "complete", Evidence: "unapproved"}}); err == nil {
+		t.Fatal("manual takeover overwritten")
+	}
+	if err = repo.SetErasureMode(receipt.ID, 7, "automatic"); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.BeginErasureTargets(receipt.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.RecordErasureTargets(receipt.ID, []model.ErasureTarget{{Name: "external_data", Status: "failed"}, {Name: "backups", Status: "pending"}}); err != nil {
+		t.Fatal(err)
+	}
+	targets, err = repo.ErasureTargets(receipt.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range targets {
+		if target.Name == "external_data" && (target.Status != "not_applicable" || target.Attempts != 0) {
+			t.Fatal("verified target regressed", target)
+		}
 	}
 	// Unknown references block and roll back the archive, aggregate and member deletion together.
 	db.MustExec(`CREATE TABLE UNHANDLED_REFERENCE (USR_SEQ INT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4; INSERT INTO UNHANDLED_REFERENCE VALUES (42)`)

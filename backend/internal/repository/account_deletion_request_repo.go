@@ -70,6 +70,9 @@ func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string
 	if _, err = tx.Exec(`INSERT IGNORE INTO ALUMNI_ACCOUNT_ERASURE (REQUEST_ID, MODE, STAGE, NEXT_ATTEMPT_AT, UPDATED_AT) VALUES (?, 'automatic', 'queued', UTC_TIMESTAMP(), UTC_TIMESTAMP())`, result.ID); err != nil {
 		return result, err
 	}
+	if err = seedErasureTargets(tx, result.ID); err != nil {
+		return result, err
+	}
 	normalizeDeletionReceiptTimes(&result)
 	return result, tx.Commit()
 }
@@ -94,7 +97,15 @@ func (r *AccountDeletionRequestRepository) List(status string, before int64) ([]
         (SELECT UPDATED_AT FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID) AS AUTOMATION_UPDATED_AT
         FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE STATUS = ? AND (? = 0 OR REQUEST_ID < ?)
         ORDER BY REQUEST_ID DESC LIMIT 50`, status, before, before)
+	if err != nil {
+		return items, err
+	}
 	for i := range items {
+		targets, e := r.ErasureTargets(items[i].ID)
+		if e != nil {
+			return nil, e
+		}
+		items[i].Targets = targets
 		normalizeDeletionReceiptTimes(&items[i].AccountDeletionReceipt)
 		if items[i].NextAttemptAt != nil {
 			value := deletionTimeUTC(*items[i].NextAttemptAt)

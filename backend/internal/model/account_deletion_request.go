@@ -16,11 +16,12 @@ type AccountDeletionReceipt struct {
 }
 
 type AccountDeletionQueueItem struct {
-	NextAttemptAt       *time.Time `json:"nextAttemptAt" db:"NEXT_ATTEMPT_AT"`
-	AutomationUpdatedAt *time.Time `json:"automationUpdatedAt" db:"AUTOMATION_UPDATED_AT"`
-	ProcessingMode      string     `json:"processingMode" db:"PROCESSING_MODE"`
-	AutoStage           string     `json:"autoStage" db:"AUTO_STAGE"`
-	AutoCode            string     `json:"autoCode" db:"AUTO_CODE"`
+	Targets             []ErasureTarget `json:"targets"`
+	NextAttemptAt       *time.Time      `json:"nextAttemptAt" db:"NEXT_ATTEMPT_AT"`
+	AutomationUpdatedAt *time.Time      `json:"automationUpdatedAt" db:"AUTOMATION_UPDATED_AT"`
+	ProcessingMode      string          `json:"processingMode" db:"PROCESSING_MODE"`
+	AutoStage           string          `json:"autoStage" db:"AUTO_STAGE"`
+	AutoCode            string          `json:"autoCode" db:"AUTO_CODE"`
 	AccountDeletionReceipt
 	UserSeq           *int   `json:"userSeq" db:"USR_SEQ"`
 	EvidenceReference string `json:"evidenceReference" db:"EVIDENCE_REFERENCE"`

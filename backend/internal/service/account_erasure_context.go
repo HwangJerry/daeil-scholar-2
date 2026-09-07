@@ -39,6 +39,17 @@ func (s *AutomaticErasureService) processExternal(ctx context.Context, w model.E
 	if !active {
 		return sql.ErrNoRows
 	}
+	targets, err := s.Store.ErasureTargets(w.RequestID)
+	if err != nil {
+		return err
+	}
+	verified := len(targets) == len(model.ErasureTargetNames)
+	for _, target := range targets {
+		verified = verified && target.Verified()
+	}
+	if verified {
+		return s.Store.RecordExternalErasure(w.RequestID, "verified-per-storage: see target evidence")
+	}
 	if s.External == nil {
 		return &model.ErasureBlocked{Code: "EXTERNAL_ERASURE_PROCESSOR_REQUIRED"}
 	}
@@ -53,9 +64,5 @@ func (s *AutomaticErasureService) processExternal(ctx context.Context, w model.E
 	if err != nil {
 		return err
 	}
-	evidence, err := s.External.Erase(ctx, subject)
-	if err != nil {
-		return err
-	}
-	return s.Store.RecordExternalErasure(w.RequestID, evidence)
+	return s.erasePendingTargets(ctx, subject)
 }

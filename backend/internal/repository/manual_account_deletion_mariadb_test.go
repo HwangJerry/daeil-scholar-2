@@ -29,7 +29,7 @@ func TestManualAccountDeletionLifecycleOnMariaDB101(t *testing.T) {
         INSERT INTO ALUMNI_ADMIN_ROLE VALUES (42,'root');
         INSERT INTO WEO_MEMBER_SOCIAL VALUES (42,'AP'),(42,'KT');
         INSERT INTO ALUMNI_MESSAGE VALUES (1,42,43);`)
-	for _, path := range []string{"../../migrations/055_create_message_reports.sql", "../../migrations/056_create_account_deletion_requests.sql", "../../migrations/057_create_automatic_account_erasure.sql", "../../migrations/059_create_erasure_context.sql"} {
+	for _, path := range []string{"../../migrations/055_create_message_reports.sql", "../../migrations/056_create_account_deletion_requests.sql", "../../migrations/057_create_automatic_account_erasure.sql", "../../migrations/059_create_erasure_context.sql", "../../migrations/060_create_erasure_targets.sql"} {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
@@ -134,6 +134,7 @@ func TestManualAccountDeletionLifecycleOnMariaDB101(t *testing.T) {
 		t.Fatal("retention deleted open or recent report")
 	}
 	// A failed receipt insert cannot disable another account.
+	db.MustExec("DROP TABLE ALUMNI_ERASURE_TARGET")
 	db.MustExec("DROP TABLE ALUMNI_ACCOUNT_DELETION_REQUEST")
 	if _, err = repo.Create(43, hash); err == nil {
 		t.Fatal("broken storage accepted request")
@@ -147,6 +148,11 @@ func TestManualAccountDeletionLifecycleOnMariaDB101(t *testing.T) {
 		t.Fatal(err)
 	}
 	db.MustExec(string(migration))
+	targetMigration, err := os.ReadFile("../../migrations/060_create_erasure_targets.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.MustExec(string(targetMigration))
 	db.MustExec("DROP TABLE ALUMNI_ADMIN_ROLE")
 	if _, err = repo.Create(43, hash); err == nil {
 		t.Fatal("failed role removal accepted request")

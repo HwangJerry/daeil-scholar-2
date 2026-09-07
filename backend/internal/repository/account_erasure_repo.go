@@ -105,6 +105,17 @@ func (r *AccountDeletionRequestRepository) RecordExternalErasure(id int64, evide
 	if n == 0 {
 		return sql.ErrNoRows
 	}
+	if _, err = tx.Exec(`UPDATE ALUMNI_ERASURE_TARGET SET STATUS='complete',EVIDENCE_REFERENCE=?,LAST_CODE='',UPDATED_AT=UTC_TIMESTAMP()
+ WHERE REQUEST_ID=? AND STATUS NOT IN ('complete','not_applicable')`, evidence, id); err != nil {
+		return err
+	}
+	verified, e := verifiedErasureTargets(tx, id)
+	if e != nil {
+		return e
+	}
+	if !verified {
+		return ErrDeletionIncomplete
+	}
 	if _, err = tx.Exec(`DELETE FROM ALUMNI_ERASURE_CONTEXT WHERE REQUEST_ID=?`, id); err != nil {
 		return err
 	}

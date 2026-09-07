@@ -18,6 +18,7 @@ type erasureStoreFake struct {
 	retry                    string
 	preparedError            error
 	encrypted                []byte
+	targets                  []model.ErasureTarget
 }
 
 func (f *erasureStoreFake) ErasureLock(context.Context) (func(), bool, error) {
@@ -169,4 +170,24 @@ func TestExpiredContextNeverCompletesOrRepeatsDatabaseErasure(t *testing.T) {
 	if store.databaseCalls != 0 || store.completed != 0 || store.retry != "ERASURE_CONTEXT_EXPIRED_REVIEW_REQUIRED" {
 		t.Fatal("expired context accepted")
 	}
+}
+
+func (f *erasureStoreFake) ErasureTargets(int64) ([]model.ErasureTarget, error) {
+	if f.targets == nil {
+		for _, name := range model.ErasureTargetNames {
+			f.targets = append(f.targets, model.ErasureTarget{Name: name, Status: "pending"})
+		}
+	}
+	return f.targets, nil
+}
+func (f *erasureStoreFake) BeginErasureTargets(int64) error { return nil }
+func (f *erasureStoreFake) RecordErasureTargets(_ int64, targets []model.ErasureTarget) error {
+	for _, target := range targets {
+		for i := range f.targets {
+			if f.targets[i].Name == target.Name {
+				f.targets[i] = target
+			}
+		}
+	}
+	return nil
 }

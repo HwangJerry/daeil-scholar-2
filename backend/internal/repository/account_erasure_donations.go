@@ -11,6 +11,7 @@ import (
 )
 
 type archiveDonation struct {
+	DateMeaning string `json:"dateMeaning,omitempty"`
 	ID          int    `db:"O_SEQ" json:"-"`
 	Name        string `db:"DONOR_NAME" json:"donorName"`
 	Date        string `db:"DONATION_DATE" json:"donationDate"`
@@ -71,6 +72,9 @@ func eraseDonations(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork, seal func
 			if end.After(time.Now()) {
 				row.BasisDate = decision.BasisDate.Format("2006-01-02")
 				row.Evidence = decision.Evidence
+				if row.Source == "happy_nanum" {
+					row.DateMeaning = "registration_date_not_verified_payment_date"
+				}
 				plain, e := json.Marshal(row)
 				if e != nil {
 					return e

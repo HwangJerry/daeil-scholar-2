@@ -37,7 +37,7 @@ func (r *AccountDeletionRequestRepository) PrepareErasure(w model.ErasureWork, v
 			err = tx.Get(&d, `SELECT O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE FROM ALUMNI_DONATION_RETENTION WHERE O_SEQ=?`, id)
 			if err == sql.ErrNoRows && r.DonationRetentionTemplate != nil {
 				var donated time.Time
-				if err = tx.Get(&donated, `SELECT O_DONATION_DATE FROM WEO_ORDER WHERE O_SEQ=? AND O_LIFECYCLE_STATUS IN ('completed','partially_refunded','fully_refunded')`, id); err != nil {
+				if err = tx.Get(&donated, `SELECT O_DONATION_DATE FROM WEO_ORDER WHERE O_SEQ=? AND O_SOURCE<>'happy_nanum' AND O_LIFECYCLE_STATUS IN ('completed','partially_refunded','fully_refunded')`, id); err != nil {
 					return &model.ErasureBlocked{Code: "DONATION_RETENTION_REVIEW_REQUIRED"}
 				}
 				d, err = r.DonationRetentionTemplate(id, donated)

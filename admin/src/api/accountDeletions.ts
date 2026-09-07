@@ -2,7 +2,17 @@
 import { api } from './client';
 
 export type DeletionStatus = 'pending' | 'processing' | 'completed';
+export interface ErasureTarget {
+ target: string;
+ status: 'pending' | 'running' | 'complete' | 'not_applicable' | 'manual' | 'failed';
+ evidenceReference: string;
+ code: string;
+ attempts: number;
+ lastAttemptAt: string | null;
+ updatedAt: string;
+}
 export interface AccountDeletion {
+ targets?: ErasureTarget[];
   requestId: number;
   userSeq: number | null;
   status: DeletionStatus;
