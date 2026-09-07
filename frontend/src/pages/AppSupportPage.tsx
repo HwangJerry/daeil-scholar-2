@@ -6,11 +6,11 @@ import { Card } from '../components/ui/Card';
 
 const SUPPORT_EMAIL = 'ghkdwp018@gmail.com';
 const KAKAO_SUPPORT_URL = 'https://open.kakao.com/o/sWwTIiMi';
-const EMAIL_SUPPORT_URL = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('[DFLH] 앱 이용 문의')}`;
+const EMAIL_SUPPORT_URL = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('[대일외고 장학회] 앱 이용 문의')}`;
 
 const ISSUE_REPORT_DETAILS = [
   { title: '기기와 운영체제', description: '사용 중인 기기 모델과 iOS 또는 Android 버전을 알려주세요.' },
-  { title: '앱 버전', description: '현재 설치된 DFLH 앱의 버전을 알려주세요.' },
+  { title: '앱 버전', description: '현재 설치된 대일외고 장학회 앱의 버전을 알려주세요.' },
   { title: '문제가 발생한 상황', description: '어떤 화면에서 어떤 동작을 했을 때 문제가 생겼는지 설명해 주세요.' },
   { title: '오류 화면 캡처 · 선택', description: '화면을 첨부하시면 도움이 됩니다. 개인정보는 가린 뒤 보내주세요.' },
 ] as const;
@@ -20,14 +20,14 @@ export function AppSupportPage() {
     <>
       <PageMeta
         title="앱 이용 문의"
-        description="DFLH 앱의 회원가입, 로그인, 동문 인증, 쪽지, 기부 현황에 관한 도움이 필요하시면 카카오톡 또는 이메일로 문의해 주세요."
+        description="대일외고 장학회 앱의 회원가입, 로그인, 동문 인증, 쪽지, 기부 현황에 관한 도움이 필요하시면 카카오톡 또는 이메일로 문의해 주세요."
         canonicalPath="/support"
       />
 
       <header className="border-b border-border-subtle bg-surface px-5 py-14 sm:px-8 md:px-6 md:py-20">
         <div className="mx-auto max-w-[1080px]">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-secondary">
-            DFLH App Support
+            대일외고 장학회 앱 이용 문의
           </p>
           <h1 className="mt-4 font-serif text-4xl font-bold tracking-tight text-text-primary sm:text-5xl md:text-6xl">
             앱 이용 문의

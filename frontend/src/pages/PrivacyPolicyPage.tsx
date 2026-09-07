@@ -56,7 +56,7 @@ export function PrivacyPolicyPage() {
           <p className="mt-6 max-w-2xl text-base leading-8 text-text-secondary">
             대일의 인연을 이어가는 공간에서, 내 정보가 어떻게 쓰이는지 알 수 있도록.{' '}
             <br className="hidden sm:block" />
-            {PRIVACY_CONTACT.organization}의 웹사이트와 DFLH 앱에서 개인정보를 이용하고 관리하는 방법을 안내합니다.
+            {PRIVACY_CONTACT.organization}의 웹사이트와 대일외고 장학회 앱에서 개인정보를 이용하고 관리하는 방법을 안내합니다.
           </p>
           <p className="mt-6 text-sm text-text-secondary">
             최종 수정일 <time dateTime={PRIVACY_UPDATED_AT}>2026년 9월 7일</time>
