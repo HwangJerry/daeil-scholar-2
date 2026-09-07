@@ -91,3 +91,20 @@ Go 전체 테스트·vet, 실제 MariaDB 10.1.38 자동/수동 삭제 시나리�
 검증: iOS Debug 빌드와 개인정보 경계 테스트 4개 통과(직렬화 결과의 식별정보 제거, 미지원 이벤트 차단, 수집 경로 제한, 구버전 캐시 일회 삭제). 웹 production build·변경 파일 ESLint와 localhost 개인정보처리방침의 내용·가로 넘침·콘솔 오류 확인 완료. 새 서명 Release의 실제 전송 검증은 남아 있다.
 
 설정 예제에는 확인된 `DONATION_RECEIPT_ORIGINALS_SEPARATE=true`, `DONATION_LEDGER_YEAR_END_MONTH=12`를 반영했다. 법적 적용 확인 플래그는 false를 유지하므로 이 두 운영 사실만으로 자동 10년 보존을 활성화하지 않는다. 운영 환경은 변경하지 않았다.
+
+## Release project replacement — 2026-09-07
+
+The operator confirmed both old projects contained pre-release test records and explicitly authorized deletion and replacement. The Sentry UI removed `daeil-ios` (4512014185725952) and `daeil-android` (4512014191820805); the project list now contains only the replacements below. This supersedes the earlier pending project-deletion decision. Sentry's backend/backup purge is not independently verified by this UI result.
+
+| Platform | Project | ID |
+| --- | --- | --- |
+| iOS | daeil-ios-release | 4512042275897344 |
+| Android | daeil-android-release | 4512042279632896 |
+
+Both belong to `metanoia-lab` (US) and team `metanoia-lab`. Default scrubbers and IP-address storage prevention are enabled. No new email alert subscriptions or test events were created. The account remains on its existing trial; the operator intends to use the free plan afterward.
+
+App DSNs are updated in iOS `Config/Info.plist` and Android `app/src/main/AndroidManifest.xml`. Existing installed builds still contain the retired project DSNs and must be replaced by newly built apps. No App Store/TestFlight/Google Play upload was performed.
+
+Backend deployment configuration must use `SENTRY_ORG=metanoia-lab`, `SENTRY_IOS_PROJECT=daeil-ios-release`, `SENTRY_ANDROID_PROJECT=daeil-android-release` with a read token that can access both new projects. The committed backend env example is updated; the production service has not been restarted or deployed. Android mapping-upload jobs must use `SENTRY_PROJECT=daeil-android-release`; iOS symbol-upload jobs must use `SENTRY_PROJECT=daeil-ios-release`. No authentication token was generated or exposed.
+
+Validation: iOS Debug simulator build and Android `:app:assembleDebug` succeeded. Actual release telemetry/symbolication and the backend monitoring proxy remain deployment-time checks. Android telemetry minimization is a separate follow-up; the DSN replacement does not implement the iOS crash-field allowlist on Android.
