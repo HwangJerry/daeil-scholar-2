@@ -74,8 +74,10 @@
   --color-hero-to: #1e3a6e;
 
   /* Fonts */
-  --font-sans: 'Instrument Sans', 'Pretendard Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-serif: 'Pretendard Variable', 'Pretendard', Georgia, serif;
+  --font-sans: 'Pretendard Variable', 'Pretendard', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Keep existing heading and numeric utilities on the same frontend font. */
+  --font-serif: var(--font-sans);
+  --font-mono: var(--font-sans);
 
   /* Custom font sizes */
   --font-size-2xs: 10px;
