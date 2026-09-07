@@ -50,3 +50,41 @@ func TestErasureContentDecodesOnlyHTMLAttributes(t *testing.T) {
 		})
 	}
 }
+
+func TestAmbiguousBrowserReferencesRemainDiscoverable(t *testing.T) {
+	for _, raw := range []string{"https:/files/shared.jpg", "https:files/shared.jpg", "HTTPS:files/shared.jpg", "https:////app.example.org/files/shared.jpg", "///app.example.org/files/shared.jpg"} {
+		for _, content := range []string{
+			`<img src="` + raw + `">`, `<a href="` + raw + `">image</a>`,
+			`<img srcset="` + raw + ` 1x">`, `<div style="background-image:url(` + raw + `)"></div>`,
+			base64.StdEncoding.EncodeToString([]byte(`<img src="` + raw + `">`)),
+		} {
+			found := false
+			for _, candidate := range survivingContentURLs(content) {
+				local, _, err := model.ErasureFileReferencePath(candidate, "https://app.example.org")
+				if err != nil || local == "/files/shared.jpg" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("ambiguous reference was missed: %q", content)
+			}
+		}
+	}
+}
+
+func TestHTTPDiscoveryDoesNotQueueUnmanagedLinks(t *testing.T) {
+	content := `<a href="https://external.test/donate">donate</a>
+<img src="https://external.test/assets/logo.png">
+<a href="https://app.example.org/privacy">privacy</a>
+https://external.test/news
+https://app.example.org/assets/logo.png`
+	if urls := managedContentURLs(content); len(urls) != 0 {
+		t.Fatalf("unmanaged links became deletion candidates: %q", urls)
+	}
+	for _, raw := range survivingContentURLs(content) {
+		local, _, err := model.ErasureFileReferencePath(raw, "https://app.example.org")
+		if err != nil || local != "" {
+			t.Fatalf("unmanaged link blocks local deletion: %q %q %v", raw, local, err)
+		}
+	}
+}

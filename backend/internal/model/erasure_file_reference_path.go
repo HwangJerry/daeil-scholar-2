@@ -20,6 +20,11 @@ func ErasureFileReferencePath(raw, siteOrigin string) (string, bool, error) {
 	if err != nil {
 		return "", false, blocked
 	}
+	// With three or more leading slashes browsers recover an authority, while
+	// net/url leaves the whole value in Path. Its storage identity is ambiguous.
+	if u.Host == "" && strings.HasPrefix(raw, "//") {
+		return "", false, blocked
+	}
 	if u.Host != "" {
 		origin, err := url.Parse(siteOrigin)
 		if err != nil || origin.Hostname() == "" {
@@ -33,6 +38,13 @@ func ErasureFileReferencePath(raw, siteOrigin string) (string, bool, error) {
 			return "", false, blocked
 		}
 	} else if u.IsAbs() {
+		// Browsers resolve hostless HTTP(S) URLs such as https:/files/a.jpg
+		// against the page, or recover a host from extra slashes. net/url does
+		// neither. Without the page URL, these must require review instead of
+		// being declared external and allowing a shared file to be unlinked.
+		if strings.EqualFold(u.Scheme, "http") || strings.EqualFold(u.Scheme, "https") {
+			return "", false, blocked
+		}
 		return "", true, nil
 	}
 	if strings.Contains(u.Path, "\\") {

@@ -13,7 +13,10 @@ import (
 	"golang.org/x/net/html"
 )
 
-var managedContentFile = regexp.MustCompile(`(?:(?:https?:)?//[^\s"'<>]+)?/(?:uploads|files|upload|old/upload)/[^\s"'<>\)\]]+`)
+// Keep complete HTTP(S) tokens even when net/url cannot recover their host.
+// Taking only a /files suffix (or missing an opaque https:files URL) can lose
+// the browser's identity; the reference normalizer decides whether to block.
+var managedContentFile = regexp.MustCompile(`(?i)(?:https?:[^\s"'<>\)\]]+|(?://[^\s"'<>]+)?/(?:uploads|files|upload|old/upload)/[^\s"'<>\)\]]+)`)
 var contentMarkdownURL = regexp.MustCompile(`\]\(<?([^\s)>]+)>?(?:\s+[^)]*)?\)`)
 
 // HTML token attributes are entity-decoded exactly once by the tokenizer. Raw

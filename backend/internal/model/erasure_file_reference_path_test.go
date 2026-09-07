@@ -1,7 +1,29 @@
 // erasure_file_reference_path_test.go — References are broader than safe unlink candidates.
 package model
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
+
+func TestHostlessHTTPReferencesRequireReview(t *testing.T) {
+	for _, raw := range []string{
+		"https:/files/shared.jpg", "https:files/shared.jpg",
+		"https:///app.example.org/files/shared.jpg", "https:////app.example.org/files/shared.jpg",
+		"http:/files/shared.jpg", "HTTP:files/shared.jpg", "HTTPS:/files/shared.jpg?x=1#preview",
+		"///app.example.org/files/shared.jpg", "////app.example.org/files/shared.jpg",
+		"https:\\app.example.org/files/shared.jpg", "https://app.example.org\\@external.test/files/shared.jpg",
+		"https://app.exa\tmple.org/files/shared.jpg", "https://external.test\n@app.example.org/files/shared.jpg",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			local, external, err := ErasureFileReferencePath(raw, "https://app.example.org")
+			var blocked *ErasureBlocked
+			if !errors.As(err, &blocked) || blocked.Code != "FILE_PATH_REVIEW_REQUIRED" || external || local != "" {
+				t.Fatalf("ambiguous browser URL ignored: local=%q external=%v err=%v", local, external, err)
+			}
+		})
+	}
+}
 
 func TestSurvivingReferenceIdentity(t *testing.T) {
 	for _, raw := range []string{
