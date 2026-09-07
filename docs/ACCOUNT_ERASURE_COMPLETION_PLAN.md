@@ -133,4 +133,4 @@ migration 060에서 백업, 과거 파일, 외부 서비스, 간접 참조를 �
 
 ## 운영 준비 후속 구현 — 2026-09-07
 
-Migration 062에서 현재 및 이후 교체되는 프로필 파일 경로를 기록해 등록부 누락을 보완했다. 레거시 URL 삭제 연결, Debug Agent/PG 로그 최소화, 원본을 바꾸지 않는 PG 정리본 도구를 추가했다. 별도 키 2개·PG 정리본·App Store 형식 IPA를 준비하고 실제 Sentry crash 수신을 검증했다. 외부 서버 API 접근과 과거 소유권 확인, 운영 배포·폐기 계정 검증은 남아 있다. [구체적 결과와 자료](ACCOUNT_ERASURE_RELEASE_HANDOFF.md).
+Migration 062에서 현재 및 이후 교체되는 프로필 파일 경로를 기록해 등록부 누락을 보완했다. 레거시 URL 삭제 연결, 로그 최소화, 원본을 바꾸지 않는 PG 정리본 도구를 추가했다. 별도 키 2개·PG 정리본·App Store 형식 IPA를 준비하고 실제 Sentry crash 수신을 검증했다. 후속 사용자 결정으로 Debug Agent 외부 전송과 전용 의존성·설정·배포 검사를 제거했다. server-main 접근은 이 제거 작업의 선행 조건이 아니다. 과거 기록 실삭제를 주장하지 않으며, 과거 파일 소유권 확인과 운영 배포·폐기 계정 검증은 남아 있다. [구체적 결과와 자료](ACCOUNT_ERASURE_RELEASE_HANDOFF.md).

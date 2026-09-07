@@ -11,7 +11,7 @@ import (
 
 func TestAdminErrorReportDropsRawBrowserInput(t *testing.T) {
 	var log bytes.Buffer
-	handler := NewAdminErrorReportHandler(zerolog.New(&log), nil)
+	handler := NewAdminErrorReportHandler(zerolog.New(&log))
 	request := httptest.NewRequest("POST", "/api/admin/error-report", strings.NewReader(`{"message":"private@example.test","stack":"private@example.test","url":"https://example.test/?token=secret","component":"private@example.test"}`))
 	response := httptest.NewRecorder()
 	handler.Report(response, request)

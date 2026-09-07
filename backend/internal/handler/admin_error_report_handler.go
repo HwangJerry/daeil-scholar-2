@@ -5,19 +5,17 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/rs/zerolog"
 )
 
 // AdminErrorReportHandler accepts frontend JS error reports from the admin SPA
-// and forwards them to the debug-agent via the zerolog hook.
+// and records only a fixed diagnostic label in the local server log.
 type AdminErrorReportHandler struct {
 	logger zerolog.Logger
-	hook   *observability.Hook
 }
 
-func NewAdminErrorReportHandler(logger zerolog.Logger, hook *observability.Hook) *AdminErrorReportHandler {
-	return &AdminErrorReportHandler{logger: logger, hook: hook}
+func NewAdminErrorReportHandler(logger zerolog.Logger) *AdminErrorReportHandler {
+	return &AdminErrorReportHandler{logger: logger}
 }
 
 type frontendErrorReport struct {
@@ -34,7 +32,6 @@ func (h *AdminErrorReportHandler) Report(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.hook.ReportFrontendError()
 	h.logger.Error().Str("source", "admin-spa").Msg("admin frontend error")
 
 	w.WriteHeader(http.StatusNoContent)

@@ -275,7 +275,6 @@ ENV_FILE_CONTENT=""
 SERVICE_ENV_ENTRIES=""
 if [[ "${DEPLOY_BACKEND}" == "true" && (
       "${SKIP_ENV_CHECK:-0}" != "1" ||
-      "${SKIP_DEBUG_AGENT_CHECK:-0}" != "1" ||
       "${SKIP_MIGRATION_CHECK:-0}" != "1"
     ) ]]; then
   if ! UNIT_CONTENT=$(ssh "${SSH_OPTS[@]+"${SSH_OPTS[@]}"}" "${TARGET}" "cat ${SERVICE_PATH}" 2>&1); then
@@ -356,72 +355,6 @@ else
   fi
 
   echo "✓ ${#REQUIRED_KEYS[@]} required env vars present and non-placeholder"
-fi
-
-# =============================================================================
-# DEBUG AGENT ENV VALIDATION — all 4 vars must be set together, or all empty.
-# Empty = reporter disabled (no-op in observability.NewHook). Partial config is
-# rejected because it is almost always a mistake (e.g. forgot to copy SECRET
-# into the new unit file). Placeholder secrets/envs are also rejected so a
-# half-configured staging value never reaches production.
-# Skip with: SKIP_DEBUG_AGENT_CHECK=1 ./deploy.sh ...
-# =============================================================================
-if [[ "${DEPLOY_BACKEND}" != "true" ]]; then
-  : # Backend pre-deploy checks were already reported as skipped above.
-elif [[ "${SKIP_DEBUG_AGENT_CHECK:-0}" == "1" ]]; then
-  echo "=== Skipping debug agent env validation (SKIP_DEBUG_AGENT_CHECK=1) ==="
-else
-  echo "=== Validating debug agent env vars on ${TARGET} ==="
-
-  DA_KEYS=(DEBUG_AGENT_ENDPOINT DEBUG_AGENT_PROJECT DEBUG_AGENT_SECRET DEBUG_AGENT_ENVIRONMENT)
-
-  da_set_count=0
-  da_empty_count=0
-  da_bad_placeholder=()
-  da_present=()
-  da_missing=()
-  for key in "${DA_KEYS[@]}"; do
-    value=$(get_service_env_value "${key}")
-    if [[ -z "${value}" ]]; then
-      da_empty_count=$((da_empty_count + 1))
-      da_missing+=("${key}")
-    else
-      da_set_count=$((da_set_count + 1))
-      da_present+=("${key}")
-      # Reject known-bad placeholder values. Add new entries here if the team
-      # introduces other defaults that must never reach production.
-      case "${key}:${value}" in
-        DEBUG_AGENT_SECRET:change-me|DEBUG_AGENT_SECRET:test-secret|DEBUG_AGENT_ENVIRONMENT:dev)
-          da_bad_placeholder+=("${key}=${value}") ;;
-      esac
-    fi
-  done
-
-  if [[ ${da_set_count} -gt 0 && ${da_empty_count} -gt 0 ]]; then
-    echo "" >&2
-    echo "✗ Debug agent env vars are partially configured (${da_set_count} set, ${da_empty_count} empty)." >&2
-    echo "  Either set all 4, or leave all 4 unset/empty (reporter then runs in no-op mode)." >&2
-    echo "  Present:" >&2
-    for k in "${da_present[@]}"; do echo "    - ${k}" >&2; done
-    echo "  Missing:" >&2
-    for k in "${da_missing[@]}"; do echo "    - ${k}" >&2; done
-    echo "  Bypass with SKIP_DEBUG_AGENT_CHECK=1 if intentional." >&2
-    exit 1
-  fi
-
-  if [[ ${#da_bad_placeholder[@]} -gt 0 ]]; then
-    echo "" >&2
-    echo "✗ Debug agent placeholder values still in production unit:" >&2
-    for kv in "${da_bad_placeholder[@]}"; do echo "    - ${kv}" >&2; done
-    echo "  Replace with the real values from the Debug Agent dashboard." >&2
-    exit 1
-  fi
-
-  if [[ ${da_set_count} -eq 4 ]]; then
-    echo "✓ Debug agent enabled (all 4 env vars set)"
-  else
-    echo "✓ Debug agent disabled (no env vars set — reporter will no-op)"
-  fi
 fi
 
 # =============================================================================

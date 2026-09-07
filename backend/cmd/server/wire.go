@@ -9,7 +9,6 @@ import (
 	"github.com/dflh-saf/backend/internal/handler"
 	"github.com/dflh-saf/backend/internal/job"
 	"github.com/dflh-saf/backend/internal/model"
-	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/presenter"
 	"github.com/dflh-saf/backend/internal/push"
 	"github.com/dflh-saf/backend/internal/realtime"
@@ -43,7 +42,7 @@ type deps struct {
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
-func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook *observability.Hook) (*deps, error) {
+func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, error) {
 	authRepo := repository.NewAuthRepository(db)
 	feedRepo := repository.NewFeedRepository(db)
 	donationRepo := repository.NewDonationRepository(db)
@@ -234,7 +233,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		adminSubscription:   handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
 		realtime:            handler.NewRealtimeHandler(realtimeHub, logger),
 		visit:               handler.NewVisitHandler(visitService, logger, cfg.Server.IsSecure()),
-		adminErrorReport:    handler.NewAdminErrorReportHandler(logger, debugHook),
+		adminErrorReport:    handler.NewAdminErrorReportHandler(logger),
 		mobileAppEvent:      handler.NewMobileAppEventHandler(mobileAppEventService),
 		sentryMonitoring:    handler.NewSentryMonitoringHandler(sentryMonitoringService),
 		appSetting:          handler.NewAppSettingHandler(appSettingService),

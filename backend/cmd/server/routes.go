@@ -7,7 +7,6 @@ import (
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/handler"
 	mw "github.com/dflh-saf/backend/internal/middleware"
-	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/patrickmn/go-cache"
@@ -65,9 +64,9 @@ type handlers struct {
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
-func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, logger zerolog.Logger, debugHook *observability.Hook) chi.Router {
+func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, logger zerolog.Logger) chi.Router {
 	router := chi.NewRouter()
-	router.Use(mw.Recoverer(logger, debugHook))
+	router.Use(mw.Recoverer(logger))
 	router.Use(mw.RequestLogger(logger))
 	router.Use(mw.CORSMiddleware(allowedOrigins))
 

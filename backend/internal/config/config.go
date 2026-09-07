@@ -19,7 +19,6 @@ type Config struct {
 	Upload                UploadConfig
 	EasyPay               EasyPayConfig
 	SMTP                  SMTPConfig
-	DebugAgent            DebugAgentConfig
 	Push                  PushConfig
 	Sentry                SentryConfig
 	PGAuditLogPath        string
@@ -54,21 +53,6 @@ type SentryConfig struct {
 // present. The server can still start when this is false; handlers return 503.
 func (c SentryConfig) Configured() bool {
 	return c.AuthToken != "" && c.Organization != "" && c.IOSProject != "" && c.AndroidProject != ""
-}
-
-// DebugAgentConfig holds settings for the external Debug Agent error pipeline.
-// When Endpoint is empty the reporter is disabled (no-op) — main.go skips hook
-// installation entirely so dev environments do not leak secrets or noise.
-type DebugAgentConfig struct {
-	Endpoint    string
-	Project     string
-	Secret      string
-	Environment string
-}
-
-// Enabled reports whether the debug agent reporter should be installed.
-func (c DebugAgentConfig) Enabled() bool {
-	return c.Endpoint != ""
 }
 
 // SMTPConfig holds SMTP server settings for transactional email delivery.
@@ -245,12 +229,6 @@ func Load() *Config {
 			User:     getEnv("SMTP_USER", ""),
 			Password: getEnv("SMTP_PASSWORD", ""),
 			From:     getEnv("SMTP_FROM", "noreply@dflh.kr"),
-		},
-		DebugAgent: DebugAgentConfig{
-			Endpoint:    getEnv("DEBUG_AGENT_ENDPOINT", ""),
-			Project:     getEnv("DEBUG_AGENT_PROJECT", ""),
-			Secret:      getEnv("DEBUG_AGENT_SECRET", ""),
-			Environment: getEnv("DEBUG_AGENT_ENVIRONMENT", getEnv("ENV", "dev")),
 		},
 		Push: PushConfig{
 			Enabled:            getBoolEnv("PUSH_ENABLED", false),

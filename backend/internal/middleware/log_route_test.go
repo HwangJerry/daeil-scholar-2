@@ -36,7 +36,7 @@ func TestRequestLogsUseRouteTemplates(t *testing.T) {
 func TestPanicLogsDoNotIncludePrivatePayloadOrPath(t *testing.T) {
 	var output bytes.Buffer
 	router := chi.NewRouter()
-	router.Use(Recoverer(zerolog.New(&output), nil))
+	router.Use(Recoverer(zerolog.New(&output)))
 	router.Get("/api/members/{id}", func(w http.ResponseWriter, r *http.Request) { panic("person@example.org bearer-secret") })
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest("GET", "/api/members/987654", nil))
