@@ -17,6 +17,7 @@ type AccountDeletionReceipt struct {
 }
 
 type AccountDeletionQueueItem struct {
+	ContextExpiresAt    *time.Time         `json:"contextExpiresAt,omitempty" db:"CONTEXT_EXPIRES_AT"`
 	ReceiptWork         ErasureReceiptWork `json:"receiptWork"`
 	Targets             []ErasureTarget    `json:"targets"`
 	NextAttemptAt       *time.Time         `json:"nextAttemptAt" db:"NEXT_ATTEMPT_AT"`

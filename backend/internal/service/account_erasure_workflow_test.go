@@ -67,7 +67,13 @@ func (f *erasureStoreFake) EraseDatabase(model.ErasureWork, func([]byte) ([]byte
 }
 func (f *erasureStoreFake) ErasureFiles(int64) ([]model.ErasureFile, error) { return f.files, nil }
 func (f *erasureStoreFake) ErasureFileDone(int64) error                     { f.files = f.files[1:]; return nil }
-func (f *erasureStoreFake) FinishAutomaticErasure(model.ErasureWork) error  { f.completed++; return nil }
+func (f *erasureStoreFake) EraseFileIfUnreferenced(_ model.ErasureWork, file model.ErasureFile, erase func(string) error) error {
+	if err := erase(file.URL); err != nil {
+		return err
+	}
+	return f.ErasureFileDone(file.ID)
+}
+func (f *erasureStoreFake) FinishAutomaticErasure(model.ErasureWork) error { f.completed++; return nil }
 
 type erasureExternalFake struct {
 	err   error

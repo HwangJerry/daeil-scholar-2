@@ -29,6 +29,11 @@ type Config struct {
 
 // AccountErasureConfig holds private server-side automation integrations.
 type AccountErasureConfig struct {
+	TestUserSeq              int
+	RequestsEnabled          bool
+	WorkerEnabled            bool
+	RetentionEnabled         bool
+	ExternalMode             string
 	LedgerConfirmed          bool
 	ReceiptOriginalsSeparate bool
 	LedgerYearEndMonth       int
@@ -238,7 +243,7 @@ func Load() *Config {
 			APNSKeyID:          getEnv("APNS_KEY_ID", ""),
 			APNSPrivateKeyFile: getEnv("APNS_PRIVATE_KEY_FILE", ""),
 		},
-		AccountErasure: AccountErasureConfig{LegacyRoot: getEnv("ACCOUNT_ERASURE_LEGACY_ROOT", getEnv("UPLOAD_LEGACY_PATH", "/var/www/legacy/files")), ContextKey: getEnv("ACCOUNT_ERASURE_CONTEXT_KEY", ""), LedgerConfirmed: getBoolEnv("DONATION_LEDGER_RETENTION_CONFIRMED", false), ReceiptOriginalsSeparate: getBoolEnv("DONATION_RECEIPT_ORIGINALS_SEPARATE", false), LedgerYearEndMonth: getIntEnv("DONATION_LEDGER_YEAR_END_MONTH", 0), LedgerEvidence: getEnv("DONATION_LEDGER_RETENTION_EVIDENCE", ""), ExternalURL: getEnv("ACCOUNT_ERASURE_EXTERNAL_URL", ""), ExternalToken: getEnv("ACCOUNT_ERASURE_EXTERNAL_TOKEN", ""), ArchiveKey: getEnv("DONATION_ARCHIVE_KEY", "")},
+		AccountErasure: AccountErasureConfig{TestUserSeq: getIntEnv("ACCOUNT_ERASURE_TEST_USER_SEQ", 0), RequestsEnabled: getBoolEnv("ACCOUNT_ERASURE_REQUESTS_ENABLED", false), WorkerEnabled: getBoolEnv("ACCOUNT_ERASURE_WORKER_ENABLED", false), RetentionEnabled: getBoolEnv("PRIVACY_RETENTION_ENABLED", false), ExternalMode: getEnv("ACCOUNT_ERASURE_EXTERNAL_MODE", ""), LegacyRoot: getEnv("ACCOUNT_ERASURE_LEGACY_ROOT", getEnv("UPLOAD_LEGACY_PATH", "/var/www/legacy/files")), ContextKey: getEnv("ACCOUNT_ERASURE_CONTEXT_KEY", ""), LedgerConfirmed: getBoolEnv("DONATION_LEDGER_RETENTION_CONFIRMED", false), ReceiptOriginalsSeparate: getBoolEnv("DONATION_RECEIPT_ORIGINALS_SEPARATE", false), LedgerYearEndMonth: getIntEnv("DONATION_LEDGER_YEAR_END_MONTH", 0), LedgerEvidence: getEnv("DONATION_LEDGER_RETENTION_EVIDENCE", ""), ExternalURL: getEnv("ACCOUNT_ERASURE_EXTERNAL_URL", ""), ExternalToken: getEnv("ACCOUNT_ERASURE_EXTERNAL_TOKEN", ""), ArchiveKey: getEnv("DONATION_ARCHIVE_KEY", "")},
 		Sentry: SentryConfig{
 			AuthToken:      getEnv("SENTRY_AUTH_TOKEN", ""),
 			Organization:   getEnv("SENTRY_ORG", ""),

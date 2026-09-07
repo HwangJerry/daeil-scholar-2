@@ -28,6 +28,7 @@ export interface ReceiptWork {
  completedAt: string | null;
 }
 export interface AccountDeletion {
+ contextExpiresAt?: string;
  receiptWork?: ReceiptWork;
  receiptWorkPending?: boolean;
  targets?: ErasureTarget[];

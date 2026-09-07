@@ -217,7 +217,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		personalDonation:    handler.NewPersonalDonationHandler(personalDonationService),
 		message:             handler.NewMessageHandler(messageService),
 		messageReport:       &handler.MessageReportHandler{Service: &service.MessageReportService{Store: &repository.MessageReportRepository{DB: db}}},
-		accountDeletion:     &handler.AccountDeletionRequestHandler{Service: &service.AccountDeletionRequestService{Store: &repository.AccountDeletionRequestRepository{DB: db}}, Auth: authService},
+		accountDeletion:     &handler.AccountDeletionRequestHandler{TestUserSeq: cfg.AccountErasure.TestUserSeq, RequestsDisabled: !cfg.AccountErasure.RequestsEnabled, Service: &service.AccountDeletionRequestService{Store: &repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL}}, Auth: authService},
 		memberBlock:         handler.NewMemberBlockHandler(memberBlockService),
 		push:                handler.NewPushHandler(pushService),
 		payment:             handler.NewPaymentHandler(donateService, cfg.EasyPay),
@@ -241,9 +241,13 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 
 	seal, _ := service.DonationArchiveSealer(cfg.AccountErasure.ArchiveKey)
 	contextCipher, _ := service.NewErasureContextCipher(cfg.AccountErasure.ContextKey)
+	var external service.ExternalErasureProcessor
+	if cfg.AccountErasure.ExternalMode == "http" {
+		external = &service.HTTPErasureProcessor{Endpoint: cfg.AccountErasure.ExternalURL, Token: cfg.AccountErasure.ExternalToken}
+	}
 	erasureService := &service.AutomaticErasureService{
-		Store:         &repository.AccountDeletionRequestRepository{DB: db, DonationRetentionTemplate: service.LedgerRetentionTemplate(cfg.AccountErasure.LedgerConfirmed, cfg.AccountErasure.ReceiptOriginalsSeparate, cfg.AccountErasure.LedgerYearEndMonth, cfg.AccountErasure.LedgerEvidence)},
-		External:      &service.HTTPErasureProcessor{Endpoint: cfg.AccountErasure.ExternalURL, Token: cfg.AccountErasure.ExternalToken},
+		Store:         &repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL, TestUserSeq: cfg.AccountErasure.TestUserSeq, DonationRetentionTemplate: service.LedgerRetentionTemplate(cfg.AccountErasure.LedgerConfirmed, cfg.AccountErasure.ReceiptOriginalsSeparate, cfg.AccountErasure.LedgerYearEndMonth, cfg.AccountErasure.LedgerEvidence)},
+		External:      external,
 		Files:         &service.AccountErasureFiles{UploadRoot: cfg.Upload.BasePath, LegacyRoot: cfg.AccountErasure.LegacyRoot, SiteOrigin: cfg.Server.SiteBaseURL},
 		ContextCipher: contextCipher,
 		Seal:          seal, InvalidateCache: cacheStore.Flush,
@@ -263,7 +267,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		emailService:           emailService,
 		subscriptionBillingJob: subscriptionBillingJob,
 		visitJob:               visitJob,
-		privacyRetentionJob:    job.NewPrivacyRetentionJob(&repository.AccountDeletionRequestRepository{DB: db}, logger),
+		privacyRetentionJob:    job.NewPrivacyRetentionJob(&repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL}, logger),
 		blockedMessageCleanup:  blockedMessageCleanup,
 		pushDelivery:           pushDelivery,
 		socialRevocationWorker: socialRevocationWorker,

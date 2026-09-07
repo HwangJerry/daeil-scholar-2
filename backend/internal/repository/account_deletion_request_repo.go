@@ -14,6 +14,8 @@ var ErrDeletionReceiptConflict = errors.New("existing deletion request uses a di
 
 type AccountDeletionRequestRepository struct {
 	DB                        *sqlx.DB
+	SiteOrigin                string
+	TestUserSeq               int
 	DonationRetentionTemplate func(int, time.Time) (model.DonationRetentionDecision, error)
 }
 
@@ -93,6 +95,7 @@ func (r *AccountDeletionRequestRepository) Receipt(hash string) (model.AccountDe
 func (r *AccountDeletionRequestRepository) List(status string, before int64) ([]model.AccountDeletionQueueItem, error) {
 	items := []model.AccountDeletionQueueItem{}
 	err := r.DB.Select(&items, `SELECT `+deletionReceiptColumns+`, USR_SEQ, EVIDENCE_REFERENCE,
+        (SELECT EXPIRES_AT FROM ALUMNI_ERASURE_CONTEXT c WHERE c.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID) AS CONTEXT_EXPIRES_AT,
         COALESCE((SELECT MODE FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID),'manual') AS PROCESSING_MODE,
         COALESCE((SELECT STAGE FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID),'') AS AUTO_STAGE,
         COALESCE((SELECT LAST_CODE FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID),'') AS AUTO_CODE,
@@ -115,6 +118,10 @@ func (r *AccountDeletionRequestRepository) List(status string, before int64) ([]
 		}
 		items[i].ReceiptWork = work
 		normalizeDeletionReceiptTimes(&items[i].AccountDeletionReceipt)
+		if items[i].ContextExpiresAt != nil {
+			value := deletionTimeUTC(*items[i].ContextExpiresAt)
+			items[i].ContextExpiresAt = &value
+		}
 		if items[i].NextAttemptAt != nil {
 			value := deletionTimeUTC(*items[i].NextAttemptAt)
 			items[i].NextAttemptAt = &value

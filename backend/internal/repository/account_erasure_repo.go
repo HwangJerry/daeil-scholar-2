@@ -13,7 +13,7 @@ func (r *AccountDeletionRequestRepository) ErasureBatch(ctx context.Context) ([]
 	err := r.DB.SelectContext(ctx, &rows, `SELECT d.REQUEST_ID,d.USR_SEQ,e.STAGE,e.EXTERNAL_EVIDENCE
         FROM ALUMNI_ACCOUNT_DELETION_REQUEST d JOIN ALUMNI_ACCOUNT_ERASURE e ON e.REQUEST_ID=d.REQUEST_ID
         WHERE e.MODE='automatic' AND d.STATUS <> 'completed' AND e.NEXT_ATTEMPT_AT<=UTC_TIMESTAMP()
-        ORDER BY e.NEXT_ATTEMPT_AT,d.REQUEST_ID LIMIT 10`)
+        AND (?=0 OR d.USR_SEQ=?) ORDER BY e.NEXT_ATTEMPT_AT,d.REQUEST_ID LIMIT 10`, r.TestUserSeq, r.TestUserSeq)
 	return rows, err
 }
 
@@ -81,7 +81,34 @@ func (r *AccountDeletionRequestRepository) ErasureExternalSubject(w model.Erasur
 	if hasOrders > 0 {
 		err = r.DB.Select(&s.Retentions, `SELECT d.O_SEQ,d.BASIS,d.BASIS_DATE,d.RETAIN_UNTIL,d.EVIDENCE_REFERENCE FROM ALUMNI_DONATION_RETENTION d JOIN WEO_ORDER o ON o.O_SEQ=d.O_SEQ WHERE o.USR_SEQ=? OR o.O_ACCOUNT_USR_SEQ=?`, w.UserSeq, w.UserSeq)
 	}
-	return s, err
+	if err != nil {
+		return s, err
+	}
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return s, err
+	}
+	defer tx.Rollback()
+	schema, err := readErasureSchema(tx)
+	if err != nil {
+		return s, err
+	}
+	urls, _, err := erasureFileCandidates(tx, schema, w)
+	if err != nil {
+		return s, err
+	}
+	seen := map[string]bool{}
+	for _, raw := range urls {
+		_, external, err := model.ErasureFilePath(raw, r.SiteOrigin)
+		if err != nil {
+			return s, err
+		}
+		if external && !seen[raw] {
+			s.ExternalFileURLs = append(s.ExternalFileURLs, raw)
+			seen[raw] = true
+		}
+	}
+	return s, nil
 }
 
 func (r *AccountDeletionRequestRepository) RecordExternalErasure(id int64, evidence string) error {

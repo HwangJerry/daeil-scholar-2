@@ -174,6 +174,16 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 			t.Fatal("verified target regressed", target)
 		}
 	}
+	// Rollout allowlist excludes other queued accounts without changing their mode.
+	repo.TestUserSeq = 43
+	if selected, err := repo.ErasureBatch(context.Background()); err != nil || len(selected) != 0 {
+		t.Fatal("test rollout selected another account", err)
+	}
+	repo.TestUserSeq = 42
+	if selected, err := repo.ErasureBatch(context.Background()); err != nil || len(selected) != 1 {
+		t.Fatal("test rollout skipped approved account", err)
+	}
+	repo.TestUserSeq = 0
 	// Unknown references block and roll back the archive, aggregate and member deletion together.
 	db.MustExec(`CREATE TABLE UNHANDLED_REFERENCE (USR_SEQ INT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4; INSERT INTO UNHANDLED_REFERENCE VALUES (42)`)
 	seal := func(data []byte) ([]byte, error) {

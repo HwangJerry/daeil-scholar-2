@@ -26,6 +26,7 @@ type AutomaticErasureStore interface {
 	EraseDatabase(model.ErasureWork, func([]byte) ([]byte, error), func(model.DonationRetentionDecision) error) error
 	ErasureFiles(int64) ([]model.ErasureFile, error)
 	ErasureFileDone(int64) error
+	EraseFileIfUnreferenced(model.ErasureWork, model.ErasureFile, func(string) error) error
 	FinishAutomaticErasure(model.ErasureWork) error
 }
 type ExternalErasureProcessor interface {
@@ -127,10 +128,7 @@ func (s *AutomaticErasureService) process(ctx context.Context, w model.ErasureWo
 			if s.Files == nil {
 				return &model.ErasureBlocked{Code: "FILE_STORAGE_REQUIRED"}
 			}
-			if e = s.Files.EraseURL(file.URL); e != nil {
-				return e
-			}
-			if e = s.Store.ErasureFileDone(file.ID); e != nil {
+			if e = s.Store.EraseFileIfUnreferenced(w, file, s.Files.EraseURL); e != nil {
 				return e
 			}
 		}

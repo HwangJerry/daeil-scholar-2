@@ -19,6 +19,13 @@ import (
 func main() {
 	cfg := config.Load()
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+	if err := validateErasureRuntime(cfg); err != nil {
+		logger.Fatal().Err(err).Msg("invalid account erasure configuration")
+	}
+	if len(os.Args) == 2 && os.Args[1] == "--check-release-config" {
+		logger.Info().Bool("requests", cfg.AccountErasure.RequestsEnabled).Bool("worker", cfg.AccountErasure.WorkerEnabled).Bool("retention", cfg.AccountErasure.RetentionEnabled).Msg("release configuration valid")
+		return
+	}
 
 	db, err := repository.NewDB(cfg.DB)
 	if err != nil {
@@ -82,8 +89,12 @@ func main() {
 	// subscriptionBillingJob.Start()
 	visitJob := d.visitJob
 	visitJob.Start()
-	d.privacyRetentionJob.Start()
-	d.accountErasureJob.Start()
+	if cfg.AccountErasure.RetentionEnabled {
+		d.privacyRetentionJob.Start()
+	}
+	if cfg.AccountErasure.WorkerEnabled {
+		d.accountErasureJob.Start()
+	}
 	blockedMessageCleanup := d.blockedMessageCleanup
 	blockedMessageCleanup.Start()
 	socialRevocationWorker := d.socialRevocationWorker
