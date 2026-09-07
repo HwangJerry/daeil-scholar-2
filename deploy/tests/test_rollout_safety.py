@@ -63,6 +63,23 @@ class RolloutSafetyTests(unittest.TestCase):
         self.assertEqual(commands.count(['systemctl', 'restart', remote.SERVICE]), 1)
         self.assertIn(['systemctl', 'stop', remote.SERVICE], commands)
 
+    def test_activation_preflight_uses_target_scope_not_previous_process(self):
+        binary = self.root / 'server'
+        binary.write_text('synthetic')
+        keys = ('ALLOWED_ORIGIN SITE_BASE_URL DB_USER DB_PASSWORD DB_NAME KAKAO_CLIENT_ID '
+                'KAKAO_CLIENT_SECRET KAKAO_REDIRECT_URI JWT_SECRET UPLOAD_LEGACY_PATH '
+                'EASYPAY_IMMEDIATELY_MALL_ID EASYPAY_PROFILE_MALL_ID EASYPAY_GW_URL '
+                'EASYPAY_BIN_BASE EASYPAY_RETURN_BASE_URL SMTP_HOST SMTP_USER SMTP_PASSWORD VISIT_IP_SALT ENV')
+        env = {key: 'synthetic' for key in keys.split()}
+        env['ACCOUNT_ERASURE_TEST_USER_SEQ'] = '42'
+        for target in [0, 43]:
+            with patch.object(remote, 'run') as command:
+                remote.validate_activation(binary, env, target)
+            checked = command.call_args.kwargs['env']
+            self.assertEqual(checked['ACCOUNT_ERASURE_TEST_USER_SEQ'], str(target))
+            self.assertEqual(checked['PRIVACY_RETENTION_ENABLED'], 'false' if target else 'true')
+        self.assertEqual(env['ACCOUNT_ERASURE_TEST_USER_SEQ'], '42')
+
     def test_lock_excludes_another_process_and_releases_after_failure(self):
         path = self.root / 'release.lock'
         code = "import sys; from pathlib import Path; import remote_release as r\nwith r.release_lock(Path(sys.argv[1])): pass"

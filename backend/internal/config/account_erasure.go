@@ -14,6 +14,9 @@ func (c AccountErasureConfig) Validate() error {
 	if c.TestUserSeq < 0 {
 		return fmt.Errorf("ACCOUNT_ERASURE_TEST_USER_SEQ must be a valid non-negative integer")
 	}
+	if c.TestUserSeq > 0 && c.RetentionEnabled {
+		return fmt.Errorf("PRIVACY_RETENTION_ENABLED must be false while testing a single account")
+	}
 	if !c.RequestsEnabled && !c.WorkerEnabled {
 		return nil
 	}

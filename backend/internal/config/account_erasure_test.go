@@ -59,3 +59,20 @@ func TestInvalidErasureTestUserNeverBroadensScope(t *testing.T) {
 		})
 	}
 }
+
+func TestTestUserScopeRejectsGlobalRetention(t *testing.T) {
+	for _, user := range []int{0, 42} {
+		for flags := 0; flags < 8; flags++ {
+			c := AccountErasureConfig{
+				TestUserSeq: user, RequestsEnabled: flags&1 != 0, WorkerEnabled: flags&2 != 0,
+				RetentionEnabled: flags&4 != 0, ContextKey: strings.Repeat("ab", 32),
+				ArchiveKey: strings.Repeat("cd", 32), LegacyRoot: "/verified/root", ExternalMode: "manual",
+			}
+			err := c.Validate()
+			shouldReject := user > 0 && c.RetentionEnabled
+			if (err != nil) != shouldReject {
+				t.Fatalf("scope %d flags %d: validation error %v", user, flags, err)
+			}
+		}
+	}
+}

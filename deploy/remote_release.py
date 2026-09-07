@@ -146,7 +146,7 @@ def pending_migrations(payload, manifest, env):
     return pending if 'backend' in manifest['components'] else []
 
 
-def validate_activation(binary, env):
+def validate_activation(binary, env, test_user=0):
     required = ('ALLOWED_ORIGIN', 'SITE_BASE_URL', 'DB_USER', 'DB_PASSWORD', 'DB_NAME',
                 'KAKAO_CLIENT_ID', 'KAKAO_CLIENT_SECRET', 'KAKAO_REDIRECT_URI', 'JWT_SECRET',
                 'UPLOAD_LEGACY_PATH', 'EASYPAY_IMMEDIATELY_MALL_ID', 'EASYPAY_PROFILE_MALL_ID',
@@ -160,6 +160,8 @@ def validate_activation(binary, env):
             raise ValueError('placeholder production setting: ' + key)
     checked = dict(env)
     checked.update({key: 'true' for key in GATES})
+    checked['ACCOUNT_ERASURE_TEST_USER_SEQ'] = str(test_user)
+    checked['PRIVACY_RETENTION_ENABLED'] = 'false' if test_user else 'true'
     binary.chmod(0o755)
     run([str(binary), '--check-release-config'], env=checked, stdout=subprocess.DEVNULL)
     if env.get('SENTRY_AUTH_TOKEN') and (env.get('SENTRY_IOS_PROJECT') != 'daeil-ios-release' or env.get('SENTRY_ANDROID_PROJECT') != 'daeil-android-release'):
@@ -377,7 +379,7 @@ def change_rollout(root, enabled, test_user=0):
     if sha256(Path('/app/backend/server')) != manifest['files']['backend/server']:
         raise ValueError('release binary is no longer installed')
     env = process_environment()
-    validate_activation(Path('/app/backend/server'), env)
+    validate_activation(Path('/app/backend/server'), env, test_user)
     try:
         set_rollout(True, test_user)
         run(['systemctl', 'restart', SERVICE])
