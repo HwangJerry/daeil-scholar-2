@@ -9,7 +9,6 @@ import (
 	"github.com/dflh-saf/backend/internal/handler"
 	"github.com/dflh-saf/backend/internal/job"
 	"github.com/dflh-saf/backend/internal/model"
-	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/presenter"
 	"github.com/dflh-saf/backend/internal/push"
 	"github.com/dflh-saf/backend/internal/realtime"
@@ -43,7 +42,7 @@ type deps struct {
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
-func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook *observability.Hook) (*deps, error) {
+func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, error) {
 	authRepo := repository.NewAuthRepository(db)
 	feedRepo := repository.NewFeedRepository(db)
 	donationRepo := repository.NewDonationRepository(db)
@@ -218,7 +217,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		personalDonation:    handler.NewPersonalDonationHandler(personalDonationService),
 		message:             handler.NewMessageHandler(messageService),
 		messageReport:       &handler.MessageReportHandler{Service: &service.MessageReportService{Store: &repository.MessageReportRepository{DB: db}}},
-		accountDeletion:     &handler.AccountDeletionRequestHandler{Service: &service.AccountDeletionRequestService{Store: &repository.AccountDeletionRequestRepository{DB: db}}, Auth: authService},
+		accountDeletion:     &handler.AccountDeletionRequestHandler{TestUserSeq: cfg.AccountErasure.TestUserSeq, RequestsDisabled: !cfg.AccountErasure.RequestsEnabled, Service: &service.AccountDeletionRequestService{Store: &repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL}}, Auth: authService},
 		memberBlock:         handler.NewMemberBlockHandler(memberBlockService),
 		push:                handler.NewPushHandler(pushService),
 		payment:             handler.NewPaymentHandler(donateService, cfg.EasyPay),
@@ -234,18 +233,24 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		adminSubscription:   handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
 		realtime:            handler.NewRealtimeHandler(realtimeHub, logger),
 		visit:               handler.NewVisitHandler(visitService, logger, cfg.Server.IsSecure()),
-		adminErrorReport:    handler.NewAdminErrorReportHandler(logger, debugHook),
+		adminErrorReport:    handler.NewAdminErrorReportHandler(logger),
 		mobileAppEvent:      handler.NewMobileAppEventHandler(mobileAppEventService),
 		sentryMonitoring:    handler.NewSentryMonitoringHandler(sentryMonitoringService),
 		appSetting:          handler.NewAppSettingHandler(appSettingService),
 	}
 
 	seal, _ := service.DonationArchiveSealer(cfg.AccountErasure.ArchiveKey)
+	contextCipher, _ := service.NewErasureContextCipher(cfg.AccountErasure.ContextKey)
+	var external service.ExternalErasureProcessor
+	if cfg.AccountErasure.ExternalMode == "http" {
+		external = &service.HTTPErasureProcessor{Endpoint: cfg.AccountErasure.ExternalURL, Token: cfg.AccountErasure.ExternalToken}
+	}
 	erasureService := &service.AutomaticErasureService{
-		Store:    &repository.AccountDeletionRequestRepository{DB: db, DonationRetentionTemplate: service.LedgerRetentionTemplate(cfg.AccountErasure.LedgerConfirmed, cfg.AccountErasure.ReceiptOriginalsSeparate, cfg.AccountErasure.LedgerYearEndMonth, cfg.AccountErasure.LedgerEvidence)},
-		External: &service.HTTPErasureProcessor{Endpoint: cfg.AccountErasure.ExternalURL, Token: cfg.AccountErasure.ExternalToken},
-		Files:    &service.AccountErasureFiles{UploadRoot: cfg.Upload.BasePath, LegacyRoot: cfg.Upload.LegacyPath, SiteOrigin: cfg.Server.SiteBaseURL},
-		Seal:     seal, InvalidateCache: cacheStore.Flush,
+		Store:         &repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL, TestUserSeq: cfg.AccountErasure.TestUserSeq, DonationRetentionTemplate: service.LedgerRetentionTemplate(cfg.AccountErasure.LedgerConfirmed, cfg.AccountErasure.ReceiptOriginalsSeparate, cfg.AccountErasure.LedgerYearEndMonth, cfg.AccountErasure.LedgerEvidence)},
+		External:      external,
+		Files:         &service.AccountErasureFiles{UploadRoot: cfg.Upload.BasePath, LegacyRoot: cfg.AccountErasure.LegacyRoot, SiteOrigin: cfg.Server.SiteBaseURL},
+		ContextCipher: contextCipher,
+		Seal:          seal, InvalidateCache: cacheStore.Flush,
 	}
 	return &deps{
 		accountErasureJob:      job.NewAccountErasureJob(erasureService, logger),
@@ -262,7 +267,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger, debugHook 
 		emailService:           emailService,
 		subscriptionBillingJob: subscriptionBillingJob,
 		visitJob:               visitJob,
-		privacyRetentionJob:    job.NewPrivacyRetentionJob(&repository.AccountDeletionRequestRepository{DB: db}, logger),
+		privacyRetentionJob:    job.NewPrivacyRetentionJob(&repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL}, logger),
 		blockedMessageCleanup:  blockedMessageCleanup,
 		pushDelivery:           pushDelivery,
 		socialRevocationWorker: socialRevocationWorker,

@@ -12,24 +12,19 @@ import (
 
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/job"
-	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 func main() {
 	cfg := config.Load()
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-
-	debugHook := observability.NewHook(cfg.DebugAgent)
-	if debugHook != nil {
-		logger = logger.Hook(debugHook)
-		log.Logger = log.Logger.Hook(debugHook)
-		logger.Info().
-			Str("project", cfg.DebugAgent.Project).
-			Str("environment", cfg.DebugAgent.Environment).
-			Msg("debug agent reporter enabled")
+	if err := validateErasureRuntime(cfg); err != nil {
+		logger.Fatal().Err(err).Msg("invalid account erasure configuration")
+	}
+	if len(os.Args) == 2 && os.Args[1] == "--check-release-config" {
+		logger.Info().Bool("requests", cfg.AccountErasure.RequestsEnabled).Bool("worker", cfg.AccountErasure.WorkerEnabled).Bool("retention", cfg.AccountErasure.RetentionEnabled).Msg("release configuration valid")
+		return
 	}
 
 	db, err := repository.NewDB(cfg.DB)
@@ -38,7 +33,7 @@ func main() {
 	}
 	defer db.Close()
 
-	d, err := wireDeps(db, cfg, logger, debugHook)
+	d, err := wireDeps(db, cfg, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to wire dependencies")
 	}
@@ -61,7 +56,7 @@ func main() {
 			"https://client-macbook.tail04b57d.ts.net",
 		)
 	}
-	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg, logger, debugHook)
+	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg, logger)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Server.Port,
@@ -94,8 +89,12 @@ func main() {
 	// subscriptionBillingJob.Start()
 	visitJob := d.visitJob
 	visitJob.Start()
-	d.privacyRetentionJob.Start()
-	d.accountErasureJob.Start()
+	if cfg.AccountErasure.RetentionEnabled {
+		d.privacyRetentionJob.Start()
+	}
+	if cfg.AccountErasure.WorkerEnabled {
+		d.accountErasureJob.Start()
+	}
 	blockedMessageCleanup := d.blockedMessageCleanup
 	blockedMessageCleanup.Start()
 	socialRevocationWorker := d.socialRevocationWorker

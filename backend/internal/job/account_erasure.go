@@ -41,6 +41,8 @@ func (j *AccountErasureJob) Start() {
 func (j *AccountErasureJob) Stop() {
 	if j.cancel != nil {
 		j.cancel()
+	}
+	if j.done != nil {
 		<-j.done
 	}
 }

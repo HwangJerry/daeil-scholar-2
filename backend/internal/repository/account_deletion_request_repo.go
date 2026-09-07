@@ -14,10 +14,12 @@ var ErrDeletionReceiptConflict = errors.New("existing deletion request uses a di
 
 type AccountDeletionRequestRepository struct {
 	DB                        *sqlx.DB
+	SiteOrigin                string
+	TestUserSeq               int
 	DonationRetentionTemplate func(int, time.Time) (model.DonationRetentionDecision, error)
 }
 
-const deletionReceiptColumns = `REQUEST_ID, STATUS, REQUESTED_AT, TARGET_AT, DUE_AT,
+const deletionReceiptColumns = `EXISTS (SELECT 1 FROM ALUMNI_ERASURE_RECEIPT_WORK rw WHERE rw.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND rw.STATUS='active') AS RECEIPT_WORK_PENDING, EXISTS (SELECT 1 FROM ALUMNI_ACCOUNT_ERASURE progress WHERE progress.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND progress.STAGE IN ('database_erased','completed')) AS DATABASE_ERASED, REQUEST_ID, STATUS, REQUESTED_AT, TARGET_AT, DUE_AT,
     COMPLETED_AT, RETAINED_RECORDS, RETENTION_UNTIL`
 
 func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string) (model.AccountDeletionReceipt, error) {
@@ -70,6 +72,12 @@ func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string
 	if _, err = tx.Exec(`INSERT IGNORE INTO ALUMNI_ACCOUNT_ERASURE (REQUEST_ID, MODE, STAGE, NEXT_ATTEMPT_AT, UPDATED_AT) VALUES (?, 'automatic', 'queued', UTC_TIMESTAMP(), UTC_TIMESTAMP())`, result.ID); err != nil {
 		return result, err
 	}
+	if err = seedErasureTargets(tx, result.ID); err != nil {
+		return result, err
+	}
+	if _, err = tx.Exec(`INSERT IGNORE INTO ALUMNI_ERASURE_RECEIPT_WORK (REQUEST_ID,UPDATED_AT) VALUES (?,UTC_TIMESTAMP())`, result.ID); err != nil {
+		return result, err
+	}
 	normalizeDeletionReceiptTimes(&result)
 	return result, tx.Commit()
 }
@@ -87,13 +95,41 @@ func (r *AccountDeletionRequestRepository) Receipt(hash string) (model.AccountDe
 func (r *AccountDeletionRequestRepository) List(status string, before int64) ([]model.AccountDeletionQueueItem, error) {
 	items := []model.AccountDeletionQueueItem{}
 	err := r.DB.Select(&items, `SELECT `+deletionReceiptColumns+`, USR_SEQ, EVIDENCE_REFERENCE,
+        (SELECT EXPIRES_AT FROM ALUMNI_ERASURE_CONTEXT c WHERE c.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID) AS CONTEXT_EXPIRES_AT,
         COALESCE((SELECT MODE FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID),'manual') AS PROCESSING_MODE,
         COALESCE((SELECT STAGE FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID),'') AS AUTO_STAGE,
-        COALESCE((SELECT LAST_CODE FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID),'') AS AUTO_CODE
+        COALESCE((SELECT LAST_CODE FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID),'') AS AUTO_CODE,
+        (SELECT NEXT_ATTEMPT_AT FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID) AS NEXT_ATTEMPT_AT,
+        (SELECT UPDATED_AT FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID) AS AUTOMATION_UPDATED_AT
         FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE STATUS = ? AND (? = 0 OR REQUEST_ID < ?)
         ORDER BY REQUEST_ID DESC LIMIT 50`, status, before, before)
+	if err != nil {
+		return items, err
+	}
 	for i := range items {
+		targets, e := r.ErasureTargets(items[i].ID)
+		if e != nil {
+			return nil, e
+		}
+		items[i].Targets = targets
+		work, e := r.ReceiptWork(items[i].ID)
+		if e != nil {
+			return nil, e
+		}
+		items[i].ReceiptWork = work
 		normalizeDeletionReceiptTimes(&items[i].AccountDeletionReceipt)
+		if items[i].ContextExpiresAt != nil {
+			value := deletionTimeUTC(*items[i].ContextExpiresAt)
+			items[i].ContextExpiresAt = &value
+		}
+		if items[i].NextAttemptAt != nil {
+			value := deletionTimeUTC(*items[i].NextAttemptAt)
+			items[i].NextAttemptAt = &value
+		}
+		if items[i].AutomationUpdatedAt != nil {
+			value := deletionTimeUTC(*items[i].AutomationUpdatedAt)
+			items[i].AutomationUpdatedAt = &value
+		}
 	}
 	return items, err
 }
@@ -137,18 +173,19 @@ func (r *AccountDeletionRequestRepository) Start(id int64, operator int) error {
 // parses legacy DATETIME in Asia/Seoul, so reinterpret the wall clock here;
 // calling t.UTC() would incorrectly shift the stored instant by nine hours.
 func normalizeDeletionReceiptTimes(receipt *model.AccountDeletionReceipt) {
-	asUTC := func(t time.Time) time.Time {
-		return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
-	}
-	receipt.RequestedAt = asUTC(receipt.RequestedAt)
-	receipt.TargetAt = asUTC(receipt.TargetAt)
-	receipt.DueAt = asUTC(receipt.DueAt)
+	receipt.RequestedAt = deletionTimeUTC(receipt.RequestedAt)
+	receipt.TargetAt = deletionTimeUTC(receipt.TargetAt)
+	receipt.DueAt = deletionTimeUTC(receipt.DueAt)
 	if receipt.CompletedAt != nil {
-		normalized := asUTC(*receipt.CompletedAt)
+		normalized := deletionTimeUTC(*receipt.CompletedAt)
 		receipt.CompletedAt = &normalized
 	}
 	if receipt.RetentionUntil != nil {
-		normalized := asUTC(*receipt.RetentionUntil)
+		normalized := deletionTimeUTC(*receipt.RetentionUntil)
 		receipt.RetentionUntil = &normalized
 	}
+}
+
+func deletionTimeUTC(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
 }

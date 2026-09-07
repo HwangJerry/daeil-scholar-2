@@ -2,7 +2,36 @@
 import { api } from './client';
 
 export type DeletionStatus = 'pending' | 'processing' | 'completed';
+export interface ErasureTarget {
+ target: string;
+ status: 'pending' | 'running' | 'complete' | 'not_applicable' | 'manual' | 'failed';
+ evidenceReference: string;
+ code: string;
+ attempts: number;
+ lastAttemptAt: string | null;
+ updatedAt: string;
+}
+export interface ReceiptWorkResolution {
+ action: 'receipt_work';
+ receiptWorkStatus: 'not_required' | 'active' | 'completed';
+ originalStorage: string;
+ evidenceReference: string;
+ contactSecured: boolean;
+ contactErased: boolean;
+ resultNotified: boolean;
+}
+export interface ReceiptWork {
+ status: 'unreviewed' | 'not_required' | 'active' | 'completed';
+ originalStorage: string;
+ evidenceReference: string;
+ updatedAt: string;
+ completedAt: string | null;
+}
 export interface AccountDeletion {
+ contextExpiresAt?: string;
+ receiptWork?: ReceiptWork;
+ receiptWorkPending?: boolean;
+ targets?: ErasureTarget[];
   requestId: number;
   userSeq: number | null;
   status: DeletionStatus;
@@ -15,6 +44,9 @@ export interface AccountDeletion {
   evidenceReference: string;
   processingMode?: "automatic" | "manual";
   autoStage?: string;
+  databaseErased?: boolean;
+  nextAttemptAt?: string | null;
+  automationUpdatedAt?: string | null;
   autoCode?: string;
 }
 export interface DeletionEvidence {
@@ -35,6 +67,6 @@ export function fetchAccountDeletions(status: DeletionStatus, before: number) {
 export function verifyAccountDeletion(id: number) {
   return api.get<{ items: DeletionFootprint[] }>(`/api/admin/account-deletions/${id}/verification`);
 }
-export function resolveAccountDeletion(id: number, evidence: DeletionEvidence | { action: 'start' | 'automatic' | 'manual' }) {
+export function resolveAccountDeletion(id: number, evidence: DeletionEvidence | ReceiptWorkResolution | { action: 'start' | 'automatic' | 'manual' }) {
   return api.put<void>(`/api/admin/account-deletions/${id}`, evidence);
 }

@@ -1,6 +1,8 @@
 // AccountDeletionsPage — Manual erasure work tracking with independent completion evidence.
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AccountErasureReceiptWork } from '../components/AccountErasureReceiptWork';
+import { AccountErasureTargets } from '../components/AccountErasureTargets';
 import { Button } from '../components/ui/Button';
 import { fetchAccountDeletions, resolveAccountDeletion, verifyAccountDeletion, type AccountDeletion, type DeletionEvidence, type DeletionStatus } from '../api/accountDeletions';
 
@@ -8,6 +10,16 @@ const QUEUE_PAGE_SIZE = 50;
 const QUEUE_REFRESH_MS = 60_000;
 const STATUS_LABELS: Record<DeletionStatus, string> = { pending: '접수', processing: '처리 중', completed: '완료' };
 const AUTO_BLOCKERS: Record<string, string> = {
+  FILE_STILL_REFERENCED: '다른 회원이나 게시글에서 사용하는 파일입니다. 소유권과 공유 참조를 확인해야 합니다.',
+  FILE_OWNERSHIP_REVIEW_REQUIRED: '파일을 참조한 기록만 있고 소유권을 확인할 수 없어 삭제를 보류했습니다.',
+  EXTERNAL_FILE_HANDOFF_REVIEW_REQUIRED: '기존 파일 큐의 외부 주소를 확인하고 외부 저장소 처리 증빙을 확보해야 합니다.',
+  RECEIPT_CONTACT_REVIEW_REQUIRED: '진행 중인 영수증 연락 업무와 원본 보관 위치를 확인해야 합니다.',
+  RECEIPT_CONTACT_WORK_PENDING: '영수증 업무·결과 전달·업무용 연락처 정리 확인을 기다리고 있습니다.',
+  ERASURE_TARGETS_REVIEW_REQUIRED: '저장소별 작업 등록 상태를 확인해야 합니다.',
+  ERASURE_CONTEXT_KEY_REQUIRED: '외부 삭제 작업용 별도 암호화 키 설정이 필요합니다.',
+  ERASURE_CONTEXT_UNREADABLE: '외부 삭제 작업의 암호화 정보 확인이 필요합니다.',
+  ERASURE_CONTEXT_EXPIRED_REVIEW_REQUIRED: '외부 삭제 작업용 정보의 보관 기한이 지났습니다. 수동 확인이 필요합니다.',
+
   DONATION_RETENTION_REVIEW_REQUIRED: '기부 자료의 보존 근거와 기간을 확인해야 합니다.',
   INVALID_DONATION_RETENTION_DECISION: '기부 자료의 보존 날짜 또는 근거를 수정해야 합니다.',
   DONATION_ARCHIVE_KEY_REQUIRED: '기부 자료 보관소의 암호화 설정이 필요합니다.',
@@ -54,6 +66,9 @@ function DeletionReview({ item }: { item: AccountDeletion }) {
       {item.status !== 'completed' && (
         <div className="space-y-3">
           <p className="text-sm text-dark-slate">처리 방식: {item.processingMode === 'automatic' ? '자동' : '수동'} · 자동 작업 상태: {item.autoStage || '대기'}</p>
+          {item.automationUpdatedAt && <p className="text-sm text-cool-gray">최근 상태 변경 {new Date(item.automationUpdatedAt).toLocaleString('ko-KR')}{item.processingMode === 'automatic' && item.nextAttemptAt && ` · 다음 시도 ${new Date(item.nextAttemptAt).toLocaleString('ko-KR')}`}</p>}
+          {item.databaseErased && <p className="text-sm text-dark-slate">앱 운영 DB 삭제 완료 · 파일 및 외부 처리 확인 후 최종 완료됩니다.</p>}
+          {item.contextExpiresAt && <p role="status" className="text-sm text-dark-slate">외부 확인용 정보 만료: {new Date(item.contextExpiresAt).toLocaleString('ko-KR')}. 영수증 업무가 진행 중이어도 이 기한을 확인해주세요. 기한이 지나면 자동 재개에 필요한 정보가 없어 수동 검토가 필요할 수 있습니다.</p>}
           {item.autoCode && <p role="status" className="text-sm text-dark-slate">{AUTO_BLOCKERS[item.autoCode] ?? '서버 관리자의 확인이 필요합니다.'} <span className="break-all">({item.autoCode})</span> 원인을 해결하면 자동으로 재시도합니다.</p>}
           <div className="flex flex-wrap gap-3">
             <Button variant="outline" disabled={mutation.isPending || item.processingMode === 'manual'} onClick={() => mutation.mutate('manual')}>자동 처리 중지 · 수동으로 전환</Button>
@@ -61,6 +76,8 @@ function DeletionReview({ item }: { item: AccountDeletion }) {
           </div>
         </div>
       )}
+      <AccountErasureReceiptWork item={item} />
+      <AccountErasureTargets targets={item.targets} />
       {item.status === 'pending' && item.processingMode !== 'automatic' && <Button disabled={mutation.isPending} onClick={() => mutation.mutate('start')}>삭제 작업 시작 · 소셜 권한 철회 요청</Button>}
       {item.status === 'processing' && item.processingMode !== 'automatic' && (
         <>

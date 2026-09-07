@@ -8,7 +8,7 @@
 - root 관리자는 기존 계정 삭제 화면에서 수동 전환·자동 재개를 할 수 있다. 기존 수동 접수·검증·완료 기능을 유지한다. 현재 작업 단계가 끝난 뒤 전환이 반영될 수 있다.
 - 분당 최대 10개 요청을 순차 처리하며 DB 연결에 연결된 named lock으로 서버 간 중복 실행을 막는다. 실패는 안전한 오류 코드만 남기고 5분 후 재시도한다.
 - 기존 Apple/Kakao worker에 실제 철회를 요청한다. 이번 요청에 대한 성공 증거가 없으면 삭제를 완료하지 않는다.
-- 기부 자료 분류 → 외부 삭제 증거 → DB 삭제·암호화 보존·파일 작업 등록 → 실제 파일 삭제 → 재검증 → 비공개 접수증 완료 게시 순서다. DB 단계는 같은 트랜잭션으로 묶이며, 파일 실패 후에는 DB 삭제를 반복하지 않고 남은 파일부터 재개한다.
+- 기부 자료 분류·소셜 철회 확인 → 외부 작업용 식별정보 암호화 확보 → DB 삭제·암호화 보존·파일 작업 등록 → 실제 파일 삭제 → 외부 삭제 증거 → 재검증 → 비공개 접수증 완료 게시 순서다. 외부 처리 지연만으로 운영 DB 삭제를 막지 않는다. DB 단계는 같은 트랜잭션으로 묶이며, 파일 실패 후에는 DB 삭제를 반복하지 않고 남은 파일부터 재개한다.
 - 자동 완료 확인은 로그인 화면에서 연결되는 비공개 접수증에 게시한다. 자동 이메일 발송은 추가하지 않았다. 수동 완료는 기존 개별 통지 증빙을 요구한다.
 
 ## 한국 기부 자료 보존 검토
@@ -35,18 +35,25 @@
 
 ## 기부 분류 설정
 
-이미 검토된 거래별 결정은 `backend/cmd/donation-retention`으로 입력한다. 기본은 파일 검증만 하고 `-apply`를 지정해야 DB에 기록한다. JSON에는 개인정보 원문을 넣지 않는다.
+이미 검토된 거래별 결정은 `backend/cmd/donation-retention`으로 입력한다. 기본은 파일 검증만 하고 `-apply`를 지정해야 DB에 기록한다. JSON에는 개인정보 원문을 넣지 않는다. 063 이후에는 현재 원본을 식별하는 `sourceFingerprint`가 필수다.
+`-inspect-order`는 DB에서 해당 주문의 지문만 읽고 변경하지 않는다. 이 지문을 받은 원본을 검토한 뒤
+JSON에 함께 기록한다. 단순히 새 지문을 붙여 오래된 검토 결과를 재사용하면 안 된다.
+원본이 바뀌면 저장 단계에서 거부하며, 관리자 수정 후 기존 결정도 같은 트랜잭션에서 무효화한다.
+지문 없는 기존 결정은 원본 자료를 다시 검토해야 사용할 수 있다.
 
 ```json
-[{"orderId":123,"basis":"ledger_10y","basisDate":"2025-12-31T00:00:00Z","retainUntil":"2035-12-31T00:00:00Z","evidenceReference":"회계담당자-검토문서-번호"}]
+[{"orderId":123,"sourceFingerprint":"<검토한 원본의 64자리 지문>","basis":"ledger_10y","basisDate":"2025-12-31T00:00:00Z","retainUntil":"2035-12-31T00:00:00Z","evidenceReference":"회계담당자-검토문서-번호"}]
 ```
 
 ```sh
+# backend 디렉터리에서 실행. 아래 조회는 읽기 전용이다.
+go run ./cmd/donation-retention -inspect-order 123
+# 출력 지문과 해당 원본을 검토해 JSON을 준비한 뒤 형식 검증한다.
 go run ./cmd/donation-retention -file /secure/reviewed-retention.json
 go run ./cmd/donation-retention -file /secure/reviewed-retention.json -apply
 ```
 
-장부 보존 의무와 회계연도, 완전한 영수증 원본 별도 보존이 확인되면 환경 설정으로 **향후 요청도 자동 분류**할 수 있다. `DONATION_LEDGER_RETENTION_CONFIRMED=true`, `DONATION_RECEIPT_ORIGINALS_SEPARATE=true`, `DONATION_LEDGER_YEAR_END_MONTH=확인한 월`, `DONATION_LEDGER_RETENTION_EVIDENCE=검토 증빙 번호`를 설정한다. 기존 거래별 결정을 우선한다. 미결제 등 분류가 불명확한 거래는 자동 추정하지 않는다. 윤년과 회계연도 경계를 달력 기준으로 계산한다.
+장부 보존 의무와 회계연도, 완전한 영수증 원본 별도 보존이 확인되면 환경 설정으로 **향후 요청도 자동 분류**할 수 있다. `DONATION_LEDGER_RETENTION_CONFIRMED=true`, `DONATION_RECEIPT_ORIGINALS_SEPARATE=true`, `DONATION_LEDGER_YEAR_END_MONTH=확인한 월`, `DONATION_LEDGER_RETENTION_EVIDENCE=검토 증빙 번호`를 설정한다. 현재 원본 지문과 일치하는 기존 거래별 결정을 우선한다. 미결제 등 분류가 불명확한 거래는 자동 추정하지 않는다. 윤년과 회계연도 경계를 달력 기준으로 계산한다.
 
 `DONATION_ARCHIVE_KEY`는 전용 32바이트 키의 64자리 hex 값이다. 채팅·Git·명령 인수·운영 로그에 노출하지 않고 서버의 비밀 설정으로 주입한다.
 
@@ -66,7 +73,7 @@ Sentry 데이터의 실제 식별 가능성, 백업 선택 삭제/만료·복원
 
 ## 배포와 검증
 
-- migration 057과 058을 056 다음에 적용하고 backend·frontend·admin을 함께 배포한다. 이번 작업에서는 운영 배포와 데이터 변경을 하지 않는다.
+- migration 057·058·059를 056 다음에 적용하고 backend·frontend·admin을 함께 배포한다. 이번 작업에서는 운영 배포와 데이터 변경을 하지 않는다.
 - migration 058은 존재하는 알려진 삭제 대상 MyISAM 테이블만 InnoDB로 전환한다. ALTER TABLE은 암묵적 커밋·테이블 재구축을 수반하므로 운영 적용 전 저장 공간과 작업 시간을 확인한다. 개별 전환은 재실행 가능하다. 삭제 대상 테이블과 관련 트리거가 InnoDB인지 확인한다. 알려지지 않은 참조나 비트랜잭션 저장소는 자동 처리를 차단한다. 운영 스키마에는 과거 레거시 테이블이 있을 수 있으므로 가상 계정으로 실제 배포 스키마를 검증해야 한다.
 - 업로드 소유 기록은 새 프로필·명함 업로드부터 저장한다. 예전 파일 전체의 소유 관계를 소급해 알아냈다고 주장하지 않는다. 관리 경로 밖 파일·symlink·경로 이동은 자동 삭제하지 않고 확인 대상으로 남긴다.
 - 로컬 자동 삭제·수동 유지·트랜잭션 롤백·간접 참조·기부 최소 보존·합계 유지·보존 만료·파일 실패 재개·암호화 무결성·안전한 파일 경로를 테스트한다. 공급자 실제 철회와 외부 저장소는 연결 뒤 별도 릴리스 후보 검증 대상이다.
@@ -108,3 +115,72 @@ App DSNs are updated in iOS `Config/Info.plist` and Android `app/src/main/Androi
 Backend deployment configuration must use `SENTRY_ORG=metanoia-lab`, `SENTRY_IOS_PROJECT=daeil-ios-release`, `SENTRY_ANDROID_PROJECT=daeil-android-release` with a read token that can access both new projects. The committed backend env example is updated; the production service has not been restarted or deployed. Android mapping-upload jobs must use `SENTRY_PROJECT=daeil-android-release`; iOS symbol-upload jobs must use `SENTRY_PROJECT=daeil-ios-release`. No authentication token was generated or exposed.
 
 Validation: iOS Debug simulator build and Android `:app:assembleDebug` succeeded. Actual release telemetry/symbolication and the backend monitoring proxy remain deployment-time checks. Android telemetry minimization is a separate follow-up; the DSN replacement does not implement the iOS crash-field allowlist on Android.
+
+## 2026-09-07 삭제 단계 분리
+
+migration 059는 외부 작업용 암호화 정보만 별도 테이블에 보관한다. `ACCOUNT_ERASURE_CONTEXT_KEY`에 JWT·기부 보관소와 다른 32바이트 hex 비밀키를 설정해야 한다. 키가 없거나 기존 정보의 인증 복호화가 실패하면 DB를 삭제하지 않는다. AEAD는 요청 번호에 결합되고 복호화 후 회원 번호도 대조한다. 일반 API에는 암호문·식별정보를 제공하지 않는다.
+
+외부 증거를 받으면 작업 정보를 같은 트랜잭션에서 파기한다. 재시도로 생성 시점이나 만료를 연장하지 않는다. 생성 후 10일은 **작업 인계 한도**이며 법정 기간이나 서버 백업 만료일이 아니다. 만료 후 접근을 차단하고 기존 분당 정리 작업으로 파기한다. 만료된 미완료 요청은 `ERASURE_CONTEXT_EXPIRED_REVIEW_REQUIRED`로 남으며 완료하지 않는다. 운영자는 만료 전 외부 작업을 처리·인계해야 한다. 실제 백업 운영에 맞는 별도 복원 방지 이력은 아직 구현되지 않았으므로 이 테이블을 복원 방지 대장으로 사용하지 않는다.
+
+DB 삭제 여부는 비공개 접수증 및 관리자 목록에 표시한다. 최종 완료에는 파일 삭제와 외부 증거가 여전히 필요하다. 기존에 외부 증거를 확보한 요청은 새로운 식별정보를 만들지 않고 재개한다. 기존 수동 완료 시에도 임시 작업 정보를 정리한다.
+
+이번 변경은 저장소별 외부 작업 처리기, 백업 복원 후 재삭제, 기부 재수입 방지까지 완성한 변경이 아니다. 각각의 구현과 운영 검증을 완료한 뒤 배포해야 한다.
+
+## 저장소별 처리 계약과 운영 결정
+
+migration 060을 059 다음에 적용한다. 기존 전체 범위의 검증 증거는 항목별 완료로 이전하며, 증거가 없는 기존 요청은 대기로 시작한다. 완료 후 30일에 접수증을 정리하면 항목별 근거도 FK cascade로 함께 파기한다.
+
+HTTPS 처리기는 `requiredTargets`에 지정된 미완료 대상만 처리해야 한다. 새 응답 예시는 다음과 같다(식별정보·개인정보 원문을 근거에 넣지 않는다).
+
+```json
+{"requestId":17,"retentionRespected":true,"targets":[
+ {"target":"backups","status":"pending","evidenceReference":""},
+ {"target":"historical_files","status":"complete","evidenceReference":"file-audit-17"},
+ {"target":"external_data","status":"not_applicable","evidenceReference":"verified-release-payload-audit-17"},
+ {"target":"other_identifiers","status":"complete","evidenceReference":"reference-audit-17"}
+]}
+```
+
+각 응답에는 요청한 대상이 정확히 한 번씩 있어야 한다. `not_applicable`은 실제 조사 근거가 있어야 하며, 단순 검색 결과 없음이나 설정 미확인은 근거가 아니다. 미완료 응답에는 오류 원문을 저장하지 않고 서버 소유 코드만 저장한다. 다음 시도는 미완료 대상만 요청한다. 구형 응답은 기존 전체 완료 조건을 만족할 때에만 전체 증거로 인정한다. 처리기 자체는 여전히 실제 저장소에 연결해야 한다.
+
+가비아 백업·해피나눔 원본 보존 설정 확인 담당자는 황제철이다. 엑셀에는 이름·기수·과·연락처·금액만 있고 거래 고유번호는 없다. 일괄 날짜는 관리자의 등록일이다. 업로드 전 중복 거래·신규 기부·탈퇴자의 과거 자료 재반영 여부와 모금 합계 중복을 황제철이 판단한다. 추가 자동 중복 차단과 입금일 입력 강제는 운영자 결정으로 제외했다.
+
+`happy_nanum` 엑셀 자료는 등록일로 자동 장부 보존 기산일을 산출하지 않는다. 기존 거래별 원본 검토에 근거한 보존 결정은 계속 사용한다. 보관소에도 해당 날짜가 등록일임을 표시한다. 실명은 검토된 최소 증빙에 포함하지만 연락처를 일괄 장기 보존하도록 변경하지 않았다. 운영자는 계좌이체 기부 원본을 별도 엑셀로 보관하고, 탈퇴 후 영수증 발급 등을 위해 연락처가 필요할 수 있음을 확인했다. 엑셀의 구체적인 저장 매체·접근 권한·보존 종료 기준은 아직 확인되지 않았다. 이 운영상 필요성을 연락처의 일괄 장기 보존 의무로 간주하지 않는다. 연락처 보존 범위와 종료 기준을 확정한 뒤 실제 삭제 동작과 방침에 반영한다.
+
+## 서버 백업 실사와 연락처 기준안
+
+가비아 자동 백업·스냅샷 및 서버 이미지 백업은 아직 사용하지 않는 것으로 운영자가 확인했다. 유지보수 디렉터리는 목록상 설정 파일 사본이며 회원 DB·업로드 백업은 발견되지 않았다. 조사 범위와 한계, 기부 연락처 보존 기준 제안은 [저장소 실사 기록](ACCOUNT_ERASURE_STORAGE_AUDIT.md)에 정리했다. 운영 완료 상태나 공개 개인정보처리방침은 이번 조사만으로 변경하지 않았다.
+
+## 채택된 영수증 연락 업무 종료 기준 구현
+
+운영자는 **진행 중인 영수증 업무와 결과 전달 완료 후 해당 업무용 연락처 삭제**를 채택했다. 이를 migration 061과 기존 root 관리자 삭제 화면에 연결했다. 새 별도 수동 삭제 시스템이나 기부자 연락처 조회 API를 추가하지 않았다.
+
+- 업무 상태는 `unreviewed`, `not_required`, `active`, `completed`다. 회원·전화번호·이메일 원문을 업무 테이블에 복사하지 않는다. 원본 위치와 개인정보 없는 증빙 번호, 확인 담당자·시각만 기록한다.
+- 기부 내역이 연결된 자동 요청은 진행 업무를 확인해야 한다. 업무가 있으면 해피나눔·별도 엑셀·양쪽 원본 중 어디에 필요한 연락처와 보존 근거가 확보됐는지 담당자가 확인한다. 확인 후 앱 DB·현재 파일 삭제는 진행할 수 있다.
+- 진행 중인 업무가 있으면 외부 삭제 호출과 최종 완료를 보류한다. 접수증에서 영수증 업무가 진행 중임을 설명한다. 연락처를 법정 증빙 암호화 보관소에 일괄 복사하거나 5년·10년 보존으로 설정하지 않는다.
+- 담당자가 실제 업무 완료·결과 전달 및 원본/사본의 불필요한 연락처 정리를 각각 확인하고 증빙을 기록하면 자동 작업을 다시 예약한다. `active`를 단순히 '업무 없음'으로 바꿔 완료 확인을 우회할 수 없다.
+- 기존 수동 완료도 `active` 업무가 남으면 차단한다. 미확인 상태의 기존 수동 요청은 기존 전체 삭제 검증 증빙으로 '업무 없음'을 확인할 수 있다. 이미 종료한 업무를 재개하여 보관 기간을 늘릴 수 없다.
+- 이 기록은 외부 원본 삭제를 실행하는 API가 아니다. 황제철 담당자가 해피나눔·별도 회계 엑셀의 실제 정리를 수행해야 한다. 연락처 보존이 필요하다는 운영 사실만으로 법정 보존 예외라고 자동 판정하지 않는다.
+- 업무가 장기 지연되어 외부 작업용 암호화 정보의 기존 10일 인계 한도가 지나면 기존 수동 확인 경로로 처리한다. 일괄 무기한 연장하지 않는다. 운영 지연 사유·예정일 안내 의무는 유지한다.
+
+적용 순서: migration 061 → backend·admin·frontend 배포. 현재는 로컬 구현이며 운영 마이그레이션이나 데이터 삭제를 수행하지 않았다. 서버 백업 미사용 확인과 계좌이체 원본의 별도 엑셀 보관을 방침 문구에 반영했다.
+
+## 확인된 과거 파일을 자동 삭제에 연결 — 2026-09-07
+
+`cmd/erasure-files`로 검토한 과거 파일을 기존 큐에 넣을 수 있다. 기본은 dry-run이며, DB 삭제 후의 자동 처리 요청에만 적용한다. 다른 회원/게시글의 현재 참조, 잘못된 요청 대상, 경로 우회를 차단하고 기존 수동 전환을 존중한다. 전체 과거 파일 범위나 외부 저장소의 삭제 완료를 대신 증명하지 않는다. 상세 입력·권한·검증 방법은 [과거 파일 운영 절차](HISTORICAL_FILE_ERASURE_RUNBOOK.md)를 참조한다.
+
+`ACCOUNT_ERASURE_LEGACY_ROOT`는 공개 파일 제공 경로와 별도로 검증한 실제 디렉터리를 지정한다. 루트 부재는 삭제 성공이 아니며, 심볼릭 링크 검사를 생략하지 않는다. 새 요청/panic 로그는 라우트 템플릿만 기록하고 panic 값 원문 전송을 제거했다. 과거 로그 및 PG·Debug Agent·Sentry의 실제 데이터 정리는 별도 확인 대상으로 남아 있다.
+
+## 현재 참조 보존과 출시 검증 — 2026-09-07
+
+Migration 062는 현재 관리 사진/명함/썸네일 경로를 확보하고, 사진/명함 교체 시 이전 경로를 같은 트랜잭션에 기록한다. 자동 탈퇴는 그 이력을 파일 큐로 옮긴 후 제거한다. `/upload/`, `/old/upload/`도 실제 레거시 루트로 연결한다. 이미 사라진 이전 연결을 추측해서 복원하지 않는다.
+
+운영 키 준비·PG 정리본·오류 로그 최소화·실제 App Store IPA와 Sentry 수신 검증 및 남은 외부 연동은 [최신 인계 문서](ACCOUNT_ERASURE_RELEASE_HANDOFF.md)를 참조한다.
+
+
+## 보존 검토와 원본 수정의 동시 실행
+
+063은 기존 결정에 빈 원본 지문을 추가한다. 기존 원본·결정·보관소 행을 삭제하지 않는다.
+관리자 수정, 검토 저장, 최종 삭제는 같은 주문 행 잠금으로 직렬화하고 원본 지문을 대조한다.
+외부 처리용 정보도 새 검토 내용으로 갱신하되 최초 만료일은 연장하지 않는다.
+정보 확보 후 주문이 바뀌거나 연결 대상이 달라지면 실제 삭제를 차단하고 다시 확인한다.

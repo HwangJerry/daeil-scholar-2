@@ -4,7 +4,6 @@ go 1.25.0
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/cherryberryyogurt/debug-agent-go-client v0.1.1
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-sql-driver/mysql v1.8.1
@@ -38,5 +37,5 @@ require (
 	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
 	golang.org/x/image v0.43.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/sys v0.46.0
 )

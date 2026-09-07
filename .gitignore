@@ -33,3 +33,5 @@ daeil-redesign-v2.jsx
 
 # Local production DB backups (raw dumps, never commit)
 prod-db-backups/
+# Python release tooling caches
+__pycache__/

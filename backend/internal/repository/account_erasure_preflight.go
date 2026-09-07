@@ -20,6 +20,7 @@ func (r *AccountDeletionRequestRepository) PrepareErasure(w model.ErasureWork, v
 	if err != nil {
 		return err
 	}
+	hasDonations := false
 	if s["WEO_ORDER"] != nil {
 		var conflicting int
 		if err = tx.Get(&conflicting, `SELECT COUNT(*) FROM WEO_ORDER WHERE (USR_SEQ=? OR O_ACCOUNT_USR_SEQ=?) AND ((USR_SEQ>0 AND USR_SEQ<>?) OR (O_ACCOUNT_USR_SEQ>0 AND O_ACCOUNT_USR_SEQ<>?))`, w.UserSeq, w.UserSeq, w.UserSeq, w.UserSeq); err != nil {
@@ -29,32 +30,51 @@ func (r *AccountDeletionRequestRepository) PrepareErasure(w model.ErasureWork, v
 			return &model.ErasureBlocked{Code: "DONATION_ACCOUNT_LINK_REVIEW_REQUIRED"}
 		}
 		var orders []int
-		if err = tx.Select(&orders, `SELECT O_SEQ FROM WEO_ORDER WHERE USR_SEQ=? OR O_ACCOUNT_USR_SEQ=?`, w.UserSeq, w.UserSeq); err != nil {
+		if err = tx.Select(&orders, `SELECT O_SEQ FROM WEO_ORDER WHERE USR_SEQ=? OR O_ACCOUNT_USR_SEQ=? FOR UPDATE`, w.UserSeq, w.UserSeq); err != nil {
 			return err
 		}
+		hasDonations = len(orders) > 0
 		for _, id := range orders {
+			current, err := donationSourceFingerprint(tx, id)
+			if err != nil {
+				return err
+			}
 			var d model.DonationRetentionDecision
-			err = tx.Get(&d, `SELECT O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE FROM ALUMNI_DONATION_RETENTION WHERE O_SEQ=?`, id)
+			err = tx.Get(&d, `SELECT O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE,SOURCE_FINGERPRINT FROM ALUMNI_DONATION_RETENTION WHERE O_SEQ=?`, id)
 			if err == sql.ErrNoRows && r.DonationRetentionTemplate != nil {
 				var donated time.Time
-				if err = tx.Get(&donated, `SELECT O_DONATION_DATE FROM WEO_ORDER WHERE O_SEQ=? AND O_LIFECYCLE_STATUS IN ('completed','partially_refunded','fully_refunded')`, id); err != nil {
+				if err = tx.Get(&donated, `SELECT O_DONATION_DATE FROM WEO_ORDER WHERE O_SEQ=? AND O_SOURCE<>'happy_nanum' AND O_LIFECYCLE_STATUS IN ('completed','partially_refunded','fully_refunded')`, id); err != nil {
 					return &model.ErasureBlocked{Code: "DONATION_RETENTION_REVIEW_REQUIRED"}
 				}
 				d, err = r.DonationRetentionTemplate(id, donated)
+				d.SourceFingerprint = current
 				if err == nil {
 					err = validate(d)
 				}
 				if err == nil {
-					_, err = tx.Exec(`INSERT INTO ALUMNI_DONATION_RETENTION (O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE,REVIEWED_AT) VALUES (?,?,?,?,?,UTC_TIMESTAMP())`, id, d.Basis, d.BasisDate.Format("2006-01-02"), d.Until.Format("2006-01-02"), d.Evidence)
+					_, err = tx.Exec(`INSERT INTO ALUMNI_DONATION_RETENTION (O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE,REVIEWED_AT,SOURCE_FINGERPRINT) VALUES (?,?,?,?,?,UTC_TIMESTAMP(),?)`, id, d.Basis, retentionSQLDate(d.BasisDate), retentionSQLDate(d.Until), d.Evidence, current)
 				}
 			}
 			if err != nil {
 				return &model.ErasureBlocked{Code: "DONATION_RETENTION_REVIEW_REQUIRED"}
+			}
+			if err = verifyDonationRetentionSource(d, current); err != nil {
+				return err
 			}
 			if err = validate(d); err != nil {
 				return &model.ErasureBlocked{Code: "INVALID_DONATION_RETENTION_DECISION"}
 			}
 		}
 	}
+	if err = reviewReceiptWork(tx, w, hasDonations); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+func retentionSQLDate(value *time.Time) interface{} {
+	if value == nil {
+		return nil
+	}
+	return value.Format("2006-01-02")
 }

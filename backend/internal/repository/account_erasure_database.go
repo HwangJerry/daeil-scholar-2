@@ -2,8 +2,6 @@
 package repository
 
 import (
-	"crypto/sha256"
-	"fmt"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
 )
@@ -15,11 +13,18 @@ func (r *AccountDeletionRequestRepository) EraseDatabase(w model.ErasureWork, se
 	}
 	defer tx.Rollback()
 	var stage string
-	if err = tx.Get(&stage, `SELECT STAGE FROM ALUMNI_ACCOUNT_ERASURE WHERE REQUEST_ID=? AND MODE='automatic' AND EXTERNAL_EVIDENCE<>'' FOR UPDATE`, w.RequestID); err != nil {
+	if err = tx.Get(&stage, `SELECT STAGE FROM ALUMNI_ACCOUNT_ERASURE WHERE REQUEST_ID=? AND MODE='automatic' AND (EXTERNAL_EVIDENCE<>'' OR EXISTS (SELECT 1 FROM ALUMNI_ERASURE_CONTEXT c WHERE c.REQUEST_ID=ALUMNI_ACCOUNT_ERASURE.REQUEST_ID AND c.EXPIRES_AT>UTC_TIMESTAMP())) FOR UPDATE`, w.RequestID); err != nil {
 		return err
 	}
 	if stage == "database_erased" {
 		return nil
+	}
+	var reviewed int
+	if err = tx.Get(&reviewed, `SELECT COUNT(*) FROM ALUMNI_ERASURE_RECEIPT_WORK WHERE REQUEST_ID=? AND STATUS<>'unreviewed'`, w.RequestID); err != nil {
+		return err
+	}
+	if reviewed != 1 {
+		return &model.ErasureBlocked{Code: "RECEIPT_CONTACT_REVIEW_REQUIRED"}
 	}
 	var email string
 	if err = tx.Get(&email, `SELECT COALESCE(USR_EMAIL,'') FROM WEO_MEMBER WHERE USR_SEQ=? AND USR_STATUS='AAA' FOR UPDATE`, w.UserSeq); err != nil {
@@ -44,7 +49,7 @@ func (r *AccountDeletionRequestRepository) EraseDatabase(w model.ErasureWork, se
 			}
 		}
 	}
-	if err = queueErasureFiles(tx, s, w); err != nil {
+	if err = queueErasureFiles(tx, s, w, r.SiteOrigin); err != nil {
 		return err
 	}
 	if err = eraseDonations(tx, s, w, seal, validate); err != nil {
@@ -73,48 +78,6 @@ func (r *AccountDeletionRequestRepository) EraseDatabase(w model.ErasureWork, se
 		return err
 	}
 	return tx.Commit()
-}
-
-func queueErasureFiles(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork) error {
-	urls, err := postErasureURLs(tx, s, w.UserSeq)
-	if err != nil {
-		return err
-	}
-	for _, col := range []string{"USR_PHOTO", "USR_BIZ_CARD", "USR_THUMNAIL"} {
-		if s.has("WEO_MEMBER", col) {
-			var url string
-			if err := tx.Get(&url, "SELECT COALESCE(`"+col+"`,'') FROM WEO_MEMBER WHERE USR_SEQ=?", w.UserSeq); err != nil {
-				return err
-			}
-			if url != "" {
-				urls = append(urls, url)
-			}
-		}
-	}
-	var owned []string
-	if err := tx.Select(&owned, `SELECT URL_PATH FROM ALUMNI_UPLOAD_OWNER WHERE USR_SEQ=?`, w.UserSeq); err != nil {
-		return err
-	}
-	urls = append(urls, owned...)
-	if s["WEO_FILES"] != nil && s["WEO_BOARDBBS"] != nil {
-		var attachments []string
-		if err := tx.Select(&attachments, `SELECT CONCAT(FILE_PATH,'/',FILE_NAME) FROM WEO_FILES WHERE F_GATE='BB' AND F_JOIN_SEQ IN (SELECT SEQ FROM WEO_BOARDBBS WHERE USR_SEQ=?)`, w.UserSeq); err != nil {
-			return err
-		}
-		urls = append(urls, attachments...)
-	}
-	for _, url := range urls {
-		sum := sha256.Sum256([]byte(url))
-		if _, err := tx.Exec(`INSERT IGNORE INTO ALUMNI_ERASURE_FILE (REQUEST_ID,URL_PATH,URL_HASH) VALUES (?,?,?)`, w.RequestID, url, fmt.Sprintf("%x", sum)); err != nil {
-			return err
-		}
-		if s["WEO_FILES"] != nil {
-			if err := s.erase(tx, "WEO_FILES", "CONCAT(FILE_PATH,'/',FILE_NAME)=?", url); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 func erasePostChildren(tx *sqlx.Tx, s erasureSchema, user int) error {

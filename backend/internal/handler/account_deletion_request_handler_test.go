@@ -56,6 +56,17 @@ func TestDeletionRequestRequiresAuthentication(t *testing.T) {
 	}
 }
 
+func TestPausedDeletionDoesNotDisableAccountOrLogout(t *testing.T) {
+	store := &deletionHandlerStore{}
+	session := &deletionSessionStub{}
+	h := &AccountDeletionRequestHandler{RequestsDisabled: true, Service: &service.AccountDeletionRequestService{Store: store}, Auth: session}
+	w := httptest.NewRecorder()
+	h.Create(w, authRequest(http.MethodPost, "/api/auth/account/deletion-requests", nil))
+	if w.Code != 503 || store.hash != "" || session.calls != 0 {
+		t.Fatal("paused request mutated account", w.Code)
+	}
+}
+
 func TestDeletionAcceptedDespitePostCommitSessionCleanupFailure(t *testing.T) {
 	store := &deletionHandlerStore{}
 	session := &deletionSessionStub{}

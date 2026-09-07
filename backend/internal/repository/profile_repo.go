@@ -340,14 +340,12 @@ func classifyPhoneClaimError(err error) error {
 
 // UpdateProfilePhoto updates only the USR_PHOTO column for a user.
 func (r *ProfileRepository) UpdateProfilePhoto(usrSeq int, url string) error {
-	_, err := r.DB.Exec(`UPDATE WEO_MEMBER SET USR_PHOTO = ? WHERE USR_SEQ = ?`, url, usrSeq)
-	return err
+	return r.replaceProfileFile(usrSeq, "USR_PHOTO", url)
 }
 
 // UpdateBizCard updates only the USR_BIZ_CARD column for a user.
 func (r *ProfileRepository) UpdateBizCard(usrSeq int, url string) error {
-	_, err := r.DB.Exec(`UPDATE WEO_MEMBER SET USR_BIZ_CARD = ? WHERE USR_SEQ = ?`, url, usrSeq)
-	return err
+	return r.replaceProfileFile(usrSeq, "USR_BIZ_CARD", url)
 }
 
 // SaveUserTags replaces all tags for a user.

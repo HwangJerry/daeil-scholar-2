@@ -92,7 +92,27 @@ func (r *AccountDeletionRequestRepository) Complete(id int64, operator int, evid
 	if err = tx.Get(&automation, `SELECT MODE,STAGE,EXTERNAL_EVIDENCE FROM ALUMNI_ACCOUNT_ERASURE WHERE REQUEST_ID=? FOR UPDATE`, id); err != nil {
 		return err
 	}
+	// Existing manual completion independently attests that external contact copies were cleared.
+	if operator != 0 {
+		if _, err = tx.Exec(`UPDATE ALUMNI_ERASURE_RECEIPT_WORK SET STATUS='not_required',EVIDENCE_REFERENCE='manual-completion: see request evidence',UPDATED_AT=UTC_TIMESTAMP() WHERE REQUEST_ID=? AND STATUS='unreviewed'`, id); err != nil {
+			return err
+		}
+	}
+	finished, e := receiptWorkFinished(tx, id)
+	if e != nil {
+		return e
+	}
+	if !finished {
+		return ErrDeletionIncomplete
+	}
 	if operator == 0 {
+		verified, e := verifiedErasureTargets(tx, id)
+		if e != nil {
+			return e
+		}
+		if !verified {
+			return ErrDeletionIncomplete
+		}
 		var pendingFiles int
 		if err = tx.Get(&pendingFiles, `SELECT COUNT(*) FROM ALUMNI_ERASURE_FILE WHERE REQUEST_ID=?`, id); err != nil {
 			return err
@@ -125,6 +145,14 @@ func (r *AccountDeletionRequestRepository) Complete(id int64, operator int, evid
         EVIDENCE_REFERENCE = ?, RETAINED_RECORDS = ?, RETENTION_UNTIL = ? WHERE REQUEST_ID = ?`,
 		operator, evidence.EvidenceReference, evidence.RetainedRecords, retentionUntil, id)
 	if err != nil {
+		return err
+	}
+	if operator != 0 {
+		if _, err = tx.Exec(`UPDATE ALUMNI_ERASURE_TARGET SET STATUS='complete',EVIDENCE_REFERENCE='manual-completion: see request evidence',LAST_CODE='',UPDATED_AT=UTC_TIMESTAMP() WHERE REQUEST_ID=? AND STATUS NOT IN ('complete','not_applicable')`, id); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec(`DELETE FROM ALUMNI_ERASURE_CONTEXT WHERE REQUEST_ID=?`, id); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(`DELETE FROM ALUMNI_ERASURE_FILE WHERE REQUEST_ID=?`, id); err != nil {

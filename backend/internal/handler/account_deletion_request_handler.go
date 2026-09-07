@@ -20,8 +20,10 @@ type AccountDeletionSessionService interface {
 }
 
 type AccountDeletionRequestHandler struct {
-	Service *service.AccountDeletionRequestService
-	Auth    AccountDeletionSessionService
+	TestUserSeq      int
+	RequestsDisabled bool
+	Service          *service.AccountDeletionRequestService
+	Auth             AccountDeletionSessionService
 }
 
 func deletionRequestError(w http.ResponseWriter, err error) {
@@ -44,6 +46,10 @@ func (h *AccountDeletionRequestHandler) Create(w http.ResponseWriter, r *http.Re
 	user := middleware.GetAuthUser(r.Context())
 	if user == nil {
 		respondError(w, 401, "UNAUTHORIZED", "로그인이 필요합니다.")
+		return
+	}
+	if h.RequestsDisabled || (h.TestUserSeq > 0 && user.USRSeq != h.TestUserSeq) {
+		respondError(w, http.StatusServiceUnavailable, "ACCOUNT_DELETION_PAUSED", "회원 탈퇴 처리가 일시 중지되었습니다. ghkdwp018@naver.com으로 문의해주세요.")
 		return
 	}
 	var request struct {

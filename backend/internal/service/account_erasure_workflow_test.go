@@ -3,8 +3,10 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"github.com/dflh-saf/backend/internal/model"
+	"strings"
 	"testing"
 )
 
@@ -15,6 +17,9 @@ type erasureStoreFake struct {
 	files                    []model.ErasureFile
 	retry                    string
 	preparedError            error
+	receiptStatus            string
+	encrypted                []byte
+	targets                  []model.ErasureTarget
 }
 
 func (f *erasureStoreFake) ErasureLock(context.Context) (func(), bool, error) {
@@ -32,7 +37,29 @@ func (f *erasureStoreFake) PrepareErasure(model.ErasureWork, func(model.Donation
 func (f *erasureStoreFake) ErasureExternalSubject(w model.ErasureWork) (model.ErasureExternalSubject, error) {
 	return model.ErasureExternalSubject{RequestID: w.RequestID, UserSeq: w.UserSeq}, nil
 }
-func (f *erasureStoreFake) RecordExternalErasure(int64, string) error { return nil }
+func (f *erasureStoreFake) RecordExternalErasure(_ int64, evidence string) error {
+	f.work.ExternalEvidence = evidence
+	return nil
+}
+func (f *erasureStoreFake) SaveErasureContext(_ int64, data []byte) error {
+	f.encrypted = data
+	return nil
+}
+func (f *erasureStoreFake) LoadErasureContext(int64) ([]byte, error) {
+	if len(f.encrypted) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return f.encrypted, nil
+}
+func testContextCipher(t *testing.T) *ErasureContextCipher {
+	t.Helper()
+	c, err := NewErasureContextCipher(strings.Repeat("ab", 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
 func (f *erasureStoreFake) EraseDatabase(model.ErasureWork, func([]byte) ([]byte, error), func(model.DonationRetentionDecision) error) error {
 	f.databaseCalls++
 	f.work.Stage = "database_erased"
@@ -40,7 +67,13 @@ func (f *erasureStoreFake) EraseDatabase(model.ErasureWork, func([]byte) ([]byte
 }
 func (f *erasureStoreFake) ErasureFiles(int64) ([]model.ErasureFile, error) { return f.files, nil }
 func (f *erasureStoreFake) ErasureFileDone(int64) error                     { f.files = f.files[1:]; return nil }
-func (f *erasureStoreFake) FinishAutomaticErasure(model.ErasureWork) error  { f.completed++; return nil }
+func (f *erasureStoreFake) EraseFileIfUnreferenced(_ model.ErasureWork, file model.ErasureFile, erase func(string) error) error {
+	if err := erase(file.URL); err != nil {
+		return err
+	}
+	return f.ErasureFileDone(file.ID)
+}
+func (f *erasureStoreFake) FinishAutomaticErasure(model.ErasureWork) error { f.completed++; return nil }
 
 type erasureExternalFake struct {
 	err   error
@@ -63,7 +96,7 @@ func TestAutomaticErasureResumesFilesAfterFailure(t *testing.T) {
 	store := &erasureStoreFake{active: true, work: model.ErasureWork{RequestID: 1, UserSeq: 42}, files: []model.ErasureFile{{ID: 1, URL: "/uploads/test.jpg"}}}
 	external := &erasureExternalFake{}
 	files := &erasureFilesFake{err: errors.New("private path must not be logged")}
-	s := &AutomaticErasureService{Store: store, External: external, Files: files}
+	s := &AutomaticErasureService{ContextCipher: testContextCipher(t), Store: store, External: external, Files: files}
 	if err := s.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +115,7 @@ func TestAutomaticErasureResumesFilesAfterFailure(t *testing.T) {
 func TestManualTakeoverAndUnverifiedRetentionPreventAutomaticMutation(t *testing.T) {
 	store := &erasureStoreFake{work: model.ErasureWork{RequestID: 1, UserSeq: 42}}
 	external := &erasureExternalFake{}
-	s := &AutomaticErasureService{Store: store, External: external}
+	s := &AutomaticErasureService{ContextCipher: testContextCipher(t), Store: store, External: external}
 	if err := s.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +135,97 @@ func TestManualTakeoverAndUnverifiedRetentionPreventAutomaticMutation(t *testing
 	if err := s.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if store.databaseCalls != 0 || store.completed != 0 || store.retry != "EXTERNAL_ERASURE_PENDING" {
+	if store.databaseCalls != 1 || store.completed != 0 || store.retry != "EXTERNAL_ERASURE_PENDING" {
 		t.Fatal("external failure counted as success")
 	}
+}
+
+func TestExternalFailureResumesWithoutMemberRows(t *testing.T) {
+	store := &erasureStoreFake{active: true, work: model.ErasureWork{RequestID: 1, UserSeq: 42}}
+	external := &erasureExternalFake{err: &model.ErasureBlocked{Code: "EXTERNAL_ERASURE_PENDING"}}
+	s := &AutomaticErasureService{Store: store, External: external, ContextCipher: testContextCipher(t)}
+	if err := s.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.databaseCalls != 1 || store.completed != 0 || len(store.encrypted) == 0 {
+		t.Fatal("operational deletion blocked or work lost")
+	}
+	external.err = nil
+	if err := s.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.databaseCalls != 1 || store.completed != 1 || external.calls != 2 {
+		t.Fatal("resume repeated database erasure")
+	}
+}
+func TestMissingContextKeyPreventsLosingExternalIdentifiers(t *testing.T) {
+	store := &erasureStoreFake{active: true, work: model.ErasureWork{RequestID: 1, UserSeq: 42}}
+	s := &AutomaticErasureService{Store: store}
+	if err := s.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.databaseCalls != 0 || store.retry != "ERASURE_CONTEXT_KEY_REQUIRED" {
+		t.Fatal("unrecoverable erasure allowed")
+	}
+}
+func TestExpiredContextNeverCompletesOrRepeatsDatabaseErasure(t *testing.T) {
+	store := &erasureStoreFake{active: true, work: model.ErasureWork{RequestID: 1, UserSeq: 42, Stage: "database_erased"}}
+	s := &AutomaticErasureService{Store: store, External: &erasureExternalFake{}, ContextCipher: testContextCipher(t)}
+	if err := s.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.databaseCalls != 0 || store.completed != 0 || store.retry != "ERASURE_CONTEXT_EXPIRED_REVIEW_REQUIRED" {
+		t.Fatal("expired context accepted")
+	}
+}
+
+func (f *erasureStoreFake) ErasureTargets(int64) ([]model.ErasureTarget, error) {
+	if f.targets == nil {
+		for _, name := range model.ErasureTargetNames {
+			f.targets = append(f.targets, model.ErasureTarget{Name: name, Status: "pending"})
+		}
+	}
+	return f.targets, nil
+}
+func (f *erasureStoreFake) BeginErasureTargets(int64) error { return nil }
+func (f *erasureStoreFake) RecordErasureTargets(_ int64, targets []model.ErasureTarget) error {
+	for _, target := range targets {
+		for i := range f.targets {
+			if f.targets[i].Name == target.Name {
+				f.targets[i] = target
+			}
+		}
+	}
+	return nil
+}
+
+func (f *erasureStoreFake) ReceiptWork(int64) (model.ErasureReceiptWork, error) {
+	status := f.receiptStatus
+	if status == "" {
+		status = "not_required"
+	}
+	return model.ErasureReceiptWork{Status: status}, nil
+}
+
+func TestActiveReceiptWorkAllowsDatabaseErasureButBlocksExternalCompletion(t *testing.T) {
+	store := &erasureStoreFake{active: true, receiptStatus: "active", work: model.ErasureWork{RequestID: 1, UserSeq: 42}}
+	external := &erasureExternalFake{}
+	svc := &AutomaticErasureService{Store: store, External: external, ContextCipher: testContextCipher(t)}
+	if err := svc.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.databaseCalls != 1 || store.completed != 0 || external.calls != 0 || store.retry != "RECEIPT_CONTACT_WORK_PENDING" {
+		t.Fatal("active contacts exposed or operational deletion blocked")
+	}
+	store.receiptStatus = "completed"
+	if err := svc.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.databaseCalls != 1 || store.completed != 1 || external.calls != 1 {
+		t.Fatal("completed receipt work did not resume erasure")
+	}
+}
+
+func (f *erasureStoreFake) RefreshErasureContext(id int64, data []byte) error {
+	return f.SaveErasureContext(id, data)
 }

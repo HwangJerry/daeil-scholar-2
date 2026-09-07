@@ -1,4 +1,4 @@
-// errorReporter — forwards frontend JS errors to the backend debug-agent relay endpoint.
+// errorReporter — reports frontend JS errors to the backend for a sanitized local diagnostic.
 // Fire-and-forget: errors in the reporter itself are silently swallowed to avoid recursion.
 
 export function reportFrontendError(

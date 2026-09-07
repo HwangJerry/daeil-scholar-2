@@ -105,7 +105,7 @@ func eraseAccountReferences(tx *sqlx.Tx, s erasureSchema, user int, email string
 			return err
 		}
 	}
-	for _, t := range []string{"WEO_MEMBER_SOCIAL", "ALUMNI_SOCIAL_CREDENTIAL", "ALUMNI_UPLOAD_OWNER"} {
+	for _, t := range []string{"WEO_MEMBER_SOCIAL", "ALUMNI_SOCIAL_CREDENTIAL", "ALUMNI_UPLOAD_OWNER", "ALUMNI_PROFILE_FILE_HISTORY"} {
 		if err := s.erase(tx, t, "USR_SEQ=?", user); err != nil {
 			return err
 		}

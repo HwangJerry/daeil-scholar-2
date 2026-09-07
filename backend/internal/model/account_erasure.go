@@ -8,9 +8,11 @@ type ErasureBlocked struct{ Code string }
 func (e *ErasureBlocked) Error() string { return e.Code }
 
 type ErasureWork struct {
-	RequestID int64  `db:"REQUEST_ID" json:"requestId"`
-	UserSeq   int    `db:"USR_SEQ" json:"userSeq"`
-	Stage     string `db:"STAGE" json:"stage"`
+	ContextRetentions []DonationRetentionDecision `db:"-" json:"-"`
+	RequestID         int64                       `db:"REQUEST_ID" json:"requestId"`
+	UserSeq           int                         `db:"USR_SEQ" json:"userSeq"`
+	ExternalEvidence  string                      `db:"EXTERNAL_EVIDENCE" json:"-"`
+	Stage             string                      `db:"STAGE" json:"stage"`
 }
 type ErasureFile struct {
 	ID  int64  `db:"ID"`
@@ -19,6 +21,8 @@ type ErasureFile struct {
 
 // Sent only to the configured trusted erasure processor, never ordinary logs.
 type ErasureExternalSubject struct {
+	ExternalFileURLs []string                    `json:"externalFileUrls,omitempty"`
+	RequiredTargets  []string                    `json:"requiredTargets,omitempty"`
 	Retentions       []DonationRetentionDecision `json:"donationRetentions"`
 	RequestID        int64                       `json:"requestId"`
 	UserSeq          int                         `json:"userSeq"`
@@ -28,9 +32,10 @@ type ErasureExternalSubject struct {
 	ProviderSubjects []string                    `json:"providerSubjects"`
 }
 type DonationRetentionDecision struct {
-	OrderID   int        `db:"O_SEQ" json:"orderId"`
-	Basis     string     `db:"BASIS" json:"basis"`
-	BasisDate *time.Time `db:"BASIS_DATE" json:"basisDate"`
-	Until     *time.Time `db:"RETAIN_UNTIL" json:"retainUntil"`
-	Evidence  string     `db:"EVIDENCE_REFERENCE" json:"evidenceReference"`
+	SourceFingerprint string     `db:"SOURCE_FINGERPRINT" json:"sourceFingerprint"`
+	OrderID           int        `db:"O_SEQ" json:"orderId"`
+	Basis             string     `db:"BASIS" json:"basis"`
+	BasisDate         *time.Time `db:"BASIS_DATE" json:"basisDate"`
+	Until             *time.Time `db:"RETAIN_UNTIL" json:"retainUntil"`
+	Evidence          string     `db:"EVIDENCE_REFERENCE" json:"evidenceReference"`
 }
