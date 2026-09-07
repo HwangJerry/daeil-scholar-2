@@ -56,7 +56,7 @@ export const PRIVACY_EXTERNAL_SERVICES = [
   { name: 'Apple · 카카오', description: '소셜 로그인 과정에서 계정 인증과 동의한 정보의 전달에 이용합니다. iOS 알림은 Apple 푸시 서비스를 통해 전달합니다.' },
   { name: 'Sentry', description: '앱 오류와 충돌 원인을 확인하기 위해 진단 정보를 HTTPS로 전송하며, 데이터는 미국에 저장됩니다. iOS 출시 버전은 회원 식별정보·요청 내용·화면 이동 기록을 제외하고 오류 위치와 앱 버전 등으로 수집을 제한합니다. 이전 버전과 Android에서는 실행·네트워크 성능 진단 정보가 수집될 수 있습니다.' },
   { name: '가비아', description: '웹사이트와 API 서버 운영을 위한 호스팅 환경을 이용합니다.' },
-  { name: 'Google · jsDelivr', description: '웹 글꼴을 불러올 때 이용합니다. 글꼴 요청 과정에서 IP 주소와 브라우저 요청 정보가 해당 서비스에 전달될 수 있습니다. 일반 앱 이용 문의에는 Google의 Gmail을 이용합니다.' },
+  { name: 'Google · jsDelivr', description: 'Pretendard 웹 글꼴을 jsDelivr에서 불러옵니다. 글꼴 요청 과정에서 IP 주소와 브라우저 요청 정보가 jsDelivr에 전달될 수 있습니다. 일반 앱 이용 문의에는 Google의 Gmail을 이용합니다.' },
   { name: '네이버', description: '개인정보 열람·정정·삭제·처리정지 요청을 네이버 메일로 접수합니다. 요청에 적어 보내신 연락처와 문의 내용이 메일 서비스에서 처리됩니다.' },
   { name: '해피나눔', description: '기부 신청을 위한 외부 서비스를 이용하며, 장학회는 해피나눔에서 기부 내역을 전달받아 현황과 회원별 내역을 관리합니다. 기부금 영수증은 해피나눔에서 디지털 방식으로 발급하며 원본도 해당 시스템에 보관합니다. 결제·기부 신청 정보의 처리 내용은 해피나눔의 개인정보 안내도 확인해 주세요.' },
 ] as const;

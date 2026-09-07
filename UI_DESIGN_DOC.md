@@ -9,7 +9,7 @@ Alumni community 차세대 웹 애플리케이션의 통합 UI 디자인 가이�
 
 - **모바일 퍼스트**: 소셜 미디어 경험을 지향하며, 모바일 레이아웃을 기본으로 설계합니다.
 - **웜 에디토리얼**: 다크 네이비 + 웜 오프화이트 계열의 따뜻한 에디토리얼 스타일을 적용합니다.
-- **세리프 헤딩**: Pretendard로 헤딩, Instrument Sans로 본문을 구성하는 혼합 타이포그래피를 사용합니다.
+- **통일된 웹 글꼴**: 사용자 웹은 제목·본문·숫자 모두 Pretendard를 사용하며 굵기로 정보의 위계를 구분합니다.
 - **20px 라운드**: 메인 카드 20px, 피드 카드 16px radius를 기본으로 합니다.
 
 ---
@@ -98,11 +98,11 @@ Alumni community 차세대 웹 애플리케이션의 통합 UI 디자인 가이�
 
 | 항목 | 값 |
 |------|-----|
-| 헤딩 폰트 | `Pretendard` (serif) — `font-serif` 클래스 |
-| 본문 폰트 | `Instrument Sans` (sans) — `font-sans` 클래스 (기본) |
-| `--font-sans` | `'Instrument Sans', 'Pretendard Variable', ui-sans-serif, system-ui, -apple-system, sans-serif` |
-| `--font-serif` | `'Pretendard Variable', 'Pretendard', Georgia, serif` |
-| 로딩 전략 | Instrument Sans: Google Fonts CDN / Pretendard: jsDelivr CDN (`display=swap`) |
+| 헤딩 폰트 | `Pretendard` — `font-serif` 클래스 (기존 이름 유지) |
+| 본문 폰트 | `Pretendard` — `font-sans` 클래스 (기본) |
+| `--font-sans` | `'Pretendard Variable', 'Pretendard', ui-sans-serif, system-ui, -apple-system, sans-serif` |
+| `--font-serif` | `var(--font-sans)` (`--font-mono`도 동일) |
+| 로딩 전략 | Pretendard: jsDelivr CDN (`display=swap`) |
 | 기본 본문 크기 | `text-sm` (14px) |
 | 헤딩 letter-spacing | `-0.015em` |
 
@@ -379,3 +379,7 @@ function BannerSkeleton() {
 
 Admin SPA는 별도 디자인 토큰을 유지합니다 (`admin/src/index.css`).
 User SPA의 웜 에디토리얼 스타일과 별개로 관리됩니다.
+
+### 사용자 웹 프런트엔드 글꼴 (2026-09-07)
+
+사용자 요청에 따라 `frontend`는 모든 텍스트에 Pretendard를 사용합니다. `--font-sans`, `--font-serif`, `--font-mono`를 같은 글꼴로 연결하며 기존 utility 이름은 호환성을 위해 유지합니다. Instrument Sans / Google Fonts 로딩은 제거합니다. 관리자 앱과 네이티브 앱의 글꼴은 별도로 관리합니다.
