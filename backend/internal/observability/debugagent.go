@@ -3,7 +3,6 @@
 package observability
 
 import (
-	"fmt"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -15,6 +14,11 @@ import (
 
 const breadcrumbCap = 50
 
+// Interface permits transport-level privacy tests without sending real reports.
+type errorReporter interface {
+	ReportErrorAsync(string, string, string, string, map[string]interface{}, map[string]interface{}, string, string)
+}
+
 type breadcrumb struct {
 	Timestamp string `json:"timestamp"`
 	Level     string `json:"level"`
@@ -25,7 +29,7 @@ type breadcrumb struct {
 // Debug Agent gateway via ReportErrorAsync. Info/Debug/Warn events are stored
 // in a ring buffer and attached as breadcrumbs to the next error report.
 type Hook struct {
-	reporter    *debugagent.Reporter
+	reporter    errorReporter
 	environment string
 	mu          sync.Mutex
 	ring        [breadcrumbCap]breadcrumb
@@ -76,7 +80,7 @@ func (h *Hook) Run(_ *zerolog.Event, level zerolog.Level, msg string) {
 		bc := breadcrumb{
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 			Level:     level.String(),
-			Message:   msg,
+			Message:   "backend " + level.String(),
 		}
 		h.mu.Lock()
 		h.ring[h.head] = bc
@@ -99,7 +103,7 @@ func (h *Hook) Run(_ *zerolog.Event, level zerolog.Level, msg string) {
 	}
 	h.reporter.ReportErrorAsync(
 		logLevel,
-		msg,
+		"backend error",
 		string(debug.Stack()),
 		"",
 		meta,
@@ -109,26 +113,23 @@ func (h *Hook) Run(_ *zerolog.Event, level zerolog.Level, msg string) {
 	)
 }
 
-// ReportPanic forwards a recovered panic with its stack trace and arbitrary
-// request metadata. Caller is responsible for capturing runtime/debug.Stack().
-func (h *Hook) ReportPanic(recovered interface{}, stack []byte, meta map[string]interface{}) {
+// ReportFrontendError records a browser failure without accepting free-text input.
+func (h *Hook) ReportFrontendError() {
 	if h == nil {
 		return
 	}
-	if meta == nil {
-		meta = map[string]interface{}{}
+	h.reporter.ReportErrorAsync("error", "frontend error", "", "", map[string]interface{}{
+		"environment": h.environment, "service": "backend", "source": "admin-spa",
+	}, nil, "", "")
+}
+
+// ReportBackendPanic accepts only a runtime-generated Go stack from Recoverer.
+// The panic value and request metadata are deliberately outside this contract.
+func (h *Hook) ReportBackendPanic(stack []byte) {
+	if h == nil {
+		return
 	}
-	meta["environment"] = h.environment
-	meta["service"] = "backend"
-	meta["breadcrumbs"] = h.drainBreadcrumbs()
-	h.reporter.ReportErrorAsync(
-		"fatal",
-		fmt.Sprintf("panic: %v", recovered),
-		string(stack),
-		"",
-		meta,
-		nil,
-		"",
-		"",
-	)
+	h.reporter.ReportErrorAsync("fatal", "backend panic", string(stack), "", map[string]interface{}{
+		"environment": h.environment, "service": "backend",
+	}, nil, "", "")
 }

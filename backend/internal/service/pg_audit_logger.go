@@ -1,3 +1,4 @@
+// pg_audit_logger.go — Restricted, minimized payment reconciliation log.
 package service
 
 import (
@@ -21,7 +22,7 @@ type PGAuditEntry struct {
 	Timestamp string      `json:"ts"`
 	OrderNo   string      `json:"order_no"`
 	Event     string      `json:"event"` // "approve_success", "approve_fail", "db_insert_fail", "db_update_fail"
-	RawData   interface{} `json:"data"`
+	Data      interface{} `json:"data"`
 	Error     string      `json:"error,omitempty"`
 }
 
@@ -31,7 +32,7 @@ func NewPGAuditLogger(path string) (*PGAuditLogger, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("pg audit: create dir %s: %w", dir, err)
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("pg audit: open %s: %w", path, err)
 	}
@@ -44,10 +45,10 @@ func (l *PGAuditLogger) Log(orderNo string, event string, data interface{}, err 
 		Timestamp: time.Now().Format(time.RFC3339),
 		OrderNo:   orderNo,
 		Event:     event,
-		RawData:   data,
+		Data:      minimizedPGAuditData(data),
 	}
 	if err != nil {
-		entry.Error = err.Error()
+		entry.Error = "operation_failed"
 	}
 
 	b, _ := json.Marshal(entry)

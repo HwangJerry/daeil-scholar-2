@@ -48,3 +48,7 @@ PG 감사 로그는 승인 응답의 카드 번호·거래 식별자와 오류 �
 실행 중인 백엔드 프로세스의 환경 변수는 값 원문 없이 설정 여부만 확인했다. `DEBUG_AGENT_ENDPOINT`, `SENTRY_AUTH_TOKEN`은 설정되어 있다. `ACCOUNT_ERASURE_EXTERNAL_URL`, `ACCOUNT_ERASURE_EXTERNAL_TOKEN`, `ACCOUNT_ERASURE_CONTEXT_KEY`, `DONATION_ARCHIVE_KEY`, `ACCOUNT_ERASURE_LEGACY_ROOT`는 미설정이다. 기존 프로세스 관측이며 아직 배포하지 않은 코드의 동작을 증명하지 않는다.
 
 Sentry의 [프로젝트 오류 이벤트 조회 API](https://docs.sentry.io/api/events/list-a-projects-error-events/)로 출시용 두 프로젝트를 `statsPeriod=14d` 범위에서 읽기 전용 조회했다. `daeil-ios-release`, `daeil-android-release` 모두 오류 이벤트 0건이며 추가 페이지가 없었다. 인증 토큰·이벤트 원문은 출력·저장하지 않았다. 이 결과는 해당 조회 시점/범위의 오류 이벤트에 한정한다. 다른 데이터 유형, 공급자 백업, 향후 Release 페이로드의 개인정보 유무까지 검증한 것은 아니다.
+
+## 후속 실사·검증
+
+전체 깊이 파일 조사, 레거시 별칭 대조, 현재 프로필 경로/등록부 차이, 기존 PG 로그의 개인정보 필드와 비공개 정리본, Debug Agent 접속 실패, 합성 Sentry crash 검증은 [2026-09-07 인계 문서](ACCOUNT_ERASURE_RELEASE_HANDOFF.md)에 기록했다. 앞선 깊이 2 이내 파일 개수 및 Sentry 0건은 당시 관측이며, 이후 합성 오류 2건을 보내 검사했다.

@@ -37,6 +37,12 @@ func (s *AccountErasureFiles) managedPath(raw string) (string, error) {
 	case strings.HasPrefix(u.Path, "/uploads/"):
 		root = s.UploadRoot
 		relative = strings.TrimPrefix(u.Path, "/uploads/")
+	case strings.HasPrefix(u.Path, "/old/upload/"):
+		root = s.LegacyRoot
+		relative = strings.TrimPrefix(u.Path, "/old/upload/")
+	case strings.HasPrefix(u.Path, "/upload/"):
+		root = s.LegacyRoot
+		relative = strings.TrimPrefix(u.Path, "/upload/")
 	case strings.HasPrefix(u.Path, "/files/"):
 		root = s.LegacyRoot
 		relative = strings.TrimPrefix(u.Path, "/files/")

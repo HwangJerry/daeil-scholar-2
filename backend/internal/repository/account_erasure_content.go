@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-var managedContentFile = regexp.MustCompile(`(?:https?://[^\s"'<>]+)?/(?:uploads|files)/[^\s"'<>\)\]]+`)
+var managedContentFile = regexp.MustCompile(`(?:https?://[^\s"'<>]+)?/(?:uploads|files|upload|old/upload)/[^\s"'<>\)\]]+`)
 
 func managedContentURLs(value string) []string {
 	values := []string{value}

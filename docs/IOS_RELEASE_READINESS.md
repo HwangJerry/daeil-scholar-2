@@ -4,7 +4,7 @@ These changes are prepared locally. They are not a production deployment or App 
 
 ## Active scope — operator decision
 
-The current task adds automatic account erasure while retaining the existing manual workflow. On 2026-09-07 the operator explicitly brought Korean donation-record retention law back into scope. The current implementation and remaining production integrations are documented in [AUTOMATIC_ACCOUNT_ERASURE.md](AUTOMATIC_ACCOUNT_ERASURE.md). Organization-specific fiscal-year and receipt facts remain unconfirmed; this does not establish legal compliance or guarantee App Review approval.
+The current task adds automatic account erasure while retaining the existing manual workflow. On 2026-09-07 the operator explicitly brought Korean donation-record retention law back into scope. The current implementation and remaining production integrations are documented in [AUTOMATIC_ACCOUNT_ERASURE.md](AUTOMATIC_ACCOUNT_ERASURE.md). The operator confirmed a December 31 fiscal year end, digital HappyNanum originals and separate bank-transfer Excel originals; this does not establish legal compliance or guarantee App Review approval.
 
 Use Apple's explicit review requirements for the active checklist. A detailed country-by-country transfer table or a universal seven-day backup/30-day Sentry period is not specified by Guideline 5.1.1(i). Accurate collection/use/sharing disclosures, equivalent third-party protection, retention/deletion and consent-withdrawal explanations remain in scope. Existing promises in the app/policy must match the actual candidate and operator workflow.
 
@@ -23,8 +23,8 @@ The repository-specific [Apple account deletion scope review](APPLE_ACCOUNT_DELE
 
 ## Deployment order
 
-1. Candidate source manifest SHA-256: `93e190f01494248d62036dd02c5eb0f4e16879851bd6bd188d4b2318e03bddfd`. The source manifest, regression pin, and environment example include migrations 055–061. Production approval/environment settings have not been changed. Review migration numbering against any concurrently developed backend changes; this branch adds `055_create_message_reports.sql` and `056_create_account_deletion_requests.sql`.
-2. Apply those additive migrations using the project's normal migration procedure. No production migration has been executed by this task.
+1. Candidate source manifest SHA-256: `3d771b1a76cced492f019ef200262bc5acd5e678b21e24c5f24d4dc4afc88bcc`. The source manifest, regression pin, and environment example include migrations 055–062. Production approval/environment settings have not been changed. Review migration numbering against any concurrently developed backend changes; this branch adds `055_create_message_reports.sql` and `056_create_account_deletion_requests.sql`.
+2. Apply the reviewed migrations using the project's normal procedure; 058 converts storage engines and needs a lock/time/disk review. No production migration has been executed by this task.
 3. Deploy the backend and both SPAs together. Confirm signup works with an empty browser session and that `/api/message-reports` exists before distributing the new iOS build.
 4. Give a designated moderator an existing operator/root account. Confirm ordinary members cannot load `/api/admin/message-reports`.
 5. Create a synthetic conversation between two disposable approved accounts. Report a received message, confirm queue receipt, remove it, refresh both clients, and verify the removal marker. Do not test with real users' messages.
@@ -33,7 +33,7 @@ The repository-specific [Apple account deletion scope review](APPLE_ACCOUNT_DELE
 ## Moderator operation
 
 - Confirmed by the operator on 2026-09-06: the operator personally handles reports, checks `ghkdwp018@gmail.com` and the administrator report queue daily, and processes reports within 48 hours.
-- Verify the operator's existing administrator account can access the deployed queue. No password needs to be shared. A backup during absences and a repeat-offender/suspension process remain to be specified.
+- Verify the operator's existing administrator account can access the deployed queue. No password needs to be shared. Use the confirmed daily review/48-hour procedure and existing member management for repeat offenders.
 - The queue refreshes automatically while open; this implementation does not send emails or staff notifications. The daily manual check is part of the confirmed operating procedure. The public support source now states the daily review and 48-hour target; verify it after deployment.
 - Review reports, record a decision, and contact the reporter through the approved support process when needed. Reporter contact details are not exposed to the reported user.
 - Approve retention/access rules for report evidence and moderator decisions. Resolved report evidence is now purged after 90 days; delete it earlier when no longer needed or on a valid deletion request. Lawfully retained evidence must be separated before resolving a report.
@@ -43,14 +43,18 @@ The repository-specific [Apple account deletion scope review](APPLE_ACCOUNT_DELE
 
 1. Publish a publicly accessible privacy policy and verify links from the installed app and App Store Connect. Check disclosures of collected data, collection methods, purposes, third-party access/protection, retention/deletion and consent withdrawal against the actual app and SDK configuration. The current policy's third-party-protection and withdrawal explanations need this focused check; do not replace unknown facts with unsupported assurances. Source: https://developer.apple.com/app-store/review/guidelines/#privacy (5.1.1).
 2. Match App Store Connect App Privacy responses to app/backend/SDK data collection. Inspect the new archive's app-owned PrivacyInfo.xcprivacy and bundled SDK manifests. Local source/build tests do not replace archive inspection.
-3. Deploy the deletion/reporting backend and admin workflow before distributing the corresponding candidate. On a disposable account verify in-app deletion request, access termination, actual manual erasure, applicable Apple-token revocation, communicated timing and completion confirmation. Manual processing is permitted; status-only disablement is insufficient. Source: https://developer.apple.com/support/offering-account-deletion-in-your-app/ . The admin console tracks and verifies work; it does not automatically erase all records or send result emails.
+3. Deploy the deletion/reporting backend and admin workflow before distributing the corresponding candidate. On a disposable account verify in-app deletion request, access termination, actual automatic erasure and existing manual takeover, applicable Apple-token revocation, communicated timing and completion confirmation. Manual processing is permitted; status-only disablement is insufficient. Source: https://developer.apple.com/support/offering-account-deletion-in-your-app/ . The automatic worker deletes app data/files; external verification and receipt work can still require an operator. The private receipt is the completion channel.
 4. Verify filtering, reporting, timely moderation, blocking and reachable support in the installed candidate (Guideline 1.2). The operator checks the report queue and ghkdwp018@gmail.com daily and handles reports within 48 hours.
 5. Verify donation collection opens outside the app in the system browser and does not unlock digital benefits. The app must remain free for the external-fundraising route under 3.2.2(iv). Apple-approved in-app nonprofit fundraising would be a separate route; Korean public-benefit designation alone does not establish Apple approval.
-6. Verify password/Apple/Kakao login, production API configuration and production APNs in the candidate. Provide an approved working reviewer account and clear review notes, including the manual deletion steps and timing.
+6. Verify password/Apple/Kakao login, production API configuration and production APNs in the candidate. Provide an approved working reviewer account and clear review notes, including automatic deletion, operator follow-up and timing.
 
 Retained operator details: 대일외국어고등학교 장학회; privacy contact 엄은숙; request handler 황제철 at ghkdwp018@naver.com. Korean donation retention is in scope under the latest instruction; see the automatic erasure runbook for the implemented conditional rules. Do not resume production deployment merely because the review scope changed; the earlier deployment cancellation remains effective.
 
-## Validation
+## Latest release validation — September 7
+
+See [the current handoff](ACCOUNT_ERASURE_RELEASE_HANDOFF.md) for migration 062, historical paths, minimized diagnostics, prepared keys/PG preview and the signed App Store IPA. No production app/DB deployment or App Store submission has occurred.
+
+## Earlier validation
 
 - Automatic-erasure follow-up: Go suite and vet pass, including disposable MariaDB 10.1.38 automatic/manual lifecycle tests, rollback on unknown references, retained archive expiry and donation aggregate preservation. Frontend 139 tests, both SPA builds and changed-file ESLint pass. Five public Playwright checks and administrator automatic/manual transition checks pass on mobile and desktop; a long error-code overflow was fixed. The iOS Debug simulator build passes. Real provider APIs, external processor and production deployment remain unverified.
 

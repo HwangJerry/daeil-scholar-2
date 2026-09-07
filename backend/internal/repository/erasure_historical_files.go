@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
+	"strings"
 )
 
 // The CLI also holds ErasureLock, preventing the worker from draining a batch
@@ -70,7 +71,24 @@ func (r *AccountDeletionRequestRepository) QueueHistoricalErasureFiles(plan mode
 }
 
 func rejectReferencedHistoricalFile(tx *sqlx.Tx, schema erasureSchema, raw string) error {
+	variants := []string{raw}
+	if strings.HasPrefix(raw, "/files/") {
+		relative := strings.TrimPrefix(raw, "/files/")
+		variants = append(variants, "/upload/"+relative, "/old/upload/"+relative)
+	}
+	for _, value := range variants {
+		if err := rejectHistoricalFileReferenceVariant(tx, schema, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rejectHistoricalFileReferenceVariant(tx *sqlx.Tx, schema erasureSchema, raw string) error {
 	queries := []string{`SELECT COUNT(*) FROM ALUMNI_UPLOAD_OWNER WHERE RIGHT(URL_PATH,LENGTH(?))=?`}
+	if schema["ALUMNI_PROFILE_FILE_HISTORY"] != nil {
+		queries = append(queries, `SELECT COUNT(*) FROM ALUMNI_PROFILE_FILE_HISTORY WHERE RIGHT(URL_PATH,LENGTH(?))=?`)
+	}
 	for _, column := range []string{"USR_PHOTO", "USR_BIZ_CARD", "USR_THUMNAIL"} {
 		if schema.has("WEO_MEMBER", column) {
 			queries = append(queries, "SELECT COUNT(*) FROM WEO_MEMBER WHERE RIGHT(`"+column+"`,LENGTH(?))=?")

@@ -31,10 +31,7 @@ func Recoverer(logger zerolog.Logger, hook *observability.Hook) func(http.Handle
 					Str("method", r.Method).
 					Bytes("stack", stack).
 					Msg("http handler panicked")
-				hook.ReportPanic("http handler panicked", stack, map[string]interface{}{
-					"path":   logRoute(r),
-					"method": r.Method,
-				})
+				hook.ReportBackendPanic(stack)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
 				_, _ = w.Write([]byte(`{"code":"internal","message":"internal server error"}`))

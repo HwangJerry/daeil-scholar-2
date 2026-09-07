@@ -25,18 +25,29 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
     CREATE TABLE WEO_VISIT_DAILY (VD_USR_SEQ INT,VD_VISITOR_ID VARCHAR(50)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     CREATE TABLE WEO_ORDER (O_SEQ INT PRIMARY KEY,USR_SEQ INT,O_ACCOUNT_USR_SEQ INT,O_DONOR_NAME VARCHAR(100),O_DONOR_PHONE VARCHAR(32),O_DONATION_DATE DATE,O_GROSS_AMOUNT BIGINT,O_REFUNDED_AMOUNT BIGINT,O_NET_RECEIVED_AMOUNT BIGINT,O_SOURCE VARCHAR(30),O_TRANSACTION_NO VARCHAR(100),O_LIFECYCLE_STATUS VARCHAR(30),O_TYPE CHAR(1)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     CREATE TABLE WEO_PG_DATA (O_SEQ INT,NUM_CARD VARCHAR(50)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    INSERT INTO WEO_MEMBER VALUES (42,'CCC','fake42','Synthetic Donor','fake42@example.org','01000000042','/uploads/profile/42.jpg',''),(43,'CCC','fake43','Other Donor','fake43@example.org','01000000043','','');
+    INSERT INTO WEO_MEMBER VALUES (42,'CCC','fake42','Synthetic Donor','fake42@example.org','01000000042','/uploads/profile/42.jpg','/upload/legacy-card.jpg'),(43,'CCC','fake43','Other Donor','fake43@example.org','01000000043','','');
     INSERT INTO WEO_MEMBER_SOCIAL VALUES (42,'AP','synthetic-subject');
     INSERT INTO ALUMNI_MESSAGE VALUES (1,42,43,'outbound'),(2,43,42,'inbound'),(3,43,43,'unrelated');
     INSERT INTO WEO_VISIT_DAILY VALUES (42,'visitor42'),(43,'visitor43');
     INSERT INTO WEO_ORDER VALUES (1,42,42,'Synthetic Donor','01000000042','2025-01-01',100,0,100,'happy_nanum','fake-tx-1','completed','A'),(2,43,43,'Other Donor','01000000043','2025-01-01',50,0,50,'happy_nanum','fake-tx-2','completed','A');
     INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
-	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql"} {
+	db.MustExec(`ALTER TABLE WEO_MEMBER ADD USR_THUMNAIL TEXT`)
+	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "062_create_profile_file_history.sql"} {
 		data, err := os.ReadFile("../../migrations/" + name)
 		if err != nil {
 			t.Fatal(err)
 		}
 		db.MustExec(string(data))
+	}
+
+	// Existing paths without WEO_FILES rows survive replacements until erasure.
+	profileRepo := &ProfileRepository{DB: db}
+	if err := profileRepo.AssignProfileUpload(42, 101, "/uploads/profile/new42.jpg", false); err != nil {
+		t.Fatal(err)
+	}
+	var historyCount int
+	if err := db.Get(&historyCount, `SELECT COUNT(*) FROM ALUMNI_PROFILE_FILE_HISTORY WHERE USR_SEQ=42`); err != nil || historyCount != 2 {
+		t.Fatal("prior profile reference lost", err)
 	}
 	// Exercise the actual legacy engine transition twice without touching unrelated tables.
 	db.MustExec(`ALTER TABLE WEO_ORDER ENGINE=MyISAM; CREATE TABLE UNRELATED_LEGACY (ID INT) ENGINE=MyISAM; INSERT INTO UNRELATED_LEGACY VALUES (1)`)
@@ -60,6 +71,9 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 		t.Fatal(err)
 	}
 	work := model.ErasureWork{RequestID: receipt.ID, UserSeq: 42, Stage: "queued"}
+	if err = profileRepo.UpdateProfilePhoto(42, "/uploads/forbidden-after-withdrawal.jpg"); err == nil {
+		t.Fatal("withdrawn member changed profile history")
+	}
 	if err = repo.SetErasureMode(receipt.ID, 42, "manual"); err == nil {
 		t.Fatal("self operation allowed")
 	}
@@ -187,7 +201,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if err = repo.EraseDatabase(work, seal, validate); err != nil {
 		t.Fatal("retry", err)
 	}
-	for _, query := range []string{`SELECT COUNT(*) FROM WEO_MEMBER WHERE USR_SEQ=42`, `SELECT COUNT(*) FROM WEO_VISIT_DAILY WHERE VD_USR_SEQ=42`, `SELECT COUNT(*) FROM ALUMNI_MESSAGE WHERE AM_SENDER_SEQ=42 OR AM_RECVR_SEQ=42`, `SELECT COUNT(*) FROM WEO_ORDER WHERE O_SEQ=1`, `SELECT COUNT(*) FROM WEO_PG_DATA WHERE O_SEQ=1`} {
+	for _, query := range []string{`SELECT COUNT(*) FROM WEO_MEMBER WHERE USR_SEQ=42`, `SELECT COUNT(*) FROM WEO_VISIT_DAILY WHERE VD_USR_SEQ=42`, `SELECT COUNT(*) FROM ALUMNI_MESSAGE WHERE AM_SENDER_SEQ=42 OR AM_RECVR_SEQ=42`, `SELECT COUNT(*) FROM WEO_ORDER WHERE O_SEQ=1`, `SELECT COUNT(*) FROM WEO_PG_DATA WHERE O_SEQ=1`, `SELECT COUNT(*) FROM ALUMNI_PROFILE_FILE_HISTORY WHERE USR_SEQ=42`} {
 		db.Get(&count, query)
 		if count != 0 {
 			t.Fatal("personal data survived", query)
@@ -221,7 +235,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 		t.Fatal("another member's profile queued")
 	}
 	db.MustExec(`UPDATE WEO_MEMBER SET USR_PHOTO='' WHERE USR_SEQ=43`)
-	db.MustExec(`CREATE TABLE WEO_BOARDBBS (SEQ INT PRIMARY KEY,USR_SEQ INT,CONTENTS TEXT) ENGINE=InnoDB; INSERT INTO WEO_BOARDBBS VALUES (1,43,TO_BASE64('<img src="/files/profile/old42.jpg">'))`)
+	db.MustExec(`CREATE TABLE WEO_BOARDBBS (SEQ INT PRIMARY KEY,USR_SEQ INT,CONTENTS TEXT) ENGINE=InnoDB; INSERT INTO WEO_BOARDBBS VALUES (1,43,TO_BASE64('<img src="/old/upload/profile/old42.jpg">'))`)
 	if repo.QueueHistoricalErasureFiles(plan, true) == nil {
 		t.Fatal("another post's embedded file queued")
 	}
@@ -257,7 +271,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 		t.Fatal("unfinished file work accepted")
 	}
 	files, err := repo.ErasureFiles(receipt.ID)
-	if err != nil || len(files) != 2 {
+	if err != nil || len(files) != len(beforeFiles)+1 {
 		t.Fatal(files, err)
 	}
 	for _, file := range files {

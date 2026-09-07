@@ -23,6 +23,9 @@ func (r *ProfileRepository) AssignProfileUpload(user, fileID int, url string, bu
 	if businessCard {
 		column = "USR_BIZ_CARD"
 	}
+	if err = rememberProfileFile(tx, user, column); err != nil {
+		return err
+	}
 	if _, err = tx.Exec("UPDATE WEO_MEMBER SET "+column+"=? WHERE USR_SEQ=?", url, user); err != nil {
 		return err
 	}

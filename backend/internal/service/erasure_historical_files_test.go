@@ -125,3 +125,28 @@ func TestWorkerDeletesRealHistoricalFileWithoutFalseExternalCompletion(t *testin
 		t.Fatal("file success bypassed external verification")
 	}
 }
+
+func TestLegacyUploadAliasesUseVerifiedPhysicalRoot(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	storage := &AccountErasureFiles{LegacyRoot: root}
+	for _, prefix := range []string{"/upload/", "/old/upload/", "/files/"} {
+		file := filepath.Join(root, "legacy.jpg")
+		if err = os.WriteFile(file, []byte("synthetic legacy"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err = storage.EraseURL(prefix + "legacy.jpg"); err != nil {
+			t.Fatal(prefix, err)
+		}
+		if _, err = os.Stat(file); !os.IsNotExist(err) {
+			t.Fatal("legacy file survived")
+		}
+	}
+	for _, raw := range []string{"/upload/../other.jpg", "/old/upload/%2e%2e/other.jpg"} {
+		if storage.EraseURL(raw) == nil {
+			t.Fatal("legacy alias bypassed traversal guard")
+		}
+	}
+}

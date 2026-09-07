@@ -103,6 +103,13 @@ func queueErasureFiles(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork) error 
 		return err
 	}
 	urls = append(urls, owned...)
+	if s["ALUMNI_PROFILE_FILE_HISTORY"] != nil {
+		var previous []string
+		if err := tx.Select(&previous, `SELECT URL_PATH FROM ALUMNI_PROFILE_FILE_HISTORY WHERE USR_SEQ=?`, w.UserSeq); err != nil {
+			return err
+		}
+		urls = append(urls, previous...)
+	}
 	if s["WEO_FILES"] != nil && s["WEO_BOARDBBS"] != nil {
 		var attachments []string
 		if err := tx.Select(&attachments, `SELECT CONCAT(FILE_PATH,'/',FILE_NAME) FROM WEO_FILES WHERE F_GATE='BB' AND F_JOIN_SEQ IN (SELECT SEQ FROM WEO_BOARDBBS WHERE USR_SEQ=?)`, w.UserSeq); err != nil {

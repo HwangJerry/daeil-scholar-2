@@ -1,3 +1,4 @@
+// admin_error_report_handler.go — Accept admin diagnostics without persisting raw input.
 package handler
 
 import (
@@ -20,10 +21,10 @@ func NewAdminErrorReportHandler(logger zerolog.Logger, hook *observability.Hook)
 }
 
 type frontendErrorReport struct {
-	Message    string `json:"message"`
-	Stack      string `json:"stack"`
-	URL        string `json:"url"`
-	Component  string `json:"component"`
+	Message   string `json:"message"`
+	Stack     string `json:"stack"`
+	URL       string `json:"url"`
+	Component string `json:"component"`
 }
 
 func (h *AdminErrorReportHandler) Report(w http.ResponseWriter, r *http.Request) {
@@ -33,23 +34,8 @@ func (h *AdminErrorReportHandler) Report(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	msg := body.Message
-	if msg == "" {
-		msg = "frontend error"
-	}
-
-	h.hook.ReportPanic(msg, []byte(body.Stack), map[string]interface{}{
-		"source":    "admin-spa",
-		"url":       body.URL,
-		"component": body.Component,
-	})
-
-	h.logger.Error().
-		Str("source", "admin-spa").
-		Str("url", body.URL).
-		Str("component", body.Component).
-		Str("stack", body.Stack).
-		Msg(msg)
+	h.hook.ReportFrontendError()
+	h.logger.Error().Str("source", "admin-spa").Msg("admin frontend error")
 
 	w.WriteHeader(http.StatusNoContent)
 }
