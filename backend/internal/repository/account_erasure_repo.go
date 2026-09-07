@@ -5,11 +5,12 @@ import (
 	"context"
 	"database/sql"
 	"github.com/dflh-saf/backend/internal/model"
+	"strings"
 )
 
 func (r *AccountDeletionRequestRepository) ErasureBatch(ctx context.Context) ([]model.ErasureWork, error) {
 	rows := []model.ErasureWork{}
-	err := r.DB.SelectContext(ctx, &rows, `SELECT d.REQUEST_ID,d.USR_SEQ,e.STAGE
+	err := r.DB.SelectContext(ctx, &rows, `SELECT d.REQUEST_ID,d.USR_SEQ,e.STAGE,e.EXTERNAL_EVIDENCE
         FROM ALUMNI_ACCOUNT_DELETION_REQUEST d JOIN ALUMNI_ACCOUNT_ERASURE e ON e.REQUEST_ID=d.REQUEST_ID
         WHERE e.MODE='automatic' AND d.STATUS <> 'completed' AND e.NEXT_ATTEMPT_AT<=UTC_TIMESTAMP()
         ORDER BY e.NEXT_ATTEMPT_AT,d.REQUEST_ID LIMIT 10`)
@@ -84,8 +85,30 @@ func (r *AccountDeletionRequestRepository) ErasureExternalSubject(w model.Erasur
 }
 
 func (r *AccountDeletionRequestRepository) RecordExternalErasure(id int64, evidence string) error {
-	_, err := r.DB.Exec(`UPDATE ALUMNI_ACCOUNT_ERASURE SET EXTERNAL_EVIDENCE=?,STAGE='external_verified',UPDATED_AT=UTC_TIMESTAMP() WHERE REQUEST_ID=? AND MODE='automatic'`, evidence, id)
-	return err
+	if strings.TrimSpace(evidence) == "" || len(evidence) > 200 {
+		return &model.ErasureBlocked{Code: "EXTERNAL_ERASURE_PENDING"}
+	}
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`UPDATE ALUMNI_ACCOUNT_ERASURE e JOIN ALUMNI_ACCOUNT_DELETION_REQUEST d ON d.REQUEST_ID=e.REQUEST_ID
+ SET e.EXTERNAL_EVIDENCE=?,e.UPDATED_AT=UTC_TIMESTAMP() WHERE e.REQUEST_ID=? AND e.MODE='automatic' AND d.STATUS<>'completed'`, evidence, id)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	if _, err = tx.Exec(`DELETE FROM ALUMNI_ERASURE_CONTEXT WHERE REQUEST_ID=?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *AccountDeletionRequestRepository) ErasureFiles(id int64) ([]model.ErasureFile, error) {

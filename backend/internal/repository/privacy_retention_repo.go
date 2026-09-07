@@ -15,6 +15,15 @@ func (r *AccountDeletionRequestRepository) PurgeExpiredPrivacyRecords(ctx contex
         ORDER BY RESOLVED_AT LIMIT ?`, limit); err != nil {
 		return err
 	}
+	var contextInstalled int
+	if err := r.DB.GetContext(ctx, &contextInstalled, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_ERASURE_CONTEXT'`); err != nil {
+		return err
+	}
+	if contextInstalled > 0 {
+		if _, err := r.DB.ExecContext(ctx, `DELETE FROM ALUMNI_ERASURE_CONTEXT WHERE EXPIRES_AT<=UTC_TIMESTAMP() ORDER BY EXPIRES_AT LIMIT ?`, limit); err != nil {
+			return err
+		}
+	}
 	// Optional during the rolling migration; the new worker requires migration 057.
 	var installed int
 	if err := r.DB.GetContext(ctx, &installed, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_DONATION_LEGAL_ARCHIVE'`); err != nil {

@@ -15,6 +15,9 @@ export interface AccountDeletion {
   evidenceReference: string;
   processingMode?: "automatic" | "manual";
   autoStage?: string;
+  databaseErased?: boolean;
+  nextAttemptAt?: string | null;
+  automationUpdatedAt?: string | null;
   autoCode?: string;
 }
 export interface DeletionEvidence {

@@ -17,6 +17,8 @@ type AutomaticErasureStore interface {
 	ErasureRetry(int64, string) error
 	ErasureExternalSubject(model.ErasureWork) (model.ErasureExternalSubject, error)
 	RecordExternalErasure(int64, string) error
+	SaveErasureContext(int64, []byte) error
+	LoadErasureContext(int64) ([]byte, error)
 	EraseDatabase(model.ErasureWork, func([]byte) ([]byte, error), func(model.DonationRetentionDecision) error) error
 	ErasureFiles(int64) ([]model.ErasureFile, error)
 	ErasureFileDone(int64) error
@@ -27,6 +29,7 @@ type ExternalErasureProcessor interface {
 }
 type ErasureFileStorage interface{ EraseURL(string) error }
 type AutomaticErasureService struct {
+	ContextCipher   *ErasureContextCipher
 	Store           AutomaticErasureStore
 	External        ExternalErasureProcessor
 	Files           ErasureFileStorage
@@ -88,22 +91,11 @@ func (s *AutomaticErasureService) process(ctx context.Context, w model.ErasureWo
 		if err = s.Store.PrepareErasure(w, ValidateDonationRetention); err != nil {
 			return err
 		}
-		if s.External == nil {
-			return &model.ErasureBlocked{Code: "EXTERNAL_ERASURE_PROCESSOR_REQUIRED"}
+		if err = s.preserveContext(w); err != nil {
+			return err
 		}
-		subject, e := s.Store.ErasureExternalSubject(w)
-		if e != nil {
-			return e
-		}
-		evidence, e := s.External.Erase(ctx, subject)
-		if e != nil {
-			return e
-		}
-		if e = s.Store.RecordExternalErasure(w.RequestID, evidence); e != nil {
-			return e
-		}
-		if e = s.Store.EraseDatabase(w, s.Seal, ValidateDonationRetention); e != nil {
-			return e
+		if err = s.Store.EraseDatabase(w, s.Seal, ValidateDonationRetention); err != nil {
+			return err
 		}
 		if s.InvalidateCache != nil {
 			s.InvalidateCache()
@@ -138,6 +130,9 @@ func (s *AutomaticErasureService) process(ctx context.Context, w model.ErasureWo
 				return e
 			}
 		}
+	}
+	if err = s.processExternal(ctx, w); err != nil {
+		return err
 	}
 	return s.Store.FinishAutomaticErasure(w)
 }

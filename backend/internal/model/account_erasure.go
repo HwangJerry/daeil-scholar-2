@@ -8,9 +8,10 @@ type ErasureBlocked struct{ Code string }
 func (e *ErasureBlocked) Error() string { return e.Code }
 
 type ErasureWork struct {
-	RequestID int64  `db:"REQUEST_ID" json:"requestId"`
-	UserSeq   int    `db:"USR_SEQ" json:"userSeq"`
-	Stage     string `db:"STAGE" json:"stage"`
+	RequestID        int64  `db:"REQUEST_ID" json:"requestId"`
+	UserSeq          int    `db:"USR_SEQ" json:"userSeq"`
+	ExternalEvidence string `db:"EXTERNAL_EVIDENCE" json:"-"`
+	Stage            string `db:"STAGE" json:"stage"`
 }
 type ErasureFile struct {
 	ID  int64  `db:"ID"`

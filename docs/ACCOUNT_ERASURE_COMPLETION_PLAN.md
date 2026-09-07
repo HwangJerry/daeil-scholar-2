@@ -103,3 +103,11 @@
 [Apple 계정 삭제 안내](https://developer.apple.com/support/offering-account-deletion-in-your-app/)는 계정·연결 개인정보·사용자 콘텐츠 삭제와 법정 보존 예외, 처리 소요 시간 안내 및 완료 확인을 요구한다. 자동 처리 자체나 특정 백업 구현·특정 일수를 일률적으로 요구하는 것은 아니다. 이 계획의 작업 구조와 복원 검증은 해당 요구를 실제 서비스에서 이행하기 위한 구현 선택이다.
 
 [Sentry 사용자 데이터 삭제 안내](https://www.sentry.help/en/articles/16187006-how-do-i-complete-a-gdpr-erasure-request-for-a-user-in-sentry)는 사용자 삭제 API의 부재와 자료 종류별 삭제 한계를 명시한다. 기부 관련 법적 근거와 기존 구현은 [자동 삭제 운영 문서](AUTOMATIC_ACCOUNT_ERASURE.md)를 기준으로 별도 검토한다.
+
+## 구현 진행 — 2026-09-07
+
+`feature/complete-account-erasure`에서 단계 분리와 암호화 작업 정보, 기존 요청 재개, 부분 진행 안내를 구현했다. 로컬 전체 Go 테스트·vet, MariaDB 10.1 자동/수동 삭제 테스트 및 두 SPA 빌드를 통과했다. 이 기록은 아래 나머지 항목의 완료를 의미하지 않는다.
+
+남은 코드: 저장소별 작업 상태·처리기, 복원 방지 대장·재적용, 기부 자료 재수입 방지, 실제 Release 전송 검증 및 필요한 Android 수집 제한. 외부 기준: 가비아 백업·스냅샷과 해피나눔 원본 보존 설정 확인. 운영 배포·마이그레이션·실제 회원 삭제는 수행하지 않았다.
+
+읽기 전용 서버 실사: `/var/www/legacy/files`는 `/var/www/html/upload`를 가리키는 심볼릭 링크다. `/var/www/uploads`, `/var/logs/pg`, `/var/backups/alumni-maintenance`가 존재한다. 확인한 systemd timer 및 `/etc/cron.d`, daily/weekly 목록만으로 호스팅 백업 유무·기간을 판정하지 않는다. 이 경로의 사용자 파일이나 백업 내용은 복사·삭제하지 않았다.

@@ -1,0 +1,61 @@
+// account_erasure_context.go — Persist and resume external work after operational deletion.
+package service
+
+import (
+	"context"
+	"database/sql"
+	"github.com/dflh-saf/backend/internal/model"
+)
+
+func (s *AutomaticErasureService) preserveContext(w model.ErasureWork) error {
+	if w.ExternalEvidence != "" {
+		return nil
+	} // Previously verified work needs no new identifiers.
+	if encrypted, err := s.Store.LoadErasureContext(w.RequestID); err == nil {
+		_, err = s.ContextCipher.Open(w, encrypted)
+		return err
+	} else if err != sql.ErrNoRows {
+		return err
+	}
+	subject, err := s.Store.ErasureExternalSubject(w)
+	if err != nil {
+		return err
+	}
+	encrypted, err := s.ContextCipher.Seal(subject)
+	if err != nil {
+		return err
+	}
+	return s.Store.SaveErasureContext(w.RequestID, encrypted)
+}
+
+func (s *AutomaticErasureService) processExternal(ctx context.Context, w model.ErasureWork) error {
+	if w.ExternalEvidence != "" {
+		return nil
+	}
+	active, err := s.Store.ErasureActive(w.RequestID)
+	if err != nil {
+		return err
+	}
+	if !active {
+		return sql.ErrNoRows
+	}
+	if s.External == nil {
+		return &model.ErasureBlocked{Code: "EXTERNAL_ERASURE_PROCESSOR_REQUIRED"}
+	}
+	encrypted, err := s.Store.LoadErasureContext(w.RequestID)
+	if err == sql.ErrNoRows {
+		return &model.ErasureBlocked{Code: "ERASURE_CONTEXT_EXPIRED_REVIEW_REQUIRED"}
+	}
+	if err != nil {
+		return err
+	}
+	subject, err := s.ContextCipher.Open(w, encrypted)
+	if err != nil {
+		return err
+	}
+	evidence, err := s.External.Erase(ctx, subject)
+	if err != nil {
+		return err
+	}
+	return s.Store.RecordExternalErasure(w.RequestID, evidence)
+}

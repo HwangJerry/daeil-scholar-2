@@ -127,6 +127,9 @@ func (r *AccountDeletionRequestRepository) Complete(id int64, operator int, evid
 	if err != nil {
 		return err
 	}
+	if _, err = tx.Exec(`DELETE FROM ALUMNI_ERASURE_CONTEXT WHERE REQUEST_ID=?`, id); err != nil {
+		return err
+	}
 	if _, err = tx.Exec(`DELETE FROM ALUMNI_ERASURE_FILE WHERE REQUEST_ID=?`, id); err != nil {
 		return err
 	}

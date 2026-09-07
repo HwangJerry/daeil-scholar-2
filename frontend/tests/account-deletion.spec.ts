@@ -13,7 +13,7 @@ for (const width of [375, 1440]) {
       expect(route.request().method()).toBe('POST');
       expect(route.request().postDataJSON()).toEqual({ receiptToken: token });
       await route.fulfill({ json: {
-        requestId: 17, status, requestedAt: '2026-09-06T09:00:00Z', targetAt: '2026-09-09T09:00:00Z', dueAt: '2026-09-16T09:00:00Z',
+        requestId: 17, status, databaseErased: status !== 'pending', requestedAt: '2026-09-06T09:00:00Z', targetAt: '2026-09-09T09:00:00Z', dueAt: '2026-09-16T09:00:00Z',
         completedAt: status === 'completed' ? '2026-09-07T09:00:00Z' : null, retainedRecords: '없음', retentionUntil: null,
       } });
     });
@@ -23,6 +23,10 @@ for (const width of [375, 1440]) {
     expect(requestedURLs.every(url => !url.includes(token))).toBe(true);
     expect(await page.evaluate(value => !JSON.stringify(localStorage).includes(value) && !JSON.stringify(sessionStorage).includes(value), token)).toBe(true);
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+    status = 'processing';
+    await page.getByRole('button', { name: '처리 현황 확인' }).click();
+    await expect(page.getByText(/앱 운영 데이터는 삭제했습니다/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: '계정 삭제 완료', exact: true })).toHaveCount(0);
     status = 'completed';
     await page.getByRole('button', { name: '처리 현황 확인' }).click();
     await expect(page.getByRole('heading', { name: '계정 삭제 완료', exact: true })).toBeVisible();

@@ -10,6 +10,7 @@ import { PRIVACY_CONTACT } from '../domains/privacy/policyContent';
 type Receipt = {
   requestId: number;
   status: 'pending' | 'processing' | 'completed';
+  databaseErased?: boolean;
   requestedAt: string;
   targetAt: string;
   dueAt: string;
@@ -77,7 +78,7 @@ export function AccountDeletionPage() {
                 {receipt.retentionUntil && <p className="text-sm text-text-secondary">보존 종료일: {dateLabel(receipt.retentionUntil)}. 항목별 기한은 위 안내를 확인해주세요.</p>}
               </>
             ) : (
-              <p className="leading-8 text-text-secondary">계정 이용은 중지되었습니다. 자동 삭제를 진행하며 필요한 경우 담당자가 확인합니다. {dateLabel(receipt.targetAt)}까지 삭제를 목표로 처리하며, {dateLabel(receipt.dueAt)}까지 결과를 안내합니다. 법령에 따라 보존할 자료는 범위와 근거를 별도로 안내합니다.</p>
+              <p className="leading-8 text-text-secondary">{receipt.databaseErased ? '앱 운영 데이터는 삭제했습니다. 파일·외부 저장소의 남은 처리를 확인 중이며 최종 완료 전입니다.' : '계정 이용은 중지되었습니다. 자동 삭제를 진행하며 필요한 경우 담당자가 확인합니다.'} {dateLabel(receipt.targetAt)}까지 삭제를 목표로 처리하며, {dateLabel(receipt.dueAt)}까지 결과를 안내합니다. 법령에 따라 보존할 자료는 범위와 근거를 별도로 안내합니다.</p>
             )}
           </Card>
         )}

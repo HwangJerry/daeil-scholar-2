@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"github.com/dflh-saf/backend/internal/model"
 	"os"
@@ -30,7 +31,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
     INSERT INTO WEO_VISIT_DAILY VALUES (42,'visitor42'),(43,'visitor43');
     INSERT INTO WEO_ORDER VALUES (1,42,42,'Synthetic Donor','01000000042','2025-01-01',100,0,100,'happy_nanum','fake-tx-1','completed','A'),(2,43,43,'Other Donor','01000000043','2025-01-01',50,0,50,'happy_nanum','fake-tx-2','completed','A');
     INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
-	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql"} {
+	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql"} {
 		data, err := os.ReadFile("../../migrations/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -110,7 +111,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if err = repo.PrepareErasure(work, validate); err != nil {
 		t.Fatal(err)
 	}
-	if err = repo.RecordExternalErasure(receipt.ID, "synthetic-external-proof"); err != nil {
+	if err = repo.SaveErasureContext(receipt.ID, []byte("synthetic-encrypted-context")); err != nil {
 		t.Fatal(err)
 	}
 	// Unknown references block and roll back the archive, aggregate and member deletion together.
@@ -160,6 +161,25 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if err = repo.ErasureFileDone(files[0].ID); err != nil {
 		t.Fatal(err)
 	}
+	if err = repo.FinishAutomaticErasure(work); err == nil {
+		t.Fatal("missing external evidence accepted")
+	}
+	if _, err = repo.LoadErasureContext(receipt.ID); err != nil {
+		t.Fatal("external context lost after member erasure", err)
+	}
+	if err = repo.RecordExternalErasure(receipt.ID, " "); err == nil {
+		t.Fatal("empty external proof accepted")
+	}
+	if err = repo.RecordExternalErasure(receipt.ID, "synthetic-external-proof"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = repo.LoadErasureContext(receipt.ID); err != sql.ErrNoRows {
+		t.Fatal("verified context retained", err)
+	}
+	partial, err := repo.Receipt(strings.Repeat("a", 64))
+	if err != nil || !partial.DatabaseErased || partial.Status == "completed" {
+		t.Fatal("partial erasure misreported", err)
+	}
 	if err = repo.FinishAutomaticErasure(work); err != nil {
 		t.Fatal(err)
 	}
@@ -179,6 +199,28 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if count != 1 {
 		t.Fatal("legal archive missing")
 	}
+	// Retry must never extend context TTL or revive expired handoff information.
+	other, err := repo.Create(43, strings.Repeat("b", 64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.SaveErasureContext(other.ID, []byte("original-ciphertext")); err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.SaveErasureContext(other.ID, []byte("replacement-ciphertext")); err != nil {
+		t.Fatal(err)
+	}
+	data, err := repo.LoadErasureContext(other.ID)
+	if err != nil || string(data) != "original-ciphertext" {
+		t.Fatal("context overwritten")
+	}
+	db.MustExec(`UPDATE ALUMNI_ERASURE_CONTEXT SET EXPIRES_AT=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 1 DAY) WHERE REQUEST_ID=?`, other.ID)
+	if err = repo.SaveErasureContext(other.ID, []byte("replacement-ciphertext")); err == nil {
+		t.Fatal("expired handoff revived")
+	}
+	if _, err = repo.LoadErasureContext(other.ID); err != sql.ErrNoRows {
+		t.Fatal("expired identifiers readable")
+	}
 	db.MustExec(`UPDATE ALUMNI_DONATION_LEGAL_ARCHIVE SET RETAIN_UNTIL='2020-01-01'`)
 	if err = repo.PurgeExpiredPrivacyRecords(context.Background(), 100); err != nil {
 		t.Fatal(err)
@@ -186,5 +228,8 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	db.Get(&count, `SELECT COUNT(*) FROM ALUMNI_DONATION_LEGAL_ARCHIVE`)
 	if count != 0 {
 		t.Fatal("expired legal archive survived")
+	}
+	if err = db.Get(&count, `SELECT COUNT(*) FROM ALUMNI_ERASURE_CONTEXT`); err != nil || count != 0 {
+		t.Fatal("expired context survived", err)
 	}
 }

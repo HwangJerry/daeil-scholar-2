@@ -8,7 +8,7 @@
 - root 관리자는 기존 계정 삭제 화면에서 수동 전환·자동 재개를 할 수 있다. 기존 수동 접수·검증·완료 기능을 유지한다. 현재 작업 단계가 끝난 뒤 전환이 반영될 수 있다.
 - 분당 최대 10개 요청을 순차 처리하며 DB 연결에 연결된 named lock으로 서버 간 중복 실행을 막는다. 실패는 안전한 오류 코드만 남기고 5분 후 재시도한다.
 - 기존 Apple/Kakao worker에 실제 철회를 요청한다. 이번 요청에 대한 성공 증거가 없으면 삭제를 완료하지 않는다.
-- 기부 자료 분류 → 외부 삭제 증거 → DB 삭제·암호화 보존·파일 작업 등록 → 실제 파일 삭제 → 재검증 → 비공개 접수증 완료 게시 순서다. DB 단계는 같은 트랜잭션으로 묶이며, 파일 실패 후에는 DB 삭제를 반복하지 않고 남은 파일부터 재개한다.
+- 기부 자료 분류·소셜 철회 확인 → 외부 작업용 식별정보 암호화 확보 → DB 삭제·암호화 보존·파일 작업 등록 → 실제 파일 삭제 → 외부 삭제 증거 → 재검증 → 비공개 접수증 완료 게시 순서다. 외부 처리 지연만으로 운영 DB 삭제를 막지 않는다. DB 단계는 같은 트랜잭션으로 묶이며, 파일 실패 후에는 DB 삭제를 반복하지 않고 남은 파일부터 재개한다.
 - 자동 완료 확인은 로그인 화면에서 연결되는 비공개 접수증에 게시한다. 자동 이메일 발송은 추가하지 않았다. 수동 완료는 기존 개별 통지 증빙을 요구한다.
 
 ## 한국 기부 자료 보존 검토
@@ -66,7 +66,7 @@ Sentry 데이터의 실제 식별 가능성, 백업 선택 삭제/만료·복원
 
 ## 배포와 검증
 
-- migration 057과 058을 056 다음에 적용하고 backend·frontend·admin을 함께 배포한다. 이번 작업에서는 운영 배포와 데이터 변경을 하지 않는다.
+- migration 057·058·059를 056 다음에 적용하고 backend·frontend·admin을 함께 배포한다. 이번 작업에서는 운영 배포와 데이터 변경을 하지 않는다.
 - migration 058은 존재하는 알려진 삭제 대상 MyISAM 테이블만 InnoDB로 전환한다. ALTER TABLE은 암묵적 커밋·테이블 재구축을 수반하므로 운영 적용 전 저장 공간과 작업 시간을 확인한다. 개별 전환은 재실행 가능하다. 삭제 대상 테이블과 관련 트리거가 InnoDB인지 확인한다. 알려지지 않은 참조나 비트랜잭션 저장소는 자동 처리를 차단한다. 운영 스키마에는 과거 레거시 테이블이 있을 수 있으므로 가상 계정으로 실제 배포 스키마를 검증해야 한다.
 - 업로드 소유 기록은 새 프로필·명함 업로드부터 저장한다. 예전 파일 전체의 소유 관계를 소급해 알아냈다고 주장하지 않는다. 관리 경로 밖 파일·symlink·경로 이동은 자동 삭제하지 않고 확인 대상으로 남긴다.
 - 로컬 자동 삭제·수동 유지·트랜잭션 롤백·간접 참조·기부 최소 보존·합계 유지·보존 만료·파일 실패 재개·암호화 무결성·안전한 파일 경로를 테스트한다. 공급자 실제 철회와 외부 저장소는 연결 뒤 별도 릴리스 후보 검증 대상이다.
@@ -108,3 +108,13 @@ App DSNs are updated in iOS `Config/Info.plist` and Android `app/src/main/Androi
 Backend deployment configuration must use `SENTRY_ORG=metanoia-lab`, `SENTRY_IOS_PROJECT=daeil-ios-release`, `SENTRY_ANDROID_PROJECT=daeil-android-release` with a read token that can access both new projects. The committed backend env example is updated; the production service has not been restarted or deployed. Android mapping-upload jobs must use `SENTRY_PROJECT=daeil-android-release`; iOS symbol-upload jobs must use `SENTRY_PROJECT=daeil-ios-release`. No authentication token was generated or exposed.
 
 Validation: iOS Debug simulator build and Android `:app:assembleDebug` succeeded. Actual release telemetry/symbolication and the backend monitoring proxy remain deployment-time checks. Android telemetry minimization is a separate follow-up; the DSN replacement does not implement the iOS crash-field allowlist on Android.
+
+## 2026-09-07 삭제 단계 분리
+
+migration 059는 외부 작업용 암호화 정보만 별도 테이블에 보관한다. `ACCOUNT_ERASURE_CONTEXT_KEY`에 JWT·기부 보관소와 다른 32바이트 hex 비밀키를 설정해야 한다. 키가 없거나 기존 정보의 인증 복호화가 실패하면 DB를 삭제하지 않는다. AEAD는 요청 번호에 결합되고 복호화 후 회원 번호도 대조한다. 일반 API에는 암호문·식별정보를 제공하지 않는다.
+
+외부 증거를 받으면 작업 정보를 같은 트랜잭션에서 파기한다. 재시도로 생성 시점이나 만료를 연장하지 않는다. 생성 후 10일은 **작업 인계 한도**이며 법정 기간이나 서버 백업 만료일이 아니다. 만료 후 접근을 차단하고 기존 분당 정리 작업으로 파기한다. 만료된 미완료 요청은 `ERASURE_CONTEXT_EXPIRED_REVIEW_REQUIRED`로 남으며 완료하지 않는다. 운영자는 만료 전 외부 작업을 처리·인계해야 한다. 실제 백업 운영에 맞는 별도 복원 방지 이력은 아직 구현되지 않았으므로 이 테이블을 복원 방지 대장으로 사용하지 않는다.
+
+DB 삭제 여부는 비공개 접수증 및 관리자 목록에 표시한다. 최종 완료에는 파일 삭제와 외부 증거가 여전히 필요하다. 기존에 외부 증거를 확보한 요청은 새로운 식별정보를 만들지 않고 재개한다. 기존 수동 완료 시에도 임시 작업 정보를 정리한다.
+
+이번 변경은 저장소별 외부 작업 처리기, 백업 복원 후 재삭제, 기부 재수입 방지까지 완성한 변경이 아니다. 각각의 구현과 운영 검증을 완료한 뒤 배포해야 한다.

@@ -45,7 +45,7 @@ func (r *AccountDeletionRequestRepository) PrepareErasure(w model.ErasureWork, v
 					err = validate(d)
 				}
 				if err == nil {
-					_, err = tx.Exec(`INSERT INTO ALUMNI_DONATION_RETENTION (O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE,REVIEWED_AT) VALUES (?,?,?,?,?,UTC_TIMESTAMP())`, id, d.Basis, d.BasisDate.Format("2006-01-02"), d.Until.Format("2006-01-02"), d.Evidence)
+					_, err = tx.Exec(`INSERT INTO ALUMNI_DONATION_RETENTION (O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE,REVIEWED_AT) VALUES (?,?,?,?,?,UTC_TIMESTAMP())`, id, d.Basis, retentionSQLDate(d.BasisDate), retentionSQLDate(d.Until), d.Evidence)
 				}
 			}
 			if err != nil {
@@ -57,4 +57,11 @@ func (r *AccountDeletionRequestRepository) PrepareErasure(w model.ErasureWork, v
 		}
 	}
 	return tx.Commit()
+}
+
+func retentionSQLDate(value *time.Time) interface{} {
+	if value == nil {
+		return nil
+	}
+	return value.Format("2006-01-02")
 }

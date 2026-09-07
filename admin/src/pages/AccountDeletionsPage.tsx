@@ -8,6 +8,10 @@ const QUEUE_PAGE_SIZE = 50;
 const QUEUE_REFRESH_MS = 60_000;
 const STATUS_LABELS: Record<DeletionStatus, string> = { pending: '접수', processing: '처리 중', completed: '완료' };
 const AUTO_BLOCKERS: Record<string, string> = {
+  ERASURE_CONTEXT_KEY_REQUIRED: '외부 삭제 작업용 별도 암호화 키 설정이 필요합니다.',
+  ERASURE_CONTEXT_UNREADABLE: '외부 삭제 작업의 암호화 정보 확인이 필요합니다.',
+  ERASURE_CONTEXT_EXPIRED_REVIEW_REQUIRED: '외부 삭제 작업용 정보의 보관 기한이 지났습니다. 수동 확인이 필요합니다.',
+
   DONATION_RETENTION_REVIEW_REQUIRED: '기부 자료의 보존 근거와 기간을 확인해야 합니다.',
   INVALID_DONATION_RETENTION_DECISION: '기부 자료의 보존 날짜 또는 근거를 수정해야 합니다.',
   DONATION_ARCHIVE_KEY_REQUIRED: '기부 자료 보관소의 암호화 설정이 필요합니다.',
@@ -54,6 +58,8 @@ function DeletionReview({ item }: { item: AccountDeletion }) {
       {item.status !== 'completed' && (
         <div className="space-y-3">
           <p className="text-sm text-dark-slate">처리 방식: {item.processingMode === 'automatic' ? '자동' : '수동'} · 자동 작업 상태: {item.autoStage || '대기'}</p>
+          {item.automationUpdatedAt && <p className="text-sm text-cool-gray">최근 상태 변경 {new Date(item.automationUpdatedAt).toLocaleString('ko-KR')}{item.processingMode === 'automatic' && item.nextAttemptAt && ` · 다음 시도 ${new Date(item.nextAttemptAt).toLocaleString('ko-KR')}`}</p>}
+          {item.databaseErased && <p className="text-sm text-dark-slate">앱 운영 DB 삭제 완료 · 파일 및 외부 처리 확인 후 최종 완료됩니다.</p>}
           {item.autoCode && <p role="status" className="text-sm text-dark-slate">{AUTO_BLOCKERS[item.autoCode] ?? '서버 관리자의 확인이 필요합니다.'} <span className="break-all">({item.autoCode})</span> 원인을 해결하면 자동으로 재시도합니다.</p>}
           <div className="flex flex-wrap gap-3">
             <Button variant="outline" disabled={mutation.isPending || item.processingMode === 'manual'} onClick={() => mutation.mutate('manual')}>자동 처리 중지 · 수동으로 전환</Button>

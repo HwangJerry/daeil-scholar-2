@@ -15,7 +15,7 @@ func (r *AccountDeletionRequestRepository) EraseDatabase(w model.ErasureWork, se
 	}
 	defer tx.Rollback()
 	var stage string
-	if err = tx.Get(&stage, `SELECT STAGE FROM ALUMNI_ACCOUNT_ERASURE WHERE REQUEST_ID=? AND MODE='automatic' AND EXTERNAL_EVIDENCE<>'' FOR UPDATE`, w.RequestID); err != nil {
+	if err = tx.Get(&stage, `SELECT STAGE FROM ALUMNI_ACCOUNT_ERASURE WHERE REQUEST_ID=? AND MODE='automatic' AND (EXTERNAL_EVIDENCE<>'' OR EXISTS (SELECT 1 FROM ALUMNI_ERASURE_CONTEXT c WHERE c.REQUEST_ID=ALUMNI_ACCOUNT_ERASURE.REQUEST_ID AND c.EXPIRES_AT>UTC_TIMESTAMP())) FOR UPDATE`, w.RequestID); err != nil {
 		return err
 	}
 	if stage == "database_erased" {
