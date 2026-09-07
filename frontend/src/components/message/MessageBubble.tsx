@@ -12,7 +12,7 @@ export function MessageBubble({ message, currentUserSeq }: MessageBubbleProps) {
 
   return (
     <div className={`flex ${isSent ? 'justify-end' : 'justify-start'} mb-1.5`}>
-      <div className={`max-w-[75%] flex flex-col ${isSent ? 'items-end' : 'items-start'}`}>
+      <div className={`max-w-[calc(100%*var(--layout-web-message-bubble-max-width-ratio))] flex flex-col ${isSent ? 'items-end' : 'items-start'}`}>
         <div
           className={`px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
             isSent
@@ -24,11 +24,11 @@ export function MessageBubble({ message, currentUserSeq }: MessageBubbleProps) {
         </div>
         <div className="flex items-center gap-1 mt-0.5">
           {isSent && message.readYn === 'Y' && (
-            <span className="text-[10px] text-text-placeholder">
+            <span className="text-ds-mini text-text-placeholder">
               읽음
             </span>
           )}
-          <span className="text-[10px] text-text-placeholder">{formatChatTime(message.regDate)}</span>
+          <span className="text-ds-mini text-text-placeholder">{formatChatTime(message.regDate)}</span>
         </div>
       </div>
     </div>

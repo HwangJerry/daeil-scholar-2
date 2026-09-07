@@ -18,7 +18,7 @@ export function DonationBanner() {
   if (isLoading) {
     return (
       <section id="donation-summary" aria-label="누적 기부액" className="scroll-mt-20">
-        <div className="h-48 rounded-[20px] skeleton-shimmer" />
+        <div className="h-48 rounded-xl skeleton-shimmer" />
       </section>
     );
   }
@@ -28,7 +28,7 @@ export function DonationBanner() {
       <section
         id="donation-summary"
         aria-label="누적 기부액"
-        className="scroll-mt-20 rounded-[20px] bg-surface border border-border p-7 shadow-card"
+        className="scroll-mt-20 rounded-xl bg-surface border border-border p-7 shadow-card"
       >
         <p className="text-sm text-text-tertiary">누적 기부액을 불러오지 못했습니다.</p>
       </section>
@@ -39,9 +39,9 @@ export function DonationBanner() {
     <section
       id="donation-summary"
       aria-labelledby="donation-summary-heading"
-      className="scroll-mt-20 rounded-[20px] bg-surface border border-border p-7 shadow-card"
+      className="scroll-mt-20 rounded-xl bg-surface border border-border p-7 shadow-card"
     >
-      <p className="text-[10px] font-semibold text-text-placeholder tracking-widest uppercase mb-4">
+      <p className="text-ds-mini font-semibold text-text-placeholder tracking-widest uppercase mb-4">
         함께 만드는 내일
       </p>
 

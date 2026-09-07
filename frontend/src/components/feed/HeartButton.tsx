@@ -29,8 +29,8 @@ export function HeartButton({ liked, onToggle, count, dark = false }: HeartButto
     }
   };
 
-  const activeColor = dark ? '#ff6b8a' : 'var(--color-error)';
-  const idleColor = dark ? 'rgba(255,255,255,0.5)' : 'var(--color-text-placeholder)';
+  const activeColor = dark ? 'var(--color-like-on-dark)' : 'var(--color-error)';
+  const idleColor = dark ? 'color-mix(in srgb, var(--color-white) 50%, transparent)' : 'var(--color-text-placeholder)';
   const heartColor = liked ? activeColor : idleColor;
 
   return (
@@ -61,13 +61,9 @@ export function HeartButton({ liked, onToggle, count, dark = false }: HeartButto
 
         {anim === 'pop' && (
           <span
-            className="absolute animate-heart-ring rounded-full pointer-events-none"
+            className="absolute w-7 h-7 left-1/2 top-1/2 border-2 animate-heart-ring rounded-full pointer-events-none"
             style={{
-              width: 28,
-              height: 28,
-              border: `2px solid ${activeColor}`,
-              left: '50%',
-              top: '50%',
+              borderColor: activeColor,
             }}
           />
         )}
@@ -75,13 +71,9 @@ export function HeartButton({ liked, onToggle, count, dark = false }: HeartButto
         {anim === 'pop' && DOT_ANGLES.map((deg) => (
           <span
             key={deg}
-            className="absolute animate-heart-dot rounded-full pointer-events-none"
+            className="absolute w-1 h-1 left-1/2 top-1/2 animate-heart-dot rounded-full pointer-events-none"
             style={{
-              width: 4,
-              height: 4,
               background: activeColor,
-              left: '50%',
-              top: '50%',
               '--deg': `${deg}deg`,
             } as React.CSSProperties}
           />

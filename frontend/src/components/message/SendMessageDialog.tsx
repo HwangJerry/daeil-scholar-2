@@ -64,7 +64,7 @@ export function SendMessageDialog({
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
 
       {/* Dialog */}
-      <div className="relative w-full max-w-md rounded-[20px] bg-surface p-6 shadow-float animate-fade-in-up border border-border-subtle">
+      <div className="relative w-full max-w-md rounded-xl bg-surface p-6 shadow-float animate-fade-in-up border border-border-subtle">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-text-primary font-serif">
