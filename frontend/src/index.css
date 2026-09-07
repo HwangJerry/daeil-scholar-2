@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./generated/design-tokens.css";
 @plugin "@tailwindcss/typography";
 
 :root {
@@ -271,4 +272,11 @@
     transform: none !important;
     transition: none !important;
   }
+}
+
+/* Canonical font sizes; no line-height override so compact metadata stays unchanged. */
+@theme inline {
+  --text-ds-mini: var(--font-size-mini);
+  --text-ds-caption: var(--font-size-caption);
+  --text-ds-body-xs: var(--font-size-body-xs);
 }

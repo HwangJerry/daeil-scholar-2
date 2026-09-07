@@ -10,8 +10,8 @@ interface HeroSectionProps {
 }
 
 const HERO_HEIGHT_CLASSES = {
-  default: 'min-h-[260px]',
-  landing: 'min-h-[360px] lg:min-h-[520px]',
+  default: 'min-h-[var(--size-web-feed-hero-min-height)]',
+  landing: 'min-h-[var(--size-web-landing-hero-min-height)] lg:min-h-[var(--size-web-landing-hero-desktop-min-height)]',
 } as const;
 
 export function HeroSection({ variant = 'default' }: HeroSectionProps) {
@@ -19,7 +19,7 @@ export function HeroSection({ variant = 'default' }: HeroSectionProps) {
   const heightClassName = HERO_HEIGHT_CLASSES[variant];
 
   if (isLoading) {
-    return <div className={cn(heightClassName, 'rounded-[20px] skeleton-shimmer')} />;
+    return <div className={cn(heightClassName, 'rounded-xl skeleton-shimmer')} />;
   }
 
   if (isError || !hero) return null;
@@ -30,7 +30,7 @@ export function HeroSection({ variant = 'default' }: HeroSectionProps) {
     <NoticeCardLink
       seq={hero.seq}
       className={cn(
-        'group relative block overflow-hidden rounded-[20px] animate-fade-in-up',
+        'group relative block overflow-hidden rounded-xl animate-fade-in-up',
         'bg-gradient-to-br from-hero-from via-hero-via to-hero-to',
         heightClassName,
       )}
@@ -73,7 +73,7 @@ export function HeroSection({ variant = 'default' }: HeroSectionProps) {
             {hero.subject}
           </h2>
           {hero.summary && (
-            <p className="mb-3 line-clamp-2 text-[13px] text-white/55 leading-relaxed">{hero.summary}</p>
+            <p className="mb-3 line-clamp-2 text-ds-body-xs text-white/55 leading-relaxed">{hero.summary}</p>
           )}
           <div className="flex items-center gap-3 text-xs text-white/40">
             <span>{formatRelativeDate(hero.regDate)}</span>

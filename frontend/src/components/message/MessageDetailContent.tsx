@@ -55,7 +55,7 @@ export function MessageDetailContent({ message, type, onClose }: MessageDetailCo
       <div className="border-t border-border-subtle" />
 
       {/* Content */}
-      <p className="text-sm leading-relaxed text-text-secondary whitespace-pre-wrap min-h-[80px]">
+      <p className="text-sm leading-relaxed text-text-secondary whitespace-pre-wrap min-h-[var(--size-message-detail-min-height)]">
         {message.content}
       </p>
 
