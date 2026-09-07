@@ -220,6 +220,7 @@ func TestUpdateDonationOrderChangesLinkedAccountWhenProvided(t *testing.T) {
 			int64(50000), int64(50000), "ADMS", "Y", "Y", 7, "192.0.2.1", int64(3001), "2026-08-20T12:00:00Z",
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`DELETE FROM ALUMNI_DONATION_RETENTION WHERE O_SEQ=\?`).WithArgs(int64(3001)).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	if err := repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1"); err != nil {
@@ -255,6 +256,7 @@ func TestUpdateDonationOrderPreservesLinkedAccountWhenOmitted(t *testing.T) {
 			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001), "2026-08-20T12:00:00Z",
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`DELETE FROM ALUMNI_DONATION_RETENTION WHERE O_SEQ=\?`).WithArgs(int64(3001)).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	if err := repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1"); err != nil {
@@ -326,6 +328,7 @@ func TestUpdateDonationOrderClearsLinkedAccountWhenNullProvided(t *testing.T) {
 			int64(100000), int64(100000), "BANK", "Y", "Y", 7, "192.0.2.1", int64(3001), "2026-08-20T12:00:00Z",
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`DELETE FROM ALUMNI_DONATION_RETENTION WHERE O_SEQ=\?`).WithArgs(int64(3001)).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	if err := repo.UpdateDonationOrder(3001, order, 7, "192.0.2.1"); err != nil {

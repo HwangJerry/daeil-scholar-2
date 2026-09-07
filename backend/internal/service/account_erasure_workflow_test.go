@@ -225,3 +225,7 @@ func TestActiveReceiptWorkAllowsDatabaseErasureButBlocksExternalCompletion(t *te
 		t.Fatal("completed receipt work did not resume erasure")
 	}
 }
+
+func (f *erasureStoreFake) RefreshErasureContext(id int64, data []byte) error {
+	return f.SaveErasureContext(id, data)
+}

@@ -45,3 +45,23 @@ func (r *AccountDeletionRequestRepository) LoadErasureContext(id int64) ([]byte,
 	}
 	return encrypted, err
 }
+
+// Refresh only a live pre-erasure handoff; identifiers keep their original expiry.
+func (r *AccountDeletionRequestRepository) RefreshErasureContext(id int64, encrypted []byte) error {
+	if len(encrypted) == 0 || len(encrypted) > maxErasureContextBytes {
+		return &model.ErasureBlocked{Code: "ERASURE_CONTEXT_UNREADABLE"}
+	}
+	result, err := r.DB.Exec(`UPDATE ALUMNI_ERASURE_CONTEXT c JOIN ALUMNI_ACCOUNT_ERASURE e ON e.REQUEST_ID=c.REQUEST_ID
+ SET c.CIPHERTEXT=? WHERE c.REQUEST_ID=? AND c.EXPIRES_AT>UTC_TIMESTAMP() AND e.MODE='automatic' AND e.STAGE<>'database_erased' AND e.STAGE<>'completed'`, encrypted, id)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return &model.ErasureBlocked{Code: "ERASURE_CONTEXT_EXPIRED_REVIEW_REQUIRED"}
+	}
+	return nil
+}

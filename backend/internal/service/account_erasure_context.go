@@ -5,25 +5,37 @@ import (
 	"context"
 	"database/sql"
 	"github.com/dflh-saf/backend/internal/model"
+	"reflect"
 )
 
-func (s *AutomaticErasureService) preserveContext(w model.ErasureWork) error {
+func (s *AutomaticErasureService) preserveContext(w *model.ErasureWork) error {
 	if w.ExternalEvidence != "" {
 		return nil
-	} // Previously verified work needs no new identifiers.
-	if encrypted, err := s.Store.LoadErasureContext(w.RequestID); err == nil {
-		_, err = s.ContextCipher.Open(w, encrypted)
-		return err
-	} else if err != sql.ErrNoRows {
-		return err
 	}
-	subject, err := s.Store.ErasureExternalSubject(w)
+	encrypted, loadErr := s.Store.LoadErasureContext(w.RequestID)
+	if loadErr != nil && loadErr != sql.ErrNoRows {
+		return loadErr
+	}
+	subject, err := s.Store.ErasureExternalSubject(*w)
 	if err != nil {
 		return err
 	}
-	encrypted, err := s.ContextCipher.Seal(subject)
+	w.ContextRetentions = subject.Retentions
+	if loadErr == nil {
+		previous, err := s.ContextCipher.Open(*w, encrypted)
+		if err != nil {
+			return err
+		}
+		if reflect.DeepEqual(previous, subject) {
+			return nil
+		}
+	}
+	encrypted, err = s.ContextCipher.Seal(subject)
 	if err != nil {
 		return err
+	}
+	if loadErr == nil {
+		return s.Store.RefreshErasureContext(w.RequestID, encrypted)
 	}
 	return s.Store.SaveErasureContext(w.RequestID, encrypted)
 }

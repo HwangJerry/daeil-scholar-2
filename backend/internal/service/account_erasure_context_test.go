@@ -41,3 +41,40 @@ func TestErasureContextAuthentication(t *testing.T) {
 		t.Fatal("truncated ciphertext accepted")
 	}
 }
+
+type changingErasureContextStore struct {
+	erasureStoreFake
+	subject   model.ErasureExternalSubject
+	refreshes int
+}
+
+func (f *changingErasureContextStore) ErasureExternalSubject(model.ErasureWork) (model.ErasureExternalSubject, error) {
+	return f.subject, nil
+}
+func (f *changingErasureContextStore) RefreshErasureContext(id int64, data []byte) error {
+	f.refreshes++
+	return f.SaveErasureContext(id, data)
+}
+func TestPreDeletionContextRefreshBindsReviewedRetention(t *testing.T) {
+	cipher := testContextCipher(t)
+	old := model.ErasureExternalSubject{RequestID: 17, UserSeq: 42, Retentions: []model.DonationRetentionDecision{{OrderID: 1, SourceFingerprint: "old"}}}
+	data, err := cipher.Seal(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := old
+	current.Retentions = []model.DonationRetentionDecision{{OrderID: 1, SourceFingerprint: "new"}}
+	store := &changingErasureContextStore{erasureStoreFake: erasureStoreFake{encrypted: data}, subject: current}
+	svc := &AutomaticErasureService{Store: store, ContextCipher: cipher}
+	work := model.ErasureWork{RequestID: 17, UserSeq: 42}
+	if err = svc.preserveContext(&work); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := cipher.Open(work, store.encrypted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.refreshes != 1 || opened.Retentions[0].SourceFingerprint != "new" || work.ContextRetentions[0].SourceFingerprint != "new" {
+		t.Fatal("handoff and final database snapshot diverged")
+	}
+}

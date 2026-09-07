@@ -32,7 +32,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
     INSERT INTO WEO_ORDER VALUES (1,42,42,'Synthetic Donor','01000000042','2025-01-01',100,0,100,'happy_nanum','fake-tx-1','completed','A'),(2,43,43,'Other Donor','01000000043','2025-01-01',50,0,50,'happy_nanum','fake-tx-2','completed','A');
     INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
 	db.MustExec(`ALTER TABLE WEO_MEMBER ADD USR_THUMNAIL TEXT`)
-	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "062_create_profile_file_history.sql"} {
+	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "062_create_profile_file_history.sql", "063_bind_donation_retention_source.sql"} {
 		data, err := os.ReadFile("../../migrations/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -131,7 +131,11 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if err = repo.ResolveReceiptWork(receipt.ID, 7, model.AccountDeletionResolution{ReceiptWorkStatus: "active", OriginalStorage: "separate_excel", ContactSecured: true, EvidenceReference: "synthetic-pending-receipt"}); err != nil {
 		t.Fatal(err)
 	}
-	if err = repo.SaveDonationRetention(model.DonationRetentionDecision{OrderID: 1, Basis: "ledger_10y", BasisDate: &start, Until: &until, Evidence: "synthetic-review"}); err != nil {
+	fingerprint, err := repo.DonationRetentionSource(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.SaveDonationRetention(model.DonationRetentionDecision{SourceFingerprint: fingerprint, OrderID: 1, Basis: "ledger_10y", BasisDate: &start, Until: &until, Evidence: "synthetic-review"}); err != nil {
 		t.Fatal(err)
 	}
 	if err = repo.PrepareErasure(work, validate); err != nil {
@@ -140,6 +144,11 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if err = repo.SaveErasureContext(receipt.ID, []byte("synthetic-encrypted-context")); err != nil {
 		t.Fatal(err)
 	}
+	subject, err := repo.ErasureExternalSubject(work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	work.ContextRetentions = subject.Retentions
 	targets, err := repo.ErasureTargets(receipt.ID)
 	if err != nil || len(targets) != 4 {
 		t.Fatal("targets not initialized", err)

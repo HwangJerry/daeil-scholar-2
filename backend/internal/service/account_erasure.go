@@ -18,6 +18,7 @@ type AutomaticErasureStore interface {
 	ErasureExternalSubject(model.ErasureWork) (model.ErasureExternalSubject, error)
 	RecordExternalErasure(int64, string) error
 	SaveErasureContext(int64, []byte) error
+	RefreshErasureContext(int64, []byte) error
 	LoadErasureContext(int64) ([]byte, error)
 	ReceiptWork(int64) (model.ErasureReceiptWork, error)
 	ErasureTargets(int64) ([]model.ErasureTarget, error)
@@ -96,7 +97,7 @@ func (s *AutomaticErasureService) process(ctx context.Context, w model.ErasureWo
 		if err = s.Store.PrepareErasure(w, ValidateDonationRetention); err != nil {
 			return err
 		}
-		if err = s.preserveContext(w); err != nil {
+		if err = s.preserveContext(&w); err != nil {
 			return err
 		}
 		if err = s.Store.EraseDatabase(w, s.Seal, ValidateDonationRetention); err != nil {

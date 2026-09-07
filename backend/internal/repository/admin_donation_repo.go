@@ -566,5 +566,11 @@ func (r *AdminDonationRepository) UpdateDonationOrder(seq int64, order model.Nor
 			return ErrDonationOrderStale
 		}
 	}
+	// A replacement can change accounting facts even when its account link is omitted.
+	// Invalidate the review while the order UPDATE lock is still held.
+	if _, err := tx.Exec(`DELETE FROM ALUMNI_DONATION_RETENTION WHERE O_SEQ=?`, seq); err != nil {
+		return err
+	}
+
 	return tx.Commit()
 }

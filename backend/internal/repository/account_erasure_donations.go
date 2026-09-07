@@ -4,7 +4,6 @@ package repository
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
 	"time"
@@ -26,6 +25,9 @@ type archiveDonation struct {
 
 func eraseDonations(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork, seal func([]byte) ([]byte, error), validate func(model.DonationRetentionDecision) error) error {
 	if s["WEO_ORDER"] == nil {
+		if len(w.ContextRetentions) != 0 {
+			return &model.ErasureBlocked{Code: "DONATION_RETENTION_REVIEW_REQUIRED"}
+		}
 		return nil
 	}
 	var rows []archiveDonation
@@ -37,6 +39,9 @@ func eraseDonations(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork, seal func
         WHERE o.USR_SEQ=? OR o.O_ACCOUNT_USR_SEQ=? FOR UPDATE`, w.UserSeq, w.UserSeq)
 	if err != nil {
 		return err
+	}
+	if len(rows) != len(w.ContextRetentions) {
+		return &model.ErasureBlocked{Code: "DONATION_RETENTION_REVIEW_REQUIRED"}
 	}
 	if len(rows) == 0 {
 		return nil
@@ -54,13 +59,23 @@ func eraseDonations(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork, seal func
 	summaries := map[string]string{}
 	summaryDates := map[string]string{}
 	for _, row := range rows {
+		current, err := donationSourceFingerprint(tx, row.ID)
+		if err != nil {
+			return err
+		}
 		var decision model.DonationRetentionDecision
-		err = tx.Get(&decision, `SELECT O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE FROM ALUMNI_DONATION_RETENTION WHERE O_SEQ=?`, row.ID)
+		err = tx.Get(&decision, `SELECT O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE,SOURCE_FINGERPRINT FROM ALUMNI_DONATION_RETENTION WHERE O_SEQ=? FOR UPDATE`, row.ID)
 		if err == sql.ErrNoRows {
 			return &model.ErasureBlocked{Code: "DONATION_RETENTION_REVIEW_REQUIRED"}
 		}
 		if err != nil {
 			return err
+		}
+		if err = verifyDonationRetentionSource(decision, current); err != nil {
+			return err
+		}
+		if !contextIncludesRetention(w.ContextRetentions, decision) {
+			return &model.ErasureBlocked{Code: "DONATION_RETENTION_REVIEW_REQUIRED"}
 		}
 		if err = validate(decision); err != nil {
 			return &model.ErasureBlocked{Code: "INVALID_DONATION_RETENTION_DECISION"}
@@ -143,15 +158,23 @@ func (r *AccountDeletionRequestRepository) SaveDonationRetention(d model.Donatio
 	if d.Until != nil {
 		until = d.Until.Format("2006-01-02")
 	}
-	result, err := r.DB.Exec(`INSERT INTO ALUMNI_DONATION_RETENTION (O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE,REVIEWED_AT)
-        SELECT O_SEQ,?,?,?,?,UTC_TIMESTAMP() FROM WEO_ORDER WHERE O_SEQ=?
-        ON DUPLICATE KEY UPDATE BASIS=VALUES(BASIS),BASIS_DATE=VALUES(BASIS_DATE),RETAIN_UNTIL=VALUES(RETAIN_UNTIL),EVIDENCE_REFERENCE=VALUES(EVIDENCE_REFERENCE),REVIEWED_AT=UTC_TIMESTAMP()`, d.Basis, date, until, d.Evidence, d.OrderID)
+	tx, err := r.DB.Beginx()
 	if err != nil {
 		return err
 	}
-	n, _ := result.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("donation not found or unchanged")
+	defer tx.Rollback()
+	current, err := donationSourceFingerprint(tx, d.OrderID)
+	if err != nil {
+		return err
 	}
-	return nil
+	if err = verifyDonationRetentionSource(d, current); err != nil {
+		return err
+	}
+	_, err = tx.Exec(`INSERT INTO ALUMNI_DONATION_RETENTION (O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE,REVIEWED_AT,SOURCE_FINGERPRINT)
+ VALUES (?,?,?,?,?,UTC_TIMESTAMP(),?)
+ ON DUPLICATE KEY UPDATE BASIS=VALUES(BASIS),BASIS_DATE=VALUES(BASIS_DATE),RETAIN_UNTIL=VALUES(RETAIN_UNTIL),EVIDENCE_REFERENCE=VALUES(EVIDENCE_REFERENCE),REVIEWED_AT=UTC_TIMESTAMP(),SOURCE_FINGERPRINT=VALUES(SOURCE_FINGERPRINT)`, d.OrderID, d.Basis, date, until, d.Evidence, current)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }

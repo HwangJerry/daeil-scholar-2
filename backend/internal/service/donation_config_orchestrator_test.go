@@ -189,6 +189,7 @@ func TestDonationOrderUpdateResponseReadFailureStillRefreshesSummary(t *testing.
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`(?s)UPDATE WEO_ORDER SET.*WHERE O_SEQ = \? AND O_TYPE = 'A'`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`DELETE FROM ALUMNI_DONATION_RETENTION WHERE O_SEQ=\?`).WithArgs(int64(3001)).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 	mock.ExpectQuery(`(?s)FROM WEO_ORDER o.*WHERE o.O_SEQ = \? AND o.O_TYPE = 'A'`).
 		WithArgs(int64(3001)).

@@ -102,7 +102,7 @@ def prepare(repo, output, components, patch_mode):
         for path in (source / 'backend/migrations').glob('[0-9][0-9][0-9]_*.sql'):
             shutil.copyfile(path, artifacts / 'migrations' / path.name)
     manifest = {'format': 1, 'commit': commit, 'components': components, 'patch_mode': patch_mode,
-                'status': 'PREPARED_NOT_DEPLOYED', 'minimum_web_migration': '062_create_profile_file_history.sql',
+                'status': 'PREPARED_NOT_DEPLOYED', 'minimum_web_migration': '063_bind_donation_retention_source.sql',
                 'files': {p.relative_to(artifacts).as_posix(): digest(p) for p in sorted(artifacts.rglob('*')) if p.is_file()}}
     (output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     verify(output)

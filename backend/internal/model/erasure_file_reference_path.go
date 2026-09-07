@@ -2,7 +2,6 @@
 package model
 
 import (
-	"html"
 	"net/url"
 	"path"
 	"strings"
@@ -12,7 +11,7 @@ import (
 // Query/fragment and public www/HTTP aliases can serve the same storage object.
 // Invalid references fail closed; unrelated valid URLs have no managed identity.
 func ErasureFileReferencePath(raw, siteOrigin string) (string, bool, error) {
-	raw = strings.TrimSpace(html.UnescapeString(raw))
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", false, nil
 	}

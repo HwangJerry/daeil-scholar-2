@@ -33,3 +33,20 @@ func TestSurvivingContentReferenceVariants(t *testing.T) {
 		}
 	}
 }
+
+func TestErasureContentDecodesOnlyHTMLAttributes(t *testing.T) {
+	for _, c := range []struct{ name, content, want string }{
+		{"raw URL", "/files/a&copy;.jpg", "/files/a&copy;.jpg"},
+		{"HTML", `<img src="/files/a&amp;copy;.jpg">`, "/files/a&copy;.jpg"},
+		{"encoded HTML", base64.StdEncoding.EncodeToString([]byte(`<img src="/files/a&amp;copy;.jpg">`)), "/files/a&copy;.jpg"},
+		{"quoted filename", `<img src="/files/a&quot;b.jpg">`, `/files/a"b.jpg`},
+		{"Markdown", `![photo](/files/a&copy;.jpg)`, "/files/a&copy;.jpg"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			urls := managedContentURLs(c.content)
+			if len(urls) != 1 || urls[0] != c.want {
+				t.Fatalf("identity changed: got %q want %q", urls, c.want)
+			}
+		})
+	}
+}

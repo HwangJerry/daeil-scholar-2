@@ -34,8 +34,11 @@ func rejectOtherErasureFileReferences(tx *sqlx.Tx, s erasureSchema, local, origi
 	}
 	for _, column := range []string{"CONTENTS", "CONTENTS_MD", "THUMBNAIL_URL", "FILES", "RE_FILES"} {
 		if s.has("WEO_BOARDBBS", column) {
-			queries = append(queries, referenceQuery{"SELECT COALESCE(" + column + ",'') FROM WEO_BOARDBBS" + predicate + " FOR UPDATE", userArgs, true})
+			queries = append(queries, referenceQuery{"SELECT COALESCE(" + column + ",'') FROM WEO_BOARDBBS" + predicate + " FOR UPDATE", userArgs, column != "THUMBNAIL_URL"})
 		}
+	}
+	if s.has("MAIN_BANNER_AD_IMAGE", "IMAGE_URL") {
+		queries = append(queries, referenceQuery{"SELECT COALESCE(IMAGE_URL,'') FROM MAIN_BANNER_AD_IMAGE FOR UPDATE", nil, false})
 	}
 	if s["WEO_FILES"] != nil {
 		predicate := "1=1"

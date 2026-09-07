@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,7 +16,15 @@ import (
 func main() {
 	file := flag.String("file", "", "reviewed JSON decision array; dates use RFC3339 midnight")
 	apply := flag.Bool("apply", false, "persist validated decisions; default validates only")
+	order := flag.Int("inspect-order", 0, "read-only: print the current source fingerprint for a reviewed order")
 	flag.Parse()
+	if *order > 0 {
+		if err := inspect(*order); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(*file, *apply); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -35,6 +44,10 @@ func run(file string, apply bool) error {
 	}
 	seen := map[int]bool{}
 	for _, d := range decisions {
+		snapshot, err := hex.DecodeString(d.SourceFingerprint)
+		if err != nil || len(snapshot) != 32 {
+			return fmt.Errorf("order %d requires its reviewed sourceFingerprint", d.OrderID)
+		}
 		if seen[d.OrderID] {
 			return fmt.Errorf("duplicate order decision")
 		}
@@ -60,4 +73,18 @@ func run(file string, apply bool) error {
 	}
 	fmt.Printf("Stored %d reviewed decisions.\n", len(decisions))
 	return nil
+}
+
+func inspect(id int) error {
+	db, err := repository.NewDB(config.Load().DB)
+	if err != nil {
+		return fmt.Errorf("database connection failed")
+	}
+	defer db.Close()
+	repo := &repository.AccountDeletionRequestRepository{DB: db}
+	fingerprint, err := repo.DonationRetentionSource(id)
+	if err != nil {
+		return fmt.Errorf("order snapshot unavailable")
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"orderId": id, "sourceFingerprint": fingerprint})
 }

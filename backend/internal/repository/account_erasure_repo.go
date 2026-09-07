@@ -79,7 +79,7 @@ func (r *AccountDeletionRequestRepository) ErasureExternalSubject(w model.Erasur
 	}
 	s.Retentions = []model.DonationRetentionDecision{}
 	if hasOrders > 0 {
-		err = r.DB.Select(&s.Retentions, `SELECT d.O_SEQ,d.BASIS,d.BASIS_DATE,d.RETAIN_UNTIL,d.EVIDENCE_REFERENCE FROM ALUMNI_DONATION_RETENTION d JOIN WEO_ORDER o ON o.O_SEQ=d.O_SEQ WHERE o.USR_SEQ=? OR o.O_ACCOUNT_USR_SEQ=?`, w.UserSeq, w.UserSeq)
+		err = r.DB.Select(&s.Retentions, `SELECT d.O_SEQ,d.BASIS,d.BASIS_DATE,d.RETAIN_UNTIL,d.EVIDENCE_REFERENCE,d.SOURCE_FINGERPRINT FROM ALUMNI_DONATION_RETENTION d JOIN WEO_ORDER o ON o.O_SEQ=d.O_SEQ WHERE o.USR_SEQ=? OR o.O_ACCOUNT_USR_SEQ=? ORDER BY d.O_SEQ`, w.UserSeq, w.UserSeq)
 	}
 	if err != nil {
 		return s, err

@@ -31,3 +31,16 @@ func TestSurvivingReferenceIdentity(t *testing.T) {
 		t.Fatal("double decoding", local, err)
 	}
 }
+
+func TestRawReferencePreservesEntityLikeFileNames(t *testing.T) {
+	for _, raw := range []string{"/files/a&copy;.jpg", "/files/a&amp;.jpg", "/files/a%26copy%3B.jpg"} {
+		expected, _, err := ErasureFilePath(raw, "https://app.example.org")
+		if err != nil {
+			t.Fatal(err)
+		}
+		actual, external, err := ErasureFileReferencePath(raw, "https://app.example.org")
+		if err != nil || external || actual != expected {
+			t.Fatalf("raw URL changed: %q -> %q, wanted %q, %v", raw, actual, expected, err)
+		}
+	}
+}

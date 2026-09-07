@@ -21,13 +21,13 @@ class ReleaseTests(unittest.TestCase):
     def candidate(self):
         files = ['backend/server', 'backend/backfill', 'frontend/index.html', 'frontend/assets/new.js',
                  'deploy/remote_release.py', 'deploy/httpd-alumni.conf',
-                 *['deploy/' + name for name in remote.SHIMS], 'migrations/062_create_profile_file_history.sql']
+                 *['deploy/' + name for name in remote.SHIMS], 'migrations/063_bind_donation_retention_source.sql']
         for name in files:
             path = self.root / 'artifacts' / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('synthetic ' + name)
         manifest = {'format': 1, 'commit': 'a' * 40, 'components': ['backend', 'frontend'], 'patch_mode': 'false',
-                    'minimum_web_migration': '062_create_profile_file_history.sql',
+                    'minimum_web_migration': '063_bind_donation_retention_source.sql',
                     'files': {name: bundle.digest(self.root / 'artifacts' / name) for name in files}}
         (self.root / 'manifest.json').write_text(json.dumps(manifest))
         return manifest

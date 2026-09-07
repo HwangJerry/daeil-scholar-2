@@ -35,18 +35,25 @@
 
 ## 기부 분류 설정
 
-이미 검토된 거래별 결정은 `backend/cmd/donation-retention`으로 입력한다. 기본은 파일 검증만 하고 `-apply`를 지정해야 DB에 기록한다. JSON에는 개인정보 원문을 넣지 않는다.
+이미 검토된 거래별 결정은 `backend/cmd/donation-retention`으로 입력한다. 기본은 파일 검증만 하고 `-apply`를 지정해야 DB에 기록한다. JSON에는 개인정보 원문을 넣지 않는다. 063 이후에는 현재 원본을 식별하는 `sourceFingerprint`가 필수다.
+`-inspect-order`는 DB에서 해당 주문의 지문만 읽고 변경하지 않는다. 이 지문을 받은 원본을 검토한 뒤
+JSON에 함께 기록한다. 단순히 새 지문을 붙여 오래된 검토 결과를 재사용하면 안 된다.
+원본이 바뀌면 저장 단계에서 거부하며, 관리자 수정 후 기존 결정도 같은 트랜잭션에서 무효화한다.
+지문 없는 기존 결정은 원본 자료를 다시 검토해야 사용할 수 있다.
 
 ```json
-[{"orderId":123,"basis":"ledger_10y","basisDate":"2025-12-31T00:00:00Z","retainUntil":"2035-12-31T00:00:00Z","evidenceReference":"회계담당자-검토문서-번호"}]
+[{"orderId":123,"sourceFingerprint":"<검토한 원본의 64자리 지문>","basis":"ledger_10y","basisDate":"2025-12-31T00:00:00Z","retainUntil":"2035-12-31T00:00:00Z","evidenceReference":"회계담당자-검토문서-번호"}]
 ```
 
 ```sh
+# backend 디렉터리에서 실행. 아래 조회는 읽기 전용이다.
+go run ./cmd/donation-retention -inspect-order 123
+# 출력 지문과 해당 원본을 검토해 JSON을 준비한 뒤 형식 검증한다.
 go run ./cmd/donation-retention -file /secure/reviewed-retention.json
 go run ./cmd/donation-retention -file /secure/reviewed-retention.json -apply
 ```
 
-장부 보존 의무와 회계연도, 완전한 영수증 원본 별도 보존이 확인되면 환경 설정으로 **향후 요청도 자동 분류**할 수 있다. `DONATION_LEDGER_RETENTION_CONFIRMED=true`, `DONATION_RECEIPT_ORIGINALS_SEPARATE=true`, `DONATION_LEDGER_YEAR_END_MONTH=확인한 월`, `DONATION_LEDGER_RETENTION_EVIDENCE=검토 증빙 번호`를 설정한다. 기존 거래별 결정을 우선한다. 미결제 등 분류가 불명확한 거래는 자동 추정하지 않는다. 윤년과 회계연도 경계를 달력 기준으로 계산한다.
+장부 보존 의무와 회계연도, 완전한 영수증 원본 별도 보존이 확인되면 환경 설정으로 **향후 요청도 자동 분류**할 수 있다. `DONATION_LEDGER_RETENTION_CONFIRMED=true`, `DONATION_RECEIPT_ORIGINALS_SEPARATE=true`, `DONATION_LEDGER_YEAR_END_MONTH=확인한 월`, `DONATION_LEDGER_RETENTION_EVIDENCE=검토 증빙 번호`를 설정한다. 현재 원본 지문과 일치하는 기존 거래별 결정을 우선한다. 미결제 등 분류가 불명확한 거래는 자동 추정하지 않는다. 윤년과 회계연도 경계를 달력 기준으로 계산한다.
 
 `DONATION_ARCHIVE_KEY`는 전용 32바이트 키의 64자리 hex 값이다. 채팅·Git·명령 인수·운영 로그에 노출하지 않고 서버의 비밀 설정으로 주입한다.
 
@@ -169,3 +176,11 @@ HTTPS 처리기는 `requiredTargets`에 지정된 미완료 대상만 처리해�
 Migration 062는 현재 관리 사진/명함/썸네일 경로를 확보하고, 사진/명함 교체 시 이전 경로를 같은 트랜잭션에 기록한다. 자동 탈퇴는 그 이력을 파일 큐로 옮긴 후 제거한다. `/upload/`, `/old/upload/`도 실제 레거시 루트로 연결한다. 이미 사라진 이전 연결을 추측해서 복원하지 않는다.
 
 운영 키 준비·PG 정리본·오류 로그 최소화·실제 App Store IPA와 Sentry 수신 검증 및 남은 외부 연동은 [최신 인계 문서](ACCOUNT_ERASURE_RELEASE_HANDOFF.md)를 참조한다.
+
+
+## 보존 검토와 원본 수정의 동시 실행
+
+063은 기존 결정에 빈 원본 지문을 추가한다. 기존 원본·결정·보관소 행을 삭제하지 않는다.
+관리자 수정, 검토 저장, 최종 삭제는 같은 주문 행 잠금으로 직렬화하고 원본 지문을 대조한다.
+외부 처리용 정보도 새 검토 내용으로 갱신하되 최초 만료일은 연장하지 않는다.
+정보 확보 후 주문이 바뀌거나 연결 대상이 달라지면 실제 삭제를 차단하고 다시 확인한다.
