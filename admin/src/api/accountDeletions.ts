@@ -11,7 +11,25 @@ export interface ErasureTarget {
  lastAttemptAt: string | null;
  updatedAt: string;
 }
+export interface ReceiptWorkResolution {
+ action: 'receipt_work';
+ receiptWorkStatus: 'not_required' | 'active' | 'completed';
+ originalStorage: string;
+ evidenceReference: string;
+ contactSecured: boolean;
+ contactErased: boolean;
+ resultNotified: boolean;
+}
+export interface ReceiptWork {
+ status: 'unreviewed' | 'not_required' | 'active' | 'completed';
+ originalStorage: string;
+ evidenceReference: string;
+ updatedAt: string;
+ completedAt: string | null;
+}
 export interface AccountDeletion {
+ receiptWork?: ReceiptWork;
+ receiptWorkPending?: boolean;
  targets?: ErasureTarget[];
   requestId: number;
   userSeq: number | null;
@@ -48,6 +66,6 @@ export function fetchAccountDeletions(status: DeletionStatus, before: number) {
 export function verifyAccountDeletion(id: number) {
   return api.get<{ items: DeletionFootprint[] }>(`/api/admin/account-deletions/${id}/verification`);
 }
-export function resolveAccountDeletion(id: number, evidence: DeletionEvidence | { action: 'start' | 'automatic' | 'manual' }) {
+export function resolveAccountDeletion(id: number, evidence: DeletionEvidence | ReceiptWorkResolution | { action: 'start' | 'automatic' | 'manual' }) {
   return api.put<void>(`/api/admin/account-deletions/${id}`, evidence);
 }

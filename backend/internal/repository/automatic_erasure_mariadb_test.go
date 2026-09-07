@@ -31,7 +31,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
     INSERT INTO WEO_VISIT_DAILY VALUES (42,'visitor42'),(43,'visitor43');
     INSERT INTO WEO_ORDER VALUES (1,42,42,'Synthetic Donor','01000000042','2025-01-01',100,0,100,'happy_nanum','fake-tx-1','completed','A'),(2,43,43,'Other Donor','01000000043','2025-01-01',50,0,50,'happy_nanum','fake-tx-2','completed','A');
     INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
-	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql"} {
+	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql"} {
 		data, err := os.ReadFile("../../migrations/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -114,6 +114,9 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	repo.DonationRetentionTemplate = nil
 	start := time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC)
 	until := start.AddDate(10, 0, 0)
+	if err = repo.ResolveReceiptWork(receipt.ID, 7, model.AccountDeletionResolution{ReceiptWorkStatus: "active", OriginalStorage: "separate_excel", ContactSecured: true, EvidenceReference: "synthetic-pending-receipt"}); err != nil {
+		t.Fatal(err)
+	}
 	if err = repo.SaveDonationRetention(model.DonationRetentionDecision{OrderID: 1, Basis: "ledger_10y", BasisDate: &start, Until: &until, Evidence: "synthetic-review"}); err != nil {
 		t.Fatal(err)
 	}
@@ -222,6 +225,18 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	partial, err := repo.Receipt(strings.Repeat("a", 64))
 	if err != nil || !partial.DatabaseErased || partial.Status == "completed" {
 		t.Fatal("partial erasure misreported", err)
+	}
+	if err = repo.FinishAutomaticErasure(work); err == nil {
+		t.Fatal("active receipt contact work completed deletion")
+	}
+	if err = repo.ResolveReceiptWork(receipt.ID, 42, model.AccountDeletionResolution{ReceiptWorkStatus: "completed"}); err == nil {
+		t.Fatal("self completion allowed")
+	}
+	if err = repo.ResolveReceiptWork(receipt.ID, 7, model.AccountDeletionResolution{ReceiptWorkStatus: "not_required"}); err == nil {
+		t.Fatal("active work dismissed without cleanup")
+	}
+	if err = repo.ResolveReceiptWork(receipt.ID, 7, model.AccountDeletionResolution{ReceiptWorkStatus: "completed", ResultNotified: true, ContactErased: true, EvidenceReference: "synthetic-delivered-and-contact-cleared"}); err != nil {
+		t.Fatal(err)
 	}
 	if err = repo.FinishAutomaticErasure(work); err != nil {
 		t.Fatal(err)

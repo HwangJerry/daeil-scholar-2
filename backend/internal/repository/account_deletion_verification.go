@@ -92,6 +92,19 @@ func (r *AccountDeletionRequestRepository) Complete(id int64, operator int, evid
 	if err = tx.Get(&automation, `SELECT MODE,STAGE,EXTERNAL_EVIDENCE FROM ALUMNI_ACCOUNT_ERASURE WHERE REQUEST_ID=? FOR UPDATE`, id); err != nil {
 		return err
 	}
+	// Existing manual completion independently attests that external contact copies were cleared.
+	if operator != 0 {
+		if _, err = tx.Exec(`UPDATE ALUMNI_ERASURE_RECEIPT_WORK SET STATUS='not_required',EVIDENCE_REFERENCE='manual-completion: see request evidence',UPDATED_AT=UTC_TIMESTAMP() WHERE REQUEST_ID=? AND STATUS='unreviewed'`, id); err != nil {
+			return err
+		}
+	}
+	finished, e := receiptWorkFinished(tx, id)
+	if e != nil {
+		return e
+	}
+	if !finished {
+		return ErrDeletionIncomplete
+	}
 	if operator == 0 {
 		verified, e := verifiedErasureTargets(tx, id)
 		if e != nil {

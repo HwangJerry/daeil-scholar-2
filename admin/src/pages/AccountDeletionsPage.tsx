@@ -1,6 +1,7 @@
 // AccountDeletionsPage — Manual erasure work tracking with independent completion evidence.
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AccountErasureReceiptWork } from '../components/AccountErasureReceiptWork';
 import { AccountErasureTargets } from '../components/AccountErasureTargets';
 import { Button } from '../components/ui/Button';
 import { fetchAccountDeletions, resolveAccountDeletion, verifyAccountDeletion, type AccountDeletion, type DeletionEvidence, type DeletionStatus } from '../api/accountDeletions';
@@ -9,6 +10,8 @@ const QUEUE_PAGE_SIZE = 50;
 const QUEUE_REFRESH_MS = 60_000;
 const STATUS_LABELS: Record<DeletionStatus, string> = { pending: '접수', processing: '처리 중', completed: '완료' };
 const AUTO_BLOCKERS: Record<string, string> = {
+  RECEIPT_CONTACT_REVIEW_REQUIRED: '진행 중인 영수증 연락 업무와 원본 보관 위치를 확인해야 합니다.',
+  RECEIPT_CONTACT_WORK_PENDING: '영수증 업무·결과 전달·업무용 연락처 정리 확인을 기다리고 있습니다.',
   ERASURE_TARGETS_REVIEW_REQUIRED: '저장소별 작업 등록 상태를 확인해야 합니다.',
   ERASURE_CONTEXT_KEY_REQUIRED: '외부 삭제 작업용 별도 암호화 키 설정이 필요합니다.',
   ERASURE_CONTEXT_UNREADABLE: '외부 삭제 작업의 암호화 정보 확인이 필요합니다.',
@@ -69,6 +72,7 @@ function DeletionReview({ item }: { item: AccountDeletion }) {
           </div>
         </div>
       )}
+      <AccountErasureReceiptWork item={item} />
       <AccountErasureTargets targets={item.targets} />
       {item.status === 'pending' && item.processingMode !== 'automatic' && <Button disabled={mutation.isPending} onClick={() => mutation.mutate('start')}>삭제 작업 시작 · 소셜 권한 철회 요청</Button>}
       {item.status === 'processing' && item.processingMode !== 'automatic' && (

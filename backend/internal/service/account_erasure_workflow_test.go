@@ -17,6 +17,7 @@ type erasureStoreFake struct {
 	files                    []model.ErasureFile
 	retry                    string
 	preparedError            error
+	receiptStatus            string
 	encrypted                []byte
 	targets                  []model.ErasureTarget
 }
@@ -190,4 +191,31 @@ func (f *erasureStoreFake) RecordErasureTargets(_ int64, targets []model.Erasure
 		}
 	}
 	return nil
+}
+
+func (f *erasureStoreFake) ReceiptWork(int64) (model.ErasureReceiptWork, error) {
+	status := f.receiptStatus
+	if status == "" {
+		status = "not_required"
+	}
+	return model.ErasureReceiptWork{Status: status}, nil
+}
+
+func TestActiveReceiptWorkAllowsDatabaseErasureButBlocksExternalCompletion(t *testing.T) {
+	store := &erasureStoreFake{active: true, receiptStatus: "active", work: model.ErasureWork{RequestID: 1, UserSeq: 42}}
+	external := &erasureExternalFake{}
+	svc := &AutomaticErasureService{Store: store, External: external, ContextCipher: testContextCipher(t)}
+	if err := svc.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.databaseCalls != 1 || store.completed != 0 || external.calls != 0 || store.retry != "RECEIPT_CONTACT_WORK_PENDING" {
+		t.Fatal("active contacts exposed or operational deletion blocked")
+	}
+	store.receiptStatus = "completed"
+	if err := svc.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.databaseCalls != 1 || store.completed != 1 || external.calls != 1 {
+		t.Fatal("completed receipt work did not resume erasure")
+	}
 }

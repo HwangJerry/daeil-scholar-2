@@ -17,7 +17,7 @@ type AccountDeletionRequestRepository struct {
 	DonationRetentionTemplate func(int, time.Time) (model.DonationRetentionDecision, error)
 }
 
-const deletionReceiptColumns = `EXISTS (SELECT 1 FROM ALUMNI_ACCOUNT_ERASURE progress WHERE progress.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND progress.STAGE IN ('database_erased','completed')) AS DATABASE_ERASED, REQUEST_ID, STATUS, REQUESTED_AT, TARGET_AT, DUE_AT,
+const deletionReceiptColumns = `EXISTS (SELECT 1 FROM ALUMNI_ERASURE_RECEIPT_WORK rw WHERE rw.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND rw.STATUS='active') AS RECEIPT_WORK_PENDING, EXISTS (SELECT 1 FROM ALUMNI_ACCOUNT_ERASURE progress WHERE progress.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND progress.STAGE IN ('database_erased','completed')) AS DATABASE_ERASED, REQUEST_ID, STATUS, REQUESTED_AT, TARGET_AT, DUE_AT,
     COMPLETED_AT, RETAINED_RECORDS, RETENTION_UNTIL`
 
 func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string) (model.AccountDeletionReceipt, error) {
@@ -73,6 +73,9 @@ func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string
 	if err = seedErasureTargets(tx, result.ID); err != nil {
 		return result, err
 	}
+	if _, err = tx.Exec(`INSERT IGNORE INTO ALUMNI_ERASURE_RECEIPT_WORK (REQUEST_ID,UPDATED_AT) VALUES (?,UTC_TIMESTAMP())`, result.ID); err != nil {
+		return result, err
+	}
 	normalizeDeletionReceiptTimes(&result)
 	return result, tx.Commit()
 }
@@ -106,6 +109,11 @@ func (r *AccountDeletionRequestRepository) List(status string, before int64) ([]
 			return nil, e
 		}
 		items[i].Targets = targets
+		work, e := r.ReceiptWork(items[i].ID)
+		if e != nil {
+			return nil, e
+		}
+		items[i].ReceiptWork = work
 		normalizeDeletionReceiptTimes(&items[i].AccountDeletionReceipt)
 		if items[i].NextAttemptAt != nil {
 			value := deletionTimeUTC(*items[i].NextAttemptAt)

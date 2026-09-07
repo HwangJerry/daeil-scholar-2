@@ -20,6 +20,7 @@ func (r *AccountDeletionRequestRepository) PrepareErasure(w model.ErasureWork, v
 	if err != nil {
 		return err
 	}
+	hasDonations := false
 	if s["WEO_ORDER"] != nil {
 		var conflicting int
 		if err = tx.Get(&conflicting, `SELECT COUNT(*) FROM WEO_ORDER WHERE (USR_SEQ=? OR O_ACCOUNT_USR_SEQ=?) AND ((USR_SEQ>0 AND USR_SEQ<>?) OR (O_ACCOUNT_USR_SEQ>0 AND O_ACCOUNT_USR_SEQ<>?))`, w.UserSeq, w.UserSeq, w.UserSeq, w.UserSeq); err != nil {
@@ -32,6 +33,7 @@ func (r *AccountDeletionRequestRepository) PrepareErasure(w model.ErasureWork, v
 		if err = tx.Select(&orders, `SELECT O_SEQ FROM WEO_ORDER WHERE USR_SEQ=? OR O_ACCOUNT_USR_SEQ=?`, w.UserSeq, w.UserSeq); err != nil {
 			return err
 		}
+		hasDonations = len(orders) > 0
 		for _, id := range orders {
 			var d model.DonationRetentionDecision
 			err = tx.Get(&d, `SELECT O_SEQ,BASIS,BASIS_DATE,RETAIN_UNTIL,EVIDENCE_REFERENCE FROM ALUMNI_DONATION_RETENTION WHERE O_SEQ=?`, id)
@@ -55,6 +57,9 @@ func (r *AccountDeletionRequestRepository) PrepareErasure(w model.ErasureWork, v
 				return &model.ErasureBlocked{Code: "INVALID_DONATION_RETENTION_DECISION"}
 			}
 		}
+	}
+	if err = reviewReceiptWork(tx, w, hasDonations); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

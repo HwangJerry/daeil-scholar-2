@@ -21,6 +21,13 @@ func (r *AccountDeletionRequestRepository) EraseDatabase(w model.ErasureWork, se
 	if stage == "database_erased" {
 		return nil
 	}
+	var reviewed int
+	if err = tx.Get(&reviewed, `SELECT COUNT(*) FROM ALUMNI_ERASURE_RECEIPT_WORK WHERE REQUEST_ID=? AND STATUS<>'unreviewed'`, w.RequestID); err != nil {
+		return err
+	}
+	if reviewed != 1 {
+		return &model.ErasureBlocked{Code: "RECEIPT_CONTACT_REVIEW_REQUIRED"}
+	}
 	var email string
 	if err = tx.Get(&email, `SELECT COALESCE(USR_EMAIL,'') FROM WEO_MEMBER WHERE USR_SEQ=? AND USR_STATUS='AAA' FOR UPDATE`, w.UserSeq); err != nil {
 		return err

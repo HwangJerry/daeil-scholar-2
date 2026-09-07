@@ -19,6 +19,7 @@ type AutomaticErasureStore interface {
 	RecordExternalErasure(int64, string) error
 	SaveErasureContext(int64, []byte) error
 	LoadErasureContext(int64) ([]byte, error)
+	ReceiptWork(int64) (model.ErasureReceiptWork, error)
 	ErasureTargets(int64) ([]model.ErasureTarget, error)
 	BeginErasureTargets(int64) error
 	RecordErasureTargets(int64, []model.ErasureTarget) error

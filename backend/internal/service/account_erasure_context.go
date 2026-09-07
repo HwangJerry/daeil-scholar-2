@@ -39,6 +39,13 @@ func (s *AutomaticErasureService) processExternal(ctx context.Context, w model.E
 	if !active {
 		return sql.ErrNoRows
 	}
+	work, err := s.Store.ReceiptWork(w.RequestID)
+	if err != nil {
+		return err
+	}
+	if work.Status == "active" || work.Status == "unreviewed" {
+		return &model.ErasureBlocked{Code: "RECEIPT_CONTACT_WORK_PENDING"}
+	}
 	targets, err := s.Store.ErasureTargets(w.RequestID)
 	if err != nil {
 		return err

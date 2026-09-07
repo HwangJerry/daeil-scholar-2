@@ -11,6 +11,7 @@ type Receipt = {
   requestId: number;
   status: 'pending' | 'processing' | 'completed';
   databaseErased?: boolean;
+  receiptWorkPending?: boolean;
   requestedAt: string;
   targetAt: string;
   dueAt: string;
@@ -70,6 +71,7 @@ export function AccountDeletionPage() {
         {receipt && (
           <Card className="space-y-4 border-border p-6 shadow-none" role="status">
             <h2 className="text-xl font-semibold text-primary">{STATUS_LABELS[receipt.status]}</h2>
+            {receipt.receiptWorkPending && <p className="text-sm leading-7 text-text-secondary">진행 중인 영수증 업무를 처리하고 있습니다. 업무와 결과 전달이 끝나면 해당 업무용 연락처를 정리합니다. 다른 삭제 작업은 함께 진행합니다.</p>}
             <p className="text-sm text-text-secondary">접수번호 {receipt.requestId} · 접수일 {dateLabel(receipt.requestedAt)}</p>
             {receipt.status === 'completed' ? (
               <>

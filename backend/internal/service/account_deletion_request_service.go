@@ -81,6 +81,9 @@ func (s *AccountDeletionRequestService) Resolve(id int64, operator int, request 
 		}
 		return store.SetErasureMode(id, operator, request.Action)
 	}
+	if request.Action == "receipt_work" {
+		return s.resolveReceiptWork(id, operator, request)
+	}
 	if request.Action == "start" {
 		return s.Store.Start(id, operator)
 	}

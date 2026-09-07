@@ -23,7 +23,7 @@ The repository-specific [Apple account deletion scope review](APPLE_ACCOUNT_DELE
 
 ## Deployment order
 
-1. Candidate source manifest SHA-256: `a0b2c1436b9883b1fac8a1f1524ef42b5ad277be647ad70e3702712309ed440e`. The source manifest, regression pin, and environment example include migrations 055–060. Production approval/environment settings have not been changed. Review migration numbering against any concurrently developed backend changes; this branch adds `055_create_message_reports.sql` and `056_create_account_deletion_requests.sql`.
+1. Candidate source manifest SHA-256: `93e190f01494248d62036dd02c5eb0f4e16879851bd6bd188d4b2318e03bddfd`. The source manifest, regression pin, and environment example include migrations 055–061. Production approval/environment settings have not been changed. Review migration numbering against any concurrently developed backend changes; this branch adds `055_create_message_reports.sql` and `056_create_account_deletion_requests.sql`.
 2. Apply those additive migrations using the project's normal migration procedure. No production migration has been executed by this task.
 3. Deploy the backend and both SPAs together. Confirm signup works with an empty browser session and that `/api/message-reports` exists before distributing the new iOS build.
 4. Give a designated moderator an existing operator/root account. Confirm ordinary members cannot load `/api/admin/message-reports`.

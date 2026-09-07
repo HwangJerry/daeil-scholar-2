@@ -13,7 +13,7 @@ for (const width of [375, 1440]) {
       expect(route.request().method()).toBe('POST');
       expect(route.request().postDataJSON()).toEqual({ receiptToken: token });
       await route.fulfill({ json: {
-        requestId: 17, status, databaseErased: status !== 'pending', requestedAt: '2026-09-06T09:00:00Z', targetAt: '2026-09-09T09:00:00Z', dueAt: '2026-09-16T09:00:00Z',
+        requestId: 17, status, receiptWorkPending: status === 'processing', databaseErased: status !== 'pending', requestedAt: '2026-09-06T09:00:00Z', targetAt: '2026-09-09T09:00:00Z', dueAt: '2026-09-16T09:00:00Z',
         completedAt: status === 'completed' ? '2026-09-07T09:00:00Z' : null, retainedRecords: '없음', retentionUntil: null,
       } });
     });
@@ -26,6 +26,7 @@ for (const width of [375, 1440]) {
     status = 'processing';
     await page.getByRole('button', { name: '처리 현황 확인' }).click();
     await expect(page.getByText(/앱 운영 데이터는 삭제했습니다/)).toBeVisible();
+    await expect(page.getByText(/진행 중인 영수증 업무를 처리하고 있습니다/)).toBeVisible();
     await expect(page.getByRole('heading', { name: '계정 삭제 완료', exact: true })).toHaveCount(0);
     status = 'completed';
     await page.getByRole('button', { name: '처리 현황 확인' }).click();
