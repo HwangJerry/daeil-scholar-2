@@ -39,3 +39,23 @@ func TestErasureRolloutRequiresExplicitReadiness(t *testing.T) {
 		t.Fatal("key reuse accepted")
 	}
 }
+
+func TestInvalidErasureTestUserNeverBroadensScope(t *testing.T) {
+	for _, raw := range []string{"42x", "", "9999999999999999999999999", "-1"} {
+		t.Run(raw, func(t *testing.T) {
+			t.Setenv("ACCOUNT_ERASURE_TEST_USER_SEQ", raw)
+			c := Load().AccountErasure
+			if c.TestUserSeq >= 0 || c.Validate() == nil {
+				t.Fatalf("invalid test user %q accepted as scope %d", raw, c.TestUserSeq)
+			}
+		})
+	}
+	for raw, expected := range map[string]int{"0": 0, "42": 42} {
+		t.Run(raw, func(t *testing.T) {
+			t.Setenv("ACCOUNT_ERASURE_TEST_USER_SEQ", raw)
+			if got := Load().AccountErasure.TestUserSeq; got != expected {
+				t.Fatalf("scope changed: got %d, want %d", got, expected)
+			}
+		})
+	}
+}

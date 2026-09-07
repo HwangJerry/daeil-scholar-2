@@ -5,12 +5,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 )
 
 func (c AccountErasureConfig) Validate() error {
 	if c.TestUserSeq < 0 {
-		return fmt.Errorf("ACCOUNT_ERASURE_TEST_USER_SEQ cannot be negative")
+		return fmt.Errorf("ACCOUNT_ERASURE_TEST_USER_SEQ must be a valid non-negative integer")
 	}
 	if !c.RequestsEnabled && !c.WorkerEnabled {
 		return nil
@@ -38,4 +40,17 @@ func (c AccountErasureConfig) Validate() error {
 		return fmt.Errorf("ACCOUNT_ERASURE_EXTERNAL_MODE must be manual or http")
 	}
 	return nil
+}
+
+// Invalid explicit scope must fail validation, never fall back to all accounts.
+func erasureTestUserFromEnv() int {
+	raw, present := os.LookupEnv("ACCOUNT_ERASURE_TEST_USER_SEQ")
+	if !present {
+		return 0
+	}
+	user, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || user < 0 {
+		return -1
+	}
+	return user
 }
