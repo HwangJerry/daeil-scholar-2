@@ -46,7 +46,7 @@ var erasureMemberTables = []string{
 	"ALUMNI_MOBILE_REFRESH_TOKEN", "ALUMNI_NOTIFICATION", "ALUMNI_PASSWORD_RESET", "USER_SESSION",
 	"WEO_MEMBER_LOG", "WEO_MEMBER_PUSH", "WEO_MEMBER_OUT", "WEO_PUSH_NOTI", "WEO_SMS", "WEO_APP_PUSH",
 	"ALUMNI_USER_TAG", "ALUMNI_ADMIN_ROLE", "ALUMNI_VERIFICATION", "FUNDAMENTAL_MEMBER",
-	"WEO_BOARDLIKE", "WEO_BOARDCOMAND", "WEO_AD_COMMENT", "WEO_AD_LIKE", "WEO_AD_LOG", "WEO_BANNER_AD_LOG",
+	"WEO_BOARDLIKE", "WEO_BOARDCOMAND", "WEO_AD_COMMENT", "WEO_AD_LIKE", "WEO_AD_LOG",
 }
 
 func eraseAccountReferences(tx *sqlx.Tx, s erasureSchema, user int, email string) error {
@@ -62,6 +62,13 @@ func eraseAccountReferences(tx *sqlx.Tx, s erasureSchema, user int, email string
 	}
 	for _, table := range erasureMemberTables {
 		if err := s.erase(tx, table, "USR_SEQ=?", user); err != nil {
+			return err
+		}
+	}
+	// Current banner statistics contain no member identifier. Older deployments
+	// may have a member-linked variant; erase only that explicit variant.
+	if s.has("WEO_BANNER_AD_LOG", "USR_SEQ") {
+		if err := s.erase(tx, "WEO_BANNER_AD_LOG", "USR_SEQ=?", user); err != nil {
 			return err
 		}
 	}

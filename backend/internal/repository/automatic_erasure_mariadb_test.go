@@ -32,6 +32,15 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
     INSERT INTO WEO_ORDER VALUES (1,42,42,'Synthetic Donor','01000000042','2025-01-01',100,0,100,'happy_nanum','fake-tx-1','completed','A'),(2,43,43,'Other Donor','01000000043','2025-01-01',50,0,50,'happy_nanum','fake-tx-2','completed','A');
     INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
 	db.MustExec(`ALTER TABLE WEO_MEMBER ADD USR_THUMNAIL TEXT`)
+	db.MustExec(`CREATE TABLE WEO_BANNER_AD_LOG (BNL_SEQ INT PRIMARY KEY,BN_SEQ INT,LOG_TYPE VARCHAR(10),CREATED_AT DATETIME) ENGINE=InnoDB;
+ INSERT INTO WEO_BANNER_AD_LOG VALUES (1,7,'view',NOW());`)
+	t.Cleanup(func() {
+		var count int
+		if err := db.Get(&count, `SELECT COUNT(*) FROM WEO_BANNER_AD_LOG WHERE BNL_SEQ=1 AND BN_SEQ=7 AND LOG_TYPE='view'`); err != nil || count != 1 {
+			t.Errorf("anonymous banner aggregate lost: %d %v", count, err)
+		}
+	})
+
 	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "062_create_profile_file_history.sql", "063_bind_donation_retention_source.sql"} {
 		data, err := os.ReadFile("../../migrations/" + name)
 		if err != nil {
