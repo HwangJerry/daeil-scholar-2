@@ -36,7 +36,7 @@ export function SupportSection({
             'relative grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)] lg:items-end lg:gap-16',
           )}
         >
-          <div className={cn('max-w-2xl')}>
+          <div className={cn('min-w-0 max-w-2xl')}>
             <div className={cn('flex items-center gap-2 text-primary-muted')}>
               <HandHeart aria-hidden="true" className={cn('size-5')} />
               <p className={cn('text-xs font-semibold uppercase tracking-[0.24em]')}>
@@ -46,7 +46,7 @@ export function SupportSection({
             <h2
               id="support-heading"
               className={cn(
-                'mt-4 font-serif text-3xl font-bold leading-tight tracking-tight text-surface sm:text-4xl md:text-5xl lg:whitespace-nowrap',
+                'mt-4 break-keep font-serif text-3xl font-bold leading-tight tracking-tight text-surface sm:text-4xl md:text-5xl',
               )}
             >
               후배들의 가능성을 함께 열어주세요.
