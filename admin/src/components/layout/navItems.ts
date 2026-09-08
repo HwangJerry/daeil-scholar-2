@@ -8,6 +8,7 @@ export const NAV_ITEMS = [
   { to: '/notice', icon: FileText, label: '공지 관리', end: false },
   { to: '/disclosure', icon: ScrollText, label: '의무공시', end: false },
   { to: '/banner-ad', icon: Images, label: '배너광고 관리', end: false },
+  { to: '/donation-archives', icon: FileText, label: '탈퇴 회원 기부 증빙', end: true },
   { to: '/donation', icon: Heart, label: '기부 관리', end: true },
   { to: '/member', icon: Users, label: '회원 관리', end: true },
   { to: '/member/pending', icon: UserCheck, label: '가입 신청', end: true },

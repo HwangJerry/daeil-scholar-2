@@ -74,3 +74,25 @@ func retentionAnniversary(start time.Time, years int) time.Time {
 	}
 	return time.Date(year, start.Month(), day, 0, 0, 0, 0, time.UTC)
 }
+
+// DonationArchiveOpener reads the existing V1 nonce-prefixed archive format.
+func DonationArchiveOpener(keyHex string) (func([]byte) ([]byte, error), error) {
+	key, err := hex.DecodeString(keyHex)
+	if err != nil || len(key) != 32 {
+		return nil, errors.New("donation archive requires a dedicated 32-byte hex key")
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	return func(data []byte) ([]byte, error) {
+		if len(data) < aead.NonceSize()+aead.Overhead() {
+			return nil, errors.New("invalid archive ciphertext")
+		}
+		return aead.Open(nil, data[:aead.NonceSize()], data[aead.NonceSize():], []byte("DFLH_DONATION_LEGAL_ARCHIVE_V1"))
+	}, nil
+}

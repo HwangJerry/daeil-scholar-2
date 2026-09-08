@@ -217,6 +217,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		personalDonation:    handler.NewPersonalDonationHandler(personalDonationService),
 		message:             handler.NewMessageHandler(messageService),
 		messageReport:       &handler.MessageReportHandler{Service: &service.MessageReportService{Store: &repository.MessageReportRepository{DB: db}}},
+		donationArchive:     &handler.DonationArchiveHandler{Store: &repository.DonationArchiveRepository{DB: db}, Open: donationArchiveReader(cfg.AccountErasure.ArchiveKey)},
 		accountDeletion:     &handler.AccountDeletionRequestHandler{TestUserSeq: cfg.AccountErasure.TestUserSeq, RequestsDisabled: !cfg.AccountErasure.RequestsEnabled, Service: &service.AccountDeletionRequestService{Store: &repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL}}, Auth: authService},
 		memberBlock:         handler.NewMemberBlockHandler(memberBlockService),
 		push:                handler.NewPushHandler(pushService),
@@ -272,4 +273,13 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		pushDelivery:           pushDelivery,
 		socialRevocationWorker: socialRevocationWorker,
 	}, nil
+}
+
+// Missing/invalid archive keys disable reading without breaking unrelated services.
+func donationArchiveReader(key string) func([]byte) ([]byte, error) {
+	open, err := service.DonationArchiveOpener(key)
+	if err != nil {
+		return nil
+	}
+	return open
 }

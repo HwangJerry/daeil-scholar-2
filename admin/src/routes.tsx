@@ -21,6 +21,8 @@ import { AppSettingsPage } from './pages/AppSettingsPage.tsx';
 import { MessageReportsPage } from './pages/MessageReportsPage';
 import { AccountDeletionsPage } from './pages/AccountDeletionsPage';
 
+import { DonationArchivesPage } from './pages/DonationArchivesPage';
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -47,6 +49,7 @@ export function AppRoutes() {
         <Route path="member/:seq" element={<MemberDetailPage />} />
         <Route path="job-categories" element={<JobCategoryPage />} />
         <Route path="history" element={<HistoryManagePage />} />
+        <Route path="donation-archives" element={<DonationArchivesPage />} />
         <Route path="donation" element={<DonationMonitorPage />} />
         <Route path="app-monitoring" element={<AppMonitoringPage />} />
         <Route path="app-settings" element={<AppSettingsPage />} />

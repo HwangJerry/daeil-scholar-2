@@ -41,6 +41,7 @@ type handlers struct {
 	personalDonation    *handler.PersonalDonationHandler
 	message             *handler.MessageHandler
 	messageReport       *handler.MessageReportHandler
+	donationArchive     *handler.DonationArchiveHandler
 	accountDeletion     *handler.AccountDeletionRequestHandler
 	memberBlock         *handler.MemberBlockHandler
 	push                *handler.PushHandler
@@ -230,6 +231,8 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Get("/dashboard", h.adminDashboard.Dashboard)
 		r.Get("/message-reports", h.messageReport.List)
 		r.Put("/message-reports/{id}", h.messageReport.Resolve)
+		r.With(mw.RootOnlyMiddleware).Get("/donation-archives", h.donationArchive.List)
+		r.With(mw.RootOnlyMiddleware).Post("/donation-archives/{id}/read", h.donationArchive.Read)
 		r.Get("/account-deletions", h.accountDeletion.List)
 		r.With(mw.RootOnlyMiddleware).Get("/account-deletions/{id}/verification", h.accountDeletion.Verify)
 		r.With(mw.RootOnlyMiddleware).Put("/account-deletions/{id}", h.accountDeletion.Resolve)
