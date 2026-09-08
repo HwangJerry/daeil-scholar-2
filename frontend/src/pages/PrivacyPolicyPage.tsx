@@ -59,7 +59,7 @@ export function PrivacyPolicyPage() {
             {PRIVACY_CONTACT.organization}의 웹사이트와 대일외고 장학회 앱에서 개인정보를 이용하고 관리하는 방법을 안내합니다.
           </p>
           <p className="mt-6 text-sm text-text-secondary">
-            최종 수정일 <time dateTime={PRIVACY_UPDATED_AT}>2026년 9월 7일</time>
+            최종 수정일 <time dateTime={PRIVACY_UPDATED_AT}>2026년 9월 8일</time>
           </p>
         </div>
       </header>
@@ -110,6 +110,7 @@ export function PrivacyPolicyPage() {
           </PolicySection>
 
           <PolicySection id="retention">
+            <p>Android Google Analytics의 개별 이벤트 데이터 보관 설정은 2개월, 사용자 데이터는 14개월입니다. 새 사용자 활동이 있으면 사용자 데이터의 보관 기간이 다시 시작됩니다. 이 설정은 개인을 식별하지 않는 집계 보고서에는 적용되지 않습니다. 분석 정보와 관련한 삭제·처리정지 요청도 아래 개인정보 요청 접수 이메일로 보내실 수 있습니다.</p>
             <Card className="border-border bg-primary-light p-6 shadow-none">
               <h3 className="text-base font-semibold text-primary">계정 삭제는 자동으로 진행하며, 필요한 경우 담당자가 처리합니다</h3>
               <p className="mt-3 text-sm leading-7 text-primary">

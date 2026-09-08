@@ -6,7 +6,7 @@ export const PRIVACY_CONTACT = {
   email: 'ghkdwp018@naver.com',
 } as const;
 
-export const PRIVACY_UPDATED_AT = '2026-09-07';
+export const PRIVACY_UPDATED_AT = '2026-09-08';
 
 export const PRIVACY_SECTIONS = [
   { id: 'collection', title: '어떤 정보를 이용하나요?' },
@@ -46,13 +46,24 @@ export const PRIVACY_COLLECTION = [
     purpose: '해피나눔에서 전달받은 기부 내역을 회원과 연결하여 기부 현황과 본인의 기부 내역을 안내합니다. 기부 페이지에서 입력하는 정보는 해피나눔의 안내도 확인해 주세요.',
   },
   {
+    title: '해피나눔 기부 신청·결제',
+    information: '기부자가 입력하는 이름, 휴대전화, 이메일·주소, 기부 금액·주기, 예금주명·은행·계좌번호 또는 선택한 결제수단 정보, 생년월일과 전자서명. 결제수단에 따라 본인 확인 정보가 추가로 필요할 수 있습니다.',
+    purpose: '앱 안에서 여는 해피나눔 페이지에서 기부자의 별도 동의를 받아 기부 신청, 본인 확인, 결제와 관련 문의를 처리합니다. 기부는 선택 기능이며, 결제수단별 수집·제공 항목은 신청 화면의 안내를 확인해 주세요.',
+  },
+  {
     title: '알림과 서비스 운영',
     information: '푸시 토큰, 앱·기기·언어 정보, 알림 설정, 가입·접속 기록, 방문 식별자, IP 주소·브라우저 정보의 해시값, 오류·성능 진단 정보',
     purpose: '알림 전달, 방문 통계, 오류 확인과 서비스 안정성 개선에 사용합니다.',
   },
+  {
+    title: 'Android 앱 분석과 푸시 알림',
+    information: 'Firebase 설치·앱 인스턴스 식별자, 광고 ID, 푸시 토큰, 앱 실행·화면 조회·알림 상호작용, 기기·운영체제 정보와 IP 주소에서 추정한 대략적인 위치',
+    purpose: 'Firebase Analytics로 앱 이용 통계를 분석하고 Firebase Cloud Messaging으로 알림을 전달합니다. 정밀 GPS 위치를 수집하거나 다른 회원에게 현재 위치를 공유하는 기능은 사용하지 않습니다.',
+  },
 ] as const;
 
 export const PRIVACY_EXTERNAL_SERVICES = [
+  { name: 'Google Firebase · Google Analytics (Android)', description: '앱에서 수집한 분석 정보와 설치 식별자를 암호화된 통신으로 Google에 전달합니다. 현재 Analytics 계정의 Google 제품·서비스 데이터 공유가 켜져 있어 분석 정보가 Google 제품·서비스 개선에도 이용됩니다. Google Signals와 Google Ads 계정 연결은 사용하지 않습니다. Firebase Cloud Messaging은 설치 식별자와 푸시 토큰을 이용해 Android 알림을 전달합니다.' },
   { name: 'Apple · 카카오', description: '소셜 로그인 과정에서 계정 인증과 동의한 정보의 전달에 이용합니다. iOS 알림은 Apple 푸시 서비스를 통해 전달합니다.' },
   { name: 'Sentry', description: '앱 오류와 충돌 원인을 확인하기 위해 진단 정보를 HTTPS로 전송하며, 데이터는 미국에 저장됩니다. iOS 출시 버전은 회원 식별정보·요청 내용·화면 이동 기록을 제외하고 오류 위치와 앱 버전 등으로 수집을 제한합니다. 이전 버전과 Android에서는 실행·네트워크 성능 진단 정보가 수집될 수 있습니다.' },
   { name: '가비아', description: '웹사이트와 API 서버 운영을 위한 호스팅 환경을 이용합니다.' },
