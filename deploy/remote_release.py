@@ -146,6 +146,18 @@ def pending_migrations(payload, manifest, env):
     return pending if 'backend' in manifest['components'] else []
 
 
+def validate_migration_storage(pending, env):
+    if not any(path.name == '058_convert_erasure_tables_to_innodb.sql' for path in pending):
+        return
+    query = "SHOW GLOBAL VARIABLES WHERE Variable_name IN ('innodb_file_format','innodb_large_prefix','innodb_file_per_table','innodb_page_size')"
+    data = subprocess.check_output(mysql_args(env) + ['-BN', '-e', query], env=db_env(env)).decode()
+    settings = dict(line.split('\t', 1) for line in data.splitlines())
+    required = {'innodb_file_format': 'Barracuda', 'innodb_large_prefix': 'ON',
+                'innodb_file_per_table': 'ON', 'innodb_page_size': '16384'}
+    if any(settings.get(key, '').lower() != value.lower() for key, value in required.items()):
+        raise ValueError('migration 058 requires verified Barracuda/large-prefix/file-per-table with 16KB pages; no services stopped')
+
+
 def validate_activation(binary, env, test_user=0):
     required = ('ALLOWED_ORIGIN', 'SITE_BASE_URL', 'DB_USER', 'DB_PASSWORD', 'DB_NAME',
                 'KAKAO_CLIENT_ID', 'KAKAO_CLIENT_SECRET', 'KAKAO_REDIRECT_URI', 'JWT_SECRET',
@@ -285,6 +297,7 @@ def deploy(root, apply_schema):
     pending = pending_migrations(payload, manifest, env)
     if pending and not apply_schema:
         raise ValueError('pending schema changes require --apply-migrations after reviewing the plan')
+    validate_migration_storage(pending, env)
     artifacts = payload / 'artifacts'
     backend = 'backend' in manifest['components']
     if backend:

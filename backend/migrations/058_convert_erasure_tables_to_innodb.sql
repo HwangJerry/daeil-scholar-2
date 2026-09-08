@@ -2,6 +2,8 @@
 -- MariaDB 10.1.38. Review disk headroom and maintenance time before applying.
 -- ALTER TABLE commits implicitly; each conversion is restartable independently.
 -- Only known erasure tables that exist and are MyISAM are converted.
+-- Requires Barracuda, innodb_large_prefix=ON and innodb_file_per_table=ON.
+-- DYNAMIC preserves the full utf8 VARCHAR(300) PUSH_ID primary key.
 DROP PROCEDURE IF EXISTS _058_erasure_storage;
 DELIMITER //
 CREATE PROCEDURE _058_erasure_storage()
@@ -27,7 +29,7 @@ BEGIN
     convert_loop: LOOP
         FETCH candidates INTO target_table;
         IF finished=1 THEN LEAVE convert_loop; END IF;
-        SET @erasure_058_ddl=CONCAT('ALTER TABLE `',target_table,'` ENGINE=InnoDB');
+        SET @erasure_058_ddl=CONCAT('ALTER TABLE `',target_table,'` ENGINE=InnoDB ROW_FORMAT=DYNAMIC');
         PREPARE erasure_058_statement FROM @erasure_058_ddl;
         EXECUTE erasure_058_statement;
         DEALLOCATE PREPARE erasure_058_statement;

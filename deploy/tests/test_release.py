@@ -34,6 +34,24 @@ class ReleaseTests(unittest.TestCase):
         (self.root / 'manifest.json').write_text(json.dumps(manifest))
         return manifest
 
+    def test_legacy_index_settings_block_before_services_stop(self):
+        manifest = self.candidate()
+        env = {'DB_USER': 'test', 'DB_PASSWORD': 'test', 'DB_NAME': 'test'}
+        with patch.object(remote, 'unpack', return_value=manifest), \
+             patch.object(remote, 'process_environment', return_value=env), \
+             patch.object(remote, 'pending_migrations', return_value=[Path('058_convert_erasure_tables_to_innodb.sql')]), \
+             patch.object(remote.subprocess, 'check_output', return_value=b'innodb_file_format\tAntelope\ninnodb_large_prefix\tOFF\n'), \
+             patch.object(remote, 'run') as command:
+            with self.assertRaisesRegex(ValueError, 'migration 058 requires'):
+                remote.deploy(self.root, True)
+            command.assert_not_called()
+
+    def test_verified_index_settings_allow_pending_conversion(self):
+        data = b'innodb_file_format\tBarracuda\ninnodb_large_prefix\tON\ninnodb_file_per_table\tON\ninnodb_page_size\t16384\n'
+        env = {'DB_USER': 'test', 'DB_PASSWORD': 'test', 'DB_NAME': 'test'}
+        with patch.object(remote.subprocess, 'check_output', return_value=data):
+            remote.validate_migration_storage([Path('058_convert_erasure_tables_to_innodb.sql')], env)
+
     def test_database_backup_uses_database_locks_and_keeps_file_contents(self):
         uploads = self.root / 'uploads'
         uploads.mkdir()
