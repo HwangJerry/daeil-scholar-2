@@ -1,4 +1,5 @@
 // ConfirmDialog — Radix AlertDialog wrapper for destructive or default confirmation prompts
+import type { ReactNode } from 'react';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { Button } from './Button.tsx';
 
@@ -12,6 +13,8 @@ interface ConfirmDialogProps {
   variant?: 'default' | 'destructive';
   onConfirm: () => void;
   isPending?: boolean;
+  confirmDisabled?: boolean;
+  children?: ReactNode;
 }
 
 export function ConfirmDialog({
@@ -24,6 +27,8 @@ export function ConfirmDialog({
   variant = 'default',
   onConfirm,
   isPending,
+  confirmDisabled,
+  children,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog.Root open={open} onOpenChange={onOpenChange}>
@@ -36,6 +41,7 @@ export function ConfirmDialog({
           <AlertDialog.Description className="mt-2 text-sm text-cool-gray">
             {description}
           </AlertDialog.Description>
+          {children}
           <div className="mt-6 flex justify-end gap-3">
             <AlertDialog.Cancel asChild>
               <Button variant="outline" disabled={isPending}>
@@ -46,7 +52,7 @@ export function ConfirmDialog({
               <Button
                 variant={variant === 'destructive' ? 'destructive' : 'default'}
                 onClick={onConfirm}
-                disabled={isPending}
+                disabled={isPending || confirmDisabled}
               >
                 {isPending ? '처리 중...' : confirmLabel}
               </Button>
