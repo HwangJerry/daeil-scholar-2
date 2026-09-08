@@ -34,6 +34,17 @@ class ReleaseTests(unittest.TestCase):
         (self.root / 'manifest.json').write_text(json.dumps(manifest))
         return manifest
 
+    def test_https_probe_keeps_certificate_validation_and_hostname(self):
+        with patch.object(remote.subprocess, 'check_output', return_value=b'{"status":"ok"}') as command:
+            remote.verify_local_https('https://daeilfoundation.or.kr')
+        args = command.call_args.args[0]
+        self.assertIn('daeilfoundation.or.kr:443:127.0.0.1', args)
+        self.assertIn('https://daeilfoundation.or.kr/api/health', args)
+        self.assertNotIn('--insecure', args)
+        with patch.object(remote.subprocess, 'check_output', return_value=b'{"status":"error"}'):
+            with self.assertRaises(RuntimeError):
+                remote.verify_local_https('https://daeilfoundation.or.kr')
+
     def test_legacy_index_settings_block_before_services_stop(self):
         manifest = self.candidate()
         env = {'DB_USER': 'test', 'DB_PASSWORD': 'test', 'DB_NAME': 'test'}

@@ -19,6 +19,7 @@ import tarfile
 import time
 import tempfile
 import urllib.request
+import urllib.parse
 
 SERVICE = 'alumni-backend'
 HTTPD = 'httpd'
@@ -293,6 +294,19 @@ def install_web(source, destination):
     install_file(source / 'index.html', destination / 'index.html', 0o644)
 
 
+def verify_local_https(origin):
+    # Preserve hostname, SNI and certificate validation while avoiding public-IP
+    # hairpin routing. The release client separately checks the external route.
+    parsed = urllib.parse.urlsplit(origin)
+    if parsed.scheme != 'https' or not parsed.hostname or parsed.port not in (None, 443) or parsed.path not in ('', '/') or parsed.username or parsed.password:
+        raise ValueError('SITE_BASE_URL must be an HTTPS origin on port 443')
+    data = subprocess.check_output(['curl', '--fail', '--silent', '--show-error',
+        '--max-time', '10', '--resolve', parsed.hostname + ':443:127.0.0.1',
+        origin.rstrip('/') + '/api/health'])
+    if json.loads(data.decode()).get('status') != 'ok':
+        raise RuntimeError('Apache HTTPS health check failed')
+
+
 def deploy(root, apply_schema):
     payload = root / 'payload'
     manifest = unpack(root / 'bundle.tar.gz', payload)
@@ -353,9 +367,7 @@ def deploy(root, apply_schema):
         run(['systemctl', 'start', HTTPD])
         healthy(env)
         origin = env.get('SITE_BASE_URL', '').rstrip('/')
-        with urllib.request.urlopen(origin + '/api/health', timeout=10) as response:
-            if response.status != 200 or json.load(response).get('status') != 'ok':
-                raise RuntimeError('public API health check failed')
+        verify_local_https(origin)
         (root / 'result.json').write_text(json.dumps({'status': 'DEPLOYED_ERASURE_PAUSED' if backend else 'DEPLOYED', 'commit': manifest['commit'], 'backup': str(backup)}, indent=2))
         print('Deployment verified. Erasure activation is a separate operation; recovery data: ' + str(backup))
     except BaseException:

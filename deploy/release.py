@@ -9,6 +9,8 @@ import shlex
 import subprocess
 import tarfile
 import tempfile
+import json
+import urllib.request
 from release_bundle import prepare, verify, COMPONENTS
 
 
@@ -98,6 +100,12 @@ def main():
         if args.apply_migrations:
             command.append('--apply-migrations')
         subprocess.run(ssh + [' '.join(shlex.quote(value) for value in command)], check=True)
+    # Run from outside the production host; its public-IP hairpin route is not
+    # available. A failure here leaves the locally verified deployment installed.
+    with urllib.request.urlopen('https://daeilfoundation.or.kr/api/health', timeout=15) as response:
+        if response.status != 200 or json.load(response).get('status') != 'ok':
+            raise RuntimeError('External API health check failed; inspect the installed release')
+    print('External HTTPS API health verified from release client')
 
 
 if __name__ == '__main__':
