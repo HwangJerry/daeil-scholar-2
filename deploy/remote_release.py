@@ -158,7 +158,7 @@ def validate_migration_storage(pending, env):
         raise ValueError('migration 058 requires verified Barracuda/large-prefix/file-per-table with 16KB pages; no services stopped')
 
 
-def validate_activation(binary, env, test_user=0):
+def validate_activation(binary, env, test_user=0, enabled=True, retention=False):
     required = ('ALLOWED_ORIGIN', 'SITE_BASE_URL', 'DB_USER', 'DB_PASSWORD', 'DB_NAME',
                 'KAKAO_CLIENT_ID', 'KAKAO_CLIENT_SECRET', 'KAKAO_REDIRECT_URI', 'JWT_SECRET',
                 'UPLOAD_LEGACY_PATH', 'EASYPAY_IMMEDIATELY_MALL_ID', 'EASYPAY_PROFILE_MALL_ID',
@@ -171,20 +171,23 @@ def validate_activation(binary, env, test_user=0):
         if env.get(key) == placeholder:
             raise ValueError('placeholder production setting: ' + key)
     checked = dict(env)
-    checked.update({key: 'true' for key in GATES})
+    checked.update({key: 'true' if enabled else 'false' for key in GATES})
     checked['ACCOUNT_ERASURE_TEST_USER_SEQ'] = str(test_user)
-    checked['PRIVACY_RETENTION_ENABLED'] = 'false' if test_user else 'true'
+    if test_user and retention:
+        raise ValueError('retention cannot run during disposable-account testing')
+    checked['PRIVACY_RETENTION_ENABLED'] = 'true' if retention else 'false'
     binary.chmod(0o755)
     run([str(binary), '--check-release-config'], env=checked, stdout=subprocess.DEVNULL)
     if env.get('SENTRY_AUTH_TOKEN') and (env.get('SENTRY_IOS_PROJECT') != 'daeil-ios-release' or env.get('SENTRY_ANDROID_PROJECT') != 'daeil-android-release'):
         raise ValueError('Sentry monitoring must use the release projects')
 
 
-def set_rollout(enabled, test_user=0):
+def set_rollout(enabled, test_user=0, retention=False):
+    if test_user and retention:
+        raise ValueError('retention cannot run during disposable-account testing')
     ROLLOUT_ENV.parent.mkdir(parents=True, exist_ok=True)
     values = {key: enabled for key in GATES}
-    if test_user:
-        values['PRIVACY_RETENTION_ENABLED'] = False
+    values['PRIVACY_RETENTION_ENABLED'] = retention
     atomic_text(ROLLOUT_ENV, ''.join(key + '=' + ('true' if value else 'false') + '\n' for key, value in values.items()) + 'ACCOUNT_ERASURE_TEST_USER_SEQ=' + str(test_user) + '\n')
     ROLLOUT_ENV.chmod(0o600)
     ROLLOUT_UNIT.parent.mkdir(parents=True, exist_ok=True)
@@ -371,10 +374,12 @@ def deploy(root, apply_schema):
         raise
 
 
-def change_rollout(root, enabled, test_user=0):
+def change_rollout(root, enabled, test_user=0, retention=False):
+    if test_user and retention:
+        raise ValueError('retention cannot run during disposable-account testing')
     # Emergency pause does not depend on the DB, a live backend or old release
     # metadata. Stop the worker first so failed configuration/restart stays safe.
-    if not enabled:
+    if not enabled and not retention:
         try:
             try:
                 run(['systemctl', 'stop', SERVICE])
@@ -394,12 +399,12 @@ def change_rollout(root, enabled, test_user=0):
     if sha256(Path('/app/backend/server')) != manifest['files']['backend/server']:
         raise ValueError('release binary is no longer installed')
     env = process_environment()
-    validate_activation(Path('/app/backend/server'), env, test_user)
+    validate_activation(Path('/app/backend/server'), env, test_user, enabled, retention)
     try:
-        set_rollout(True, test_user)
+        set_rollout(enabled, test_user, retention)
         run(['systemctl', 'restart', SERVICE])
         healthy(env)
-        verify_rollout(True, test_user)
+        verify_rollout(enabled, test_user, retention)
     except BaseException:
         # Never restore a previously enabled worker after failed activation.
         try:
@@ -407,13 +412,13 @@ def change_rollout(root, enabled, test_user=0):
         finally:
             run(['systemctl', 'stop', SERVICE])
         raise
-    print('Rollout verified: ' + ('test account only' if test_user else 'all accounts'))
+    print('Rollout verified: erasure=' + str(enabled) + ', test_user=' + str(test_user) + ', retention=' + str(retention))
 
 
-def verify_rollout(enabled, test_user):
+def verify_rollout(enabled, test_user, retention=False):
     current = process_environment()
     expected = {'ACCOUNT_ERASURE_REQUESTS_ENABLED': enabled, 'ACCOUNT_ERASURE_WORKER_ENABLED': enabled,
-                'PRIVACY_RETENTION_ENABLED': enabled and not test_user}
+                'PRIVACY_RETENTION_ENABLED': retention}
     if any(current.get(key) != ('true' if value else 'false') for key, value in expected.items()) or current.get('ACCOUNT_ERASURE_TEST_USER_SEQ') != str(test_user):
         raise RuntimeError('rollout environment did not take effect')
 
@@ -426,6 +431,8 @@ if __name__ == '__main__':
     action.add_argument('--activate-test-user', type=int)
     action.add_argument('--activate-all-users', action='store_true')
     action.add_argument('--pause-erasure', action='store_true')
+    action.add_argument('--activate-retention', action='store_true')
+    action.add_argument('--pause-retention', action='store_true')
     args = parser.parse_args()
     os.umask(0o077)
     try:
@@ -434,6 +441,12 @@ if __name__ == '__main__':
                 if args.activate_test_user <= 0:
                     raise ValueError('test user must be a positive disposable account ID')
                 change_rollout(Path(args.directory), True, args.activate_test_user)
+            elif args.activate_retention or args.pause_retention:
+                current = process_environment()
+                enabled = current.get('ACCOUNT_ERASURE_REQUESTS_ENABLED') == 'true'
+                if enabled != (current.get('ACCOUNT_ERASURE_WORKER_ENABLED') == 'true'):
+                    raise ValueError('erasure gates disagree; inspect before changing retention')
+                change_rollout(Path(args.directory), enabled, int(current.get('ACCOUNT_ERASURE_TEST_USER_SEQ', '0')), args.activate_retention)
             elif args.activate_all_users or args.pause_erasure:
                 change_rollout(Path(args.directory), args.activate_all_users)
             else:

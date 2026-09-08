@@ -26,6 +26,8 @@ def main():
     action.add_argument('--activate-test-user', type=int)
     action.add_argument('--activate-all-users', action='store_true')
     action.add_argument('--pause-erasure', action='store_true')
+    action.add_argument('--activate-retention', action='store_true')
+    action.add_argument('--pause-retention', action='store_true')
     parser.add_argument('--release-id')
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
@@ -34,7 +36,7 @@ def main():
         parser.error('--only must contain distinct backend,frontend,admin components')
     if args.bundle and (args.prepare_only or args.output):
         parser.error('--bundle cannot be combined with --prepare-only or --output')
-    rollout_action = args.activate_test_user is not None or args.activate_all_users or args.pause_erasure
+    rollout_action = args.activate_test_user is not None or args.activate_all_users or args.pause_erasure or args.activate_retention or args.pause_retention
     if rollout_action:
         if args.bundle or args.prepare_only or args.output or args.apply_migrations or args.only or args.patch_mode:
             parser.error('rollout actions cannot be combined with build/deploy options')
@@ -50,6 +52,8 @@ def main():
             if args.activate_test_user <= 0:
                 parser.error('test user must be a positive disposable account ID')
             command += ['--activate-test-user', str(args.activate_test_user)]
+        elif args.activate_retention or args.pause_retention:
+            command += ['--activate-retention' if args.activate_retention else '--pause-retention']
         else:
             command += ['--activate-all-users' if args.activate_all_users else '--pause-erasure']
         ssh = ['ssh', '-o', 'BatchMode=yes'] + (['-p', str(args.port)] if args.port else []) + [args.target]

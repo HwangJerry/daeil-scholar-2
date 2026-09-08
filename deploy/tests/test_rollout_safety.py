@@ -77,8 +77,30 @@ class RolloutSafetyTests(unittest.TestCase):
                 remote.validate_activation(binary, env, target)
             checked = command.call_args.kwargs['env']
             self.assertEqual(checked['ACCOUNT_ERASURE_TEST_USER_SEQ'], str(target))
-            self.assertEqual(checked['PRIVACY_RETENTION_ENABLED'], 'false' if target else 'true')
+            self.assertEqual(checked['PRIVACY_RETENTION_ENABLED'], 'false')
         self.assertEqual(env['ACCOUNT_ERASURE_TEST_USER_SEQ'], '42')
+
+    def test_erasure_enable_never_enables_retention(self):
+        with patch.object(remote, 'run'):
+            remote.set_rollout(True)
+        values = dict(line.split('=', 1) for line in self.env.read_text().splitlines())
+        self.assertEqual(values['ACCOUNT_ERASURE_WORKER_ENABLED'], 'true')
+        self.assertEqual(values['PRIVACY_RETENTION_ENABLED'], 'false')
+
+    def test_retention_can_run_without_erasure(self):
+        with patch.object(remote, 'run'):
+            remote.set_rollout(False, retention=True)
+        values = dict(line.split('=', 1) for line in self.env.read_text().splitlines())
+        self.assertEqual(values['ACCOUNT_ERASURE_WORKER_ENABLED'], 'false')
+        self.assertEqual(values['PRIVACY_RETENTION_ENABLED'], 'true')
+
+    def test_test_account_rejects_retention_before_mutation(self):
+        previous = self.env.read_text()
+        with patch.object(remote, 'run') as command:
+            with self.assertRaises(ValueError):
+                remote.change_rollout(self.root, True, 42, retention=True)
+        command.assert_not_called()
+        self.assertEqual(self.env.read_text(), previous)
 
     def test_lock_excludes_another_process_and_releases_after_failure(self):
         path = self.root / 'release.lock'

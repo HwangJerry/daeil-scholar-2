@@ -194,9 +194,9 @@ func (r *PasswordResetRepository) FindMemberByEmail(email string) (*model.User, 
 	return &u, nil
 }
 
-// DeleteExpiredTokens removes all expired token records and returns the count deleted.
+// DeleteExpiredTokens removes a bounded batch of expired token records and returns the count deleted.
 func (r *PasswordResetRepository) DeleteExpiredTokens() (int64, error) {
-	result, err := r.DB.Exec(`DELETE FROM ALUMNI_PASSWORD_RESET WHERE EXPIRES_AT < NOW()`)
+	result, err := r.DB.Exec(`DELETE FROM ALUMNI_PASSWORD_RESET WHERE EXPIRES_AT < NOW() ORDER BY EXPIRES_AT LIMIT ?`, expiredRecordBatchSize)
 	if err != nil {
 		return 0, err
 	}

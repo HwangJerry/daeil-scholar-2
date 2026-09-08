@@ -646,7 +646,8 @@ func (r *AuthRepository) DeleteExpiredMobileRefreshTokens(revokedBefore time.Tim
 		DELETE FROM ALUMNI_MOBILE_REFRESH_TOKEN
 		WHERE EXPIRES_AT < NOW()
 		   OR (REVOKED_AT IS NOT NULL AND REVOKED_AT < ?)
-	`, revokedBefore)
+        ORDER BY EXPIRES_AT LIMIT ?
+	`, revokedBefore, expiredRecordBatchSize)
 	if err != nil {
 		return 0, err
 	}

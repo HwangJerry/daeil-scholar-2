@@ -29,8 +29,8 @@ func TestDeleteExpiredMobileRefreshTokens(t *testing.T) {
 			defer db.Close()
 
 			repo := NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
-			mock.ExpectExec(`^DELETE FROM ALUMNI_MOBILE_REFRESH_TOKEN WHERE EXPIRES_AT < NOW\(\) OR \(REVOKED_AT IS NOT NULL AND REVOKED_AT < \?\)$`).
-				WithArgs(revokedBefore).
+			mock.ExpectExec(`^DELETE FROM ALUMNI_MOBILE_REFRESH_TOKEN WHERE EXPIRES_AT < NOW\(\) OR \(REVOKED_AT IS NOT NULL AND REVOKED_AT < \?\) ORDER BY EXPIRES_AT LIMIT \?$`).
+				WithArgs(revokedBefore, expiredRecordBatchSize).
 				WillReturnResult(sqlmock.NewResult(0, testCase.rowsAffected))
 
 			deleted, err := repo.DeleteExpiredMobileRefreshTokens(revokedBefore)

@@ -24,7 +24,8 @@ func (r *SessionRepository) CreateSession(session model.UserSession) error {
 func (r *SessionRepository) DeleteExpiredSessions() (int64, error) {
 	result, err := r.DB.Exec(`
 		DELETE FROM USER_SESSION WHERE EXPIRES_AT < NOW()
-	`)
+        ORDER BY EXPIRES_AT LIMIT ?
+	`, expiredRecordBatchSize)
 	if err != nil {
 		return 0, err
 	}

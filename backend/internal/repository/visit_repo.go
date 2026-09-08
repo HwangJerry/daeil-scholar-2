@@ -112,9 +112,12 @@ func (r *VisitRepository) HasSummary(date time.Time) (bool, error) {
 	return c > 0, err
 }
 
-// DeleteDailyBefore prunes WEO_VISIT_DAILY rows older than the cutoff (exclusive).
+// DeleteDailyBefore prunes a bounded batch older than the cutoff (exclusive).
+// Days without a stored summary are retained for operator investigation.
 func (r *VisitRepository) DeleteDailyBefore(cutoff time.Time) (int64, error) {
-	res, err := r.DB.Exec(`DELETE FROM WEO_VISIT_DAILY WHERE VD_DATE < DATE(?)`, cutoff)
+	res, err := r.DB.Exec(`DELETE FROM WEO_VISIT_DAILY WHERE VD_DATE < DATE(?)
+        AND EXISTS (SELECT 1 FROM WEO_VISIT_SUMMARY WHERE VS_DATE = WEO_VISIT_DAILY.VD_DATE)
+        ORDER BY VD_DATE, VD_VISITOR_ID LIMIT ?`, cutoff, expiredRecordBatchSize)
 	if err != nil {
 		return 0, err
 	}

@@ -53,7 +53,8 @@ func (j *VisitAggregationJob) Start() {
 			case <-time.After(time.Until(next)):
 				yesterday := next.AddDate(0, 0, -1)
 				if err := j.aggregate(yesterday); err != nil {
-					j.logger.Error().Err(err).Msg("visit aggregation failed")
+					j.logger.Error().Err(err).Msg("visit aggregation failed; pruning skipped")
+					continue
 				} else {
 					j.logger.Info().Str("date", yesterday.Format("2006-01-02")).Msg("visit summary written")
 				}
