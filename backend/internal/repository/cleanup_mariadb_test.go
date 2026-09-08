@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -68,4 +69,27 @@ func TestCleanupBoundariesOnMariaDB101(t *testing.T) {
 	if err := db.Get(&n, "SELECT COUNT(*) FROM WEO_VISIT_SUMMARY"); err != nil || n != 1 {
 		t.Fatalf("summary lost: %d %v", n, err)
 	}
+	db.MustExec(`CREATE TABLE ALUMNI_MESSAGE_REPORT (STATUS VARCHAR(20), RESOLVED_AT DATETIME) ENGINE=InnoDB;
+ CREATE TABLE ALUMNI_DONATION_LEGAL_ARCHIVE (RETAIN_UNTIL DATE) ENGINE=InnoDB;
+ CREATE TABLE ALUMNI_ACCOUNT_DELETION_REQUEST (REQUEST_ID BIGINT PRIMARY KEY, STATUS VARCHAR(20), COMPLETED_AT DATETIME) ENGINE=InnoDB;
+ CREATE TABLE ALUMNI_ACCOUNT_ERASURE (REQUEST_ID BIGINT PRIMARY KEY) ENGINE=InnoDB;
+ INSERT INTO ALUMNI_ACCOUNT_DELETION_REQUEST VALUES (1,'completed',DATE_SUB(NOW(),INTERVAL 40 DAY)),(2,'completed',DATE_SUB(NOW(),INTERVAL 50 DAY)),(3,'pending',NULL);
+ INSERT INTO ALUMNI_ACCOUNT_ERASURE VALUES (1),(2),(3);`)
+	retention := &AccountDeletionRequestRepository{DB: db}
+	if err := retention.PurgeExpiredPrivacyRecords(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Get(&n, `SELECT COUNT(*) FROM ALUMNI_ACCOUNT_ERASURE e LEFT JOIN ALUMNI_ACCOUNT_DELETION_REQUEST d ON d.REQUEST_ID=e.REQUEST_ID WHERE d.REQUEST_ID IS NULL`); err != nil || n != 0 {
+		t.Fatalf("orphan erasure state: %d %v", n, err)
+	}
+	if err := retention.PurgeExpiredPrivacyRecords(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Get(&n, `SELECT COUNT(*) FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE STATUS='completed'`); err != nil || n != 0 {
+		t.Fatalf("completed receipts not drained: %d %v", n, err)
+	}
+	if err := db.Get(&n, `SELECT COUNT(*) FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID=3`); err != nil || n != 1 {
+		t.Fatalf("pending receipt lost: %d %v", n, err)
+	}
+
 }

@@ -37,8 +37,14 @@ func (r *AccountDeletionRequestRepository) PurgeExpiredPrivacyRecords(ctx contex
 			return err
 		}
 	}
-	_, err := r.DB.ExecContext(ctx, `DELETE FROM ALUMNI_ACCOUNT_DELETION_REQUEST
-        WHERE STATUS = 'completed' AND COMPLETED_AT < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)
-        ORDER BY COMPLETED_AT LIMIT ?`, limit)
+	// The two batches can have different orderings. Keep the parent until its
+	// erasure state is removed, otherwise that state would become unreachable.
+	requestDelete := `DELETE FROM ALUMNI_ACCOUNT_DELETION_REQUEST
+        WHERE STATUS = 'completed' AND COMPLETED_AT < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)`
+	if installed > 0 {
+		requestDelete += ` AND NOT EXISTS (SELECT 1 FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID)`
+	}
+	requestDelete += ` ORDER BY COMPLETED_AT LIMIT ?`
+	_, err := r.DB.ExecContext(ctx, requestDelete, limit)
 	return err
 }
