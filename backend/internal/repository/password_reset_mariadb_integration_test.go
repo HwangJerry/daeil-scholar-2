@@ -100,6 +100,9 @@ func TestPasswordResetRepositorySerializesDistinctTokensOnMariaDB101(t *testing.
 
 func startPasswordResetMariaDB101(t *testing.T) *sqlx.DB {
 	t.Helper()
+	if os.Getenv("ERASURE_ISOLATED_CONTAINER") == "1" {
+		return startIsolatedSocketMariaDB101(t)
+	}
 	imageBytes, err := os.ReadFile("../../migrations/testdata/mariadb-10.1.38.image")
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +120,9 @@ func startPasswordResetMariaDB101(t *testing.T) *sqlx.DB {
 		t.Fatalf("start pinned MariaDB: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
 	t.Cleanup(func() {
-		_ = exec.Command("docker", "rm", "-f", containerName).Run()
+		if output, err := exec.Command("docker", "rm", "-fv", containerName).CombinedOutput(); err != nil {
+			t.Errorf("remove test container and volume: %v (%s)", err, output)
+		}
 	})
 	portOutput, err := exec.Command("docker", "port", containerName, "3306/tcp").Output()
 	if err != nil {

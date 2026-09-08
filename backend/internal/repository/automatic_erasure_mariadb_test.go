@@ -74,6 +74,31 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if err = db.Get(&engine, `SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='UNRELATED_LEGACY'`); err != nil || engine != "MyISAM" {
 		t.Fatal("unrelated table converted")
 	}
+	// Cross-member replies on a deleted post are children of that post; unrelated
+	// posts and their replies must remain byte-for-byte unchanged.
+	db.MustExec(`CREATE TABLE WEO_BOARDBBS (SEQ INT PRIMARY KEY,USR_SEQ INT,CONTENTS TEXT) ENGINE=InnoDB;
+ CREATE TABLE WEO_BOARDCOMAND (SEQ INT PRIMARY KEY,USR_SEQ INT,BC_TYPE CHAR(1),JOIN_SEQ INT,CONTENTS TEXT) ENGINE=InnoDB;
+ CREATE TABLE WEO_BOARDLIKE (SEQ INT PRIMARY KEY,USR_SEQ INT,BBS_SEQ INT) ENGINE=InnoDB;
+ INSERT INTO WEO_BOARDBBS VALUES (10,42,'synthetic withdrawn post'),(11,43,'preserved other post');
+ INSERT INTO WEO_BOARDCOMAND VALUES (20,42,'B',11,'withdrawn author reply'),(21,43,'B',10,'reply to removed post'),(22,43,'B',11,'preserved other reply');
+ INSERT INTO WEO_BOARDLIKE VALUES (30,42,11),(31,43,10),(32,43,11);`)
+	preservedQueries := map[string]string{
+		"member":   "SELECT CONCAT_WS('|',USR_ID,USR_NAME,USR_EMAIL,USR_PHONE,USR_STATUS) FROM WEO_MEMBER WHERE USR_SEQ=43",
+		"message":  "SELECT CONCAT_WS('|',AM_SENDER_SEQ,AM_RECVR_SEQ,AM_CONTENT) FROM ALUMNI_MESSAGE WHERE AM_SEQ=3",
+		"donation": "SELECT CONCAT_WS('|',USR_SEQ,O_ACCOUNT_USR_SEQ,O_DONOR_NAME,O_DONOR_PHONE,O_NET_RECEIVED_AMOUNT,O_TRANSACTION_NO) FROM WEO_ORDER WHERE O_SEQ=2",
+		"payment":  "SELECT NUM_CARD FROM WEO_PG_DATA WHERE O_SEQ=2",
+		"post":     "SELECT CONTENTS FROM WEO_BOARDBBS WHERE SEQ=11",
+		"reply":    "SELECT CONTENTS FROM WEO_BOARDCOMAND WHERE SEQ=22",
+		"like":     "SELECT CONCAT_WS('|',USR_SEQ,BBS_SEQ) FROM WEO_BOARDLIKE WHERE SEQ=32",
+	}
+	preserved := map[string]string{}
+	for name, query := range preservedQueries {
+		var value string
+		if err := db.Get(&value, query); err != nil {
+			t.Fatal(name, err)
+		}
+		preserved[name] = value
+	}
 	repo := &AccountDeletionRequestRepository{DB: db}
 	receipt, err := repo.Create(42, strings.Repeat("a", 64))
 	if err != nil {
@@ -202,6 +227,9 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 		t.Fatal("test rollout skipped approved account", err)
 	}
 	repo.TestUserSeq = 0
+	if os.Getenv("ERASURE_ISOLATED_CONTAINER") == "1" {
+		verifySyntheticErasureBackup(t, db, 1)
+	}
 	// Unknown references block and roll back the archive, aggregate and member deletion together.
 	db.MustExec(`CREATE TABLE UNHANDLED_REFERENCE (USR_SEQ INT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4; INSERT INTO UNHANDLED_REFERENCE VALUES (42)`)
 	seal := func(data []byte) ([]byte, error) {
@@ -222,7 +250,17 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if count != 0 {
 		t.Fatal("archive did not roll back")
 	}
+	for name, query := range preservedQueries {
+		var value string
+		if err := db.Get(&value, query); err != nil || value != preserved[name] {
+			t.Fatal("rollback changed other member", name, err)
+		}
+	}
 	db.MustExec(`DROP TABLE UNHANDLED_REFERENCE`)
+	// Drop all idle DB connections and reconstruct repository state, as a new
+	// worker would after process restart. No in-memory progress is carried over.
+	db.SetMaxIdleConns(0)
+	repo = &AccountDeletionRequestRepository{DB: db}
 	if err = repo.EraseDatabase(work, seal, validate); err != nil {
 		t.Fatal(err)
 	}
@@ -233,6 +271,21 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 		db.Get(&count, query)
 		if count != 0 {
 			t.Fatal("personal data survived", query)
+		}
+	}
+	for name, query := range preservedQueries {
+		var value string
+		if err := db.Get(&value, query); err != nil || value != preserved[name] {
+			t.Fatal("erasure changed other member", name, err)
+		}
+	}
+	for _, query := range []string{
+		"SELECT COUNT(*) FROM WEO_BOARDBBS WHERE SEQ=10",
+		"SELECT COUNT(*) FROM WEO_BOARDCOMAND WHERE SEQ IN (20,21)",
+		"SELECT COUNT(*) FROM WEO_BOARDLIKE WHERE SEQ IN (30,31)",
+	} {
+		if err := db.Get(&count, query); err != nil || count != 0 {
+			t.Fatal("post child survived", query, err)
 		}
 	}
 	total, donors, err := NewDonationRepository(db).GetReceivedDonationAggregate()
@@ -263,11 +316,11 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 		t.Fatal("another member's profile queued")
 	}
 	db.MustExec(`UPDATE WEO_MEMBER SET USR_PHOTO='' WHERE USR_SEQ=43`)
-	db.MustExec(`CREATE TABLE WEO_BOARDBBS (SEQ INT PRIMARY KEY,USR_SEQ INT,CONTENTS TEXT) ENGINE=InnoDB; INSERT INTO WEO_BOARDBBS VALUES (1,43,TO_BASE64('<img src="/old/upload/profile/old42.jpg">'))`)
+	db.MustExec(`INSERT INTO WEO_BOARDBBS VALUES (1,43,TO_BASE64('<img src="/old/upload/profile/old42.jpg">'))`)
 	if repo.QueueHistoricalErasureFiles(plan, true) == nil {
 		t.Fatal("another post's embedded file queued")
 	}
-	db.MustExec(`DELETE FROM WEO_BOARDBBS`)
+	db.MustExec(`DELETE FROM WEO_BOARDBBS WHERE SEQ=1`)
 	if err = repo.SetErasureMode(receipt.ID, 7, "manual"); err != nil {
 		t.Fatal(err)
 	}
@@ -356,6 +409,9 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	db.Get(&count, `SELECT COUNT(*) FROM ALUMNI_DONATION_LEGAL_ARCHIVE`)
 	if count != 1 {
 		t.Fatal("legal archive missing")
+	}
+	if os.Getenv("ERASURE_ISOLATED_CONTAINER") == "1" {
+		verifySyntheticErasureBackup(t, db, 0)
 	}
 	// Retry must never extend context TTL or revive expired handoff information.
 	other, err := repo.Create(43, strings.Repeat("b", 64))
