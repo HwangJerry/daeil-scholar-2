@@ -1,5 +1,7 @@
 # test_release.py — Artifact integrity, deployment ordering and failure recovery.
 import json
+import gzip
+import io
 from pathlib import Path
 import sys
 import tarfile
@@ -31,6 +33,29 @@ class ReleaseTests(unittest.TestCase):
                     'files': {name: bundle.digest(self.root / 'artifacts' / name) for name in files}}
         (self.root / 'manifest.json').write_text(json.dumps(manifest))
         return manifest
+
+    def test_database_backup_uses_database_locks_and_keeps_file_contents(self):
+        uploads = self.root / 'uploads'
+        uploads.mkdir()
+        (uploads / 'example.txt').write_text('synthetic upload')
+        backup = self.root / 'backup'
+        backup.mkdir()
+        env = {'DB_USER': 'test', 'DB_PASSWORD': 'test', 'DB_NAME': 'test',
+               'UPLOAD_BASE_PATH': str(uploads), 'ACCOUNT_ERASURE_LEGACY_ROOT': str(uploads)}
+        class Dump:
+            stdout = io.BytesIO(b'CREATE TABLE example (id INT);')
+            def wait(self):
+                return 0
+        with patch.object(remote.subprocess, 'Popen', return_value=Dump()) as command:
+            remote.database_backup(env, backup)
+        args = command.call_args[0][0]
+        self.assertIn('--lock-tables', args)
+        self.assertNotIn('--lock-all-tables', args)
+        self.assertNotIn('--skip-lock-tables', args)
+        with gzip.open(backup / 'database.sql.gz', 'rb') as stream:
+            self.assertIn(b'CREATE TABLE example', stream.read())
+        with tarfile.open(backup / 'uploads-0.tar.gz') as archive:
+            self.assertEqual(archive.extractfile('uploads/example.txt').read(), b'synthetic upload')
 
     def test_verified_inventory_rejects_modified_extra_and_symlink_files(self):
         self.candidate()

@@ -225,9 +225,11 @@ def restore(records):
 
 
 def database_backup(env, backup):
+    # One database is dumped while Apache and the backend are stopped. Lock
+    # its tables without requiring the server-wide RELOAD privilege.
     destination = backup / 'database.sql.gz'
     with gzip.open(str(destination), 'wb') as stream:
-        proc = subprocess.Popen(mysql_args(env, 'mysqldump') + ['--routines', '--events', '--triggers', '--hex-blob', '--lock-all-tables'], env=db_env(env), stdout=subprocess.PIPE)
+        proc = subprocess.Popen(mysql_args(env, 'mysqldump') + ['--routines', '--events', '--triggers', '--hex-blob', '--lock-tables'], env=db_env(env), stdout=subprocess.PIPE)
         shutil.copyfileobj(proc.stdout, stream)
         proc.stdout.close()
         if proc.wait() != 0:
