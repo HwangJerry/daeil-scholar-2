@@ -3,6 +3,7 @@ package service
 
 import (
 	"errors"
+	"time"
 	"unicode/utf8"
 
 	"github.com/dflh-saf/backend/internal/model"
@@ -10,6 +11,11 @@ import (
 )
 
 const maxCommentLength = 500
+
+// Legacy comment DATETIME values are stored as Korean wall-clock time.
+var commentKST = time.FixedZone("KST", 9*60*60)
+
+const commentTimestampLayout = "2006-01-02 15:04"
 
 // CommentService handles comment-related business logic.
 type CommentService struct {
@@ -37,7 +43,8 @@ func (s *CommentService) AddComment(joinSeq int, usrSeq int, regName string, con
 		return nil, errors.New("댓글은 500자 이내로 작성해주세요")
 	}
 
-	lastID, err := s.commentRepo.InsertComment(joinSeq, usrSeq, regName, contents)
+	createdAt := time.Now().In(commentKST)
+	lastID, err := s.commentRepo.InsertComment(joinSeq, usrSeq, regName, contents, createdAt)
 	if err != nil {
 		return nil, err
 	}
@@ -48,6 +55,7 @@ func (s *CommentService) AddComment(joinSeq int, usrSeq int, regName string, con
 		USRSeq:   usrSeq,
 		RegName:  regName,
 		Contents: contents,
+		RegDate:  createdAt.Format(commentTimestampLayout),
 	}, nil
 }
 
