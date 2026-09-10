@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -265,7 +266,7 @@ func apnsReason(body []byte) string {
 }
 
 func payloadData(payload model.PushMessagePayload) map[string]string {
-	return map[string]string{
+	data := map[string]string{
 		"type":                payload.Type,
 		"eventId":             payload.EventID,
 		"messageId":           payload.MessageID,
@@ -275,4 +276,14 @@ func payloadData(payload model.PushMessagePayload) map[string]string {
 		"preview":             payload.Preview,
 		"createdAt":           payload.CreatedAt,
 	}
+	if payload.Type == "verification.reviewed" {
+		data["event_type"] = payload.Type
+		data["event_id"] = payload.EventID
+		data["user_id"] = payload.RecipientUserSeq
+		data["ttl_sec"] = "86400"
+		if sentAt, err := time.Parse(time.RFC3339, payload.CreatedAt); err == nil {
+			data["sent_at"] = strconv.FormatInt(sentAt.Unix(), 10)
+		}
+	}
+	return data
 }

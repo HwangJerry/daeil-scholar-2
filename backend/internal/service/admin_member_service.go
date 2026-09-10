@@ -36,8 +36,17 @@ var allowedMemberStatuses = map[string]bool{
 }
 
 // AdminMemberService handles member management operations for administrators.
+type VerificationReviewNotifier interface {
+	NotifyVerificationReviewed(int, model.VerificationStatus)
+}
+
 type AdminMemberService struct {
-	repo *repository.AdminMemberRepository
+	repo     *repository.AdminMemberRepository
+	notifier VerificationReviewNotifier
+}
+
+func (s *AdminMemberService) SetVerificationReviewNotifier(notifier VerificationReviewNotifier) {
+	s.notifier = notifier
 }
 
 // NewAdminMemberService creates an AdminMemberService.
@@ -86,11 +95,23 @@ func (s *AdminMemberService) RejectAlumniVerification(usrSeq int, reviewerSeq in
 	if reason == "" {
 		return ErrRejectionReasonRequired
 	}
-	return s.repo.RejectAlumniVerification(usrSeq, reviewerSeq, reason, expectedUpdatedAt)
+	if err := s.repo.RejectAlumniVerification(usrSeq, reviewerSeq, reason, expectedUpdatedAt); err != nil {
+		return err
+	}
+	if s.notifier != nil {
+		s.notifier.NotifyVerificationReviewed(usrSeq, model.VerificationRejected)
+	}
+	return nil
 }
 
 func (s *AdminMemberService) ApproveAlumniVerification(usrSeq int, reviewerSeq int, expectedUpdatedAt time.Time) error {
-	return s.repo.ApproveAlumniVerification(usrSeq, reviewerSeq, expectedUpdatedAt)
+	if err := s.repo.ApproveAlumniVerification(usrSeq, reviewerSeq, expectedUpdatedAt); err != nil {
+		return err
+	}
+	if s.notifier != nil {
+		s.notifier.NotifyVerificationReviewed(usrSeq, model.VerificationApproved)
+	}
+	return nil
 }
 
 // HasKakaoLink checks whether a member has a linked Kakao social account.

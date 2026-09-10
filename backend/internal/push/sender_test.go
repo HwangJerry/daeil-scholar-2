@@ -118,3 +118,15 @@ func TestAPNSSenderClassifiesInvalidAndTransientResponses(t *testing.T) {
 		}
 	}
 }
+
+func TestVerificationPayloadContainsRecipientAndAndroidEnvelope(t *testing.T) {
+	data := payloadData(model.PushMessagePayload{Type: "verification.reviewed", EventID: "review-42", RecipientUserSeq: "42", CreatedAt: "2026-09-10T00:00:00Z"})
+	for key, want := range map[string]string{"type": "verification.reviewed", "event_type": "verification.reviewed", "event_id": "review-42", "user_id": "42", "ttl_sec": "86400"} {
+		if data[key] != want {
+			t.Fatalf("%s = %q", key, data[key])
+		}
+	}
+	if data["sent_at"] == "" {
+		t.Fatal("missing expiry reference")
+	}
+}

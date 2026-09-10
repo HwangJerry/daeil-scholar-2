@@ -1,7 +1,9 @@
 package main
 
 import (
+	mw "github.com/dflh-saf/backend/internal/middleware"
 	"net/http"
+	"reflect"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -195,4 +197,28 @@ func routesForTest(t *testing.T, router chi.Router) map[string]bool {
 		t.Fatal(err)
 	}
 	return found
+}
+
+func TestWaitingMembersCanRegisterPushWithoutAlumniApproval(t *testing.T) {
+	router := chi.NewRouter()
+	registerAuthRoutes(router, handlers{}, nil)
+	var checked int
+	err := chi.Walk(router, func(method, route string, _ http.Handler, chain ...func(http.Handler) http.Handler) error {
+		if method != http.MethodPost || (route != "/api/push/device/register" && route != "/api/push/device/unregister") {
+			return nil
+		}
+		if len(chain) == 0 {
+			t.Fatal("push endpoint is missing authentication")
+		}
+		for _, middleware := range chain {
+			if reflect.ValueOf(middleware).Pointer() == reflect.ValueOf(mw.ApprovedAlumniMiddleware).Pointer() {
+				t.Fatal("waiting member cannot register push")
+			}
+		}
+		checked++
+		return nil
+	})
+	if err != nil || checked != 2 {
+		t.Fatalf("checked=%d err=%v", checked, err)
+	}
 }

@@ -145,6 +145,9 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	adminDonationOrchestrator := service.NewDonationConfigOrchestrator(adminDonationSvc, donationService, donationJob)
 	donationImportSvc := service.NewDonationImportService(donationImportRepo, adminDonationSvc, cfg.JWT.Secret, adminDonationOrchestrator)
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
+	if pushDelivery != nil {
+		adminMemberSvc.SetVerificationReviewNotifier(pushDelivery)
+	}
 	visitService := service.NewVisitService(visitRepo, cacheStore, cfg.VisitIPSalt, logger)
 	mobileAppEventService := service.NewMobileAppEventService(mobileAppEventRepo)
 	sentryClient := service.NewSentryClient(cfg.Sentry, cacheStore)

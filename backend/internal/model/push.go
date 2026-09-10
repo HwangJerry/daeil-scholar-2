@@ -33,6 +33,8 @@ type PushDeliveryTarget struct {
 }
 
 type PushMessagePayload struct {
+	RecipientUserSeq    string
+	VerificationStatus  VerificationStatus
 	Type                string
 	EventID             string
 	MessageID           string

@@ -142,3 +142,11 @@ func pushFlag(enabled bool) string {
 	}
 	return "N"
 }
+
+func (r *PushRepository) VerificationStillCurrent(userSeq int, status model.VerificationStatus) (bool, error) {
+	var count int
+	err := r.db.Get(&count, `SELECT COUNT(*) FROM ALUMNI_VERIFICATION v
+		JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
+		WHERE v.USR_SEQ = ? AND v.STATUS = ? AND m.USR_STATUS != 'AAA'`, userSeq, status)
+	return count > 0, err
+}
