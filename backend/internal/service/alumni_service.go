@@ -67,16 +67,28 @@ func (s *AlumniService) GetDetail(viewerSeq, userSeq int) (*model.AlumniDetail, 
 	if err != nil || record == nil {
 		return nil, err
 	}
+	var graduationYear *int64
+	if record.GraduationYear.Valid && record.GraduationYear.Int64 > 0 {
+		graduationYear = &record.GraduationYear.Int64
+	}
 	return &model.AlumniDetail{
-		UserSeq:     record.USRSeq,
-		Name:        record.USRName,
-		PhotoURL:    nullableString(record.USRPhoto),
-		Cohort:      nullString(record.Cohort),
-		Department:  nullString(record.Department),
-		JobCategory: nullString(record.AJCName),
-		JobRole:     nullString(record.USRPosition),
-		Phone:       publicValue(record.USRPhone, record.USRPhonePublic),
-		Email:       publicValue(record.USREmail, record.USREmailPublic),
+		GraduationYear: graduationYear,
+		BizName:        nullString(record.USRBizName),
+		BizAddr:        nullString(record.USRBizAddr),
+		BizDesc:        nullString(record.USRBizDesc),
+		BizCardURL:     nullableString(record.USRBizCard),
+		Tags:           record.Tags,
+		PhonePublic:    record.USRPhonePublic.Valid && record.USRPhonePublic.String == "Y",
+		EmailPublic:    record.USREmailPublic.Valid && record.USREmailPublic.String == "Y",
+		UserSeq:        record.USRSeq,
+		Name:           record.USRName,
+		PhotoURL:       nullableString(record.USRPhoto),
+		Cohort:         nullString(record.Cohort),
+		Department:     nullString(record.Department),
+		JobCategory:    nullString(record.AJCName),
+		JobRole:        nullString(record.USRPosition),
+		Phone:          publicValue(record.USRPhone, record.USRPhonePublic),
+		Email:          publicValue(record.USREmail, record.USREmailPublic),
 		BlockState: model.AlumniBlockState{
 			BlockedByMe: record.BlockedByMe,
 		},

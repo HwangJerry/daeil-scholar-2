@@ -74,6 +74,7 @@ func (r *AlumniRepository) GetDetail(viewerSeq, userSeq int) (*model.AlumniRecor
 			m.USR_SEQ, m.USR_NAME, m.USR_PHOTO,
 			v.GRADUATION_YEAR, v.COHORT, v.DEPARTMENT,
 			jc.AJC_NAME, m.USR_POSITION,
+			m.USR_BIZ_NAME, m.USR_BIZ_ADDR, m.USR_BIZ_DESC, m.USR_BIZ_CARD,
 			m.USR_PHONE, m.USR_EMAIL,
 			m.USR_PHONE_PUBLIC, m.USR_EMAIL_PUBLIC,
 			EXISTS (
@@ -93,6 +94,13 @@ func (r *AlumniRepository) GetDetail(viewerSeq, userSeq int) (*model.AlumniRecor
 		return nil, nil
 	}
 	if err != nil {
+		return nil, err
+	}
+	record.Tags = make([]string, 0)
+	if err := r.DB.Select(&record.Tags, `
+		SELECT AUT_TAG FROM ALUMNI_USER_TAG WHERE USR_SEQ = ?
+		ORDER BY AUT_INDX ASC, AUT_SEQ ASC
+	`, userSeq); err != nil {
 		return nil, err
 	}
 	return &record, nil
