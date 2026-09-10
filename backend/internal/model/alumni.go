@@ -6,6 +6,11 @@ import (
 
 // AlumniRecord represents a member from WEO_MEMBER.
 type AlumniRecord struct {
+	USRBizName     sql.NullString `db:"USR_BIZ_NAME"`
+	USRBizAddr     sql.NullString `db:"USR_BIZ_ADDR"`
+	USRBizDesc     sql.NullString `db:"USR_BIZ_DESC"`
+	USRBizCard     sql.NullString `db:"USR_BIZ_CARD"`
+	Tags           []string       `db:"-"`
 	USRSeq         int            `db:"USR_SEQ"`
 	USRName        string         `db:"USR_NAME"`
 	USRPhoto       sql.NullString `db:"USR_PHOTO"`
@@ -54,16 +59,24 @@ type AlumniSearchResponse struct {
 }
 
 type AlumniDetail struct {
-	UserSeq     int              `json:"userSeq"`
-	Name        string           `json:"name"`
-	PhotoURL    *string          `json:"photoUrl"`
-	Cohort      string           `json:"cohort"`
-	Department  string           `json:"department"`
-	JobCategory string           `json:"jobCategory"`
-	JobRole     string           `json:"jobRole"`
-	Phone       *string          `json:"phone,omitempty"`
-	Email       *string          `json:"email,omitempty"`
-	BlockState  AlumniBlockState `json:"blockState"`
+	GraduationYear *int64           `json:"graduationYear"`
+	BizName        string           `json:"bizName"`
+	BizAddr        string           `json:"bizAddr"`
+	BizDesc        string           `json:"bizDesc"`
+	BizCardURL     *string          `json:"bizCardUrl"`
+	Tags           []string         `json:"tags"`
+	PhonePublic    bool             `json:"phonePublic"`
+	EmailPublic    bool             `json:"emailPublic"`
+	UserSeq        int              `json:"userSeq"`
+	Name           string           `json:"name"`
+	PhotoURL       *string          `json:"photoUrl"`
+	Cohort         string           `json:"cohort"`
+	Department     string           `json:"department"`
+	JobCategory    string           `json:"jobCategory"`
+	JobRole        string           `json:"jobRole"`
+	Phone          *string          `json:"phone,omitempty"`
+	Email          *string          `json:"email,omitempty"`
+	BlockState     AlumniBlockState `json:"blockState"`
 }
 
 type AlumniBlockState struct {
