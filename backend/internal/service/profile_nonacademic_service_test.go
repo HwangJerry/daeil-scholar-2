@@ -9,7 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-func TestUpdateProfileIgnoresLegacyAcademicFields(t *testing.T) {
+func TestUpdateProfileSavesAcademicFieldsWithoutRequestingApproval(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -24,7 +24,7 @@ func TestUpdateProfileIgnoresLegacyAcademicFields(t *testing.T) {
 		WithArgs(42).
 		WillReturnRows(sqlmock.NewRows([]string{"USR_PHONE"}).AddRow("01012345678"))
 	mock.ExpectExec(`UPDATE WEO_MEMBER`).
-		WithArgs("홍길동", "01012345678", "user@example.com", "", "", "", "직무", 0, "Y", "Y", 42).
+		WithArgs("홍길동", "01012345678", "user@example.com", "", "", "", "직무", 0, "Y", "Y", "99", "영어", "99", "영어", 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
@@ -34,7 +34,7 @@ func TestUpdateProfileIgnoresLegacyAcademicFields(t *testing.T) {
 		USREmail: "user@example.com",
 		Position: "직무",
 		USRFN:    "99",
-		FmDept:   "계약에 없는 레거시 학과",
+		FmDept:   "영어",
 	})
 	if err != nil {
 		t.Fatal(err)

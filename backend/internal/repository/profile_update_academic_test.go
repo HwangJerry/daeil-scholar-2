@@ -8,7 +8,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-func TestUpdateProfileDoesNotWriteAcademicFields(t *testing.T) {
+func TestUpdateProfileSavesApprovedAcademicFieldsWithoutChangingApproval(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -21,10 +21,10 @@ func TestUpdateProfileDoesNotWriteAcademicFields(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery(`SELECT USR_PHONE[\s\S]*FOR UPDATE`).WithArgs(42).
 		WillReturnRows(sqlmock.NewRows([]string{"USR_PHONE"}).AddRow("01012345678"))
-	mock.ExpectExec(`SET USR_NAME = \?, USR_PHONE = \?, USR_EMAIL = \?,`).
+	mock.ExpectExec(`UPDATE WEO_MEMBER LEFT JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = WEO_MEMBER.USR_SEQ AND v.STATUS = 'approved'[\s\S]*v.COHORT = COALESCE[\s\S]*v.DEPARTMENT = COALESCE`).
 		WithArgs(
 			"홍길동", "01012345678", "user@example.com",
-			"회사", "소개", "주소", "직무", jobCategory, "Y", "N", 42,
+			"회사", "소개", "주소", "직무", jobCategory, "Y", "N", "99", "영어", "99", "영어", 42,
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -38,7 +38,7 @@ func TestUpdateProfileDoesNotWriteAcademicFields(t *testing.T) {
 		BizDesc:        "소개",
 		BizAddr:        "주소",
 		Position:       "직무",
-		FmDept:         "변경학과",
+		FmDept:         "영어",
 		JobCat:         &jobCategory,
 		USRPhonePublic: "Y",
 		USREmailPublic: "N",

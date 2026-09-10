@@ -99,7 +99,7 @@ func TestSubmitAlumniVerificationResubmitsRejectedApplication(t *testing.T) {
 	}
 }
 
-func TestSubmitAlumniVerificationMovesApprovedAcademicChangeToReapproval(t *testing.T) {
+func TestSubmitAlumniVerificationKeepsApprovedAcademicChangeApproved(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -116,8 +116,8 @@ func TestSubmitAlumniVerificationMovesApprovedAcademicChangeToReapproval(t *test
 	mock.ExpectExec(`UPDATE WEO_MEMBER`).
 		WithArgs("18", "영어", 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`UPDATE ALUMNI_VERIFICATION`).
-		WithArgs("reapproval_pending", 2004, "18", "영어", 42).
+	mock.ExpectExec(`SET STATUS = 'approved', GRADUATION_YEAR = \?, COHORT = \?, DEPARTMENT = \?, UPDATED_AT = NOW\(\)`).
+		WithArgs(2004, "18", "영어", 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
@@ -151,7 +151,77 @@ func TestSubmitAlumniVerificationKeepsUnchangedApprovedReview(t *testing.T) {
 	mock.ExpectExec(`UPDATE WEO_MEMBER`).
 		WithArgs("18", "영어", 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`SET GRADUATION_YEAR = \?, COHORT = \?, DEPARTMENT = \?, UPDATED_AT = NOW\(\)`).
+	mock.ExpectExec(`SET STATUS = 'approved', GRADUATION_YEAR = \?, COHORT = \?, DEPARTMENT = \?, UPDATED_AT = NOW\(\)`).
+		WithArgs(2004, "18", "영어", 42).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err = service.SubmitAlumniVerification(42, model.AlumniVerificationSubmissionRequest{
+		GraduationYear: 2004,
+		Cohort:         "18",
+		Department:     "영어",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSubmitAlumniVerificationRestoresLegacyReapprovalOnEdit(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	service := NewProfileService(repository.NewProfileRepository(sqlx.NewDb(db, "sqlmock")))
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`FROM ALUMNI_VERIFICATION`).
+		WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"STATUS", "APPROVED_GRADUATION_YEAR", "APPROVED_COHORT", "APPROVED_DEPARTMENT",
+		}).AddRow("reapproval_pending", nil, "17", "독일어"))
+	mock.ExpectExec(`UPDATE WEO_MEMBER`).
+		WithArgs("18", "영어", 42).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`SET STATUS = 'approved', GRADUATION_YEAR = \?, COHORT = \?, DEPARTMENT = \?, UPDATED_AT = NOW\(\)`).
+		WithArgs(2004, "18", "영어", 42).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err = service.SubmitAlumniVerification(42, model.AlumniVerificationSubmissionRequest{
+		GraduationYear: 2004,
+		Cohort:         "18",
+		Department:     "영어",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSubmitAlumniVerificationKeepsLegacyApprovedWithoutGraduationYear(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	service := NewProfileService(repository.NewProfileRepository(sqlx.NewDb(db, "sqlmock")))
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`FROM ALUMNI_VERIFICATION`).
+		WithArgs(42).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"STATUS", "APPROVED_GRADUATION_YEAR", "APPROVED_COHORT", "APPROVED_DEPARTMENT",
+		}).AddRow("approved", nil, "17", "독일어"))
+	mock.ExpectExec(`UPDATE WEO_MEMBER`).
+		WithArgs("18", "영어", 42).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`SET STATUS = 'approved', GRADUATION_YEAR = \?, COHORT = \?, DEPARTMENT = \?, UPDATED_AT = NOW\(\)`).
 		WithArgs(2004, "18", "영어", 42).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()

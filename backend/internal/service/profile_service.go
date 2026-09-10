@@ -42,6 +42,11 @@ func (s *ProfileService) SubmitAlumniVerification(usrSeq int, req model.AlumniVe
 }
 
 func (s *ProfileService) UpdateProfile(usrSeq int, req model.ProfileUpdateRequest) error {
+	req.USRFN = strings.TrimSpace(req.USRFN)
+	req.FmDept = strings.TrimSpace(req.FmDept)
+	if req.FmDept != "" && !model.IsValidDepartment(req.FmDept) {
+		return ErrInvalidDepartment
+	}
 	if !model.NormalizePhoneNumber(req.USRPhone).Valid() {
 		return ErrInvalidPhone
 	}

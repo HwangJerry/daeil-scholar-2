@@ -3,7 +3,7 @@ package model
 import "time"
 
 // AlumniVerificationSubmissionRequest is the complete academic record submitted
-// for initial verification, correction, or reapproval.
+// for initial verification, correction, or an immediately saved profile edit.
 type AlumniVerificationSubmissionRequest struct {
 	GraduationYear int    `json:"graduationYear"`
 	Cohort         string `json:"cohort"`

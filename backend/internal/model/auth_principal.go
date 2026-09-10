@@ -26,12 +26,13 @@ func (s VerificationStatus) Valid() bool {
 	}
 }
 
-func (s VerificationStatus) AfterAcademicSubmission(academicChanged bool) VerificationStatus {
+func (s VerificationStatus) AfterAcademicSubmission() VerificationStatus {
 	if s == VerificationUnsubmitted || s == VerificationRejected {
 		return VerificationPending
 	}
-	if s == VerificationApproved && academicChanged {
-		return VerificationReapprovalPending
+	// Existing members keep their approval when editing academic information.
+	if s == VerificationReapprovalPending {
+		return VerificationApproved
 	}
 	return s
 }

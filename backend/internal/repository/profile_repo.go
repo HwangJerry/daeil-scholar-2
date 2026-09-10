@@ -112,13 +112,8 @@ func (r *ProfileRepository) submitAlumniVerificationOnce(usrSeq int, req model.A
 	}
 	isNewApplication := errors.Is(err, sql.ErrNoRows)
 	nextStatus := model.VerificationPending
-	academicChanged := true
 	if !isNewApplication {
-		academicChanged = !current.ApprovedGraduationYear.Valid ||
-			int(current.ApprovedGraduationYear.Int64) != req.GraduationYear ||
-			!current.ApprovedCohort.Valid || current.ApprovedCohort.String != req.Cohort ||
-			!current.ApprovedDepartment.Valid || current.ApprovedDepartment.String != req.Department
-		nextStatus = current.Status.AfterAcademicSubmission(academicChanged)
+		nextStatus = current.Status.AfterAcademicSubmission()
 	}
 
 	if _, err := tx.Exec(`
@@ -139,10 +134,10 @@ func (r *ProfileRepository) submitAlumniVerificationOnce(usrSeq int, req model.A
 		`, usrSeq, model.VerificationPending, req.GraduationYear, req.Cohort, req.Department); err != nil {
 			return err
 		}
-	} else if current.Status == model.VerificationApproved && !academicChanged {
+	} else if nextStatus == model.VerificationApproved {
 		if _, err := tx.Exec(`
 			UPDATE ALUMNI_VERIFICATION
-			SET GRADUATION_YEAR = ?, COHORT = ?, DEPARTMENT = ?, UPDATED_AT = NOW()
+			SET STATUS = 'approved', GRADUATION_YEAR = ?, COHORT = ?, DEPARTMENT = ?, UPDATED_AT = NOW()
 			WHERE USR_SEQ = ?
 		`, req.GraduationYear, req.Cohort, req.Department, usrSeq); err != nil {
 			return err
@@ -312,17 +307,33 @@ func updateProfileFields(execer profileExecer, usrSeq int, req model.ProfileUpda
 	if emailPublic == "" {
 		emailPublic = "Y"
 	}
+	args := []interface{}{req.USRName, req.USRPhone, req.USREmail,
+		req.BizName, req.BizDesc, req.BizAddr,
+		req.Position, jobCat, phonePublic, emailPublic}
+	academicJoin := ""
+	academicAssignments := ""
+	if req.USRFN != "" || req.FmDept != "" {
+		// Android edits cohort/department through this endpoint. Keep both
+		// representations in sync without changing approval or review history.
+		// A pending applicant cannot obtain approval through a profile update.
+		academicJoin = ` LEFT JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = WEO_MEMBER.USR_SEQ AND v.STATUS = 'approved'`
+		academicAssignments = `,
+			USR_FN = IF(v.USR_SEQ IS NULL, USR_FN, COALESCE(NULLIF(?, ''), USR_FN)),
+			USR_DEPT = IF(v.USR_SEQ IS NULL, USR_DEPT, COALESCE(NULLIF(?, ''), USR_DEPT)),
+			v.COHORT = COALESCE(NULLIF(?, ''), v.COHORT),
+			v.DEPARTMENT = COALESCE(NULLIF(?, ''), v.DEPARTMENT)`
+		args = append(args, req.USRFN, req.FmDept, req.USRFN, req.FmDept)
+	}
+	args = append(args, usrSeq)
 	_, err := execer.Exec(`
-		UPDATE WEO_MEMBER
+		UPDATE WEO_MEMBER`+academicJoin+`
 		SET USR_NAME = ?, USR_PHONE = ?, USR_EMAIL = ?,
 			USR_BIZ_NAME = ?, USR_BIZ_DESC = ?, USR_BIZ_ADDR = ?,
 			USR_POSITION = NULLIF(?, ''),
 			USR_JOB_CAT = NULLIF(?, 0),
-			USR_PHONE_PUBLIC = ?, USR_EMAIL_PUBLIC = ?
-		WHERE USR_SEQ = ?
-	`, req.USRName, req.USRPhone, req.USREmail,
-		req.BizName, req.BizDesc, req.BizAddr,
-		req.Position, jobCat, phonePublic, emailPublic, usrSeq)
+			USR_PHONE_PUBLIC = ?, USR_EMAIL_PUBLIC = ?`+academicAssignments+`
+		WHERE WEO_MEMBER.USR_SEQ = ?
+	`, args...)
 	return err
 }
 
