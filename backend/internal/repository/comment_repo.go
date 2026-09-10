@@ -23,7 +23,7 @@ func (r *CommentRepository) GetComments(joinSeq int) ([]model.Comment, error) {
 	comments := make([]model.Comment, 0)
 	err := r.DB.Select(&comments, `
 		SELECT SEQ AS BC_SEQ, JOIN_SEQ, USR_SEQ, IFNULL(NICKNAME,'') AS NICKNAME,
-		       IFNULL(CONTENTS,'') AS CONTENTS, REG_DATE
+		       IFNULL(CONTENTS,'') AS CONTENTS, DATE_FORMAT(REG_DATE, '%Y-%m-%d %H:%i') AS REG_DATE
 		FROM WEO_BOARDCOMAND
 		WHERE JOIN_SEQ = ? AND BC_TYPE = 'B' AND OPEN_YN = 'Y'
 		ORDER BY SEQ DESC
@@ -35,11 +35,11 @@ func (r *CommentRepository) GetComments(joinSeq int) ([]model.Comment, error) {
 }
 
 // InsertComment creates a new comment and returns the last insert ID.
-func (r *CommentRepository) InsertComment(joinSeq int, usrSeq int, regName string, contents string) (int64, error) {
+func (r *CommentRepository) InsertComment(joinSeq int, usrSeq int, regName string, contents string, createdAt time.Time) (int64, error) {
 	result, err := r.DB.Exec(`
 		INSERT INTO WEO_BOARDCOMAND (JOIN_SEQ, BC_TYPE, USR_SEQ, NICKNAME, CONTENTS, OPEN_YN, REG_DATE)
 		VALUES (?, 'B', ?, ?, ?, 'Y', ?)
-	`, joinSeq, usrSeq, regName, contents, time.Now().Format("2006-01-02 15:04:05"))
+	`, joinSeq, usrSeq, regName, contents, createdAt.Format("2006-01-02 15:04:05"))
 	if err != nil {
 		return 0, err
 	}
