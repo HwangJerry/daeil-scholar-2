@@ -21,13 +21,22 @@ type AccountDeletionRequestRepository struct {
 	DonationRetentionTemplate func(int, time.Time) (model.DonationRetentionDecision, error)
 }
 
-const deletionReceiptColumns = `(SELECT SCHEDULED_AT FROM ALUMNI_ERASURE_SCHEDULE s WHERE s.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID) AS SCHEDULED_AT,
+const deletionReceiptColumns = `(SELECT CANCELLED_AT FROM ALUMNI_ERASURE_CANCELLATION c WHERE c.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID) AS CANCELLED_AT,
+ EXISTS(SELECT 1 FROM ALUMNI_ERASURE_CANCELLATION c, WEO_MEMBER m
+ WHERE m.USR_SEQ=ALUMNI_ACCOUNT_DELETION_REQUEST.USR_SEQ AND c.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND c.CANCEL_HASH<>'' AND c.ORIGINAL_STATUS IN ('CCC','BBB','BAA','ZZZ') AND c.RESTORE_BLOCKED=0 AND c.STARTED_AT IS NULL AND m.USR_STATUS='AAA' AND ALUMNI_ACCOUNT_DELETION_REQUEST.STATUS='pending'
+ AND NOT EXISTS(SELECT 1 FROM ALUMNI_ERASURE_TARGET t WHERE t.REQUEST_ID=c.REQUEST_ID AND t.STATUS NOT IN ('pending','manual'))
+ ) AS CAN_CANCEL,
+ (SELECT SCHEDULED_AT FROM ALUMNI_ERASURE_SCHEDULE s WHERE s.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID) AS SCHEDULED_AT,
  (SELECT EXPEDITED_AT FROM ALUMNI_ERASURE_SCHEDULE s WHERE s.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID) AS EXPEDITED_AT,
  EXISTS(SELECT 1 FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND (e.MODE='manual' OR e.LAST_CODE<>'')) AS NEEDS_ATTENTION,
  EXISTS (SELECT 1 FROM ALUMNI_ERASURE_RECEIPT_WORK rw WHERE rw.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND rw.STATUS='active') AS RECEIPT_WORK_PENDING, EXISTS (SELECT 1 FROM ALUMNI_ACCOUNT_ERASURE progress WHERE progress.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND progress.STAGE IN ('database_erased','completed')) AS DATABASE_ERASED, REQUEST_ID, STATUS, REQUESTED_AT, TARGET_AT, DUE_AT,
     COMPLETED_AT, RETAINED_RECORDS, RETENTION_UNTIL`
 
 func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string) (model.AccountDeletionReceipt, error) {
+	return r.CreateCancelable(usrSeq, receiptHash, "")
+}
+
+func (r *AccountDeletionRequestRepository) CreateCancelable(usrSeq int, receiptHash, cancelHash string) (model.AccountDeletionReceipt, error) {
 	var result model.AccountDeletionReceipt
 	if r.WaitHours <= 0 || r.WaitHours > 24*30 {
 		return result, &model.ValidationError{Msg: "탈퇴 대기 기간 설정이 필요합니다."}
@@ -56,6 +65,14 @@ func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string
 	if err == nil && existingHash != receiptHash {
 		return result, ErrDeletionReceiptConflict
 	}
+	if err == nil {
+		// A retried receipt never disables the account twice or overwrites cancellation authority.
+		if err = tx.Get(&result, `SELECT `+deletionReceiptColumns+` FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE USR_SEQ=?`, usrSeq); err != nil {
+			return result, err
+		}
+		normalizeDeletionReceiptTimes(&result)
+		return result, tx.Commit()
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		_, err = tx.Exec(`INSERT INTO ALUMNI_ACCOUNT_DELETION_REQUEST
             (USR_SEQ, RECEIPT_HASH, REQUESTED_AT, TARGET_AT, DUE_AT, APPLE_REQUIRED, KAKAO_REQUIRED)
@@ -72,6 +89,11 @@ func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string
 	}
 	if _, err = tx.Exec(`UPDATE ALUMNI_ACCOUNT_DELETION_REQUEST d JOIN ALUMNI_ERASURE_SCHEDULE s ON s.REQUEST_ID=d.REQUEST_ID
  SET d.TARGET_AT=s.SCHEDULED_AT,d.DUE_AT=DATE_ADD(s.SCHEDULED_AT,INTERVAL 10 DAY) WHERE d.USR_SEQ=?`, usrSeq); err != nil {
+		return result, err
+	}
+	// Snapshot the original status only once, before access is disabled.
+	if _, err = tx.Exec(`INSERT IGNORE INTO ALUMNI_ERASURE_CANCELLATION (REQUEST_ID,ORIGINAL_STATUS,CANCEL_HASH)
+ SELECT REQUEST_ID,?,? FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE USR_SEQ=?`, status, cancelHash, usrSeq); err != nil {
 		return result, err
 	}
 	// Disable access in the same transaction as the durable receipt. Erasure
@@ -101,7 +123,8 @@ func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string
 func (r *AccountDeletionRequestRepository) Receipt(hash string) (model.AccountDeletionReceipt, error) {
 	var receipt model.AccountDeletionReceipt
 	err := r.DB.Get(&receipt, `SELECT `+deletionReceiptColumns+` FROM ALUMNI_ACCOUNT_DELETION_REQUEST
-        WHERE RECEIPT_HASH = ? AND (COMPLETED_AT IS NULL OR COMPLETED_AT > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY))`, hash)
+        WHERE RECEIPT_HASH = ? AND (COMPLETED_AT IS NULL OR COMPLETED_AT > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY))
+ AND NOT EXISTS(SELECT 1 FROM ALUMNI_ERASURE_CANCELLATION c WHERE c.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND c.CANCELLED_AT<=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY))`, hash)
 	if err == nil {
 		normalizeDeletionReceiptTimes(&receipt)
 	}
@@ -175,6 +198,9 @@ func (r *AccountDeletionRequestRepository) Start(id int64, operator int) error {
         WHERE REQUEST_ID = ? AND STATUS = 'pending' AND USR_SEQ <> ? FOR UPDATE`, id, operator); err != nil {
 		return err
 	}
+	if _, err = tx.Exec(`UPDATE ALUMNI_ERASURE_CANCELLATION SET STARTED_AT=COALESCE(STARTED_AT,UTC_TIMESTAMP()) WHERE REQUEST_ID=?`, id); err != nil {
+		return err
+	}
 	// The existing worker performs provider revocation before manual removal
 	// of the identity rows. Missing credentials remain a visible blocker.
 	_, err = tx.Exec(`INSERT INTO ALUMNI_SOCIAL_REVOCATION_OUTBOX
@@ -203,6 +229,15 @@ func (r *AccountDeletionRequestRepository) Start(id int64, operator int) error {
 // parses legacy DATETIME in Asia/Seoul, so reinterpret the wall clock here;
 // calling t.UTC() would incorrectly shift the stored instant by nine hours.
 func normalizeDeletionReceiptTimes(receipt *model.AccountDeletionReceipt) {
+	if receipt.Status == "cancelled" {
+		receipt.CompletedAt = nil
+		receipt.NeedsAttention = false
+		receipt.ReceiptWorkPending = false
+	}
+	if receipt.CancelledAt != nil {
+		v := deletionTimeUTC(*receipt.CancelledAt)
+		receipt.CancelledAt = &v
+	}
 	if receipt.ScheduledAt != nil {
 		v := deletionTimeUTC(*receipt.ScheduledAt)
 		receipt.ScheduledAt = &v

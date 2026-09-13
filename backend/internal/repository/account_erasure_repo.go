@@ -12,7 +12,7 @@ func (r *AccountDeletionRequestRepository) ErasureBatch(ctx context.Context) ([]
 	rows := []model.ErasureWork{}
 	err := r.DB.SelectContext(ctx, &rows, `SELECT d.REQUEST_ID,d.USR_SEQ,e.STAGE,e.EXTERNAL_EVIDENCE
         FROM ALUMNI_ACCOUNT_DELETION_REQUEST d JOIN ALUMNI_ACCOUNT_ERASURE e ON e.REQUEST_ID=d.REQUEST_ID
-        WHERE e.MODE='automatic' AND d.STATUS <> 'completed' AND e.NEXT_ATTEMPT_AT<=UTC_TIMESTAMP()
+        WHERE e.MODE='automatic' AND d.STATUS IN ('pending','processing') AND e.NEXT_ATTEMPT_AT<=UTC_TIMESTAMP()
  AND EXISTS(SELECT 1 FROM ALUMNI_ERASURE_SCHEDULE s WHERE s.REQUEST_ID=d.REQUEST_ID AND (s.SCHEDULED_AT<=UTC_TIMESTAMP() OR s.EXPEDITED_AT IS NOT NULL))
         AND (?=0 OR d.USR_SEQ=?) ORDER BY e.NEXT_ATTEMPT_AT,d.REQUEST_ID LIMIT 10`, r.TestUserSeq, r.TestUserSeq)
 	return rows, err
@@ -56,7 +56,7 @@ func (r *AccountDeletionRequestRepository) SetErasureMode(id int64, operator int
 	}
 	result, err := r.DB.Exec(`UPDATE ALUMNI_ACCOUNT_ERASURE e JOIN ALUMNI_ACCOUNT_DELETION_REQUEST d ON d.REQUEST_ID=e.REQUEST_ID
         SET e.MODE=?,e.LAST_CODE='',e.NEXT_ATTEMPT_AT=UTC_TIMESTAMP(),e.UPDATED_AT=UTC_TIMESTAMP()
-        WHERE d.REQUEST_ID=? AND d.STATUS<>'completed' AND d.USR_SEQ<>?`, mode, id, operator)
+        WHERE d.REQUEST_ID=? AND d.STATUS IN ('pending','processing') AND d.USR_SEQ<>?`, mode, id, operator)
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func (r *AccountDeletionRequestRepository) SetErasureMode(id int64, operator int
 func (r *AccountDeletionRequestRepository) ErasureActive(id int64) (bool, error) {
 	var n int
 	err := r.DB.Get(&n, `SELECT COUNT(*) FROM ALUMNI_ACCOUNT_ERASURE e JOIN ALUMNI_ACCOUNT_DELETION_REQUEST d ON d.REQUEST_ID=e.REQUEST_ID
-        WHERE e.REQUEST_ID=? AND e.MODE='automatic' AND d.STATUS<>'completed'
+        WHERE e.REQUEST_ID=? AND e.MODE='automatic' AND d.STATUS IN ('pending','processing')
  AND EXISTS(SELECT 1 FROM ALUMNI_ERASURE_SCHEDULE s WHERE s.REQUEST_ID=d.REQUEST_ID AND (s.SCHEDULED_AT<=UTC_TIMESTAMP() OR s.EXPEDITED_AT IS NOT NULL))`, id)
 	return n == 1, err
 }
@@ -138,7 +138,7 @@ func (r *AccountDeletionRequestRepository) RecordExternalErasure(id int64, evide
 	}
 	defer tx.Rollback()
 	result, err := tx.Exec(`UPDATE ALUMNI_ACCOUNT_ERASURE e JOIN ALUMNI_ACCOUNT_DELETION_REQUEST d ON d.REQUEST_ID=e.REQUEST_ID
- SET e.EXTERNAL_EVIDENCE=?,e.UPDATED_AT=UTC_TIMESTAMP() WHERE e.REQUEST_ID=? AND e.MODE='automatic' AND d.STATUS<>'completed'`, evidence, id)
+ SET e.EXTERNAL_EVIDENCE=?,e.UPDATED_AT=UTC_TIMESTAMP() WHERE e.REQUEST_ID=? AND e.MODE='automatic' AND d.STATUS IN ('pending','processing')`, evidence, id)
 	if err != nil {
 		return err
 	}

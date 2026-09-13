@@ -36,6 +36,8 @@ func deletionRequestError(w http.ResponseWriter, err error) {
 		respondError(w, 404, "DELETION_REQUEST_NOT_FOUND", "삭제 요청을 찾을 수 없거나 이미 처리되었습니다.")
 	case errors.Is(err, repository.ErrDeletionReceiptConflict):
 		respondError(w, 409, "DELETION_ALREADY_REQUESTED", "이미 접수된 삭제 요청입니다. 기존 확인번호로 조회해주세요.")
+	case errors.Is(err, repository.ErrDeletionCancellationClosed):
+		respondError(w, 409, "ACCOUNT_DELETION_CANCELLATION_CLOSED", "이미 탈퇴 처리가 시작되었거나 계정 상태가 변경되어 취소할 수 없습니다. 처리 현황을 확인해주세요.")
 	case errors.Is(err, repository.ErrDeletionIncomplete):
 		respondError(w, 409, "DELETION_INCOMPLETE", "계정 관련 기록 또는 소셜 권한 철회 확인이 남아 있습니다. 실제 삭제 후 다시 확인해주세요.")
 	default:
@@ -55,12 +57,13 @@ func (h *AccountDeletionRequestHandler) Create(w http.ResponseWriter, r *http.Re
 	}
 	var request struct {
 		ReceiptToken string `json:"receiptToken"`
+		CancelToken  string `json:"cancelToken"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
 		respondError(w, 400, "INVALID_DELETION_REQUEST", "요청 내용을 확인해주세요.")
 		return
 	}
-	receipt, token, err := h.Service.Create(user.USRSeq, request.ReceiptToken)
+	receipt, token, err := h.Service.CreateCancelable(user.USRSeq, request.ReceiptToken, request.CancelToken)
 	if err != nil {
 		deletionRequestError(w, err)
 		return
@@ -76,6 +79,7 @@ func (h *AccountDeletionRequestHandler) Receipt(w http.ResponseWriter, r *http.R
 	w.Header().Set("Cache-Control", "no-store")
 	var request struct {
 		ReceiptToken string `json:"receiptToken"`
+		CancelToken  string `json:"cancelToken"`
 	}
 	if json.NewDecoder(r.Body).Decode(&request) != nil {
 		respondError(w, 400, "INVALID_RECEIPT", "확인번호를 입력해주세요.")
@@ -144,4 +148,22 @@ func (h *AccountDeletionRequestHandler) Resolve(w http.ResponseWriter, r *http.R
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *AccountDeletionRequestHandler) Cancel(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	var request struct {
+		ReceiptToken string `json:"receiptToken"`
+		CancelToken  string `json:"cancelToken"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 2048)).Decode(&request) != nil {
+		respondError(w, 400, "INVALID_REQUEST", "취소 인증 정보를 확인해주세요.")
+		return
+	}
+	receipt, err := h.Service.Cancel(request.ReceiptToken, request.CancelToken)
+	if err != nil {
+		deletionRequestError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, receipt)
 }

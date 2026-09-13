@@ -66,7 +66,7 @@ func (r *AccountDeletionRequestRepository) Verify(id int64) ([]model.AccountDele
 	}
 	defer tx.Rollback()
 	var usrSeq int
-	err = tx.Get(&usrSeq, `SELECT USR_SEQ FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID = ? AND STATUS <> 'completed'`, id)
+	err = tx.Get(&usrSeq, `SELECT USR_SEQ FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID = ? AND STATUS IN ('pending','processing')`, id)
 	if err != nil {
 		return nil, err
 	}

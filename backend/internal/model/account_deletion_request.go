@@ -4,6 +4,8 @@ package model
 import "time"
 
 type AccountDeletionReceipt struct {
+	CanCancel          bool       `json:"canCancel" db:"CAN_CANCEL"`
+	CancelledAt        *time.Time `json:"cancelledAt" db:"CANCELLED_AT"`
 	ScheduledAt        *time.Time `json:"scheduledAt" db:"SCHEDULED_AT"`
 	ExpeditedAt        *time.Time `json:"expeditedAt" db:"EXPEDITED_AT"`
 	NeedsAttention     bool       `json:"needsAttention" db:"NEEDS_ATTENTION"`

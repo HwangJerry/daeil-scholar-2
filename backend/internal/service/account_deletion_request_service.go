@@ -21,6 +21,48 @@ type AccountDeletionRequestStore interface {
 }
 type AccountDeletionRequestService struct{ Store AccountDeletionRequestStore }
 
+func (s *AccountDeletionRequestService) CreateCancelable(user int, receiptToken, cancelToken string) (model.AccountDeletionReceipt, string, error) {
+	if cancelToken == "" {
+		return s.Create(user, receiptToken)
+	} // Legacy clients remain receipt-only.
+	receiptHash, err := deletionTokenHash(receiptToken)
+	if err != nil {
+		return model.AccountDeletionReceipt{}, "", err
+	}
+	cancelHash, err := deletionTokenHash(cancelToken)
+	if err != nil {
+		return model.AccountDeletionReceipt{}, "", err
+	}
+	if receiptHash == cancelHash {
+		return model.AccountDeletionReceipt{}, "", &model.ValidationError{Msg: "조회 번호와 취소 인증값은 달라야 합니다."}
+	}
+	store, ok := s.Store.(interface {
+		CreateCancelable(int, string, string) (model.AccountDeletionReceipt, error)
+	})
+	if !ok {
+		return model.AccountDeletionReceipt{}, "", &model.ValidationError{Msg: "취소 가능한 접수 기능이 준비되지 않았습니다."}
+	}
+	receipt, err := store.CreateCancelable(user, receiptHash, cancelHash)
+	return receipt, receiptToken, err
+}
+func (s *AccountDeletionRequestService) Cancel(receiptToken, cancelToken string) (model.AccountDeletionReceipt, error) {
+	receiptHash, err := deletionTokenHash(receiptToken)
+	if err != nil {
+		return model.AccountDeletionReceipt{}, err
+	}
+	cancelHash, err := deletionTokenHash(cancelToken)
+	if err != nil {
+		return model.AccountDeletionReceipt{}, err
+	}
+	store, ok := s.Store.(interface {
+		Cancel(string, string) (model.AccountDeletionReceipt, error)
+	})
+	if !ok {
+		return model.AccountDeletionReceipt{}, &model.ValidationError{Msg: "취소 기능이 준비되지 않았습니다."}
+	}
+	return store.Cancel(receiptHash, cancelHash)
+}
+
 func (s *AccountDeletionRequestService) Verify(id int64) ([]model.AccountDeletionFootprint, error) {
 	return s.Store.Verify(id)
 }
@@ -62,7 +104,7 @@ func (s *AccountDeletionRequestService) List(status string, before int64) ([]mod
 	if status == "" {
 		status = "pending"
 	}
-	if (status != "pending" && status != "processing" && status != "completed") || before < 0 {
+	if (status != "pending" && status != "processing" && status != "completed" && status != "cancelled") || before < 0 {
 		return nil, &model.ValidationError{Msg: "올바른 삭제 요청 목록을 선택해주세요."}
 	}
 	return s.Store.List(status, before)
@@ -71,6 +113,18 @@ func (s *AccountDeletionRequestService) List(status string, before int64) ([]mod
 func (s *AccountDeletionRequestService) Resolve(id int64, operator int, request model.AccountDeletionResolution) error {
 	if id <= 0 || operator <= 0 {
 		return &model.ValidationError{Msg: "올바른 요청을 선택해주세요."}
+	}
+	if request.Action == "cancel_verified" {
+		if strings.TrimSpace(request.EvidenceReference) == "" || len(request.EvidenceReference) > 500 {
+			return &model.ValidationError{Msg: "본인 확인 근거를 입력해주세요."}
+		}
+		store, ok := s.Store.(interface {
+			CancelVerified(int64, int, string) error
+		})
+		if !ok {
+			return &model.ValidationError{Msg: "본인 확인 취소 기능이 준비되지 않았습니다."}
+		}
+		return store.CancelVerified(id, operator, request.EvidenceReference)
 	}
 	if request.Action == "target" {
 		store, ok := s.Store.(interface {

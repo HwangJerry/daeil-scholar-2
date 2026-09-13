@@ -126,6 +126,7 @@ func registerPublicRoutes(r chi.Router, h handlers, authService *service.AuthSer
 	r.Get("/api/donation/summary", h.donation.GetSummary)
 	r.Get("/api/settings/public", h.appSetting.Public)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/account-deletion/receipt", h.accountDeletion.Receipt)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/account-deletion/cancel", h.accountDeletion.Cancel)
 	r.Get("/api/auth/kakao", h.auth.KakaoLogin)
 	r.Get("/api/auth/kakao/callback", h.auth.KakaoCallback)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/kakao/mobile", h.auth.KakaoMobileLogin)

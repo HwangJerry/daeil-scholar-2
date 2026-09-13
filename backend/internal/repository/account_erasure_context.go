@@ -18,7 +18,7 @@ func (r *AccountDeletionRequestRepository) SaveErasureContext(id int64, encrypte
 	result, err := r.DB.Exec(`INSERT INTO ALUMNI_ERASURE_CONTEXT (REQUEST_ID,CIPHERTEXT,EXPIRES_AT,CREATED_AT)
  SELECT e.REQUEST_ID,?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? DAY),UTC_TIMESTAMP()
  FROM ALUMNI_ACCOUNT_ERASURE e JOIN ALUMNI_ACCOUNT_DELETION_REQUEST d ON d.REQUEST_ID=e.REQUEST_ID
- WHERE e.REQUEST_ID=? AND e.MODE='automatic' AND e.STAGE<>'database_erased' AND d.STATUS<>'completed'
+ WHERE e.REQUEST_ID=? AND e.MODE='automatic' AND e.STAGE<>'database_erased' AND d.STATUS IN ('pending','processing')
  ON DUPLICATE KEY UPDATE REQUEST_ID=VALUES(REQUEST_ID)`, encrypted, erasureContextLifetimeDays, id)
 	if err != nil {
 		return err

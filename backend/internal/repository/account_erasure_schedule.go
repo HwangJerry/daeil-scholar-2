@@ -33,7 +33,7 @@ func (r *AccountDeletionRequestRepository) ControlSchedule(id int64, operator in
 	}
 	defer tx.Rollback()
 	var user int
-	if err = tx.Get(&user, `SELECT USR_SEQ FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID=? AND STATUS<>'completed' AND USR_SEQ<>? FOR UPDATE`, id, operator); err != nil {
+	if err = tx.Get(&user, `SELECT USR_SEQ FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID=? AND STATUS IN ('pending','processing') AND USR_SEQ<>? FOR UPDATE`, id, operator); err != nil {
 		return err
 	}
 	if r.TestUserSeq > 0 && user != r.TestUserSeq {
@@ -92,7 +92,7 @@ func (r *AccountDeletionRequestRepository) ReviewErasureTarget(id int64, operato
 	}
 	defer release()
 	var user int
-	if err = r.DB.Get(&user, `SELECT USR_SEQ FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID=? AND USR_SEQ<>? AND STATUS<>'completed'`, id, operator); err != nil {
+	if err = r.DB.Get(&user, `SELECT USR_SEQ FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID=? AND USR_SEQ<>? AND STATUS IN ('pending','processing')`, id, operator); err != nil {
 		return err
 	}
 	if r.TestUserSeq > 0 && user != r.TestUserSeq {
@@ -111,7 +111,7 @@ func (r *AccountDeletionRequestRepository) ReviewErasureTarget(id int64, operato
 
 func (r *AccountDeletionRequestRepository) checkOperatorErasureScope(id int64, operator int) error {
 	var user int
-	if err := r.DB.Get(&user, `SELECT USR_SEQ FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID=? AND STATUS<>'completed' AND USR_SEQ<>?`, id, operator); err != nil {
+	if err := r.DB.Get(&user, `SELECT USR_SEQ FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID=? AND STATUS IN ('pending','processing') AND USR_SEQ<>?`, id, operator); err != nil {
 		return err
 	}
 	if r.TestUserSeq > 0 && user != r.TestUserSeq {

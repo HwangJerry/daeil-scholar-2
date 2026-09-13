@@ -28,11 +28,12 @@ export function AccountErasureReceiptWork({ item }: { item: AccountDeletion }) {
     onSuccess: () => { setEvidence(''); void client.invalidateQueries({ queryKey: ['account-deletions'] }); },
   });
   if (!status) return null;
-  const editable = item.status !== 'completed' && (status === 'unreviewed' || closing);
+  const editable = (item.status === 'pending' || item.status === 'processing') && (status === 'unreviewed' || closing);
   const confirmed = closing ? delivered && erased : choice === 'not_required' || secured;
   return (
     <div className="space-y-3 rounded-lg border border-border-light p-4 text-sm text-dark-slate">
       <h3 className="font-semibold">영수증 연락 업무 · {LABELS[status]}</h3>
+      {item.status === 'cancelled' && <p>탈퇴 신청 취소 시점의 기록입니다. 별도로 진행 중이던 발급·정정 업무가 취소된 것은 아닙니다. 해당 업무와 연락처 정리는 기존 회계 업무 절차에서 계속 관리해 주세요.</p>}
       <p className="text-cool-gray">담당: 황제철. 진행 중인 영수증 업무와 결과 전달이 끝나면 해당 업무용 연락처를 정리합니다. 원본의 법정 보존 증빙은 유지합니다. 연락처 원문은 이 화면에 입력하지 마세요.</p>
       {item.receiptWork?.evidenceReference && <p className="break-all text-cool-gray">확인 근거: {item.receiptWork.evidenceReference}</p>}
       {editable && (

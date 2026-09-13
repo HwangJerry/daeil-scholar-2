@@ -24,7 +24,7 @@ func (r *AccountDeletionRequestRepository) ResolveReceiptWork(id int64, operator
 	}
 	defer tx.Rollback()
 	var user int
-	if err = tx.Get(&user, `SELECT USR_SEQ FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID=? AND STATUS<>'completed' AND USR_SEQ<>? FOR UPDATE`, id, operator); err != nil {
+	if err = tx.Get(&user, `SELECT USR_SEQ FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE REQUEST_ID=? AND STATUS IN ('pending','processing') AND USR_SEQ<>? FOR UPDATE`, id, operator); err != nil {
 		return err
 	}
 	var current string

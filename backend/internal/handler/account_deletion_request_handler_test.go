@@ -87,3 +87,25 @@ func TestDeletionAcceptedDespitePostCommitSessionCleanupFailure(t *testing.T) {
 		t.Fatal("session cleared before durable request")
 	}
 }
+
+func (s *deletionHandlerStore) Cancel(receipt, cancel string) (model.AccountDeletionReceipt, error) {
+	if receipt == cancel {
+		return model.AccountDeletionReceipt{}, errors.New("must not reuse lookup authority")
+	}
+	s.hash = cancel
+	return model.AccountDeletionReceipt{Status: "cancelled"}, nil
+}
+func TestCancellationUsesIndependentSecretWithoutAuthentication(t *testing.T) {
+	store := &deletionHandlerStore{}
+	h := &AccountDeletionRequestHandler{RequestsDisabled: true, AutomationDisabled: true, Service: &service.AccountDeletionRequestService{Store: store}}
+	w := httptest.NewRecorder()
+	h.Cancel(w, httptest.NewRequest("POST", "/api/account-deletion/cancel", strings.NewReader(`{"receiptToken":"`+strings.Repeat("a", 64)+`","cancelToken":"`+strings.Repeat("b", 64)+`"}`)))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "cancelled") || store.hash == strings.Repeat("b", 64) {
+		t.Fatal("cancellation failed or persisted raw token", w.Code)
+	}
+	w = httptest.NewRecorder()
+	h.Cancel(w, httptest.NewRequest("POST", "/api/account-deletion/cancel", strings.NewReader(`{"receiptToken":"`+strings.Repeat("a", 64)+`"}`)))
+	if w.Code != 400 {
+		t.Fatal("receipt-only cancellation accepted")
+	}
+}

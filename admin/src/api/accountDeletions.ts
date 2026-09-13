@@ -1,7 +1,7 @@
 // accountDeletions — Durable manual account-erasure queue and verification API.
 import { api } from './client';
 
-export type DeletionStatus = 'pending' | 'processing' | 'completed';
+export type DeletionStatus = 'pending' | 'processing' | 'completed' | 'cancelled';
 export interface ErasureTarget {
  target: string;
  status: 'pending' | 'running' | 'complete' | 'not_applicable' | 'manual' | 'failed';
@@ -28,6 +28,8 @@ export interface ReceiptWork {
  completedAt: string | null;
 }
 export interface AccountDeletion {
+ canCancel?: boolean;
+ cancelledAt?: string | null;
  scheduledAt?: string | null;
  expeditedAt?: string | null;
  needsAttention?: boolean;
@@ -70,6 +72,6 @@ export function fetchAccountDeletions(status: DeletionStatus, before: number) {
 export function verifyAccountDeletion(id: number) {
   return api.get<{ items: DeletionFootprint[] }>(`/api/admin/account-deletions/${id}/verification`);
 }
-export function resolveAccountDeletion(id: number, evidence: DeletionEvidence | ReceiptWorkResolution | { action: 'start' | 'automatic' | 'manual' | 'expedite' | 'schedule' | 'retry_social' } | { action: 'target'; target: string; targetStatus: 'manual' | 'complete' | 'not_applicable'; evidenceReference: string }) {
+export function resolveAccountDeletion(id: number, evidence: DeletionEvidence | ReceiptWorkResolution | { action: 'start' | 'automatic' | 'manual' | 'expedite' | 'schedule' | 'retry_social' } | { action: 'cancel_verified'; evidenceReference: string } | { action: 'target'; target: string; targetStatus: 'manual' | 'complete' | 'not_applicable'; evidenceReference: string }) {
   return api.put<void>(`/api/admin/account-deletions/${id}`, evidence);
 }

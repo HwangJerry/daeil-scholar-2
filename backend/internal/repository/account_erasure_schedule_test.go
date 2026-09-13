@@ -17,7 +17,7 @@ func TestScheduledErasureOnMariaDB(t *testing.T) {
  CREATE TABLE WEO_MEMBER_SOCIAL(USR_SEQ INT,NMS_GATE CHAR(2)) ENGINE=InnoDB;
  CREATE TABLE ALUMNI_ADMIN_ROLE(USR_SEQ INT) ENGINE=InnoDB;
  INSERT INTO WEO_MEMBER VALUES(42,'CCC'),(43,'CCC');`)
-	for _, name := range []string{"056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "066_schedule_account_erasure.sql"} {
+	for _, name := range []string{"056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "066_schedule_account_erasure.sql", "067_cancel_account_deletion.sql"} {
 		data, err := os.ReadFile("../../migrations/" + name)
 		if err != nil {
 			t.Fatal(err)

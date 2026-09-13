@@ -33,7 +33,7 @@ func (r *AccountDeletionRequestRepository) PurgeExpiredPrivacyRecords(ctx contex
 		if _, err := r.DB.ExecContext(ctx, `DELETE FROM ALUMNI_DONATION_LEGAL_ARCHIVE WHERE RETAIN_UNTIL < DATE(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 9 HOUR)) ORDER BY RETAIN_UNTIL LIMIT ?`, limit); err != nil {
 			return err
 		}
-		if _, err := r.DB.ExecContext(ctx, `DELETE FROM ALUMNI_ACCOUNT_ERASURE WHERE EXISTS (SELECT 1 FROM ALUMNI_ACCOUNT_DELETION_REQUEST d WHERE d.REQUEST_ID=ALUMNI_ACCOUNT_ERASURE.REQUEST_ID AND d.STATUS='completed' AND d.COMPLETED_AT < DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY)) ORDER BY REQUEST_ID LIMIT ?`, limit); err != nil {
+		if _, err := r.DB.ExecContext(ctx, `DELETE FROM ALUMNI_ACCOUNT_ERASURE WHERE EXISTS (SELECT 1 FROM ALUMNI_ACCOUNT_DELETION_REQUEST d WHERE d.REQUEST_ID=ALUMNI_ACCOUNT_ERASURE.REQUEST_ID AND d.STATUS IN ('completed','cancelled') AND d.COMPLETED_AT < DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY)) ORDER BY REQUEST_ID LIMIT ?`, limit); err != nil {
 			return err
 		}
 	}
@@ -43,14 +43,14 @@ func (r *AccountDeletionRequestRepository) PurgeExpiredPrivacyRecords(ctx contex
 		return err
 	}
 	if scheduleInstalled > 0 {
-		if _, err := r.DB.ExecContext(ctx, `DELETE FROM ALUMNI_ERASURE_SCHEDULE WHERE EXISTS(SELECT 1 FROM ALUMNI_ACCOUNT_DELETION_REQUEST d WHERE d.REQUEST_ID=ALUMNI_ERASURE_SCHEDULE.REQUEST_ID AND d.STATUS='completed' AND d.COMPLETED_AT<DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY)) ORDER BY REQUEST_ID LIMIT ?`, limit); err != nil {
+		if _, err := r.DB.ExecContext(ctx, `DELETE FROM ALUMNI_ERASURE_SCHEDULE WHERE EXISTS(SELECT 1 FROM ALUMNI_ACCOUNT_DELETION_REQUEST d WHERE d.REQUEST_ID=ALUMNI_ERASURE_SCHEDULE.REQUEST_ID AND d.STATUS IN ('completed','cancelled') AND d.COMPLETED_AT<DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY)) ORDER BY REQUEST_ID LIMIT ?`, limit); err != nil {
 			return err
 		}
 	}
 	// The two batches can have different orderings. Keep the parent until its
 	// erasure state is removed, otherwise that state would become unreachable.
 	requestDelete := `DELETE FROM ALUMNI_ACCOUNT_DELETION_REQUEST
-        WHERE STATUS = 'completed' AND COMPLETED_AT < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)`
+        WHERE STATUS IN ('completed','cancelled') AND COMPLETED_AT < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)`
 	if installed > 0 {
 		requestDelete += ` AND NOT EXISTS (SELECT 1 FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID)`
 	}
@@ -59,5 +59,15 @@ func (r *AccountDeletionRequestRepository) PurgeExpiredPrivacyRecords(ctx contex
 	}
 	requestDelete += ` ORDER BY COMPLETED_AT LIMIT ?`
 	_, err := r.DB.ExecContext(ctx, requestDelete, limit)
+	if err != nil {
+		return err
+	}
+	var cancellationInstalled int
+	if err = r.DB.GetContext(ctx, &cancellationInstalled, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_ERASURE_CANCELLATION'`); err != nil {
+		return err
+	}
+	if cancellationInstalled > 0 {
+		_, err = r.DB.ExecContext(ctx, `DELETE FROM ALUMNI_ERASURE_CANCELLATION WHERE NOT EXISTS(SELECT 1 FROM ALUMNI_ACCOUNT_DELETION_REQUEST d WHERE d.REQUEST_ID=ALUMNI_ERASURE_CANCELLATION.REQUEST_ID) ORDER BY REQUEST_ID LIMIT ?`, limit)
+	}
 	return err
 }

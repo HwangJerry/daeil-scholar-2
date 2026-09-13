@@ -8,7 +8,7 @@ import { fetchAccountDeletions, resolveAccountDeletion, verifyAccountDeletion, t
 
 const QUEUE_PAGE_SIZE = 50;
 const QUEUE_REFRESH_MS = 60_000;
-const STATUS_LABELS: Record<DeletionStatus, string> = { pending: '접수', processing: '처리 중', completed: '완료' };
+const STATUS_LABELS: Record<DeletionStatus, string> = { pending: '접수', processing: '처리 중', completed: '완료', cancelled: '신청 취소' };
 const AUTO_BLOCKERS: Record<string, string> = {
  LEGACY_REPLY_REVIEW_REQUIRED: '과거 게시글에 다른 작성자의 답변이 포함되어 있습니다. 답변 분리와 개인정보 확인 후 재개해주세요.',
   EXTERNAL_HANDOFF_REVIEW_REQUIRED: '내부 삭제 전에 아래 저장소별 담당자와 처리 경로를 확인하고 수동 처리 인계를 기록해주세요.',
@@ -48,24 +48,25 @@ function DeletionReview({ item }: { item: AccountDeletion }) {
     const timer = setInterval(() => setNow(Date.now()), QUEUE_REFRESH_MS);
     return () => clearInterval(timer);
   }, []);
+  const [verificationNote, setVerificationNote] = useState('');
   const [evidence, setEvidence] = useState<DeletionEvidence>({
     action: 'complete', resultNotified: false, filesErased: false, backupsErased: false, externalDataErased: false,
     otherIdentifiersChecked: false, evidenceReference: '', retainedRecords: '', retentionUntil: '',
   });
   const mutation = useMutation({
-    mutationFn: (action: 'start' | 'complete' | 'automatic' | 'manual' | 'expedite' | 'schedule' | 'retry_social') => resolveAccountDeletion(item.requestId, action === 'complete' ? evidence : { action }),
+    mutationFn: (action: 'start' | 'complete' | 'automatic' | 'manual' | 'expedite' | 'schedule' | 'retry_social' | 'cancel_verified') => resolveAccountDeletion(item.requestId, action === 'complete' ? evidence : action === 'cancel_verified' ? { action, evidenceReference: verificationNote } : { action }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['account-deletions'] }),
   });
   const verification = useQuery({ queryKey: ['account-deletion-verification', item.requestId], queryFn: () => verifyAccountDeletion(item.requestId), enabled: false });
   const ready = CHECKS.every(([key]) => evidence[key]) && evidence.evidenceReference.trim() && evidence.retainedRecords.trim();
-  const overdue = item.status !== 'completed' && new Date(item.dueAt).getTime() < now;
+  const overdue = (item.status === 'pending' || item.status === 'processing') && new Date(item.dueAt).getTime() < now;
 
   return (
     <section className="space-y-4 rounded-xl border border-border-light bg-surface p-5" aria-label={`삭제 요청 ${item.requestId}`}>
       <h2 className="text-lg font-semibold text-dark-slate">접수번호 {item.requestId} · {STATUS_LABELS[item.status]}</h2>
       <p className="text-sm text-cool-gray">회원 번호 {item.userSeq ?? '삭제됨'} · 접수 {new Date(item.requestedAt).toLocaleString('ko-KR')}</p>
       <p className="text-sm text-dark-slate">자동 처리 예정 {item.scheduledAt ? new Date(item.scheduledAt).toLocaleString('ko-KR') : '기존 요청 · 예약 검토 필요'} · 결과 안내 기한 {new Date(item.dueAt).toLocaleDateString('ko-KR')}{overdue && ' · 기한 경과 — 즉시 확인 필요'}</p>
-      {item.status !== 'completed' && (
+      {(item.status === 'pending' || item.status === 'processing') && (
         <div className="space-y-3">
           <p className="text-sm text-dark-slate">처리 방식: {item.processingMode === 'automatic' ? '자동' : '수동'} · 자동 작업 상태: {item.autoStage || '대기'}</p>
           {item.automationUpdatedAt && <p className="text-sm text-cool-gray">최근 상태 변경 {new Date(item.automationUpdatedAt).toLocaleString('ko-KR')}{item.processingMode === 'automatic' && item.nextAttemptAt && ` · 다음 시도 ${new Date(item.nextAttemptAt).toLocaleString('ko-KR')}`}</p>}
@@ -85,8 +86,12 @@ function DeletionReview({ item }: { item: AccountDeletion }) {
           </div>
         </div>
       )}
+      {item.canCancel && <div className="space-y-2">
+        <label className="block text-sm">신청 취소 본인 확인 근거 (개인정보 제외)<input className="w-full rounded-lg border border-border-light p-2" value={verificationNote} onChange={event => setVerificationNote(event.target.value)} maxLength={150}/></label>
+        <Button variant="outline" disabled={!verificationNote.trim() || mutation.isPending} onClick={() => { if (window.confirm('문의자의 본인 확인을 완료했나요? 신청을 취소하고 일반 계정 이용을 복원합니다.')) mutation.mutate('cancel_verified'); }}>본인 확인 후 신청 취소</Button>
+      </div>}
       <AccountErasureReceiptWork item={item} />
-      <AccountErasureTargets targets={item.targets} requestId={item.status !== 'completed' && item.processingMode === 'automatic' ? item.requestId : undefined} />
+      <AccountErasureTargets targets={item.targets} requestId={(item.status === 'pending' || item.status === 'processing') && item.processingMode === 'automatic' ? item.requestId : undefined} />
       {item.status === 'pending' && item.processingMode !== 'automatic' && <Button disabled={mutation.isPending} onClick={() => mutation.mutate('start')}>삭제 작업 시작 · 소셜 권한 철회 요청</Button>}
       {item.status === 'processing' && item.processingMode !== 'automatic' && (
         <>
@@ -128,7 +133,7 @@ export function AccountDeletionsPage() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold text-dark-slate">계정 삭제 요청</h1>
-      <p className="text-sm text-cool-gray">담당: 황제철 · ghkdwp018@naver.com. 통상 3일 내 처리, 접수일부터 10일 내 결과 안내. 작업 시작과 완료는 root 권한이 필요합니다. 새 요청은 자동으로 처리합니다. 기존 수동 요청은 수동 방식을 유지하며 언제든 전환할 수 있습니다. 자동 완료 결과는 앱의 확인번호로 게시합니다. 자동 이메일 발송은 없습니다. 수동 처리 시 담당자가 개별 통지하고 증빙을 남깁니다. 진행 중인 작업 단계가 끝난 뒤 수동 전환이 반영될 수 있습니다.</p>
+      <p className="text-sm text-cool-gray">담당: 황제철 · ghkdwp018@gmail.com. 예약 시각 이후 자동 처리하며 최고 관리자는 조기 실행할 수 있습니다. 실제 처리가 시작되기 전에는 사용자가 신청을 취소할 수 있습니다. 본인 확인 후 관리자 취소도 가능합니다. 취소·완료 이력은 다시 실행할 수 없습니다. 외부 처리 증빙과 결과는 접수번호로 확인합니다.</p>
       <label className="block text-sm text-dark-slate">상태{' '}
         <select value={status} onChange={(event) => { setStatus(event.target.value as DeletionStatus); setBefore(0); }} className="rounded-lg border border-border-light bg-surface p-2">
           {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}

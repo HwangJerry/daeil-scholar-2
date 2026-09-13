@@ -12,7 +12,9 @@ type Receipt = {
  expeditedAt?: string | null;
  needsAttention?: boolean;
   requestId: number;
-  status: 'pending' | 'processing' | 'completed';
+  status: 'pending' | 'processing' | 'completed' | 'cancelled';
+  canCancel?: boolean;
+  cancelledAt?: string | null;
   databaseErased?: boolean;
   receiptWorkPending?: boolean;
   requestedAt: string;
@@ -22,11 +24,13 @@ type Receipt = {
   retainedRecords: string;
   retentionUntil: string | null;
 };
-const STATUS_LABELS = { pending: '삭제 요청 접수', processing: '계정 삭제 처리 중입니다', completed: '계정 삭제 완료' };
+const STATUS_LABELS = { pending: '삭제 요청 접수', processing: '계정 삭제 처리 중입니다', completed: '계정 삭제 완료', cancelled: '탈퇴 신청이 취소되었습니다' };
 const dateLabel = (value: string) => new Date(value).toLocaleDateString('ko-KR');
 
 export function AccountDeletionPage() {
   const [token, setToken] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('receipt') ?? '');
+  const [cancelToken, setCancelToken] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('cancel') ?? '');
+  const [cancelling, setCancelling] = useState(false);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -53,6 +57,18 @@ export function AccountDeletionPage() {
     if (token) void lookup(token);
   }, [token]);
 
+  async function cancelRequest() {
+    if (cancelling || !receipt?.canCancel) return;
+    if (!window.confirm('탈퇴 신청을 취소하고 계정 이용을 다시 시작할까요? 취소 후 다시 로그인해야 합니다.')) return;
+    setCancelling(true); setError('');
+    try {
+      const result = await api.post<Receipt>('/api/account-deletion/cancel', { receiptToken: token.trim(), cancelToken: cancelToken.trim() });
+      setReceipt(result); setCancelToken('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '취소 결과를 확인하지 못했습니다. 처리 현황을 확인한 뒤 다시 시도해주세요.');
+      try { setReceipt(await api.post<Receipt>('/api/account-deletion/receipt', { receiptToken: token.trim() })); } catch { /* Keep the prior receipt, never claim cancellation. */ }
+    } finally { setCancelling(false); }
+  }
   function submit(event: FormEvent) { event.preventDefault(); void lookup(token.trim()); }
 
   return (
@@ -73,10 +89,16 @@ export function AccountDeletionPage() {
         {error && <p role="alert" className="text-sm text-text-primary">{error}</p>}
         {receipt && (
           <Card className="space-y-4 border-border p-6 shadow-none" role="status">
-            <h2 className="text-xl font-semibold text-primary">{receipt.status === 'completed' ? STATUS_LABELS.completed : receipt.needsAttention ? '추가 확인이 필요합니다' : receipt.status === 'pending' && receipt.scheduledAt && !receipt.expeditedAt ? '자동 탈퇴 예약 대기' : STATUS_LABELS[receipt.status]}</h2>
+            <h2 className="text-xl font-semibold text-primary">{receipt.status === 'cancelled' ? STATUS_LABELS.cancelled : receipt.status === 'completed' ? STATUS_LABELS.completed : receipt.needsAttention ? '추가 확인이 필요합니다' : receipt.status === 'pending' && receipt.scheduledAt && !receipt.expeditedAt ? '자동 탈퇴 예약 대기' : STATUS_LABELS[receipt.status]}</h2>
+            {receipt.canCancel && <div className="space-y-3">
+              <p>실제 탈퇴 처리가 시작되기 전까지 신청을 취소할 수 있습니다.</p>
+              <label className="block">취소 인증번호<input type="password" autoComplete="off" maxLength={64} value={cancelToken} onChange={event => setCancelToken(event.target.value)} className="w-full rounded-md border border-border bg-surface p-3" /></label>
+              <Button type="button" disabled={cancelling || !/^[a-f\d]{64}$/i.test(cancelToken)} onClick={() => void cancelRequest()}>{cancelling ? '취소 확인 중…' : '탈퇴 신청 취소'}</Button>
+              {!cancelToken && <p>신청한 앱에서 취소하거나 별도로 보관한 취소 인증번호를 입력하세요. 인증번호를 분실했다면 문의 창구에서 본인 확인을 받아주세요.</p>}
+            </div>}
             {receipt.receiptWorkPending && <p className="text-sm leading-7 text-text-secondary">진행 중인 영수증 업무를 처리하고 있습니다. 업무와 결과 전달이 끝나면 해당 업무용 연락처를 정리합니다. 다른 삭제 작업은 예약 및 검토 상태에 따라 진행합니다.</p>}
             <p className="text-sm text-text-secondary">접수번호 {receipt.requestId} · 접수일 {dateLabel(receipt.requestedAt)}</p>
-            {receipt.status === 'completed' ? (
+            {receipt.status === 'cancelled' ? <p>신청이 취소되었습니다. 다시 로그인해 주세요. 관리자 권한은 별도 확인이 필요합니다. <Link to="/login">로그인으로 이동</Link></p> : receipt.status === 'completed' ? (
               <>
                 <p className="leading-7 text-text-secondary">{receipt.completedAt && dateLabel(receipt.completedAt)}에 계정과 삭제 대상 정보의 삭제를 확인했습니다.</p>
                 <p className="whitespace-pre-wrap break-words text-sm leading-7 text-text-secondary">법정 보존 안내: {receipt.retainedRecords}</p>

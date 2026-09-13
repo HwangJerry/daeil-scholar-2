@@ -22,3 +22,10 @@ it('manual handoff records responsibility without inventing completion',async()=
  await user.type(screen.getByLabelText(/처리 인계 또는 검증 근거/),'ticket-7');await user.click(button);
  await waitFor(()=>expect(put).toHaveBeenCalledWith('/api/admin/account-deletions/7',{action:'target',target:'backups',targetStatus:'manual',evidenceReference:'ticket-7'}));
 });
+it('requires identity verification evidence for administrative cancellation',async()=>{
+ vi.spyOn(api,'get').mockResolvedValue({items:[{requestId:7,userSeq:42,status:'pending',canCancel:true,requestedAt:'2026-09-13T00:00:00Z',targetAt:'2026-09-16T00:00:00Z',dueAt:'2026-09-26T00:00:00Z',processingMode:'manual',targets:[]}]});
+ const put=vi.spyOn(api,'put').mockResolvedValue(undefined);vi.spyOn(window,'confirm').mockReturnValue(true);const user=userEvent.setup();mount(<AccountDeletionsPage/>);
+ const button=await screen.findByRole('button',{name:'본인 확인 후 신청 취소'});expect(button).toBeDisabled();
+ await user.type(screen.getByLabelText(/신청 취소 본인 확인 근거/),'support-ticket-7');await user.click(button);
+ await waitFor(()=>expect(put).toHaveBeenCalledWith('/api/admin/account-deletions/7',{action:'cancel_verified',evidenceReference:'support-ticket-7'}));
+});
