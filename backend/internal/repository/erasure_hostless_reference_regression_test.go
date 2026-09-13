@@ -22,7 +22,7 @@ func TestErasureHostlessReferencesOnMariaDB101(t *testing.T) {
  CREATE TABLE ALUMNI_ACCOUNT_ERASURE (REQUEST_ID BIGINT PRIMARY KEY,MODE VARCHAR(30),STAGE VARCHAR(30)) ENGINE=InnoDB;
  INSERT INTO ALUMNI_ACCOUNT_ERASURE VALUES (1,'automatic','database_erased')`)
 	work := model.ErasureWork{RequestID: 1, UserSeq: 42}
-	repo := &AccountDeletionRequestRepository{DB: db, SiteOrigin: "https://app.example.org"}
+	repo := &AccountDeletionRequestRepository{WaitHours: 72, DB: db, SiteOrigin: "https://app.example.org"}
 	const fileURL = "/files/shared.jpg"
 	for _, raw := range []string{
 		"https:/files/shared.jpg", "https:files/shared.jpg",

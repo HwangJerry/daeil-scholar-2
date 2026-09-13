@@ -166,6 +166,9 @@ func (r *AuthRepository) MarkSocialRevocationFailed(outboxID int64, errMsg strin
 	status := retryStatus
 	if newAttemptCount >= maxAttempts {
 		status = "FAILED"
+		if retryStatus == "REVOKED" {
+			status = "FINALIZE_FAILED"
+		}
 	}
 	_, err := r.DB.Exec(`
 		UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX

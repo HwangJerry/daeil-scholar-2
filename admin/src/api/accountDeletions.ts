@@ -28,6 +28,9 @@ export interface ReceiptWork {
  completedAt: string | null;
 }
 export interface AccountDeletion {
+ scheduledAt?: string | null;
+ expeditedAt?: string | null;
+ needsAttention?: boolean;
  contextExpiresAt?: string;
  receiptWork?: ReceiptWork;
  receiptWorkPending?: boolean;
@@ -67,6 +70,6 @@ export function fetchAccountDeletions(status: DeletionStatus, before: number) {
 export function verifyAccountDeletion(id: number) {
   return api.get<{ items: DeletionFootprint[] }>(`/api/admin/account-deletions/${id}/verification`);
 }
-export function resolveAccountDeletion(id: number, evidence: DeletionEvidence | ReceiptWorkResolution | { action: 'start' | 'automatic' | 'manual' }) {
+export function resolveAccountDeletion(id: number, evidence: DeletionEvidence | ReceiptWorkResolution | { action: 'start' | 'automatic' | 'manual' | 'expedite' | 'schedule' | 'retry_social' } | { action: 'target'; target: string; targetStatus: 'manual' | 'complete' | 'not_applicable'; evidenceReference: string }) {
   return api.put<void>(`/api/admin/account-deletions/${id}`, evidence);
 }

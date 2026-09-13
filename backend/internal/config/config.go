@@ -29,6 +29,7 @@ type Config struct {
 
 // AccountErasureConfig holds private server-side automation integrations.
 type AccountErasureConfig struct {
+	WaitHours                int
 	TestUserSeq              int
 	RequestsEnabled          bool
 	WorkerEnabled            bool
@@ -119,6 +120,7 @@ func (c DBConfig) DSN() string {
 }
 
 type KakaoConfig struct {
+	AdminKey            string
 	ClientID            string
 	ClientSecret        string
 	RedirectURI         string
@@ -185,6 +187,7 @@ func Load() *Config {
 			ConnMaxIdleTime: getDurationEnv("DB_CONN_MAX_IDLE_TIME", 3*time.Minute),
 		},
 		Kakao: KakaoConfig{
+			AdminKey:            getEnv("KAKAO_ADMIN_KEY", ""),
 			ClientID:            getEnv("KAKAO_CLIENT_ID", ""),
 			ClientSecret:        getEnv("KAKAO_CLIENT_SECRET", ""),
 			RedirectURI:         getEnv("KAKAO_REDIRECT_URI", "http://localhost:8000/api/auth/kakao/callback"),
@@ -243,7 +246,7 @@ func Load() *Config {
 			APNSKeyID:          getEnv("APNS_KEY_ID", ""),
 			APNSPrivateKeyFile: getEnv("APNS_PRIVATE_KEY_FILE", ""),
 		},
-		AccountErasure: AccountErasureConfig{TestUserSeq: erasureTestUserFromEnv(), RequestsEnabled: getBoolEnv("ACCOUNT_ERASURE_REQUESTS_ENABLED", false), WorkerEnabled: getBoolEnv("ACCOUNT_ERASURE_WORKER_ENABLED", false), RetentionEnabled: getBoolEnv("PRIVACY_RETENTION_ENABLED", false), ExternalMode: getEnv("ACCOUNT_ERASURE_EXTERNAL_MODE", ""), LegacyRoot: getEnv("ACCOUNT_ERASURE_LEGACY_ROOT", getEnv("UPLOAD_LEGACY_PATH", "/var/www/legacy/files")), ContextKey: getEnv("ACCOUNT_ERASURE_CONTEXT_KEY", ""), LedgerConfirmed: getBoolEnv("DONATION_LEDGER_RETENTION_CONFIRMED", false), ReceiptOriginalsSeparate: getBoolEnv("DONATION_RECEIPT_ORIGINALS_SEPARATE", false), LedgerYearEndMonth: getIntEnv("DONATION_LEDGER_YEAR_END_MONTH", 0), LedgerEvidence: getEnv("DONATION_LEDGER_RETENTION_EVIDENCE", ""), ExternalURL: getEnv("ACCOUNT_ERASURE_EXTERNAL_URL", ""), ExternalToken: getEnv("ACCOUNT_ERASURE_EXTERNAL_TOKEN", ""), ArchiveKey: getEnv("DONATION_ARCHIVE_KEY", "")},
+		AccountErasure: AccountErasureConfig{WaitHours: getIntEnv("ACCOUNT_ERASURE_WAIT_HOURS", 0), TestUserSeq: erasureTestUserFromEnv(), RequestsEnabled: getBoolEnv("ACCOUNT_ERASURE_REQUESTS_ENABLED", false), WorkerEnabled: getBoolEnv("ACCOUNT_ERASURE_WORKER_ENABLED", false), RetentionEnabled: getBoolEnv("PRIVACY_RETENTION_ENABLED", false), ExternalMode: getEnv("ACCOUNT_ERASURE_EXTERNAL_MODE", ""), LegacyRoot: getEnv("ACCOUNT_ERASURE_LEGACY_ROOT", getEnv("UPLOAD_LEGACY_PATH", "/var/www/legacy/files")), ContextKey: getEnv("ACCOUNT_ERASURE_CONTEXT_KEY", ""), LedgerConfirmed: getBoolEnv("DONATION_LEDGER_RETENTION_CONFIRMED", false), ReceiptOriginalsSeparate: getBoolEnv("DONATION_RECEIPT_ORIGINALS_SEPARATE", false), LedgerYearEndMonth: getIntEnv("DONATION_LEDGER_YEAR_END_MONTH", 0), LedgerEvidence: getEnv("DONATION_LEDGER_RETENTION_EVIDENCE", ""), ExternalURL: getEnv("ACCOUNT_ERASURE_EXTERNAL_URL", ""), ExternalToken: getEnv("ACCOUNT_ERASURE_EXTERNAL_TOKEN", ""), ArchiveKey: getEnv("DONATION_ARCHIVE_KEY", "")},
 		Sentry: SentryConfig{
 			AuthToken:      getEnv("SENTRY_AUTH_TOKEN", ""),
 			Organization:   getEnv("SENTRY_ORG", ""),

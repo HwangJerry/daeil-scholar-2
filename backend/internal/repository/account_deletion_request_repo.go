@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"github.com/dflh-saf/backend/internal/model"
@@ -15,15 +16,22 @@ var ErrDeletionReceiptConflict = errors.New("existing deletion request uses a di
 type AccountDeletionRequestRepository struct {
 	DB                        *sqlx.DB
 	SiteOrigin                string
+	WaitHours                 int
 	TestUserSeq               int
 	DonationRetentionTemplate func(int, time.Time) (model.DonationRetentionDecision, error)
 }
 
-const deletionReceiptColumns = `EXISTS (SELECT 1 FROM ALUMNI_ERASURE_RECEIPT_WORK rw WHERE rw.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND rw.STATUS='active') AS RECEIPT_WORK_PENDING, EXISTS (SELECT 1 FROM ALUMNI_ACCOUNT_ERASURE progress WHERE progress.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND progress.STAGE IN ('database_erased','completed')) AS DATABASE_ERASED, REQUEST_ID, STATUS, REQUESTED_AT, TARGET_AT, DUE_AT,
+const deletionReceiptColumns = `(SELECT SCHEDULED_AT FROM ALUMNI_ERASURE_SCHEDULE s WHERE s.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID) AS SCHEDULED_AT,
+ (SELECT EXPEDITED_AT FROM ALUMNI_ERASURE_SCHEDULE s WHERE s.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID) AS EXPEDITED_AT,
+ EXISTS(SELECT 1 FROM ALUMNI_ACCOUNT_ERASURE e WHERE e.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND (e.MODE='manual' OR e.LAST_CODE<>'')) AS NEEDS_ATTENTION,
+ EXISTS (SELECT 1 FROM ALUMNI_ERASURE_RECEIPT_WORK rw WHERE rw.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND rw.STATUS='active') AS RECEIPT_WORK_PENDING, EXISTS (SELECT 1 FROM ALUMNI_ACCOUNT_ERASURE progress WHERE progress.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_REQUEST.REQUEST_ID AND progress.STAGE IN ('database_erased','completed')) AS DATABASE_ERASED, REQUEST_ID, STATUS, REQUESTED_AT, TARGET_AT, DUE_AT,
     COMPLETED_AT, RETAINED_RECORDS, RETENTION_UNTIL`
 
 func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string) (model.AccountDeletionReceipt, error) {
 	var result model.AccountDeletionReceipt
+	if r.WaitHours <= 0 || r.WaitHours > 24*30 {
+		return result, &model.ValidationError{Msg: "탈퇴 대기 기간 설정이 필요합니다."}
+	}
 	var engine string
 	if err := r.DB.Get(&engine, `SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'WEO_MEMBER'`); err != nil {
 		return result, err
@@ -58,6 +66,14 @@ func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string
 			return result, err
 		}
 	}
+	if _, err = tx.Exec(`INSERT IGNORE INTO ALUMNI_ERASURE_SCHEDULE (REQUEST_ID,SCHEDULED_AT,CREATED_AT)
+ SELECT REQUEST_ID,DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? HOUR),UTC_TIMESTAMP() FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE USR_SEQ=?`, r.WaitHours, usrSeq); err != nil {
+		return result, err
+	}
+	if _, err = tx.Exec(`UPDATE ALUMNI_ACCOUNT_DELETION_REQUEST d JOIN ALUMNI_ERASURE_SCHEDULE s ON s.REQUEST_ID=d.REQUEST_ID
+ SET d.TARGET_AT=s.SCHEDULED_AT,d.DUE_AT=DATE_ADD(s.SCHEDULED_AT,INTERVAL 10 DAY) WHERE d.USR_SEQ=?`, usrSeq); err != nil {
+		return result, err
+	}
 	// Disable access in the same transaction as the durable receipt. Erasure
 	// is a separate manual step; no provider credential is discarded here.
 	if _, err = tx.Exec(`UPDATE WEO_MEMBER SET USR_STATUS = 'AAA' WHERE USR_SEQ = ?`, usrSeq); err != nil {
@@ -69,7 +85,7 @@ func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string
 	if err = tx.Get(&result, `SELECT `+deletionReceiptColumns+` FROM ALUMNI_ACCOUNT_DELETION_REQUEST WHERE USR_SEQ = ?`, usrSeq); err != nil {
 		return result, err
 	}
-	if _, err = tx.Exec(`INSERT IGNORE INTO ALUMNI_ACCOUNT_ERASURE (REQUEST_ID, MODE, STAGE, NEXT_ATTEMPT_AT, UPDATED_AT) VALUES (?, 'automatic', 'queued', UTC_TIMESTAMP(), UTC_TIMESTAMP())`, result.ID); err != nil {
+	if _, err = tx.Exec(`INSERT IGNORE INTO ALUMNI_ACCOUNT_ERASURE (REQUEST_ID, MODE, STAGE, NEXT_ATTEMPT_AT, UPDATED_AT) SELECT REQUEST_ID,'automatic','queued',SCHEDULED_AT,UTC_TIMESTAMP() FROM ALUMNI_ERASURE_SCHEDULE WHERE REQUEST_ID=?`, result.ID); err != nil {
 		return result, err
 	}
 	if err = seedErasureTargets(tx, result.ID); err != nil {
@@ -135,6 +151,20 @@ func (r *AccountDeletionRequestRepository) List(status string, before int64) ([]
 }
 
 func (r *AccountDeletionRequestRepository) Start(id int64, operator int) error {
+	if operator > 0 {
+		release, locked, err := r.ErasureLock(context.Background())
+		if err != nil {
+			return err
+		}
+		if !locked {
+			return &model.ValidationError{Msg: "삭제 작업이 실행 중입니다. 잠시 후 다시 확인해주세요."}
+		}
+		defer release()
+		if err = r.checkOperatorErasureScope(id, operator); err != nil {
+			return err
+		}
+	}
+
 	tx, err := r.DB.Beginx()
 	if err != nil {
 		return err
@@ -173,6 +203,14 @@ func (r *AccountDeletionRequestRepository) Start(id int64, operator int) error {
 // parses legacy DATETIME in Asia/Seoul, so reinterpret the wall clock here;
 // calling t.UTC() would incorrectly shift the stored instant by nine hours.
 func normalizeDeletionReceiptTimes(receipt *model.AccountDeletionReceipt) {
+	if receipt.ScheduledAt != nil {
+		v := deletionTimeUTC(*receipt.ScheduledAt)
+		receipt.ScheduledAt = &v
+	}
+	if receipt.ExpeditedAt != nil {
+		v := deletionTimeUTC(*receipt.ExpeditedAt)
+		receipt.ExpeditedAt = &v
+	}
 	receipt.RequestedAt = deletionTimeUTC(receipt.RequestedAt)
 	receipt.TargetAt = deletionTimeUTC(receipt.TargetAt)
 	receipt.DueAt = deletionTimeUTC(receipt.DueAt)

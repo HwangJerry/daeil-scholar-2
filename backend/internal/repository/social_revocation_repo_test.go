@@ -297,3 +297,20 @@ func expectFinalizeDisconnectLoginMethodLock(mock sqlmock.Sqlmock) {
 		WithArgs(42).
 		WillReturnRows(sqlmock.NewRows([]string{"has_password"}).AddRow(0))
 }
+
+func TestExhaustedLocalFinalizationPreservesProviderRevocation(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
+	next := time.Now()
+	mock.ExpectExec(`UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX`).WithArgs("FINALIZE_FAILED", 10, "synthetic failure", next, int64(7)).WillReturnResult(sqlmock.NewResult(0, 1))
+	if err = repo.MarkSocialRevocationFailed(7, "synthetic failure", 10, 10, next, "REVOKED"); err != nil {
+		t.Fatal(err)
+	}
+	if err = mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

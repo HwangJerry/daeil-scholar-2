@@ -268,6 +268,14 @@ func (w *SocialRevocationWorker) revoke(ctx context.Context, entry model.SocialR
 		return errors.New("unsupported social provider")
 	}
 
+	// Delayed account deletion must not depend on a short-lived Kakao access token.
+	if entry.Action == socialRevocationActionAccountDelete && provider == model.SocialProviderKakao {
+		if revoker, ok := w.kakao.(interface {
+			UnlinkKakaoAccount(context.Context, int) error
+		}); ok {
+			return revoker.UnlinkKakaoAccount(ctx, entry.USRSeq)
+		}
+	}
 	credential, err := w.loadCredential(entry.USRSeq, provider)
 	if err != nil {
 		return err

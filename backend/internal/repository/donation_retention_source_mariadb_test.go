@@ -30,7 +30,7 @@ func TestDonationRetentionSourceOnMariaDB101(t *testing.T) {
     INSERT INTO WEO_ORDER VALUES (1,42,42,'Synthetic Donor','01000000042','2025-01-01',100,0,100,'happy_nanum','fake-tx-1','completed','A'),(2,43,43,'Other Donor','01000000043','2025-01-01',50,0,50,'happy_nanum','fake-tx-2','completed','A');
     INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
 	db.MustExec(`ALTER TABLE WEO_MEMBER ADD USR_THUMNAIL TEXT`)
-	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "062_create_profile_file_history.sql", "063_bind_donation_retention_source.sql"} {
+	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "066_schedule_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "062_create_profile_file_history.sql", "063_bind_donation_retention_source.sql"} {
 		data, err := os.ReadFile("../../migrations/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -42,7 +42,7 @@ func TestDonationRetentionSourceOnMariaDB101(t *testing.T) {
  UPDATE WEO_ORDER SET O_DONATION_DATE='2010-01-01' WHERE O_SEQ=1;
  ALTER TABLE WEO_ORDER ADD O_ACCOUNT_UNLINKED_AT DATETIME NULL, ADD O_COMPOSITE_KEY VARCHAR(200), ADD O_DONOR_COHORT VARCHAR(30), ADD O_DONOR_DEPARTMENT VARCHAR(30), ADD O_GATE VARCHAR(30), ADD O_PAYMENT_METHOD VARCHAR(30), ADD O_MEMO TEXT, ADD O_PRICE BIGINT, ADD O_PAY BIGINT, ADD O_PAY_TYPE VARCHAR(10), ADD O_STATUS VARCHAR(10), ADD O_PAYMENT VARCHAR(10), ADD EDT_OPER INT, ADD EDT_DATE DATETIME, ADD EDT_IPADDR VARCHAR(100), ADD REG_DATE DATETIME;
  UPDATE WEO_ORDER SET REG_DATE='2026-09-01 00:00:00';`)
-	repo := &AccountDeletionRequestRepository{DB: db}
+	repo := &AccountDeletionRequestRepository{WaitHours: 72, DB: db}
 	receipt, err := repo.Create(42, strings.Repeat("b", 64))
 	if err != nil {
 		t.Fatal(err)

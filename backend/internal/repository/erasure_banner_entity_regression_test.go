@@ -22,7 +22,7 @@ func TestErasureBannerAndEntityReferencesOnMariaDB101(t *testing.T) {
  CREATE TABLE ALUMNI_ACCOUNT_ERASURE (REQUEST_ID BIGINT PRIMARY KEY,MODE VARCHAR(30),STAGE VARCHAR(30)) ENGINE=InnoDB;
  INSERT INTO ALUMNI_ACCOUNT_ERASURE VALUES (1,'automatic','database_erased')`)
 	work := model.ErasureWork{RequestID: 1, UserSeq: 42}
-	repo := &AccountDeletionRequestRepository{DB: db, SiteOrigin: "https://app.example.org"}
+	repo := &AccountDeletionRequestRepository{WaitHours: 72, DB: db, SiteOrigin: "https://app.example.org"}
 	const fileURL = "/files/a&copy;.jpg"
 	for _, c := range []struct{ name, referenceSQL string }{
 		{"banner", `INSERT INTO MAIN_BANNER_AD_IMAGE VALUES (1,1,'/files/a&copy;.jpg')`},

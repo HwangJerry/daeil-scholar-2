@@ -4,6 +4,9 @@ package model
 import "time"
 
 type AccountDeletionReceipt struct {
+	ScheduledAt        *time.Time `json:"scheduledAt" db:"SCHEDULED_AT"`
+	ExpeditedAt        *time.Time `json:"expeditedAt" db:"EXPEDITED_AT"`
+	NeedsAttention     bool       `json:"needsAttention" db:"NEEDS_ATTENTION"`
 	ReceiptWorkPending bool       `json:"receiptWorkPending" db:"RECEIPT_WORK_PENDING"`
 	DatabaseErased     bool       `json:"databaseErased" db:"DATABASE_ERASED"`
 	ID                 int64      `json:"requestId" db:"REQUEST_ID"`
@@ -31,6 +34,8 @@ type AccountDeletionQueueItem struct {
 }
 
 type AccountDeletionResolution struct {
+	Target                  string `json:"target"`
+	TargetStatus            string `json:"targetStatus"`
 	ReceiptWorkStatus       string `json:"receiptWorkStatus"`
 	OriginalStorage         string `json:"originalStorage"`
 	ContactSecured          bool   `json:"contactSecured"`

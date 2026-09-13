@@ -48,7 +48,7 @@ INSERT INTO ALUMNI_ACCOUNT_ERASURE VALUES (1,'automatic','database_erased');`)
 	}
 	// A stale queue still cannot unlink a file referenced after the member transaction.
 	db.MustExec(`INSERT INTO ALUMNI_ERASURE_FILE (ID,REQUEST_ID,URL_PATH,URL_HASH) VALUES (1,1,'/upload/shared.jpg','test')`)
-	repo := &AccountDeletionRequestRepository{DB: db, SiteOrigin: origin}
+	repo := &AccountDeletionRequestRepository{WaitHours: 72, DB: db, SiteOrigin: origin}
 	called := false
 	if err := repo.EraseFileIfUnreferenced(w, model.ErasureFile{ID: 1, URL: "/upload/shared.jpg"}, func(string) error { called = true; return nil }); err == nil || called {
 		t.Fatal("shared queued file unlinked")

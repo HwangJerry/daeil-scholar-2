@@ -75,7 +75,7 @@ func TestCleanupBoundariesOnMariaDB101(t *testing.T) {
  CREATE TABLE ALUMNI_ACCOUNT_ERASURE (REQUEST_ID BIGINT PRIMARY KEY) ENGINE=InnoDB;
  INSERT INTO ALUMNI_ACCOUNT_DELETION_REQUEST VALUES (1,'completed',DATE_SUB(NOW(),INTERVAL 40 DAY)),(2,'completed',DATE_SUB(NOW(),INTERVAL 50 DAY)),(3,'pending',NULL);
  INSERT INTO ALUMNI_ACCOUNT_ERASURE VALUES (1),(2),(3);`)
-	retention := &AccountDeletionRequestRepository{DB: db}
+	retention := &AccountDeletionRequestRepository{WaitHours: 72, DB: db}
 	if err := retention.PurgeExpiredPrivacyRecords(context.Background(), 1); err != nil {
 		t.Fatal(err)
 	}

@@ -72,6 +72,24 @@ func (s *AccountDeletionRequestService) Resolve(id int64, operator int, request 
 	if id <= 0 || operator <= 0 {
 		return &model.ValidationError{Msg: "올바른 요청을 선택해주세요."}
 	}
+	if request.Action == "target" {
+		store, ok := s.Store.(interface {
+			ReviewErasureTarget(int64, int, model.ErasureTarget) error
+		})
+		if !ok {
+			return &model.ValidationError{Msg: "저장소 검토 기능이 준비되지 않았습니다."}
+		}
+		return store.ReviewErasureTarget(id, operator, model.ErasureTarget{Name: request.Target, Status: request.TargetStatus, Evidence: strings.TrimSpace(request.EvidenceReference)})
+	}
+	if request.Action == "expedite" || request.Action == "schedule" || request.Action == "retry_social" {
+		store, ok := s.Store.(interface {
+			ControlSchedule(int64, int, string) error
+		})
+		if !ok {
+			return &model.ValidationError{Msg: "예약 탈퇴 저장소가 준비되지 않았습니다."}
+		}
+		return store.ControlSchedule(id, operator, request.Action)
+	}
 	if request.Action == "automatic" || request.Action == "manual" {
 		store, ok := s.Store.(interface {
 			SetErasureMode(int64, int, string) error

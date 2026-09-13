@@ -37,7 +37,7 @@ func TestManualAccountDeletionLifecycleOnMariaDB101(t *testing.T) {
 		db.MustExec(string(data))
 		db.MustExec(string(data))
 	}
-	repo := &AccountDeletionRequestRepository{DB: db}
+	repo := &AccountDeletionRequestRepository{WaitHours: 72, DB: db}
 	hash := strings.Repeat("a", 64)
 	receipt, err := repo.Create(42, hash)
 	if err != nil {

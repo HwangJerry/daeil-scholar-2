@@ -20,6 +20,9 @@ func (c AccountErasureConfig) Validate() error {
 	if !c.RequestsEnabled && !c.WorkerEnabled {
 		return nil
 	}
+	if c.WaitHours <= 0 || c.WaitHours > 24*30 {
+		return fmt.Errorf("ACCOUNT_ERASURE_WAIT_HOURS must explicitly specify 1..720 hours before activation")
+	}
 	for name, value := range map[string]string{"ACCOUNT_ERASURE_CONTEXT_KEY": c.ContextKey, "DONATION_ARCHIVE_KEY": c.ArchiveKey} {
 		key, err := hex.DecodeString(value)
 		if err != nil || len(key) != 32 {

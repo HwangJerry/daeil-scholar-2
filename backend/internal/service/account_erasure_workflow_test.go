@@ -229,3 +229,34 @@ func TestActiveReceiptWorkAllowsDatabaseErasureButBlocksExternalCompletion(t *te
 func (f *erasureStoreFake) RefreshErasureContext(id int64, data []byte) error {
 	return f.SaveErasureContext(id, data)
 }
+
+func TestManualExternalHandoffRequiredBeforeDatabaseErasure(t *testing.T) {
+	store := &erasureStoreFake{active: true, work: model.ErasureWork{RequestID: 1, UserSeq: 42}}
+	svc := &AutomaticErasureService{Store: store, ContextCipher: testContextCipher(t)}
+	if err := svc.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.databaseCalls != 0 || store.retry != "EXTERNAL_HANDOFF_REVIEW_REQUIRED" {
+		t.Fatal("unacknowledged external work allowed deletion")
+	}
+	for i := range store.targets {
+		store.targets[i].Status = "manual"
+		store.targets[i].Evidence = "operator handoff"
+	}
+	if err := svc.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.databaseCalls != 1 || store.completed != 0 {
+		t.Fatal("handoff confused with completion")
+	}
+	for i := range store.targets {
+		store.targets[i].Status = "complete"
+		store.targets[i].Evidence = "actual synthetic erasure proof"
+	}
+	if err := svc.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.databaseCalls != 1 || store.completed != 1 {
+		t.Fatal("manual proof did not resume without repeating deletion")
+	}
+}

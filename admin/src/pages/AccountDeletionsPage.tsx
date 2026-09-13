@@ -10,6 +10,8 @@ const QUEUE_PAGE_SIZE = 50;
 const QUEUE_REFRESH_MS = 60_000;
 const STATUS_LABELS: Record<DeletionStatus, string> = { pending: '접수', processing: '처리 중', completed: '완료' };
 const AUTO_BLOCKERS: Record<string, string> = {
+ LEGACY_REPLY_REVIEW_REQUIRED: '과거 게시글에 다른 작성자의 답변이 포함되어 있습니다. 답변 분리와 개인정보 확인 후 재개해주세요.',
+  EXTERNAL_HANDOFF_REVIEW_REQUIRED: '내부 삭제 전에 아래 저장소별 담당자와 처리 경로를 확인하고 수동 처리 인계를 기록해주세요.',
   FILE_STILL_REFERENCED: '다른 회원이나 게시글에서 사용하는 파일입니다. 소유권과 공유 참조를 확인해야 합니다.',
   FILE_OWNERSHIP_REVIEW_REQUIRED: '파일을 참조한 기록만 있고 소유권을 확인할 수 없어 삭제를 보류했습니다.',
   EXTERNAL_FILE_HANDOFF_REVIEW_REQUIRED: '기존 파일 큐의 외부 주소를 확인하고 외부 저장소 처리 증빙을 확보해야 합니다.',
@@ -51,7 +53,7 @@ function DeletionReview({ item }: { item: AccountDeletion }) {
     otherIdentifiersChecked: false, evidenceReference: '', retainedRecords: '', retentionUntil: '',
   });
   const mutation = useMutation({
-    mutationFn: (action: 'start' | 'complete' | 'automatic' | 'manual') => resolveAccountDeletion(item.requestId, action === 'complete' ? evidence : { action }),
+    mutationFn: (action: 'start' | 'complete' | 'automatic' | 'manual' | 'expedite' | 'schedule' | 'retry_social') => resolveAccountDeletion(item.requestId, action === 'complete' ? evidence : { action }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['account-deletions'] }),
   });
   const verification = useQuery({ queryKey: ['account-deletion-verification', item.requestId], queryFn: () => verifyAccountDeletion(item.requestId), enabled: false });
@@ -62,22 +64,29 @@ function DeletionReview({ item }: { item: AccountDeletion }) {
     <section className="space-y-4 rounded-xl border border-border-light bg-surface p-5" aria-label={`삭제 요청 ${item.requestId}`}>
       <h2 className="text-lg font-semibold text-dark-slate">접수번호 {item.requestId} · {STATUS_LABELS[item.status]}</h2>
       <p className="text-sm text-cool-gray">회원 번호 {item.userSeq ?? '삭제됨'} · 접수 {new Date(item.requestedAt).toLocaleString('ko-KR')}</p>
-      <p className="text-sm text-dark-slate">처리 목표 {new Date(item.targetAt).toLocaleDateString('ko-KR')} · 결과 안내 기한 {new Date(item.dueAt).toLocaleDateString('ko-KR')}{overdue && ' · 기한 경과 — 즉시 확인 필요'}</p>
+      <p className="text-sm text-dark-slate">자동 처리 예정 {item.scheduledAt ? new Date(item.scheduledAt).toLocaleString('ko-KR') : '기존 요청 · 예약 검토 필요'} · 결과 안내 기한 {new Date(item.dueAt).toLocaleDateString('ko-KR')}{overdue && ' · 기한 경과 — 즉시 확인 필요'}</p>
       {item.status !== 'completed' && (
         <div className="space-y-3">
           <p className="text-sm text-dark-slate">처리 방식: {item.processingMode === 'automatic' ? '자동' : '수동'} · 자동 작업 상태: {item.autoStage || '대기'}</p>
           {item.automationUpdatedAt && <p className="text-sm text-cool-gray">최근 상태 변경 {new Date(item.automationUpdatedAt).toLocaleString('ko-KR')}{item.processingMode === 'automatic' && item.nextAttemptAt && ` · 다음 시도 ${new Date(item.nextAttemptAt).toLocaleString('ko-KR')}`}</p>}
           {item.databaseErased && <p className="text-sm text-dark-slate">앱 운영 DB 삭제 완료 · 파일 및 외부 처리 확인 후 최종 완료됩니다.</p>}
           {item.contextExpiresAt && <p role="status" className="text-sm text-dark-slate">외부 확인용 정보 만료: {new Date(item.contextExpiresAt).toLocaleString('ko-KR')}. 영수증 업무가 진행 중이어도 이 기한을 확인해주세요. 기한이 지나면 자동 재개에 필요한 정보가 없어 수동 검토가 필요할 수 있습니다.</p>}
+          {mutation.error && <p role="alert" className="text-sm text-dark-slate">{mutation.error instanceof Error ? mutation.error.message : '요청을 처리하지 못했습니다.'}</p>}
+          {item.expeditedAt && <p className="text-sm text-cool-gray">관리자 조기 실행 요청 {new Date(item.expeditedAt).toLocaleString('ko-KR')}</p>}
           {item.autoCode && <p role="status" className="text-sm text-dark-slate">{AUTO_BLOCKERS[item.autoCode] ?? '서버 관리자의 확인이 필요합니다.'} <span className="break-all">({item.autoCode})</span> 원인을 해결하면 자동으로 재시도합니다.</p>}
           <div className="flex flex-wrap gap-3">
+            <Button disabled={mutation.isPending || !!item.expeditedAt} onClick={() => {
+              if (window.confirm(`접수번호 ${item.requestId}의 대기 기간을 생략하고 탈퇴 처리를 시작할까요? 소셜 연결 해제와 데이터 삭제를 진행하며 이미 삭제한 자료는 되돌릴 수 없습니다. 확인이 필요한 항목이 있으면 보류됩니다.`)) mutation.mutate('expedite');
+            }}>{item.expeditedAt ? '즉시 처리 요청됨' : '지금 탈퇴 처리'}</Button>
+            {!item.scheduledAt && <Button variant="outline" disabled={mutation.isPending} onClick={() => { if (window.confirm('현재 설정된 대기 기간을 적용해 이 기존 요청의 자동 처리를 예약할까요?')) mutation.mutate('schedule'); }}>기존 요청 예약 적용</Button>}
+            {item.autoCode === 'PROVIDER_REVOCATION_PENDING' && <Button variant="outline" disabled={mutation.isPending} onClick={() => { if (window.confirm('소셜 연결 해제 설정과 자격 증명을 확인했나요? 실패한 작업을 재시도합니다.')) mutation.mutate('retry_social'); }}>소셜 설정 확인 후 재시도</Button>}
             <Button variant="outline" disabled={mutation.isPending || item.processingMode === 'manual'} onClick={() => mutation.mutate('manual')}>자동 처리 중지 · 수동으로 전환</Button>
             <Button variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate('automatic')}>자동 처리 시작 · 재개</Button>
           </div>
         </div>
       )}
       <AccountErasureReceiptWork item={item} />
-      <AccountErasureTargets targets={item.targets} />
+      <AccountErasureTargets targets={item.targets} requestId={item.status !== 'completed' && item.processingMode === 'automatic' ? item.requestId : undefined} />
       {item.status === 'pending' && item.processingMode !== 'automatic' && <Button disabled={mutation.isPending} onClick={() => mutation.mutate('start')}>삭제 작업 시작 · 소셜 권한 철회 요청</Button>}
       {item.status === 'processing' && item.processingMode !== 'automatic' && (
         <>

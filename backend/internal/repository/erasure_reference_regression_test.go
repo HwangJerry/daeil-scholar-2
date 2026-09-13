@@ -42,7 +42,7 @@ func TestReviewSurvivingReferencesMustPreventUnlink(t *testing.T) {
 			db.MustExec(`DELETE FROM WEO_MEMBER; DELETE FROM WEO_BOARDBBS; DELETE FROM ALUMNI_ERASURE_FILE`)
 			db.MustExec(`INSERT INTO WEO_BOARDBBS VALUES (2,?,?)`, c.author, `<img src="`+c.reference+`">`)
 			db.MustExec(`INSERT INTO ALUMNI_ERASURE_FILE VALUES (1,1,'/files/shared.jpg','synthetic')`)
-			repo := &AccountDeletionRequestRepository{DB: db, SiteOrigin: "https://app.example.org"}
+			repo := &AccountDeletionRequestRepository{WaitHours: 72, DB: db, SiteOrigin: "https://app.example.org"}
 			called := false
 			err := repo.EraseFileIfUnreferenced(model.ErasureWork{RequestID: 1, UserSeq: 42}, model.ErasureFile{ID: 1, URL: "/files/shared.jpg"}, func(string) error { called = true; return nil })
 			var blocked *model.ErasureBlocked

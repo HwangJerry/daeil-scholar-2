@@ -4,6 +4,7 @@ package repository
 import (
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
+	"strings"
 )
 
 func (r *AccountDeletionRequestRepository) EraseDatabase(w model.ErasureWork, seal func([]byte) ([]byte, error), validate func(model.DonationRetentionDecision) error) error {
@@ -80,18 +81,39 @@ func (r *AccountDeletionRequestRepository) EraseDatabase(w model.ErasureWork, se
 	return tx.Commit()
 }
 
+// Preserve other authors' conversation by retaining an anonymous, empty parent.
 func erasePostChildren(tx *sqlx.Tx, s erasureSchema, user int) error {
 	if s["WEO_BOARDBBS"] == nil {
 		return nil
 	}
-	for _, q := range []struct{ table, where string }{
-		{"WEO_BOARDLIKE", "BBS_SEQ IN (SELECT SEQ FROM WEO_BOARDBBS WHERE USR_SEQ=?)"},
-		{"WEO_BOARDCOMAND", "BC_TYPE='B' AND JOIN_SEQ IN (SELECT SEQ FROM WEO_BOARDBBS WHERE USR_SEQ=?)"},
-		{"WEO_BOARDBBS", "USR_SEQ=?"},
-	} {
-		if err := s.erase(tx, q.table, q.where, user); err != nil {
+	var engine string
+	if err := tx.Get(&engine, `SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_BOARDBBS'`); err != nil {
+		return err
+	}
+	if engine != "InnoDB" {
+		return &model.ErasureBlocked{Code: "NON_TRANSACTIONAL_TABLE_WEO_BOARDBBS"}
+	}
+	// Legacy inline replies are not separately owned rows. An operator must
+	// separate third-party content before erasure; never silently remove it.
+	if s.has("WEO_BOARDBBS", "RE_CONTENTS") {
+		var replies int
+		if err := tx.Get(&replies, `SELECT COUNT(*) FROM WEO_BOARDBBS WHERE USR_SEQ=? AND COALESCE(RE_CONTENTS,'')<>''`, user); err != nil {
 			return err
 		}
+		if replies > 0 {
+			return &model.ErasureBlocked{Code: "LEGACY_REPLY_REVIEW_REQUIRED"}
+		}
 	}
-	return nil
+	sets := []string{"USR_SEQ=0"}
+	for _, column := range []string{"SUBJECT", "CONTENTS", "CONTENTS_MD", "SUMMARY", "THUMBNAIL_URL", "FILES", "RE_FILES", "USR_NAME", "USR_ID", "EMAIL", "PHONE", "IP", "BBS_IP", "PASSWORD", "REG_ID", "REG_NAME", "REG_EMAIL", "REG_TEL", "REG_PWD", "REG_IPADDR"} {
+		if s.has("WEO_BOARDBBS", column) {
+			value := "''"
+			if column == "SUBJECT" || column == "CONTENTS" {
+				value = "'탈퇴한 회원의 삭제된 게시글입니다.'"
+			}
+			sets = append(sets, "`"+column+"`="+value)
+		}
+	}
+	_, err := tx.Exec("UPDATE WEO_BOARDBBS SET "+strings.Join(sets, ",")+" WHERE USR_SEQ=?", user)
+	return err
 }

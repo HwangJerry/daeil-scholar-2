@@ -11,6 +11,7 @@ func TestErasureRolloutRequiresExplicitReadiness(t *testing.T) {
 	if c.Validate() != nil {
 		t.Fatal("paused rollout must boot")
 	}
+	c.WaitHours = 72
 	c.RequestsEnabled = true
 	if c.Validate() == nil {
 		t.Fatal("active requests accepted without keys")
@@ -64,7 +65,7 @@ func TestTestUserScopeRejectsGlobalRetention(t *testing.T) {
 	for _, user := range []int{0, 42} {
 		for flags := 0; flags < 8; flags++ {
 			c := AccountErasureConfig{
-				TestUserSeq: user, RequestsEnabled: flags&1 != 0, WorkerEnabled: flags&2 != 0,
+				WaitHours: 72, TestUserSeq: user, RequestsEnabled: flags&1 != 0, WorkerEnabled: flags&2 != 0,
 				RetentionEnabled: flags&4 != 0, ContextKey: strings.Repeat("ab", 32),
 				ArchiveKey: strings.Repeat("cd", 32), LegacyRoot: "/verified/root", ExternalMode: "manual",
 			}
@@ -73,6 +74,16 @@ func TestTestUserScopeRejectsGlobalRetention(t *testing.T) {
 			if (err != nil) != shouldReject {
 				t.Fatalf("scope %d flags %d: validation error %v", user, flags, err)
 			}
+		}
+	}
+}
+
+func TestErasureWaitHoursMustBeExplicitAndBounded(t *testing.T) {
+	for _, hours := range []int{-1, 0, 1, 72, 720, 721} {
+		c := AccountErasureConfig{RequestsEnabled: true, WaitHours: hours, ContextKey: strings.Repeat("ab", 32), ArchiveKey: strings.Repeat("cd", 32), LegacyRoot: "/verified/root", ExternalMode: "manual"}
+		wantError := hours < 1 || hours > 720
+		if (c.Validate() != nil) != wantError {
+			t.Fatalf("unexpected wait validation: %d", hours)
 		}
 	}
 }

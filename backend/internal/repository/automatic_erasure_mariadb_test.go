@@ -41,7 +41,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 		}
 	})
 
-	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "062_create_profile_file_history.sql", "063_bind_donation_retention_source.sql"} {
+	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "066_schedule_account_erasure.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "062_create_profile_file_history.sql", "063_bind_donation_retention_source.sql"} {
 		data, err := os.ReadFile("../../migrations/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -83,13 +83,15 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
  INSERT INTO WEO_BOARDCOMAND VALUES (20,42,'B',11,'withdrawn author reply'),(21,43,'B',10,'reply to removed post'),(22,43,'B',11,'preserved other reply');
  INSERT INTO WEO_BOARDLIKE VALUES (30,42,11),(31,43,10),(32,43,11);`)
 	preservedQueries := map[string]string{
-		"member":   "SELECT CONCAT_WS('|',USR_ID,USR_NAME,USR_EMAIL,USR_PHONE,USR_STATUS) FROM WEO_MEMBER WHERE USR_SEQ=43",
-		"message":  "SELECT CONCAT_WS('|',AM_SENDER_SEQ,AM_RECVR_SEQ,AM_CONTENT) FROM ALUMNI_MESSAGE WHERE AM_SEQ=3",
-		"donation": "SELECT CONCAT_WS('|',USR_SEQ,O_ACCOUNT_USR_SEQ,O_DONOR_NAME,O_DONOR_PHONE,O_NET_RECEIVED_AMOUNT,O_TRANSACTION_NO) FROM WEO_ORDER WHERE O_SEQ=2",
-		"payment":  "SELECT NUM_CARD FROM WEO_PG_DATA WHERE O_SEQ=2",
-		"post":     "SELECT CONTENTS FROM WEO_BOARDBBS WHERE SEQ=11",
-		"reply":    "SELECT CONTENTS FROM WEO_BOARDCOMAND WHERE SEQ=22",
-		"like":     "SELECT CONCAT_WS('|',USR_SEQ,BBS_SEQ) FROM WEO_BOARDLIKE WHERE SEQ=32",
+		"member":     "SELECT CONCAT_WS('|',USR_ID,USR_NAME,USR_EMAIL,USR_PHONE,USR_STATUS) FROM WEO_MEMBER WHERE USR_SEQ=43",
+		"message":    "SELECT CONCAT_WS('|',AM_SENDER_SEQ,AM_RECVR_SEQ,AM_CONTENT) FROM ALUMNI_MESSAGE WHERE AM_SEQ=3",
+		"donation":   "SELECT CONCAT_WS('|',USR_SEQ,O_ACCOUNT_USR_SEQ,O_DONOR_NAME,O_DONOR_PHONE,O_NET_RECEIVED_AMOUNT,O_TRANSACTION_NO) FROM WEO_ORDER WHERE O_SEQ=2",
+		"payment":    "SELECT NUM_CARD FROM WEO_PG_DATA WHERE O_SEQ=2",
+		"post":       "SELECT CONTENTS FROM WEO_BOARDBBS WHERE SEQ=11",
+		"crossReply": "SELECT CONTENTS FROM WEO_BOARDCOMAND WHERE SEQ=21",
+		"crossLike":  "SELECT CONCAT_WS('|',USR_SEQ,BBS_SEQ) FROM WEO_BOARDLIKE WHERE SEQ=31",
+		"reply":      "SELECT CONTENTS FROM WEO_BOARDCOMAND WHERE SEQ=22",
+		"like":       "SELECT CONCAT_WS('|',USR_SEQ,BBS_SEQ) FROM WEO_BOARDLIKE WHERE SEQ=32",
 	}
 	preserved := map[string]string{}
 	for name, query := range preservedQueries {
@@ -99,7 +101,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 		}
 		preserved[name] = value
 	}
-	repo := &AccountDeletionRequestRepository{DB: db}
+	repo := &AccountDeletionRequestRepository{WaitHours: 72, DB: db}
 	receipt, err := repo.Create(42, strings.Repeat("a", 64))
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +120,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if err != nil || len(batch) != 0 {
 		t.Fatal("manual request selected for automation")
 	}
-	if err = repo.SetErasureMode(receipt.ID, 7, "automatic"); err != nil {
+	if err = repo.ControlSchedule(receipt.ID, 7, "expedite"); err != nil {
 		t.Fatal(err)
 	}
 	batch, err = repo.ErasureBatch(context.Background())
@@ -199,7 +201,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if err = repo.RecordErasureTargets(receipt.ID, []model.ErasureTarget{{Name: "backups", Status: "complete", Evidence: "unapproved"}}); err == nil {
 		t.Fatal("manual takeover overwritten")
 	}
-	if err = repo.SetErasureMode(receipt.ID, 7, "automatic"); err != nil {
+	if err = repo.ControlSchedule(receipt.ID, 7, "expedite"); err != nil {
 		t.Fatal(err)
 	}
 	if err = repo.BeginErasureTargets(receipt.ID); err != nil {
@@ -260,7 +262,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	// Drop all idle DB connections and reconstruct repository state, as a new
 	// worker would after process restart. No in-memory progress is carried over.
 	db.SetMaxIdleConns(0)
-	repo = &AccountDeletionRequestRepository{DB: db}
+	repo = &AccountDeletionRequestRepository{WaitHours: 72, DB: db}
 	if err = repo.EraseDatabase(work, seal, validate); err != nil {
 		t.Fatal(err)
 	}
@@ -280,9 +282,9 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 		}
 	}
 	for _, query := range []string{
-		"SELECT COUNT(*) FROM WEO_BOARDBBS WHERE SEQ=10",
-		"SELECT COUNT(*) FROM WEO_BOARDCOMAND WHERE SEQ IN (20,21)",
-		"SELECT COUNT(*) FROM WEO_BOARDLIKE WHERE SEQ IN (30,31)",
+		"SELECT COUNT(*) FROM WEO_BOARDBBS WHERE SEQ=10 AND USR_SEQ=42",
+		"SELECT COUNT(*) FROM WEO_BOARDCOMAND WHERE SEQ=20",
+		"SELECT COUNT(*) FROM WEO_BOARDLIKE WHERE SEQ=30",
 	} {
 		if err := db.Get(&count, query); err != nil || count != 0 {
 			t.Fatal("post child survived", query, err)
@@ -327,7 +329,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	if repo.QueueHistoricalErasureFiles(plan, true) == nil {
 		t.Fatal("manual takeover ignored by queue")
 	}
-	if err = repo.SetErasureMode(receipt.ID, 7, "automatic"); err != nil {
+	if err = repo.ControlSchedule(receipt.ID, 7, "expedite"); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {

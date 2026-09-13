@@ -13,6 +13,7 @@ func (r *AccountDeletionRequestRepository) ErasureBatch(ctx context.Context) ([]
 	err := r.DB.SelectContext(ctx, &rows, `SELECT d.REQUEST_ID,d.USR_SEQ,e.STAGE,e.EXTERNAL_EVIDENCE
         FROM ALUMNI_ACCOUNT_DELETION_REQUEST d JOIN ALUMNI_ACCOUNT_ERASURE e ON e.REQUEST_ID=d.REQUEST_ID
         WHERE e.MODE='automatic' AND d.STATUS <> 'completed' AND e.NEXT_ATTEMPT_AT<=UTC_TIMESTAMP()
+ AND EXISTS(SELECT 1 FROM ALUMNI_ERASURE_SCHEDULE s WHERE s.REQUEST_ID=d.REQUEST_ID AND (s.SCHEDULED_AT<=UTC_TIMESTAMP() OR s.EXPEDITED_AT IS NOT NULL))
         AND (?=0 OR d.USR_SEQ=?) ORDER BY e.NEXT_ATTEMPT_AT,d.REQUEST_ID LIMIT 10`, r.TestUserSeq, r.TestUserSeq)
 	return rows, err
 }
@@ -35,6 +36,21 @@ func (r *AccountDeletionRequestRepository) ErasureLock(ctx context.Context) (fun
 }
 
 func (r *AccountDeletionRequestRepository) SetErasureMode(id int64, operator int, mode string) error {
+	release, locked, err := r.ErasureLock(context.Background())
+	if err != nil {
+		return err
+	}
+	if !locked {
+		return &model.ValidationError{Msg: "삭제 작업이 실행 중입니다. 잠시 후 다시 확인해주세요."}
+	}
+	defer release()
+	if operator <= 0 {
+		return &model.ValidationError{Msg: "관리자 확인이 필요합니다."}
+	}
+	if err = r.checkOperatorErasureScope(id, operator); err != nil {
+		return err
+	}
+
 	if mode != "automatic" && mode != "manual" {
 		return &model.ValidationError{Msg: "처리 방식을 확인해주세요."}
 	}
@@ -54,7 +70,8 @@ func (r *AccountDeletionRequestRepository) SetErasureMode(id int64, operator int
 func (r *AccountDeletionRequestRepository) ErasureActive(id int64) (bool, error) {
 	var n int
 	err := r.DB.Get(&n, `SELECT COUNT(*) FROM ALUMNI_ACCOUNT_ERASURE e JOIN ALUMNI_ACCOUNT_DELETION_REQUEST d ON d.REQUEST_ID=e.REQUEST_ID
-        WHERE e.REQUEST_ID=? AND e.MODE='automatic' AND d.STATUS<>'completed'`, id)
+        WHERE e.REQUEST_ID=? AND e.MODE='automatic' AND d.STATUS<>'completed'
+ AND EXISTS(SELECT 1 FROM ALUMNI_ERASURE_SCHEDULE s WHERE s.REQUEST_ID=d.REQUEST_ID AND (s.SCHEDULED_AT<=UTC_TIMESTAMP() OR s.EXPEDITED_AT IS NOT NULL))`, id)
 	return n == 1, err
 }
 

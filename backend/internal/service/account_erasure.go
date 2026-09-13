@@ -100,6 +100,9 @@ func (s *AutomaticErasureService) process(ctx context.Context, w model.ErasureWo
 		if err = s.preserveContext(&w); err != nil {
 			return err
 		}
+		if err = s.externalReadyForDeletion(w); err != nil {
+			return err
+		}
 		if err = s.Store.EraseDatabase(w, s.Seal, ValidateDonationRetention); err != nil {
 			return err
 		}

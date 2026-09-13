@@ -8,6 +8,9 @@ import { Card } from '../components/ui/Card';
 import { PRIVACY_CONTACT } from '../domains/privacy/policyContent';
 
 type Receipt = {
+ scheduledAt?: string | null;
+ expeditedAt?: string | null;
+ needsAttention?: boolean;
   requestId: number;
   status: 'pending' | 'processing' | 'completed';
   databaseErased?: boolean;
@@ -70,8 +73,8 @@ export function AccountDeletionPage() {
         {error && <p role="alert" className="text-sm text-text-primary">{error}</p>}
         {receipt && (
           <Card className="space-y-4 border-border p-6 shadow-none" role="status">
-            <h2 className="text-xl font-semibold text-primary">{STATUS_LABELS[receipt.status]}</h2>
-            {receipt.receiptWorkPending && <p className="text-sm leading-7 text-text-secondary">진행 중인 영수증 업무를 처리하고 있습니다. 업무와 결과 전달이 끝나면 해당 업무용 연락처를 정리합니다. 다른 삭제 작업은 함께 진행합니다.</p>}
+            <h2 className="text-xl font-semibold text-primary">{receipt.status === 'completed' ? STATUS_LABELS.completed : receipt.needsAttention ? '추가 확인이 필요합니다' : receipt.status === 'pending' && receipt.scheduledAt && !receipt.expeditedAt ? '자동 탈퇴 예약 대기' : STATUS_LABELS[receipt.status]}</h2>
+            {receipt.receiptWorkPending && <p className="text-sm leading-7 text-text-secondary">진행 중인 영수증 업무를 처리하고 있습니다. 업무와 결과 전달이 끝나면 해당 업무용 연락처를 정리합니다. 다른 삭제 작업은 예약 및 검토 상태에 따라 진행합니다.</p>}
             <p className="text-sm text-text-secondary">접수번호 {receipt.requestId} · 접수일 {dateLabel(receipt.requestedAt)}</p>
             {receipt.status === 'completed' ? (
               <>
@@ -80,7 +83,7 @@ export function AccountDeletionPage() {
                 {receipt.retentionUntil && <p className="text-sm text-text-secondary">보존 종료일: {dateLabel(receipt.retentionUntil)}. 항목별 기한은 위 안내를 확인해주세요.</p>}
               </>
             ) : (
-              <p className="leading-8 text-text-secondary">{receipt.databaseErased ? '앱 운영 데이터는 삭제했습니다. 파일·외부 저장소의 남은 처리를 확인 중이며 최종 완료 전입니다.' : '계정 이용은 중지되었습니다. 자동 삭제를 진행하며 필요한 경우 담당자가 확인합니다.'} {dateLabel(receipt.targetAt)}까지 삭제를 목표로 처리하며, {dateLabel(receipt.dueAt)}까지 결과를 안내합니다. 법령에 따라 보존할 자료는 범위와 근거를 별도로 안내합니다.</p>
+              <p className="leading-8 text-text-secondary">{receipt.databaseErased ? '앱 운영 데이터는 삭제했습니다. 파일·외부 저장소의 남은 처리를 확인 중이며 최종 완료 전입니다.' : '계정 이용은 중지되었습니다. 예약 시각 이후 자동 처리하며 관리자가 먼저 처리를 시작할 수 있습니다.'} {receipt.scheduledAt ? `자동 처리 예정: ${new Date(receipt.scheduledAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (한국 시간).` : '자동 처리 일정은 담당자가 확인 중입니다.'} {receipt.expeditedAt && '관리자가 조기 처리를 요청했습니다.'} {dateLabel(receipt.dueAt)}까지 결과를 안내합니다. 법령에 따라 보존할 자료는 범위와 근거를 별도로 안내합니다.</p>
             )}
           </Card>
         )}

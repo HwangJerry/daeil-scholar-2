@@ -3,7 +3,7 @@ export const PRIVACY_CONTACT = {
   organization: '대일외국어고등학교 장학회',
   officer: '엄은숙',
   requestHandler: '황제철',
-  email: 'ghkdwp018@naver.com',
+  email: 'ghkdwp018@gmail.com',
 } as const;
 
 export const PRIVACY_UPDATED_AT = '2026-09-08';

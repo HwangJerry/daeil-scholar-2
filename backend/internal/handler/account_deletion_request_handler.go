@@ -20,10 +20,11 @@ type AccountDeletionSessionService interface {
 }
 
 type AccountDeletionRequestHandler struct {
-	TestUserSeq      int
-	RequestsDisabled bool
-	Service          *service.AccountDeletionRequestService
-	Auth             AccountDeletionSessionService
+	TestUserSeq        int
+	AutomationDisabled bool
+	RequestsDisabled   bool
+	Service            *service.AccountDeletionRequestService
+	Auth               AccountDeletionSessionService
 }
 
 func deletionRequestError(w http.ResponseWriter, err error) {
@@ -49,7 +50,7 @@ func (h *AccountDeletionRequestHandler) Create(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if h.RequestsDisabled || (h.TestUserSeq > 0 && user.USRSeq != h.TestUserSeq) {
-		respondError(w, http.StatusServiceUnavailable, "ACCOUNT_DELETION_PAUSED", "회원 탈퇴 처리가 일시 중지되었습니다. ghkdwp018@naver.com으로 문의해주세요.")
+		respondError(w, http.StatusServiceUnavailable, "ACCOUNT_DELETION_PAUSED", "회원 탈퇴 처리가 일시 중지되었습니다. ghkdwp018@gmail.com으로 문의해주세요.")
 		return
 	}
 	var request struct {
@@ -132,6 +133,10 @@ func (h *AccountDeletionRequestHandler) Resolve(w http.ResponseWriter, r *http.R
 	var request model.AccountDeletionResolution
 	if err != nil || json.NewDecoder(r.Body).Decode(&request) != nil {
 		respondError(w, 400, "INVALID_REQUEST", "요청 내용을 확인해주세요.")
+		return
+	}
+	if h.AutomationDisabled && (request.Action == "expedite" || request.Action == "automatic" || request.Action == "schedule" || request.Action == "retry_social") {
+		respondError(w, 503, "ACCOUNT_DELETION_PAUSED", "자동 탈퇴 처리가 중지되어 있습니다. 운영 설정을 먼저 확인해주세요.")
 		return
 	}
 	if err = h.Service.Resolve(id, user.USRSeq, request); err != nil {
