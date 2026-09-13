@@ -27,6 +27,6 @@ No production migration, deletion activation, real account cancellation, app upl
 - Android debug build and account-deletion repository tests passed. Added independent durable secret, successful cancellation, response-loss recovery and failed cancellation cases.
 - Web cancellation tests passed: confirmation, fragment removal, separate capabilities, cancelled terminal UI and refreshing execution status after failure.
 - Admin schedule/cancellation tests passed, including mandatory verification evidence.
-- iOS generic simulator build passed. Receipt-store XCTest tests passed on iOS Simulator (6 tests); final secret-write interruption guard is verified in the final test run. The first simulator bootstrap attempt failed before test execution; retry succeeded.
+- iOS generic simulator build passed. Receipt-store XCTest tests passed on iOS Simulator (6 tests) before the final secret-write interruption guard. After that guard, the final iOS build passed and all 6 production receipt-store XCTest cases passed in an isolated macOS test harness with only storage I/O replaced. The final simulator test attempt failed during test-host bootstrap; final iOS simulator test execution is therefore not claimed.
 
 Device visual QA and production end-to-end cancellation are not claimed by these automated checks.
