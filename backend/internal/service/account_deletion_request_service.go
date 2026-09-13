@@ -135,7 +135,10 @@ func (s *AccountDeletionRequestService) Resolve(id int64, operator int, request 
 		}
 		return store.ReviewErasureTarget(id, operator, model.ErasureTarget{Name: request.Target, Status: request.TargetStatus, Evidence: strings.TrimSpace(request.EvidenceReference)})
 	}
-	if request.Action == "expedite" || request.Action == "schedule" || request.Action == "retry_social" {
+	if request.Action == "expedite" {
+		return s.expediteReviewed(id, operator, request.ReviewedPlanDigest)
+	}
+	if request.Action == "schedule" || request.Action == "retry_social" {
 		store, ok := s.Store.(interface {
 			ControlSchedule(int64, int, string) error
 		})

@@ -104,16 +104,12 @@ func erasePostChildren(tx *sqlx.Tx, s erasureSchema, user int) error {
 			return &model.ErasureBlocked{Code: "LEGACY_REPLY_REVIEW_REQUIRED"}
 		}
 	}
-	sets := []string{"USR_SEQ=0"}
-	for _, column := range []string{"SUBJECT", "CONTENTS", "CONTENTS_MD", "SUMMARY", "THUMBNAIL_URL", "FILES", "RE_FILES", "USR_NAME", "USR_ID", "EMAIL", "PHONE", "IP", "BBS_IP", "PASSWORD", "REG_ID", "REG_NAME", "REG_EMAIL", "REG_TEL", "REG_PWD", "REG_IPADDR"} {
-		if s.has("WEO_BOARDBBS", column) {
-			value := "''"
-			if column == "SUBJECT" || column == "CONTENTS" {
-				value = "'탈퇴한 회원의 삭제된 게시글입니다.'"
-			}
-			sets = append(sets, "`"+column+"`="+value)
-		}
+	sets := []string{}
+	args := []interface{}{}
+	for _, c := range boardAnonymizedColumns(s) {
+		sets = append(sets, "`"+c.column+"`=?")
+		args = append(args, c.value)
 	}
-	_, err := tx.Exec("UPDATE WEO_BOARDBBS SET "+strings.Join(sets, ",")+" WHERE USR_SEQ=?", user)
+	_, err := tx.Exec("UPDATE WEO_BOARDBBS SET "+strings.Join(sets, ",")+" WHERE USR_SEQ=?", append(args, user)...)
 	return err
 }

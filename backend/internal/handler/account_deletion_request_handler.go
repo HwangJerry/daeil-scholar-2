@@ -40,6 +40,8 @@ func deletionRequestError(w http.ResponseWriter, err error) {
 		respondError(w, 409, "ACCOUNT_DELETION_CANCELLATION_CLOSED", "이미 탈퇴 처리가 시작되었거나 계정 상태가 변경되어 취소할 수 없습니다. 처리 현황을 확인해주세요.")
 	case errors.Is(err, repository.ErrDeletionIncomplete):
 		respondError(w, 409, "DELETION_INCOMPLETE", "계정 관련 기록 또는 소셜 권한 철회 확인이 남아 있습니다. 실제 삭제 후 다시 확인해주세요.")
+	case errors.Is(err, repository.ErrErasurePlanChanged):
+		respondError(w, 409, "ERASURE_PLAN_CHANGED", "검토한 뒤 처리 대상 기록이 바뀌었습니다. 다시 검토한 후 처리해주세요.")
 	default:
 		respondError(w, 500, "DELETION_REQUEST_FAILED", "삭제 요청을 처리하지 못했습니다. 다시 시도해주세요.")
 	}
@@ -125,6 +127,22 @@ func (h *AccountDeletionRequestHandler) Verify(w http.ResponseWriter, r *http.Re
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	respondJSON(w, http.StatusOK, map[string]interface{}{"items": items})
+}
+
+// Preview returns the records the erasure would change, for root review.
+func (h *AccountDeletionRequestHandler) Preview(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id <= 0 {
+		respondError(w, 400, "INVALID_REQUEST_ID", "잘못된 요청입니다.")
+		return
+	}
+	preview, err := h.Service.Preview(id)
+	if err != nil {
+		deletionRequestError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	respondJSON(w, http.StatusOK, preview)
 }
 
 func (h *AccountDeletionRequestHandler) Resolve(w http.ResponseWriter, r *http.Request) {

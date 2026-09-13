@@ -51,16 +51,26 @@ func erasureFileCandidates(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork) ([
 	return urls, ownedPaths, nil
 }
 
-func queueErasureFiles(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork, origin string) error {
+// erasureFilePlan is the verified set of local files to unlink and the
+// WEO_FILES metadata rows that point at them.
+type erasureFilePlan struct {
+	locals  []string
+	fileIDs []int
+}
+
+// planErasureFiles performs every ownership and shared-reference check without
+// writing. A blocked plan returns *model.ErasureBlocked.
+func planErasureFiles(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork, origin string) (erasureFilePlan, error) {
+	plan := erasureFilePlan{locals: []string{}, fileIDs: []int{}}
 	urls, owned, err := erasureFileCandidates(tx, s, w)
 	if err != nil {
-		return err
+		return plan, err
 	}
 	ownership := map[string]bool{}
 	for _, raw := range owned {
 		local, external, err := model.ErasureFilePath(raw, origin)
 		if err != nil {
-			return err
+			return plan, err
 		}
 		if !external {
 			ownership[local] = true
@@ -70,38 +80,52 @@ func queueErasureFiles(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork, origin
 	for _, raw := range urls {
 		local, external, err := model.ErasureFilePath(raw, origin)
 		if err != nil {
-			return err
+			return plan, err
 		}
 		if external || seen[local] {
 			continue
 		}
 		seen[local] = true
 		if !ownership[local] {
-			return &model.ErasureBlocked{Code: "FILE_OWNERSHIP_REVIEW_REQUIRED"}
+			return plan, &model.ErasureBlocked{Code: "FILE_OWNERSHIP_REVIEW_REQUIRED"}
 		}
 		if err := rejectOtherErasureFileReferences(tx, s, local, origin, &w.UserSeq); err != nil {
-			return err
+			return plan, err
 		}
-		sum := sha256.Sum256([]byte(local))
-		if _, err := tx.Exec(`INSERT IGNORE INTO ALUMNI_ERASURE_FILE (REQUEST_ID,URL_PATH,URL_HASH) VALUES (?,?,?)`, w.RequestID, local, fmt.Sprintf("%x", sum)); err != nil {
-			return err
-		}
+		plan.locals = append(plan.locals, local)
 		if s["WEO_FILES"] != nil {
 			var rows []struct {
 				ID  int    `db:"F_SEQ"`
 				URL string `db:"URL_PATH"`
 			}
 			if err := tx.Select(&rows, `SELECT F_SEQ,CONCAT(FILE_PATH,'/',FILE_NAME) AS URL_PATH FROM WEO_FILES FOR UPDATE`); err != nil {
-				return err
+				return plan, err
 			}
 			for _, row := range rows {
 				candidate, ext, e := model.ErasureFilePath(row.URL, origin)
 				if e == nil && !ext && candidate == local {
-					if err := s.erase(tx, "WEO_FILES", "F_SEQ=?", row.ID); err != nil {
-						return err
-					}
+					plan.fileIDs = append(plan.fileIDs, row.ID)
 				}
 			}
+		}
+	}
+	return plan, nil
+}
+
+func queueErasureFiles(tx *sqlx.Tx, s erasureSchema, w model.ErasureWork, origin string) error {
+	plan, err := planErasureFiles(tx, s, w, origin)
+	if err != nil {
+		return err
+	}
+	for _, local := range plan.locals {
+		sum := sha256.Sum256([]byte(local))
+		if _, err := tx.Exec(`INSERT IGNORE INTO ALUMNI_ERASURE_FILE (REQUEST_ID,URL_PATH,URL_HASH) VALUES (?,?,?)`, w.RequestID, local, fmt.Sprintf("%x", sum)); err != nil {
+			return err
+		}
+	}
+	for _, id := range plan.fileIDs {
+		if err := s.erase(tx, "WEO_FILES", "F_SEQ=?", id); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -51,6 +51,7 @@ type AccountDeletionResolution struct {
 	OtherIdentifiersChecked bool   `json:"otherIdentifiersChecked"`
 	RetainedRecords         string `json:"retainedRecords"`
 	RetentionUntil          string `json:"retentionUntil"`
+	ReviewedPlanDigest      string `json:"reviewedPlanDigest"`
 }
 
 type AccountDeletionFootprint struct {

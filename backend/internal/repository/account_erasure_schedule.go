@@ -5,11 +5,17 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/jmoiron/sqlx"
 )
 
 // Both controls only enqueue work. The same locked worker performs all erasure.
 // The global worker lock also serializes operator changes with a running batch.
 func (r *AccountDeletionRequestRepository) ControlSchedule(id int64, operator int, action string) error {
+	return r.controlSchedule(id, operator, action, nil)
+}
+
+// review, when set, runs inside the locked transaction before any change.
+func (r *AccountDeletionRequestRepository) controlSchedule(id int64, operator int, action string, review func(*sqlx.Tx, int) error) error {
 	if operator <= 0 {
 		return &model.ValidationError{Msg: "관리자 확인이 필요합니다."}
 	}
@@ -38,6 +44,11 @@ func (r *AccountDeletionRequestRepository) ControlSchedule(id int64, operator in
 	}
 	if r.TestUserSeq > 0 && user != r.TestUserSeq {
 		return &model.ValidationError{Msg: "현재 테스트 회원만 처리할 수 있습니다."}
+	}
+	if review != nil {
+		if err = review(tx, user); err != nil {
+			return err
+		}
 	}
 	if action == "retry_social" {
 		// Preserve REVOKED evidence: never repeat a completed provider call.
