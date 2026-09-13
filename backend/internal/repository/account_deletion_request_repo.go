@@ -204,8 +204,8 @@ func (r *AccountDeletionRequestRepository) Start(id int64, operator int) error {
 	// The existing worker performs provider revocation before manual removal
 	// of the identity rows. Missing credentials remain a visible blocker.
 	_, err = tx.Exec(`INSERT INTO ALUMNI_SOCIAL_REVOCATION_OUTBOX
-        (USR_SEQ, PROVIDER, ACTION, STATUS, NEXT_ATTEMPT_AT, CREATED_AT, UPDATED_AT)
-        SELECT s.USR_SEQ, s.NMS_GATE, 'ACCOUNT_DELETE', 'PENDING', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP()
+        (USR_SEQ, PROVIDER, ACTION, STATUS, ATTEMPT_COUNT, NEXT_ATTEMPT_AT, LAST_ERROR, CREATED_AT, UPDATED_AT)
+        SELECT s.USR_SEQ, s.NMS_GATE, 'ACCOUNT_DELETE', 'PENDING', 0, UTC_TIMESTAMP(), '', UTC_TIMESTAMP(), UTC_TIMESTAMP()
         FROM WEO_MEMBER_SOCIAL s WHERE s.USR_SEQ = ? AND s.NMS_GATE IN ('AP','KT')
         AND NOT EXISTS (SELECT 1 FROM ALUMNI_SOCIAL_REVOCATION_OUTBOX o
             WHERE o.USR_SEQ = s.USR_SEQ AND o.PROVIDER = s.NMS_GATE AND o.ACTION = 'ACCOUNT_DELETE'

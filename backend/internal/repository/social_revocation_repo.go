@@ -43,10 +43,12 @@ func (r *AuthRepository) ClaimDueSocialRevocations(claimToken string, staleAfter
 		return nil, err
 	}
 
+	// LAST_ERROR is nullable in the schema; rows created without an error
+	// message must still be claimable instead of failing the whole batch.
 	var entries []model.SocialRevocationOutboxEntry
 	err = r.DB.Select(&entries, `
 		SELECT OUTBOX_ID, USR_SEQ, PROVIDER, ACTION, STATUS, ATTEMPT_COUNT,
-		       NEXT_ATTEMPT_AT, LAST_ERROR, CREATED_AT, UPDATED_AT
+		       NEXT_ATTEMPT_AT, COALESCE(LAST_ERROR, '') AS LAST_ERROR, CREATED_AT, UPDATED_AT
 		FROM ALUMNI_SOCIAL_REVOCATION_OUTBOX
 		WHERE CLAIM_TOKEN = ?
 		ORDER BY NEXT_ATTEMPT_AT
