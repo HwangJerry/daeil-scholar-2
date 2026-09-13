@@ -24,12 +24,13 @@ func TestScheduledErasureOnMariaDB(t *testing.T) {
 		}
 		db.MustExec(string(data))
 	}
-	repo := &AccountDeletionRequestRepository{DB: db, WaitHours: 72}
+	const productionWaitHours = 7 * 24
+	repo := &AccountDeletionRequestRepository{DB: db, WaitHours: productionWaitHours}
 	receipt, err := repo.Create(42, strings.Repeat("a", 64))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if receipt.ScheduledAt == nil || receipt.ScheduledAt.Sub(receipt.RequestedAt) != 72*time.Hour {
+	if receipt.ScheduledAt == nil || receipt.ScheduledAt.Sub(receipt.RequestedAt) != productionWaitHours*time.Hour {
 		t.Fatal("schedule not captured", receipt)
 	}
 	assertBatch := func(n int) {
