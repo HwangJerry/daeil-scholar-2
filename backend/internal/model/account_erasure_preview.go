@@ -18,6 +18,7 @@ type ErasurePreview struct {
 	Blockers    []string                   `json:"blockers"`
 	Tables      []ErasurePreviewTable      `json:"tables"`
 	Files       []string                   `json:"files"`
+	Social      []ErasureSocialUnlink      `json:"socialUnlinks"`
 	Unhandled   []AccountDeletionFootprint `json:"unhandled"`
 }
 
@@ -39,4 +40,12 @@ type ErasurePreviewRow struct {
 	Before []*string `json:"before"`
 	After  []*string `json:"after,omitempty"`
 	Note   string    `json:"note,omitempty"`
+}
+
+// ErasureSocialUnlink is one linked Apple or Kakao account the erasure asks
+// the provider to unlink before the member's records are deleted.
+// Status is pending, delivered, failed or missing_credential.
+type ErasureSocialUnlink struct {
+	Provider string `json:"provider"`
+	Status   string `json:"status"`
 }

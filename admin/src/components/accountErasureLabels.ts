@@ -60,10 +60,23 @@ export const AUTO_BLOCKERS: Record<string, string> = {
   BILLING_REVOCATION_REVIEW_REQUIRED: '기존 정기결제 연결을 확인해야 합니다.',
   FILE_PATH_REVIEW_REQUIRED: '파일 경로 또는 소유 관계 확인이 필요합니다.',
   FILE_DELETE_RETRY_REQUIRED: '파일 삭제를 다시 시도합니다.',
+  PROVIDER_CREDENTIAL_MISSING: 'Apple 연결 해제에 필요한 인증 정보가 저장돼 있지 않습니다. 해제 방법을 확보해야 처리할 수 있습니다.',
   MEMBER_NOT_WITHDRAWN: '회원 상태가 탈퇴로 바뀌어 있지 않습니다. 신청 상태를 확인해주세요.',
 };
 
 export function blockerMessage(code: string): string {
   if (code.startsWith('NON_TRANSACTIONAL_TABLE_')) return `${code.slice('NON_TRANSACTIONAL_TABLE_'.length)} 테이블이 트랜잭션을 지원하지 않아 되돌릴 수 없으므로 처리를 보류합니다. 서버 관리자의 저장 방식 전환이 필요합니다.`;
   return AUTO_BLOCKERS[code] ?? '서버 관리자의 확인이 필요합니다.';
+}
+
+const PROVIDER_LABELS: Record<string, string> = { AP: 'Apple', KT: '카카오' };
+const UNLINK_STATUS_LABELS: Record<string, string> = {
+  pending: '처리 시작 후 해제 요청',
+  delivered: '해제 완료',
+  failed: '해제 실패 · 재시도 필요',
+  missing_credential: '저장된 인증 정보가 없어 해제할 수 없음',
+};
+
+export function socialUnlinkLabel(provider: string, status: string): string {
+  return `${PROVIDER_LABELS[provider] ?? provider}: ${UNLINK_STATUS_LABELS[status] ?? status}`;
 }

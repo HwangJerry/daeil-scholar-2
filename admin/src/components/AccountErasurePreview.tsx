@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from './ui/Button';
 import { ErasurePreviewTable } from './ErasurePreviewTable';
-import { blockerMessage, tableLabel } from './accountErasureLabels';
+import { blockerMessage, socialUnlinkLabel, tableLabel } from './accountErasureLabels';
 import { expediteReviewedErasure, fetchErasurePreview, type ErasurePreview } from '../api/accountErasurePreview';
 import type { AccountDeletion } from '../api/accountDeletions';
 
@@ -38,6 +38,13 @@ function PreviewRecords({ preview }: { preview: ErasurePreview }) {
         조회 시각 {new Date(preview.generatedAt).toLocaleString('ko-KR')} · 테이블 {preview.tables.length}개 · 기록 {total}건 · 삭제할 파일 {preview.files.length}개
       </p>
       <PreviewHolds preview={preview} />
+      {(preview.socialUnlinks?.length ?? 0) > 0 && (
+        <div className="space-y-1 rounded-lg border border-border-light p-3 text-sm text-dark-slate">
+          <p className="font-semibold">소셜 연결 해제 · {preview.socialUnlinks?.length}건</p>
+          <ul className="list-disc space-y-1 pl-5">{preview.socialUnlinks?.map((unlink) => <li key={unlink.provider}>{socialUnlinkLabel(unlink.provider, unlink.status)}</li>)}</ul>
+          <p className="text-xs text-cool-gray">DB 기록을 지우기 전에 Apple·카카오에 연결 해제를 요청합니다. 해제가 끝나야 다음 단계로 넘어갑니다.</p>
+        </div>
+      )}
       {preview.tables.length === 0 && <p className="text-sm text-cool-gray">운영 DB에서 처리할 기록이 없습니다.</p>}
       <div className="space-y-2">{preview.tables.map((table) => <ErasurePreviewTable key={table.table} table={table} />)}</div>
       {preview.files.length > 0 && (

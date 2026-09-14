@@ -11,7 +11,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const DIGEST = 'a'.repeat(64);
 const QUEUE_ITEM = { requestId: 7, userSeq: 42, status: 'pending', requestedAt: '2026-09-13T00:00:00Z', scheduledAt: '2026-09-16T00:00:00Z', targetAt: '2026-09-16T00:00:00Z', dueAt: '2026-09-26T00:00:00Z', processingMode: 'manual', targets: [] };
 const PREVIEW = {
-  requestId: 7, generatedAt: '2026-09-13T01:00:00Z', planDigest: DIGEST, blockers: [], files: ['uploads/profile/42.jpg'], unhandled: [],
+  requestId: 7, generatedAt: '2026-09-13T01:00:00Z', planDigest: DIGEST, blockers: [], files: ['uploads/profile/42.jpg'], unhandled: [], socialUnlinks: [{ provider: 'KT', status: 'pending' }],
   tables: [
     { table: 'WEO_BOARDBBS', action: 'anonymize', columns: ['SEQ', 'USR_SEQ', 'SUBJECT'], maskedColumns: [], changedColumns: ['USR_SEQ', 'SUBJECT'], count: 1,
       rows: [{ before: ['10', '42', '원래 제목'], after: ['10', '0', '탈퇴한 회원의 삭제된 게시글입니다.'] }] },
@@ -45,6 +45,7 @@ it('shows affected records with before and after values before any processing', 
   expect(screen.getByText('탈퇴한 회원의 삭제된 게시글입니다.')).toBeInTheDocument();
   expect(screen.getByText(/행 삭제 · 1건/)).toBeInTheDocument();
   expect(screen.getByText('[보안값 비표시]')).toBeInTheDocument();
+  expect(screen.getByText('카카오: 처리 시작 후 해제 요청')).toBeInTheDocument();
   expect(put).not.toHaveBeenCalled();
 });
 

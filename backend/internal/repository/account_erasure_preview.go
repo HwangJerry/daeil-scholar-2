@@ -34,7 +34,7 @@ func (r *AccountDeletionRequestRepository) buildErasurePreview(tx *sqlx.Tx, id i
 // collectErasurePreview also returns every affected row's hash, per table.
 func (r *AccountDeletionRequestRepository) collectErasurePreview(tx *sqlx.Tx, id int64, user int) (model.ErasurePreview, []previewTable, error) {
 	preview := model.ErasurePreview{RequestID: id, GeneratedAt: time.Now().UTC(), Blockers: []string{},
-		Tables: []model.ErasurePreviewTable{}, Files: []string{}, Unhandled: []model.AccountDeletionFootprint{}}
+		Tables: []model.ErasurePreviewTable{}, Files: []string{}, Social: []model.ErasureSocialUnlink{}, Unhandled: []model.AccountDeletionFootprint{}}
 	s, err := readErasureSchema(tx)
 	if err != nil {
 		return preview, nil, err
@@ -48,6 +48,12 @@ func (r *AccountDeletionRequestRepository) collectErasurePreview(tx *sqlx.Tx, id
 	if preview.Blockers, err = previewBlockers(tx, s, id, user); err != nil {
 		return preview, nil, err
 	}
+	social, socialBlockers, err := previewSocialUnlinks(tx, s, user)
+	if err != nil {
+		return preview, nil, err
+	}
+	preview.Social = social
+	preview.Blockers = append(preview.Blockers, socialBlockers...)
 	plan, err := planErasureFiles(tx, s, model.ErasureWork{RequestID: id, UserSeq: user}, r.SiteOrigin)
 	var blocked *model.ErasureBlocked
 	if errors.As(err, &blocked) {

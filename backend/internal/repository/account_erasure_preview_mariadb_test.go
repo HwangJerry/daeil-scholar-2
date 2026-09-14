@@ -99,6 +99,9 @@ INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
 	if err != nil || len(preview.Blockers) != 0 || len(preview.Unhandled) != 0 {
 		t.Fatalf("unexpected hold: %v %v %v", err, preview.Blockers, preview.Unhandled)
 	}
+	if len(preview.Social) != 1 || preview.Social[0].Provider != "KT" || preview.Social[0].Status != "pending" {
+		t.Fatalf("social unlink steps = %+v, want one pending Kakao unlink", preview.Social)
+	}
 	again, err := repo.PreviewErasure(receipt.ID)
 	if err != nil || again.PlanDigest != preview.PlanDigest {
 		t.Fatal("digest is not deterministic", err)

@@ -15,6 +15,7 @@ export interface ErasurePreviewTable {
   count: number;
   rows: ErasurePreviewRow[];
 }
+export interface ErasureSocialUnlink { provider: string; status: 'pending' | 'delivered' | 'failed' | 'missing_credential' }
 export interface ErasureUnhandledReference { table: string; column: string; count: number }
 export interface ErasurePreview {
   requestId: number;
@@ -23,6 +24,7 @@ export interface ErasurePreview {
   blockers: string[];
   tables: ErasurePreviewTable[];
   files: string[];
+  socialUnlinks?: ErasureSocialUnlink[];
   unhandled: ErasureUnhandledReference[];
 }
 
