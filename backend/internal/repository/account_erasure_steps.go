@@ -86,6 +86,15 @@ func accountReferenceSteps(s erasureSchema, user int, email string) []erasureSte
 	for _, table := range []string{"AUTH_PHONE_CLAIM", "AUTH_CONSENT", "AUTH_IDENTITY", "AUTH_ACCOUNT_STATE"} {
 		steps = append(steps, erasureStep{table, "ACCOUNT_ID=?", []interface{}{user}})
 	}
+	// Social link continuations and re-auth guards are keyed by provider
+	// subject, not member number, so they must be matched through the member's
+	// social links before WEO_MEMBER_SOCIAL itself is erased.
+	if s["WEO_MEMBER_SOCIAL"] != nil {
+		steps = append(steps,
+			erasureStep{"ALUMNI_SOCIAL_LINK_CONTINUATION", "EXISTS (SELECT 1 FROM WEO_MEMBER_SOCIAL s WHERE s.USR_SEQ=? AND s.NMS_GATE=ALUMNI_SOCIAL_LINK_CONTINUATION.SLC_PROVIDER AND s.NMS_ID=ALUMNI_SOCIAL_LINK_CONTINUATION.SLC_SUBJECT)", []interface{}{user}},
+			erasureStep{"ALUMNI_SOCIAL_LINK_REAUTH_GUARD", "EXISTS (SELECT 1 FROM WEO_MEMBER_SOCIAL s WHERE s.USR_SEQ=? AND s.NMS_GATE=ALUMNI_SOCIAL_LINK_REAUTH_GUARD.SLR_PROVIDER AND s.NMS_ID=ALUMNI_SOCIAL_LINK_REAUTH_GUARD.SLR_SUBJECT)", []interface{}{user}},
+		)
+	}
 	for _, table := range []string{"WEO_MEMBER_SOCIAL", "ALUMNI_SOCIAL_CREDENTIAL", "ALUMNI_UPLOAD_OWNER", "ALUMNI_PROFILE_FILE_HISTORY"} {
 		steps = append(steps, erasureStep{table, "USR_SEQ=?", []interface{}{user}})
 	}

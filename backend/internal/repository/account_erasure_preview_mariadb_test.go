@@ -52,6 +52,15 @@ INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
+	links, err := os.ReadFile("../../migrations/039_create_social_link_continuation.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.MustExec(string(links))
+	// Link attempts are keyed by provider subject, never by member number.
+	db.MustExec(`INSERT INTO ALUMNI_SOCIAL_LINK_CONTINUATION (SLC_TOKEN_HASH,SLC_PROVIDER,SLC_SUBJECT,SLC_EMAIL,SLC_EXPIRES_AT,SLC_CREATED_AT) VALUES
+ (REPEAT('a',64),'KT','synthetic-kakao','fake42@example.org',NOW(),NOW()),(REPEAT('b',64),'KT','synthetic-kakao',NULL,NOW(),NOW()),(REPEAT('c',64),'KT','other-kakao',NULL,NOW(),NOW());
+ INSERT INTO ALUMNI_SOCIAL_LINK_REAUTH_GUARD (SLR_PROVIDER,SLR_SUBJECT,SLR_EXPIRES_AT,SLR_UPDATED_AT) VALUES ('KT','synthetic-kakao',NOW(),NOW()),('AP','synthetic-kakao',NOW(),NOW())`)
 	db.MustExec(`INSERT INTO ALUMNI_UPLOAD_OWNER (F_SEQ,USR_SEQ,URL_PATH) VALUES (5,42,'/uploads/profile/42.jpg')`)
 	repo := &AccountDeletionRequestRepository{WaitHours: 72, DB: db}
 	receipt, err := repo.Create(42, strings.Repeat("a", 64))
@@ -100,7 +109,7 @@ INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
 	}
 	wantCounts := map[string]int64{"WEO_FILES": 1, "WEO_PG_DATA": 1, "WEO_ORDER": 1, "ALUMNI_DONATION_RETENTION": 1, "WEO_BOARDBBS": 1,
 		"ALUMNI_PUSH_OUTBOX": 1, "ALUMNI_NOTIFICATION": 2, "WEO_BOARDCOMAND": 1, "ALUMNI_MESSAGE": 2, "WEO_VISIT_DAILY": 1,
-		"WEO_MEMBER_SOCIAL": 1, "ALUMNI_UPLOAD_OWNER": 1, "ALUMNI_PROFILE_FILE_HISTORY": 1, "WEO_MEMBER": 1}
+		"WEO_MEMBER_SOCIAL": 1, "ALUMNI_SOCIAL_LINK_CONTINUATION": 2, "ALUMNI_SOCIAL_LINK_REAUTH_GUARD": 1, "ALUMNI_UPLOAD_OWNER": 1, "ALUMNI_PROFILE_FILE_HISTORY": 1, "WEO_MEMBER": 1}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("counts = %v, want %v", counts, wantCounts)
 	}
