@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
@@ -52,8 +51,13 @@ func (r *AccountDeletionRequestRepository) controlSchedule(id int64, operator in
 	}
 	if action == "retry_social" {
 		// Preserve REVOKED evidence: never repeat a completed provider call.
-		result, e := tx.Exec(`UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX SET STATUS=CASE WHEN STATUS='FINALIZE_FAILED' THEN 'REVOKED' ELSE 'PENDING' END,CLAIM_TOKEN=NULL,ATTEMPT_COUNT=0,NEXT_ATTEMPT_AT=NOW(),LAST_ERROR=NULL,UPDATED_AT=NOW()
-   WHERE USR_SEQ=? AND ACTION='ACCOUNT_DELETE' AND STATUS IN ('FAILED','FINALIZE_FAILED')`, user)
+		// Rows still waiting (PENDING/REVOKED) are re-queued too, so a claim
+		// stuck on a broken worker run can be released by the operator.
+		result, e := tx.Exec(`UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX
+   SET ATTEMPT_COUNT=CASE WHEN STATUS IN ('FAILED','FINALIZE_FAILED') THEN 0 ELSE ATTEMPT_COUNT END,
+       STATUS=CASE WHEN STATUS IN ('FINALIZE_FAILED','REVOKED') THEN 'REVOKED' ELSE 'PENDING' END,
+       CLAIM_TOKEN=NULL,NEXT_ATTEMPT_AT=NOW(),LAST_ERROR=NULL,UPDATED_AT=NOW()
+   WHERE USR_SEQ=? AND ACTION='ACCOUNT_DELETE' AND STATUS IN ('FAILED','FINALIZE_FAILED','PENDING','REVOKED')`, user)
 		if e != nil {
 			return e
 		}
@@ -62,7 +66,7 @@ func (r *AccountDeletionRequestRepository) controlSchedule(id int64, operator in
 			return e
 		}
 		if n == 0 {
-			return sql.ErrNoRows
+			return &model.ValidationError{Msg: "다시 시도할 소셜 연결 해제 작업이 없습니다. 처리 현황을 새로고침해 확인해주세요."}
 		}
 	} else {
 		if _, err = tx.Exec(`INSERT IGNORE INTO ALUMNI_ERASURE_SCHEDULE (REQUEST_ID,SCHEDULED_AT,CREATED_AT) VALUES (?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? HOUR),UTC_TIMESTAMP())`, id, r.WaitHours); err != nil {

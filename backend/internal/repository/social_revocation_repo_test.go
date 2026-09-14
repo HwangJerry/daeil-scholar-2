@@ -314,3 +314,30 @@ func TestExhaustedLocalFinalizationPreservesProviderRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestClaimDueSocialRevocationsSkipsUnreadableRow proves one malformed row is
+// reported without hiding the readable rows claimed in the same batch.
+func TestClaimDueSocialRevocationsSkipsUnreadableRow(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
+	now := time.Now()
+	mock.ExpectExec(`UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX`).WillReturnResult(sqlmock.NewResult(0, 2))
+	mock.ExpectQuery(`SELECT OUTBOX_ID`).WithArgs("worker-token").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"OUTBOX_ID", "USR_SEQ", "PROVIDER", "ACTION", "STATUS", "ATTEMPT_COUNT",
+			"NEXT_ATTEMPT_AT", "LAST_ERROR", "CREATED_AT", "UPDATED_AT",
+		}).
+			AddRow(1, 42, "KT", "ACCOUNT_DELETE", "PENDING", 0, "not-a-time", "", now, now).
+			AddRow(2, 43, "AP", "DISCONNECT", "PENDING", 0, now, "", now, now))
+	entries, err := repo.ClaimDueSocialRevocations("worker-token", 5*time.Minute, 20)
+	if err == nil {
+		t.Fatal("unreadable row was not reported")
+	}
+	if len(entries) != 1 || entries[0].OutboxID != 2 {
+		t.Fatalf("readable rows = %+v, want outbox 2", entries)
+	}
+}

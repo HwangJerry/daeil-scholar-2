@@ -8,6 +8,7 @@ package repository
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
@@ -44,16 +45,40 @@ func (r *AuthRepository) ClaimDueSocialRevocations(claimToken string, staleAfter
 	}
 
 	// LAST_ERROR is nullable in the schema; rows created without an error
-	// message must still be claimable instead of failing the whole batch.
-	var entries []model.SocialRevocationOutboxEntry
-	err = r.DB.Select(&entries, `
+	// message must still be claimable. Rows are read one by one so a single
+	// unreadable row is reported instead of stalling the whole batch.
+	rows, err := r.DB.Queryx(`
 		SELECT OUTBOX_ID, USR_SEQ, PROVIDER, ACTION, STATUS, ATTEMPT_COUNT,
 		       NEXT_ATTEMPT_AT, COALESCE(LAST_ERROR, '') AS LAST_ERROR, CREATED_AT, UPDATED_AT
 		FROM ALUMNI_SOCIAL_REVOCATION_OUTBOX
 		WHERE CLAIM_TOKEN = ?
 		ORDER BY NEXT_ATTEMPT_AT
 	`, claimToken)
-	return entries, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var entries []model.SocialRevocationOutboxEntry
+	skipped := 0
+	var firstErr error
+	for rows.Next() {
+		var entry model.SocialRevocationOutboxEntry
+		if err := rows.StructScan(&entry); err != nil {
+			skipped++
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return entries, err
+	}
+	if skipped > 0 {
+		return entries, fmt.Errorf("skipped %d unreadable social revocation rows: %w", skipped, firstErr)
+	}
+	return entries, nil
 }
 
 // MarkSocialRevocationRevoked durably records that the upstream provider has

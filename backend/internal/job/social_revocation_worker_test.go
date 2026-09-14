@@ -13,6 +13,8 @@ import (
 )
 
 type fakeSocialRevocationRepo struct {
+	claimed               []model.SocialRevocationOutboxEntry
+	claimErr              error
 	credential            string
 	credentialErr         error
 	revokedCalls          []int64
@@ -36,7 +38,7 @@ type failedCall struct {
 }
 
 func (f *fakeSocialRevocationRepo) ClaimDueSocialRevocations(string, time.Duration, int) ([]model.SocialRevocationOutboxEntry, error) {
-	return nil, nil // not exercised directly; processEntry is tested in isolation
+	return f.claimed, f.claimErr
 }
 
 func (f *fakeSocialRevocationRepo) MarkSocialRevocationRevoked(outboxID int64) error {
@@ -220,5 +222,20 @@ func TestProcessEntryAttemptCapReachesFailedStatus(t *testing.T) {
 	}
 	if repo.failedCalls[0].attemptCount != 10 {
 		t.Fatalf("expected attemptCount=10 (9+1), got %d", repo.failedCalls[0].attemptCount)
+	}
+}
+
+// TestProcessDueProcessesReadableEntriesWhenClaimReportsError proves one
+// unreadable row no longer stops the rows that were read in the same batch.
+func TestProcessDueProcessesReadableEntriesWhenClaimReportsError(t *testing.T) {
+	repo := &fakeSocialRevocationRepo{
+		credential: "encrypted",
+		claimed:    []model.SocialRevocationOutboxEntry{{OutboxID: 7, USRSeq: 42, Provider: "KT", Action: socialRevocationActionDisconnect, Status: "PENDING"}},
+		claimErr:   errors.New("skipped 1 unreadable social revocation rows"),
+	}
+	kakao := &fakeKakao{}
+	newTestWorker(repo, kakao).processDue(context.Background())
+	if kakao.calls != 1 || len(repo.succeededCalls) != 1 || repo.succeededCalls[0] != 7 {
+		t.Fatalf("readable entry not processed: calls=%d succeeded=%v", kakao.calls, repo.succeededCalls)
 	}
 }

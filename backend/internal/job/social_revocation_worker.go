@@ -168,8 +168,9 @@ func (w *SocialRevocationWorker) Stop() {
 func (w *SocialRevocationWorker) processDue(ctx context.Context) {
 	entries, err := w.repo.ClaimDueSocialRevocations(w.claimToken, socialRevocationClaimStaleAfter, socialRevocationBatchSize)
 	if err != nil {
-		w.logger.Error().Err(err).Msg("social revocation worker failed to claim due entries")
-		return
+		// Readable rows are still processed; unreadable ones stay claimed
+		// until the stale window passes and are reported on every attempt.
+		w.logger.Error().Err(err).Int("readable", len(entries)).Msg("social revocation worker failed to claim due entries")
 	}
 	for _, entry := range entries {
 		w.processEntry(ctx, entry)

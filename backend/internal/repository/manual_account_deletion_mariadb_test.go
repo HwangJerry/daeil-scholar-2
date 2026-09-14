@@ -29,7 +29,7 @@ func TestManualAccountDeletionLifecycleOnMariaDB101(t *testing.T) {
         INSERT INTO ALUMNI_ADMIN_ROLE VALUES (42,'root');
         INSERT INTO WEO_MEMBER_SOCIAL VALUES (42,'AP'),(42,'KT');
         INSERT INTO ALUMNI_MESSAGE VALUES (1,42,43);`)
-	for _, path := range []string{"../../migrations/055_create_message_reports.sql", "../../migrations/056_create_account_deletion_requests.sql", "../../migrations/057_create_automatic_account_erasure.sql", "../../migrations/059_create_erasure_context.sql", "../../migrations/060_create_erasure_targets.sql", "../../migrations/061_create_erasure_receipt_work.sql"} {
+	for _, path := range []string{"../../migrations/055_create_message_reports.sql", "../../migrations/056_create_account_deletion_requests.sql", "../../migrations/057_create_automatic_account_erasure.sql", "../../migrations/059_create_erasure_context.sql", "../../migrations/060_create_erasure_targets.sql", "../../migrations/061_create_erasure_receipt_work.sql", "../../migrations/066_schedule_account_erasure.sql", "../../migrations/067_cancel_account_deletion.sql"} {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
@@ -43,7 +43,7 @@ func TestManualAccountDeletionLifecycleOnMariaDB101(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if receipt.Status != "pending" || receipt.TargetAt.Sub(receipt.RequestedAt) != 3*24*time.Hour || receipt.DueAt.Sub(receipt.RequestedAt) != 10*24*time.Hour {
+	if receipt.Status != "pending" || receipt.TargetAt.Sub(receipt.RequestedAt) != 3*24*time.Hour || receipt.DueAt.Sub(receipt.TargetAt) != 10*24*time.Hour {
 		t.Fatalf("unexpected receipt: %+v", receipt)
 	}
 	var status string

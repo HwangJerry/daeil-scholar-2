@@ -2,10 +2,13 @@
 package repository
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dflh-saf/backend/internal/model"
 )
 
 func TestErasureSocialRevocationClaimOnMariaDB101(t *testing.T) {
@@ -74,6 +77,15 @@ INSERT INTO WEO_MEMBER_SOCIAL VALUES (42,'KT','synthetic-kakao');`)
 		t.Fatalf("erasure revocation row stored without explicit defaults: %d %v", unset, err)
 	}
 
+	// An operator retry releases a claim left behind by a failed worker run.
+	if err = repo.ControlSchedule(receipt.ID, 7, "retry_social"); err != nil {
+		t.Fatalf("retry of a stuck claim failed: %v", err)
+	}
+	var released int
+	if err = db.Get(&released, `SELECT COUNT(*) FROM ALUMNI_SOCIAL_REVOCATION_OUTBOX WHERE OUTBOX_ID=? AND STATUS='PENDING' AND CLAIM_TOKEN IS NULL`, outboxID); err != nil || released != 1 {
+		t.Fatalf("stuck claim not released: %d %v", released, err)
+	}
+
 	// Completing the provider call must satisfy the erasure's provider proof.
 	if err = auth.MarkSocialRevocationRevoked(outboxID); err != nil {
 		t.Fatal(err)
@@ -88,5 +100,10 @@ INSERT INTO WEO_MEMBER_SOCIAL VALUES (42,'KT','synthetic-kakao');`)
 	defer tx.Rollback()
 	if err = verifyDeletionProviders(tx, receipt.ID, 42); err != nil {
 		t.Fatalf("provider proof not recognized: %v", err)
+	}
+	// Once delivered there is nothing to retry, and the operator is told so.
+	var invalid *model.ValidationError
+	if err = repo.ControlSchedule(receipt.ID, 7, "retry_social"); !errors.As(err, &invalid) {
+		t.Fatalf("retry with nothing pending = %v, want a validation message", err)
 	}
 }
