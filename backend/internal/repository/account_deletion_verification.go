@@ -23,7 +23,7 @@ func deletionFootprint(tx *sqlx.Tx, usrSeq int) ([]model.AccountDeletionFootprin
 	err := tx.Select(&columns, `SELECT c.TABLE_NAME, c.COLUMN_NAME FROM information_schema.COLUMNS c
         JOIN information_schema.TABLES t ON t.TABLE_SCHEMA = c.TABLE_SCHEMA AND t.TABLE_NAME = c.TABLE_NAME
         WHERE c.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE = 'BASE TABLE'
-        AND c.TABLE_NAME <> 'ALUMNI_ACCOUNT_DELETION_REQUEST'
+        AND c.TABLE_NAME NOT IN ('ALUMNI_ACCOUNT_DELETION_REQUEST','ALUMNI_ERASURE_RESTORE_GUARD')
         AND c.COLUMN_NAME IN ('USR_SEQ','ACCOUNT_ID','USER_ID','AM_SENDER_SEQ','AM_RECVR_SEQ',
             'REPORTER_SEQ','REPORTED_SEQ','BLOCKER_USR_SEQ','BLOCKED_USR_SEQ','VD_USR_SEQ','O_ACCOUNT_USR_SEQ')
         ORDER BY c.TABLE_NAME, c.COLUMN_NAME`)
@@ -139,6 +139,10 @@ func (r *AccountDeletionRequestRepository) Complete(id int64, operator int, evid
 	var retentionUntil sql.NullString
 	if evidence.RetentionUntil != "" {
 		retentionUntil = sql.NullString{String: evidence.RetentionUntil, Valid: true}
+	}
+	// Keep the member number only while retained backups may still hold it.
+	if err = recordRestoreGuard(tx, id, usrSeq); err != nil {
+		return err
 	}
 	_, err = tx.Exec(`UPDATE ALUMNI_ACCOUNT_DELETION_REQUEST SET STATUS = 'completed',
         USR_SEQ = NULL, OPERATOR_SEQ = ?, COMPLETED_AT = UTC_TIMESTAMP(),

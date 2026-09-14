@@ -37,13 +37,14 @@ func (c AccountErasureConfig) Validate() error {
 	}
 	switch c.ExternalMode {
 	case "manual": // Existing operator evidence workflow; no fake processor success.
+	case "internal": // Server-side checks of backups, files, identifiers and Sentry; unproven targets stay for an operator.
 	case "http":
 		u, err := url.Parse(c.ExternalURL)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" || c.ExternalToken == "" {
 			return fmt.Errorf("external erasure requires an HTTPS endpoint and token")
 		}
 	default:
-		return fmt.Errorf("ACCOUNT_ERASURE_EXTERNAL_MODE must be manual or http")
+		return fmt.Errorf("ACCOUNT_ERASURE_EXTERNAL_MODE must be manual, internal or http")
 	}
 	return nil
 }

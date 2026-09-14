@@ -20,7 +20,7 @@ function nextAction(target: ErasureTarget): string {
   if (target.status === 'complete' || target.status === 'not_applicable') return '확인 근거를 보존하며 이 작업은 반복하지 않습니다.';
   if (target.status === 'manual') return '황제철 담당자가 저장소 설정과 남은 자료를 확인하고 기존 수동 처리 절차로 해결해야 합니다.';
   if (target.status === 'failed') return '서버 담당자가 연동 설정 또는 오류를 확인해야 합니다. 다음 자동 시도에서 다시 확인합니다.';
-  return '실제 삭제 또는 해당 자료가 없다는 근거를 확인한 뒤 완료합니다. 만료 예정만으로 완료하지 않습니다.';
+  return '서버가 자동으로 확인하는 중이거나, 남은 자료가 있어 확인하지 못했습니다. 자동 확인이 끝나지 않으면 담당자가 확인한 뒤 결과를 기록해 주세요.';
 }
 
 export function AccountErasureTargets({ targets, requestId }: { targets?: ErasureTarget[]; requestId?: number }) {

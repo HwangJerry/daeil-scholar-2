@@ -52,6 +52,11 @@ func (s *AutomaticErasureService) RunOnce(ctx context.Context) error {
 		return nil
 	}
 	defer release()
+	if purger, ok := s.Store.(interface{ PurgeExpiredRestoreGuards(context.Context) error }); ok {
+		if err := purger.PurgeExpiredRestoreGuards(ctx); err != nil {
+			return err
+		}
+	}
 	batch, err := s.Store.ErasureBatch(ctx)
 	if err != nil {
 		return err

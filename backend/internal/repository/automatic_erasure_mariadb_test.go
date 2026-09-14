@@ -41,7 +41,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 		}
 	})
 
-	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "066_schedule_account_erasure.sql", "067_cancel_account_deletion.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "062_create_profile_file_history.sql", "063_bind_donation_retention_source.sql"} {
+	for _, name := range []string{"055_create_message_reports.sql", "056_create_account_deletion_requests.sql", "057_create_automatic_account_erasure.sql", "066_schedule_account_erasure.sql", "067_cancel_account_deletion.sql", "059_create_erasure_context.sql", "060_create_erasure_targets.sql", "061_create_erasure_receipt_work.sql", "062_create_profile_file_history.sql", "063_bind_donation_retention_source.sql", "068_create_erasure_restore_guard.sql"} {
 		data, err := os.ReadFile("../../migrations/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -447,5 +447,9 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	}
 	if err = db.Get(&count, `SELECT COUNT(*) FROM ALUMNI_ERASURE_CONTEXT`); err != nil || count != 0 {
 		t.Fatal("expired context survived", err)
+	}
+	var guardRows int
+	if err = db.Get(&guardRows, `SELECT COUNT(*) FROM ALUMNI_ERASURE_RESTORE_GUARD WHERE USR_SEQ=42`); err != nil || guardRows != 1 {
+		t.Fatal("completed erasure not guarded against backup restore", guardRows, err)
 	}
 }

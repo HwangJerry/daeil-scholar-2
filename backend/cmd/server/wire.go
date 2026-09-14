@@ -249,6 +249,17 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	if cfg.AccountErasure.ExternalMode == "http" {
 		external = &service.HTTPErasureProcessor{Endpoint: cfg.AccountErasure.ExternalURL, Token: cfg.AccountErasure.ExternalToken}
 	}
+	if cfg.AccountErasure.ExternalMode == "internal" {
+		verifier := &service.InternalErasureVerifier{
+			Identifiers:   &repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL},
+			StatusPath:    cfg.AccountErasure.BackupStatusPath,
+			RetentionDays: service.BackupRetentionDays,
+		}
+		if cfg.Sentry.Configured() {
+			verifier.Sentry = sentryClient
+		}
+		external = verifier
+	}
 	erasureService := &service.AutomaticErasureService{
 		Store:         &repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL, TestUserSeq: cfg.AccountErasure.TestUserSeq, DonationRetentionTemplate: service.LedgerRetentionTemplate(cfg.AccountErasure.LedgerConfirmed, cfg.AccountErasure.ReceiptOriginalsSeparate, cfg.AccountErasure.LedgerYearEndMonth, cfg.AccountErasure.LedgerEvidence)},
 		External:      external,

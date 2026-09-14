@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const approvedCandidateManifestSHA256 = "3521ead85cab31e59ec627b1be35f0c09c0c3c67079b0639223a2561b105002e"
+const approvedCandidateManifestSHA256 = "4307ba03f2d4dc90699f3d26c6198be2a5f10b9ec94938f8c8a70f03adcea266"
 
 func TestMigrationRunnerApprovesEveryFutureMigrationIncluding063(t *testing.T) {
 	manifestPath := filepath.Join("..", "..", "migrations", "testdata", "canonical_identity_candidate_lineage.sha256")
@@ -32,7 +32,7 @@ func TestMigrationRunnerApprovesEveryFutureMigrationIncluding063(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migration source approval failed: %v\n%s", err, output)
 	}
-	if strings.TrimSpace(string(output)) != "MIGRATION_SOURCE_APPROVAL=PASS future_migrations=28" {
+	if strings.TrimSpace(string(output)) != "MIGRATION_SOURCE_APPROVAL=PASS future_migrations=29" {
 		t.Fatalf("unexpected source approval output: %q", output)
 	}
 }

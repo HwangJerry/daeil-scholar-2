@@ -1,0 +1,6 @@
+# /etc/cron.d/dflh-backup-rotation — weekly full backup (Sunday 04:10 KST) and daily prune (04:40 KST).
+# Backups and rotated web logs older than 28 days are removed; the newest backup is always kept.
+SHELL=/bin/bash
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+10 4 * * 0 root /usr/bin/python3.6 /app/backend/backup_rotation.py weekly >> /var/log/dflh-backup-rotation.log 2>&1
+40 4 * * * root /usr/bin/python3.6 /app/backend/backup_rotation.py prune >> /var/log/dflh-backup-rotation.log 2>&1

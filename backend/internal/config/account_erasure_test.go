@@ -87,3 +87,14 @@ func TestErasureWaitHoursMustBeExplicitAndBounded(t *testing.T) {
 		}
 	}
 }
+
+func TestInternalExternalModeIsAccepted(t *testing.T) {
+	c := AccountErasureConfig{RequestsEnabled: true, WaitHours: 168, ContextKey: strings.Repeat("ab", 32), ArchiveKey: strings.Repeat("cd", 32), LegacyRoot: "/verified/root", ExternalMode: "internal"}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	c.ExternalMode = "automatic"
+	if err := c.Validate(); err == nil {
+		t.Fatal("unknown external mode accepted")
+	}
+}
