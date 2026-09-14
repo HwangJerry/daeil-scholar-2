@@ -30,6 +30,7 @@ type AccountDeletionQueueItem struct {
 	ProcessingMode      string             `json:"processingMode" db:"PROCESSING_MODE"`
 	AutoStage           string             `json:"autoStage" db:"AUTO_STAGE"`
 	AutoCode            string             `json:"autoCode" db:"AUTO_CODE"`
+	SocialUnlinkStalled bool               `json:"socialUnlinkStalled" db:"SOCIAL_UNLINK_STALLED"`
 	AccountDeletionReceipt
 	UserSeq           *int   `json:"userSeq" db:"USR_SEQ"`
 	EvidenceReference string `json:"evidenceReference" db:"EVIDENCE_REFERENCE"`

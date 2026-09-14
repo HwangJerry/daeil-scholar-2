@@ -30,6 +30,7 @@ function ProcessingStatus({ item }: { item: AccountDeletion }) {
       {item.automationUpdatedAt && <p className="text-sm text-cool-gray">최근 상태 변경 {new Date(item.automationUpdatedAt).toLocaleString('ko-KR')}{item.processingMode === 'automatic' && item.nextAttemptAt && ` · 다음 시도 ${new Date(item.nextAttemptAt).toLocaleString('ko-KR')}`}</p>}
       {item.databaseErased && <p className="text-sm text-dark-slate">앱 운영 DB 처리 완료 · 파일 및 외부 처리 확인 후 최종 완료됩니다.</p>}
       {item.contextExpiresAt && <p role="status" className="text-sm text-dark-slate">외부 확인용 정보 만료: {new Date(item.contextExpiresAt).toLocaleString('ko-KR')}. 영수증 업무가 진행 중이어도 이 기한을 확인해주세요. 기한이 지나면 자동 재개에 필요한 정보가 없어 수동 검토가 필요할 수 있습니다.</p>}
+      {item.socialUnlinkStalled && <p role="alert" className="text-sm font-semibold text-dark-slate">Apple·카카오 연결 해제가 15분 넘게 끝나지 않았거나 실패했습니다. 서버 로그의 연결 해제 오류를 확인한 뒤 "소셜 설정 확인 후 재시도"를 눌러 주세요.</p>}
       {item.autoCode && <p role="status" className="text-sm text-dark-slate">{blockerMessage(item.autoCode)} <span className="break-all">({item.autoCode})</span> 원인을 해결하면 자동으로 재시도합니다.</p>}
     </>
   );
@@ -57,7 +58,7 @@ function DeletionReview({ item }: { item: AccountDeletion }) {
           {mutation.error && <p role="alert" className="text-sm text-dark-slate">{mutation.error instanceof Error ? mutation.error.message : '요청을 처리하지 못했습니다.'}</p>}
           <div className="flex flex-wrap gap-3">
             {!item.scheduledAt && <Button variant="outline" disabled={mutation.isPending} onClick={() => { if (window.confirm('현재 설정된 대기 기간을 적용해 이 기존 요청의 자동 처리를 예약할까요?')) mutation.mutate('schedule'); }}>기존 요청 예약 적용</Button>}
-            {item.autoCode === 'PROVIDER_REVOCATION_PENDING' && <Button variant="outline" disabled={mutation.isPending} onClick={() => { if (window.confirm('소셜 연결 해제 설정과 자격 증명을 확인했나요? 실패한 작업을 재시도합니다.')) mutation.mutate('retry_social'); }}>소셜 설정 확인 후 재시도</Button>}
+            {(item.autoCode === 'PROVIDER_REVOCATION_PENDING' || item.socialUnlinkStalled) && <Button variant="outline" disabled={mutation.isPending} onClick={() => { if (window.confirm('소셜 연결 해제 설정과 자격 증명을 확인했나요? 실패한 작업을 재시도합니다.')) mutation.mutate('retry_social'); }}>소셜 설정 확인 후 재시도</Button>}
             <Button variant="outline" disabled={mutation.isPending || item.processingMode === 'manual'} onClick={() => mutation.mutate('manual')}>자동 처리 중지 · 관리자 검토 후 처리</Button>
             <Button variant="outline" disabled={mutation.isPending || item.processingMode === 'automatic'} onClick={() => mutation.mutate('automatic')}>검토 없이 자동 처리 재개</Button>
           </div>

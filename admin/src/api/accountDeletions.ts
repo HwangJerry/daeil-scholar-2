@@ -53,6 +53,7 @@ export interface AccountDeletion {
   nextAttemptAt?: string | null;
   automationUpdatedAt?: string | null;
   autoCode?: string;
+  socialUnlinkStalled?: boolean;
 }
 export function fetchAccountDeletions(status: DeletionStatus, before: number) {
   return api.get<{ items: AccountDeletion[] }>(`/api/admin/account-deletions?status=${status}&before=${before}`);

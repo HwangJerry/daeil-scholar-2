@@ -51,6 +51,17 @@ INSERT INTO WEO_MEMBER_SOCIAL VALUES (42,'KT','synthetic-kakao');`)
 		t.Fatal(err)
 	}
 
+	// An unlink still waiting after 15 minutes is surfaced to the operator.
+	items, err := repo.List("processing", 0)
+	if err != nil || len(items) != 1 || items[0].SocialUnlinkStalled {
+		t.Fatalf("fresh unlink flagged as stalled: %+v %v", items, err)
+	}
+	db.MustExec(`UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX SET CREATED_AT=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 20 MINUTE) WHERE USR_SEQ=42`)
+	if items, err = repo.List("processing", 0); err != nil || len(items) != 1 || !items[0].SocialUnlinkStalled {
+		t.Fatalf("stalled unlink not flagged: %+v %v", items, err)
+	}
+	db.MustExec(`UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX SET CREATED_AT=UTC_TIMESTAMP() WHERE USR_SEQ=42`)
+
 	// The worker must claim every due row, including ones without an error message.
 	auth := NewAuthRepository(db)
 	entries, err := auth.ClaimDueSocialRevocations("worker-a", 5*time.Minute, 20)
