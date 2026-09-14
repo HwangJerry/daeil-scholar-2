@@ -1,3 +1,4 @@
+// AccountDeletionCancellation — Confirms cancellation without native browser dialogs.
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HelmetProvider } from 'react-helmet-async';
@@ -20,16 +21,24 @@ it('requires confirmation and sends independent cancellation capability only to 
  const button = await screen.findByRole('button', {name: '탈퇴 신청 취소'});
  expect(window.location.hash).toBe('');
  expect(post).toHaveBeenNthCalledWith(1, '/api/account-deletion/receipt', {receiptToken});
- await user.click(button); expect(post).toHaveBeenCalledTimes(1);
- confirm.mockReturnValue(true); await user.click(button);
+ await user.click(button);
+ await screen.findByRole('group', {name: '탈퇴 신청을 취소할까요?'});
+ expect(post).toHaveBeenCalledTimes(1);
+ await user.click(screen.getByRole('button', {name: '신청 유지'}));
+ expect(screen.queryByRole('group', {name: '탈퇴 신청을 취소할까요?'})).not.toBeInTheDocument();
+ expect(post).toHaveBeenCalledTimes(1);
+ await user.click(button);
+ await user.click(screen.getByRole('button', {name: '신청 취소 확인'}));
+ expect(confirm).not.toHaveBeenCalled();
  await screen.findByText('탈퇴 신청이 취소되었습니다');
  expect(post).toHaveBeenNthCalledWith(2, '/api/account-deletion/cancel', {receiptToken, cancelToken});
  expect(screen.queryByRole('button', {name:'탈퇴 신청 취소'})).not.toBeInTheDocument();
 });
 it('refreshes execution state after rejection without showing cancellation success', async () => {
  const post = vi.spyOn(api, 'post').mockResolvedValueOnce(pending).mockRejectedValueOnce(new Error('처리가 시작되었습니다')).mockResolvedValueOnce({...pending, status:'processing', canCancel:false});
- vi.spyOn(window, 'confirm').mockReturnValue(true); const user = userEvent.setup(); mount();
+ vi.spyOn(window, 'confirm').mockReturnValue(false); const user = userEvent.setup(); mount();
  await user.click(await screen.findByRole('button', {name:'탈퇴 신청 취소'}));
+ await user.click(screen.getByRole('button', {name: '신청 취소 확인'}));
  await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
  await screen.findByText('계정 삭제 처리 중입니다');
  expect(screen.queryByText('탈퇴 신청이 취소되었습니다')).not.toBeInTheDocument();

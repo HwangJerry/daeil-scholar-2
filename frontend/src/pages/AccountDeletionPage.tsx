@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { CancelDeletionButton } from '../components/accountDeletion/CancelDeletionButton';
 import { AccountDeletionRequestGuide } from '../components/accountDeletion/AccountDeletionRequestGuide';
 import { PageMeta } from '../components/seo/PageMeta';
 import { Button } from '../components/ui/Button';
@@ -60,7 +61,6 @@ export function AccountDeletionPage() {
 
   async function cancelRequest() {
     if (cancelling || !receipt?.canCancel) return;
-    if (!window.confirm('탈퇴 신청을 취소하고 계정 이용을 다시 시작할까요? 취소 후 다시 로그인해야 합니다.')) return;
     setCancelling(true); setError('');
     try {
       const result = await api.post<Receipt>('/api/account-deletion/cancel', { receiptToken: token.trim(), cancelToken: cancelToken.trim() });
@@ -96,7 +96,7 @@ export function AccountDeletionPage() {
             {receipt.canCancel && <div className="space-y-3">
               <p>실제 탈퇴 처리가 시작되기 전까지 신청을 취소할 수 있습니다.</p>
               <label className="block">취소 인증번호<input type="password" autoComplete="off" maxLength={64} value={cancelToken} onChange={event => setCancelToken(event.target.value)} className="w-full rounded-md border border-border bg-surface p-3" /></label>
-              <Button type="button" disabled={cancelling || !/^[a-f\d]{64}$/i.test(cancelToken)} onClick={() => void cancelRequest()}>{cancelling ? '취소 확인 중…' : '탈퇴 신청 취소'}</Button>
+              <CancelDeletionButton disabled={!/^[a-f\d]{64}$/i.test(cancelToken.trim())} cancelling={cancelling} onConfirm={cancelRequest} />
               {!cancelToken && <p>신청한 앱에서 취소하거나 별도로 보관한 취소 인증번호를 입력하세요. 인증번호를 분실했다면 문의 창구에서 본인 확인을 받아주세요.</p>}
             </div>}
             {receipt.receiptWorkPending && <p className="text-sm leading-7 text-text-secondary">진행 중인 영수증 업무를 처리하고 있습니다. 업무와 결과 전달이 끝나면 해당 업무용 연락처를 정리합니다. 다른 삭제 작업은 예약 및 검토 상태에 따라 진행합니다.</p>}

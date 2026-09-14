@@ -46,3 +46,30 @@ test('unknown receipt reports failure without showing completion', async ({ page
   await expect(page.getByRole('alert')).toHaveText('삭제 요청을 찾을 수 없습니다.');
   await expect(page.getByRole('heading', { name: '계정 삭제 완료', exact: true })).toHaveCount(0);
 });
+
+// Native confirm dialogs may be unavailable in WKWebView. Confirmation must stay in the page.
+test('cancels only after in-page confirmation when native dialogs are unavailable', async ({ page }) => {
+  const cancelToken = 'b'.repeat(64);
+  let cancellationRequests = 0;
+  await page.addInitScript(() => { window.confirm = () => { throw new Error('Native confirm unavailable'); }; });
+  await page.route('**/api/visit/beacon', route => route.fulfill({ status: 204 }));
+  const receipt = { requestId: 5, status: 'pending', canCancel: true, requestedAt: '2026-09-14T08:00:00Z', dueAt: '2026-09-28T08:00:00Z' };
+  await page.route('**/api/account-deletion/receipt', route => route.fulfill({ json: receipt }));
+  await page.route('**/api/account-deletion/cancel', async route => {
+    cancellationRequests += 1;
+    expect(route.request().postDataJSON()).toEqual({ receiptToken: token, cancelToken });
+    await route.fulfill({ json: { ...receipt, status: 'cancelled', canCancel: false } });
+  });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(`/account-deletion#receipt=${token}&cancel=${cancelToken}`);
+  await page.getByRole('button', { name: '탈퇴 신청 취소', exact: true }).click();
+  await expect(page.getByRole('group', { name: '탈퇴 신청을 취소할까요?' })).toBeVisible();
+  expect(cancellationRequests).toBe(0);
+  await page.getByRole('button', { name: '신청 유지', exact: true }).click();
+  expect(cancellationRequests).toBe(0);
+  await page.getByRole('button', { name: '탈퇴 신청 취소', exact: true }).click();
+  await page.getByRole('group', { name: '탈퇴 신청을 취소할까요?' }).screenshot({ path: '/tmp/dflh-cancel-confirmation.png' });
+  await page.getByRole('button', { name: '신청 취소 확인', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '탈퇴 신청이 취소되었습니다', exact: true })).toBeVisible();
+  expect(cancellationRequests).toBe(1);
+});
