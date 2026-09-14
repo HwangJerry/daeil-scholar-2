@@ -69,5 +69,16 @@ func (r *AccountDeletionRequestRepository) PurgeExpiredPrivacyRecords(ctx contex
 	if cancellationInstalled > 0 {
 		_, err = r.DB.ExecContext(ctx, `DELETE FROM ALUMNI_ERASURE_CANCELLATION WHERE NOT EXISTS(SELECT 1 FROM ALUMNI_ACCOUNT_DELETION_REQUEST d WHERE d.REQUEST_ID=ALUMNI_ERASURE_CANCELLATION.REQUEST_ID) ORDER BY REQUEST_ID LIMIT ?`, limit)
 	}
+	if err != nil {
+		return err
+	}
+	// Operator intake audit follows its request out of retention.
+	var intakeInstalled int
+	if err = r.DB.GetContext(ctx, &intakeInstalled, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_ACCOUNT_DELETION_INTAKE'`); err != nil {
+		return err
+	}
+	if intakeInstalled > 0 {
+		_, err = r.DB.ExecContext(ctx, `DELETE FROM ALUMNI_ACCOUNT_DELETION_INTAKE WHERE NOT EXISTS(SELECT 1 FROM ALUMNI_ACCOUNT_DELETION_REQUEST d WHERE d.REQUEST_ID=ALUMNI_ACCOUNT_DELETION_INTAKE.REQUEST_ID) ORDER BY REQUEST_ID LIMIT ?`, limit)
+	}
 	return err
 }

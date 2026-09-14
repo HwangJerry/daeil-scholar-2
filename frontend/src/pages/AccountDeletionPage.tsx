@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { AccountDeletionRequestGuide } from '../components/accountDeletion/AccountDeletionRequestGuide';
 import { PageMeta } from '../components/seo/PageMeta';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -39,7 +40,7 @@ export function AccountDeletionPage() {
   async function lookup(value: string) {
     setError('');
     setReceipt(null);
-    if (!/^[a-f\d]{64}$/i.test(value)) { setError('앱에서 받은 확인번호 64자리를 입력해주세요.'); return; }
+    if (!/^[a-f\d]{64}$/i.test(value)) { setError('앱이나 담당자 회신으로 받은 확인번호 64자리를 입력해주세요.'); return; }
     setLoading(true);
     try {
       setReceipt(await api.post<Receipt>('/api/account-deletion/receipt', { receiptToken: value }));
@@ -73,13 +74,15 @@ export function AccountDeletionPage() {
 
   return (
     <>
-      <PageMeta title="계정 삭제 처리 현황" canonicalPath="/account-deletion" noIndex />
+      <PageMeta title="계정 삭제 요청과 처리 현황" canonicalPath="/account-deletion" noIndex />
       <div className="mx-auto max-w-2xl space-y-8 px-5 py-14 sm:px-8 md:py-20">
         <header>
           <p className="text-xs font-semibold tracking-widest text-text-secondary">DFLH ACCOUNT</p>
-          <h1 className="mt-4 font-serif text-3xl font-semibold text-text-primary sm:text-4xl">계정 삭제 처리 현황</h1>
-          <p className="mt-5 leading-8 text-text-secondary">앱에서 받은 확인번호로 접수와 처리 결과를 확인하세요. 로그인은 필요하지 않습니다.</p>
+          <h1 className="mt-4 font-serif text-3xl font-semibold text-text-primary sm:text-4xl">계정 삭제 요청과 처리 현황</h1>
+          <p className="mt-5 leading-8 text-text-secondary">앱 없이 계정 삭제를 요청하는 방법과, 받은 확인번호로 처리 결과를 확인하는 방법을 안내합니다. 로그인은 필요하지 않습니다.</p>
         </header>
+        <AccountDeletionRequestGuide />
+        <h2 className="text-xl font-semibold text-text-primary">처리 현황 확인</h2>
         <form onSubmit={submit} className="space-y-4">
           <label htmlFor="deletion-receipt" className="block text-sm font-semibold text-text-primary">삭제 요청 확인번호</label>
           <input id="deletion-receipt" type="password" autoComplete="off" spellCheck={false} value={token} onChange={(event) => setToken(event.target.value)} maxLength={64} className="min-h-12 w-full rounded-md border border-border bg-surface px-4 text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-describedby="receipt-help" />

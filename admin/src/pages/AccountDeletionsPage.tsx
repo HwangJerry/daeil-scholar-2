@@ -1,6 +1,7 @@
 // AccountDeletionsPage — Deletion queue where operators review exact affected records before processing.
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AccountDeletionProxyIntake } from '../components/AccountDeletionProxyIntake';
 import { AccountErasurePreview } from '../components/AccountErasurePreview';
 import { AccountErasureReceiptWork } from '../components/AccountErasureReceiptWork';
 import { AccountErasureTargets } from '../components/AccountErasureTargets';
@@ -85,6 +86,7 @@ export function AccountDeletionsPage() {
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold text-dark-slate">계정 삭제 요청</h1>
       <p className="text-sm text-cool-gray">담당: 황제철 · ghkdwp018@gmail.com. 예약 시각 이후 자동 처리합니다. 최고 관리자는 ‘처리 대상 기록 검토’에서 탈퇴 시 삭제·익명화되는 기록을 직접 확인한 뒤 즉시 처리할 수 있습니다. 검토 후 처리하려면 먼저 자동 처리를 중지해 두세요. 실제 처리가 시작되기 전에는 사용자가 신청을 취소할 수 있고, 본인 확인 후 관리자 취소도 가능합니다. 취소·완료 이력은 다시 실행할 수 없습니다.</p>
+      <AccountDeletionProxyIntake />
       <label className="block text-sm text-dark-slate">상태{' '}
         <select value={status} onChange={(event) => { setStatus(event.target.value as DeletionStatus); setBefore(0); }} className="rounded-lg border border-border-light bg-surface p-2">
           {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}

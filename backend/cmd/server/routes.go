@@ -235,6 +235,7 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.With(mw.RootOnlyMiddleware).Get("/donation-archives", h.donationArchive.List)
 		r.With(mw.RootOnlyMiddleware).Post("/donation-archives/{id}/read", h.donationArchive.Read)
 		r.Get("/account-deletions", h.accountDeletion.List)
+		r.With(mw.RootOnlyMiddleware).Post("/account-deletions", h.accountDeletion.CreateOnBehalf)
 		r.With(mw.RootOnlyMiddleware).Get("/account-deletions/{id}/verification", h.accountDeletion.Verify)
 		r.With(mw.RootOnlyMiddleware).Get("/account-deletions/{id}/preview", h.accountDeletion.Preview)
 		r.With(mw.RootOnlyMiddleware).Put("/account-deletions/{id}", h.accountDeletion.Resolve)

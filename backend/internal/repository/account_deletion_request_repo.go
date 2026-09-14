@@ -37,6 +37,11 @@ func (r *AccountDeletionRequestRepository) Create(usrSeq int, receiptHash string
 }
 
 func (r *AccountDeletionRequestRepository) CreateCancelable(usrSeq int, receiptHash, cancelHash string) (model.AccountDeletionReceipt, error) {
+	return r.createReceipt(usrSeq, receiptHash, cancelHash, nil)
+}
+
+// createReceipt runs beforeCommit only for a newly created request, inside its transaction.
+func (r *AccountDeletionRequestRepository) createReceipt(usrSeq int, receiptHash, cancelHash string, beforeCommit func(*sqlx.Tx, model.AccountDeletionReceipt) error) (model.AccountDeletionReceipt, error) {
 	var result model.AccountDeletionReceipt
 	if r.WaitHours <= 0 || r.WaitHours > 24*30 {
 		return result, &model.ValidationError{Msg: "탈퇴 대기 기간 설정이 필요합니다."}
@@ -115,6 +120,11 @@ func (r *AccountDeletionRequestRepository) CreateCancelable(usrSeq int, receiptH
 	}
 	if _, err = tx.Exec(`INSERT IGNORE INTO ALUMNI_ERASURE_RECEIPT_WORK (REQUEST_ID,UPDATED_AT) VALUES (?,UTC_TIMESTAMP())`, result.ID); err != nil {
 		return result, err
+	}
+	if beforeCommit != nil {
+		if err = beforeCommit(tx, result); err != nil {
+			return result, err
+		}
 	}
 	normalizeDeletionReceiptTimes(&result)
 	return result, tx.Commit()

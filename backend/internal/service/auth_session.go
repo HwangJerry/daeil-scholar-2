@@ -90,6 +90,13 @@ func (s *AuthService) LogoutCurrent(w http.ResponseWriter, user *model.AuthUser,
 }
 
 func (s *AuthService) LogoutAll(w http.ResponseWriter, usrSeq int) error {
+	err := s.RevokeSessions(usrSeq)
+	s.clearSessionCookies(w)
+	return err
+}
+
+// RevokeSessions ends every session of a member without touching the caller's cookies.
+func (s *AuthService) RevokeSessions(usrSeq int) error {
 	var logoutErrors []error
 	if err := s.repo.DeleteLegacySessionsByUser(usrSeq); err != nil {
 		logoutErrors = append(logoutErrors, err)
@@ -100,7 +107,6 @@ func (s *AuthService) LogoutAll(w http.ResponseWriter, usrSeq int) error {
 	if err := s.repo.DeletePushDevicesByUser(usrSeq); err != nil {
 		logoutErrors = append(logoutErrors, err)
 	}
-	s.clearSessionCookies(w)
 	return errors.Join(logoutErrors...)
 }
 

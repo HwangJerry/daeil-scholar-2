@@ -61,3 +61,13 @@ export function fetchAccountDeletions(status: DeletionStatus, before: number) {
 export function resolveAccountDeletion(id: number, evidence: ReceiptWorkResolution | { action: 'automatic' | 'manual' | 'schedule' | 'retry_social' } | { action: 'cancel_verified'; evidenceReference: string } | { action: 'target'; target: string; targetStatus: 'manual' | 'complete' | 'not_applicable'; evidenceReference: string }) {
   return api.put<void>(`/api/admin/account-deletions/${id}`, evidence);
 }
+
+export interface ProxyIntakeResult {
+  receipt: AccountDeletion;
+  receiptToken: string;
+  cancelToken: string;
+}
+// Registers an emailed request after identity verification; tokens are shown once.
+export function createAccountDeletionOnBehalf(userSeq: number, evidenceReference: string) {
+  return api.post<ProxyIntakeResult>('/api/admin/account-deletions', { userSeq, evidenceReference });
+}
