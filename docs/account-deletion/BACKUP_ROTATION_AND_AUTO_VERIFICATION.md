@@ -50,6 +50,13 @@ cd /app/backend
 
 기부 기록이 되살아난 회원은 보존 결정이 필요해 멈춘다. 이 경우 담당자가 기부 보존 절차를 먼저 처리한다. 복원 백업에 들어 있던 탈퇴 요청의 상태는 관리자 화면에서 다시 확인한다.
 
+## 서버 설정 위치
+
+- 자동 확인 모드: `/etc/systemd/system/alumni-backend.service.d/99-zz-erasure-verify.conf`가 `/app/backend/erasure-verify.env`(`ACCOUNT_ERASURE_EXTERNAL_MODE=internal`)를 마지막에 읽어 `/etc/sysconfig/alumni-backend`의 `manual` 값을 덮어쓴다.
+- **5fef4b1 이전 빌드로 되돌릴 때는** 옛 빌드가 `internal` 값을 거부하므로 이 drop-in을 먼저 지우고 `systemctl daemon-reload` 한다.
+- 웹 서버 로그 순환 설정의 원본은 `/root/httpd.logrotate.before-maxage-20260914`에 있다.
+
 ## 적용 기록
 
-- 2026-09-14 도입. 적용 배포 번호와 서버 설정 적용 결과는 [사고 기록](INCIDENT_AND_RELEASE_2026-09-14.md)의 배포 기록에 남긴다.
+- 2026-09-14 도입. 배포 `20260914T045603Z-5fef4b173be1`(migration 068 적용), 자동 확인 모드 적용 후 탈퇴 스위치 원상 복구 확인.
+- 첫 주간 백업 `weekly-20260914T045147Z` 생성. 첫 정리에서 2019년 웹 서버 로그 10개 삭제.
