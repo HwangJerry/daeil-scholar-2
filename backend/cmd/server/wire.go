@@ -39,6 +39,8 @@ type deps struct {
 	blockedMessageCleanup  *job.BlockedMessageCleanupJob
 	pushDelivery           *service.PushDeliveryNotifier
 	socialRevocationWorker *job.SocialRevocationWorker
+	appUpdatePolicyService *service.AppUpdatePolicyService
+	appClientBuildService  *service.AppClientBuildService
 }
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
@@ -74,6 +76,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	visitRepo := repository.NewVisitRepository(db)
 	mobileAppEventRepo := repository.NewMobileAppEventRepository(db)
 	appSettingRepo := repository.NewAppSettingRepository(db)
+	appUpdatePolicyRepo := repository.NewAppUpdatePolicyRepository(db)
+	appClientBuildRepo := repository.NewAppClientBuildRepository(db)
 	canonicalPasswordReady, err := repository.CanonicalPasswordWriteReady(db)
 	if err != nil {
 		return nil, err
@@ -96,6 +100,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
 	socialLinkTokens := service.NewSocialLinkTokenStore(cacheStore)
 	appSettingService := service.NewAppSettingService(appSettingRepo, cacheStore)
+	appClientBuildService := service.NewAppClientBuildService(appClientBuildRepo, cacheStore, logger)
+	appUpdatePolicyService := service.NewAppUpdatePolicyService(appUpdatePolicyRepo, appSettingService, appClientBuildService)
 
 	realtimeHub := realtime.NewHub(logger)
 	var messageNotifier service.MessageNotifier = service.NewRealtimeMessageNotifier(realtimeHub)
@@ -242,6 +248,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		mobileAppEvent:      handler.NewMobileAppEventHandler(mobileAppEventService),
 		sentryMonitoring:    handler.NewSentryMonitoringHandler(sentryMonitoringService),
 		appSetting:          handler.NewAppSettingHandler(appSettingService),
+		adminAppUpdate:      handler.NewAdminAppUpdateHandler(appUpdatePolicyService, appClientBuildService),
 	}
 
 	seal, _ := service.DonationArchiveSealer(cfg.AccountErasure.ArchiveKey)
@@ -287,6 +294,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		blockedMessageCleanup:  blockedMessageCleanup,
 		pushDelivery:           pushDelivery,
 		socialRevocationWorker: socialRevocationWorker,
+		appUpdatePolicyService: appUpdatePolicyService,
+		appClientBuildService:  appClientBuildService,
 	}, nil
 }
 

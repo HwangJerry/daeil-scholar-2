@@ -63,10 +63,18 @@ type handlers struct {
 	mobileAppEvent      *handler.MobileAppEventHandler
 	sentryMonitoring    *handler.SentryMonitoringHandler
 	appSetting          *handler.AppSettingHandler
+	adminAppUpdate      *handler.AdminAppUpdateHandler
+}
+
+// appVersionGate carries what the minimum-build gate needs. A zero value leaves
+// the gate unmounted, which keeps route tests free of service wiring.
+type appVersionGate struct {
+	policies mw.AppUpdatePolicyProvider
+	observer mw.AppClientBuildObserver
 }
 
 // registerRoutes creates a chi.Router with all middleware and API routes.
-func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, logger zerolog.Logger) chi.Router {
+func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, logger zerolog.Logger, gate appVersionGate) chi.Router {
 	router := chi.NewRouter()
 	router.Use(mw.Recoverer(logger))
 	router.Use(mw.RequestLogger(logger))
@@ -83,7 +91,7 @@ func registerRoutes(h handlers, authService *service.AuthService, cacheStore *ca
 
 	// DISABLED 2026-04-28: external donation redirect (dangled — see /home/jerryhwang/.claude/plans/drifting-gliding-hopcroft.md).
 	// registerPGRoutes(router, h)
-	registerAPIRoutes(router, h, authService, cacheStore, allowedOrigins, cfg)
+	registerAPIRoutes(router, h, authService, cacheStore, allowedOrigins, cfg, gate)
 
 	return router
 }
@@ -98,14 +106,17 @@ func registerPGRoutes(router chi.Router, h handlers) {
 }
 
 // registerAPIRoutes registers all /api/* routes with CSRF protection.
-func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config) {
+func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, gate appVersionGate) {
 	router.Group(func(r chi.Router) {
 		r.Use(mw.MaxBodySize(defaultMaxBodySizeBytes))
 		r.Use(mw.CSRFMiddleware(allowedOrigins))
+		if gate.policies != nil {
+			r.Use(mw.AppVersionGate(gate.policies))
+		}
 
 		registerPublicRoutes(r, h, authService, cacheStore)
-		registerAuthRoutes(r, h, authService)
-		registerOptionalAuthRoutes(r, h, authService)
+		registerAuthRoutes(r, h, authService, gate.observer)
+		registerOptionalAuthRoutes(r, h, authService, gate.observer)
 		registerAdminRoutes(r, h, authService, cfg)
 	})
 
@@ -154,9 +165,10 @@ func registerPublicRoutes(r chi.Router, h handlers, authService *service.AuthSer
 }
 
 // registerAuthRoutes registers endpoints that require authentication.
-func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthService) {
+func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthService, buildObserver mw.AppClientBuildObserver) {
 	r.Group(func(r chi.Router) {
 		r.Use(mw.AuthMiddleware(authService))
+		r.Use(mw.AppClientBuildRecorder(buildObserver))
 		r.Get("/api/auth/me", h.auth.Me)
 		r.Get("/api/auth/account/connections", h.auth.GetAccountConnections)
 		r.Post("/api/auth/identities/link/{provider}", h.auth.LinkIdentity)
@@ -210,9 +222,10 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 }
 
 // registerOptionalAuthRoutes registers endpoints that work with or without auth.
-func registerOptionalAuthRoutes(r chi.Router, h handlers, authService *service.AuthService) {
+func registerOptionalAuthRoutes(r chi.Router, h handlers, authService *service.AuthService, buildObserver mw.AppClientBuildObserver) {
 	r.Group(func(r chi.Router) {
 		r.Use(mw.OptionalAuthMiddleware(authService))
+		r.Use(mw.AppClientBuildRecorder(buildObserver))
 		r.Get("/api/feed", h.feed.GetFeed)
 		r.Get("/api/feed/{seq}", h.feed.GetDetail)
 		r.Get("/api/feed/{seq}/siblings", h.feed.GetSiblings)
@@ -288,6 +301,10 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Get("/monitoring/performance-summary", h.sentryMonitoring.PerformanceSummary)
 		r.Get("/settings", h.appSetting.List)
 		r.Put("/settings/{key}", h.appSetting.Update)
+		r.Get("/app-update-policies", h.adminAppUpdate.ListPolicies)
+		r.Put("/app-update-policies/{platform}", h.adminAppUpdate.SavePolicy)
+		r.Get("/app-update-policies/{platform}/history", h.adminAppUpdate.ListHistory)
+		r.Get("/app-client-builds", h.adminAppUpdate.ListClientBuilds)
 		r.Get("/history", h.history.AdminList)
 		r.Post("/history", h.history.AdminCreate)
 		r.Put("/history/{seq}", h.history.AdminUpdate)

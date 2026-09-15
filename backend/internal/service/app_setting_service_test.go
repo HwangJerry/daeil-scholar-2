@@ -105,3 +105,46 @@ func TestAppSettingServiceValidatesKeyAndTextCapacity(t *testing.T) {
 		t.Fatalf("oversized value error = %v", err)
 	}
 }
+
+// Update policies carry cross-field rules and an audit trail, so the generic
+// settings endpoint must refuse them outright.
+func TestAppSettingServiceRefusesAppUpdatePolicyKeys(t *testing.T) {
+	store := &appSettingStoreStub{updateExists: true}
+	service := NewAppSettingService(store, cache.New(time.Minute, time.Minute))
+
+	err := service.UpdateValue("app_update_policy_ios", `{"forceEnabled":true}`, 7)
+
+	if !errors.Is(err, ErrAppSettingReadOnly) {
+		t.Fatalf("UpdateValue() error = %v, want ErrAppSettingReadOnly", err)
+	}
+}
+
+// AS_KEY uses a case-insensitive collation, so a differently cased key reaches
+// the same row and must hit the same guard.
+func TestAppSettingServiceRefusesPolicyKeysRegardlessOfCase(t *testing.T) {
+	store := &appSettingStoreStub{updateExists: true}
+	service := NewAppSettingService(store, cache.New(time.Minute, time.Minute))
+
+	for _, key := range []string{"App_Update_Policy_ios", "APP_UPDATE_POLICY_ANDROID"} {
+		if err := service.UpdateValue(key, "{}", 7); !errors.Is(err, ErrAppSettingReadOnly) {
+			t.Fatalf("UpdateValue(%q) error = %v, want ErrAppSettingReadOnly", key, err)
+		}
+	}
+}
+
+func TestAppSettingServiceInvalidatePublicCacheForcesReload(t *testing.T) {
+	store := &appSettingStoreStub{public: []model.AppSetting{{Key: "k", Value: "v"}}}
+	service := NewAppSettingService(store, cache.New(time.Minute, time.Minute))
+
+	if _, err := service.GetPublicSettings(); err != nil {
+		t.Fatal(err)
+	}
+	service.InvalidatePublicSettingsCache()
+	if _, err := service.GetPublicSettings(); err != nil {
+		t.Fatal(err)
+	}
+
+	if store.publicListCalls != 2 {
+		t.Fatalf("public list calls = %d, want 2", store.publicListCalls)
+	}
+}

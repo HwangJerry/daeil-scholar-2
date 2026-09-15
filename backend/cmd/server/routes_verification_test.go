@@ -12,7 +12,7 @@ import (
 
 func TestAuthenticatedRoutesIncludeAlumniVerificationEndpoints(t *testing.T) {
 	router := chi.NewRouter()
-	registerAuthRoutes(router, handlers{}, nil)
+	registerAuthRoutes(router, handlers{}, nil, nil)
 
 	found := map[string]bool{}
 	if err := chi.Walk(router, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
@@ -34,7 +34,7 @@ func TestAuthenticatedRoutesIncludeAlumniVerificationEndpoints(t *testing.T) {
 
 func TestAuthenticatedRoutesIncludeIdentityLinkEndpoint(t *testing.T) {
 	router := chi.NewRouter()
-	registerAuthRoutes(router, handlers{}, nil)
+	registerAuthRoutes(router, handlers{}, nil, nil)
 
 	found := routesForTest(t, router)
 	route := http.MethodPost + " /api/auth/identities/link/{provider}"
@@ -51,7 +51,7 @@ func TestAlumniWidgetIsMountedOnlyInApprovedAuthenticatedRoutes(t *testing.T) {
 	}
 
 	authenticatedRouter := chi.NewRouter()
-	registerAuthRoutes(authenticatedRouter, handlers{}, nil)
+	registerAuthRoutes(authenticatedRouter, handlers{}, nil, nil)
 	if !routesForTest(t, authenticatedRouter)[http.MethodGet+" /api/alumni/widget"] {
 		t.Fatal("widget is not mounted in authenticated routes")
 	}
@@ -59,7 +59,7 @@ func TestAlumniWidgetIsMountedOnlyInApprovedAuthenticatedRoutes(t *testing.T) {
 
 func TestApprovedRoutesIncludeCanonicalAlumniSearchEndpoints(t *testing.T) {
 	router := chi.NewRouter()
-	registerAuthRoutes(router, handlers{}, nil)
+	registerAuthRoutes(router, handlers{}, nil, nil)
 	found := routesForTest(t, router)
 
 	for _, route := range []string{
@@ -76,7 +76,7 @@ func TestApprovedRoutesIncludeCanonicalAlumniSearchEndpoints(t *testing.T) {
 
 func TestApprovedRoutesIncludeCanonicalMemberBlockEndpoints(t *testing.T) {
 	router := chi.NewRouter()
-	registerAuthRoutes(router, handlers{}, nil)
+	registerAuthRoutes(router, handlers{}, nil, nil)
 	found := routesForTest(t, router)
 
 	for _, route := range []string{
@@ -93,7 +93,7 @@ func TestApprovedRoutesIncludeCanonicalMemberBlockEndpoints(t *testing.T) {
 
 func TestApprovedRoutesIncludeCanonicalPushEndpoints(t *testing.T) {
 	router := chi.NewRouter()
-	registerAuthRoutes(router, handlers{}, nil)
+	registerAuthRoutes(router, handlers{}, nil, nil)
 	found := routesForTest(t, router)
 
 	for _, route := range []string{
@@ -145,6 +145,29 @@ func TestAppSettingRoutesSeparatePublicReadFromAdminManagement(t *testing.T) {
 		}
 		if !adminRoutes[route] {
 			t.Fatalf("admin app settings route is missing: %s", route)
+		}
+	}
+}
+
+func TestAppUpdatePolicyRoutesAreAdminOnly(t *testing.T) {
+	publicRouter := chi.NewRouter()
+	registerPublicRoutes(publicRouter, handlers{}, nil, cache.New(0, 0))
+	adminRouter := chi.NewRouter()
+	registerAdminRoutes(adminRouter, handlers{}, nil, nil)
+
+	publicRoutes := routesForTest(t, publicRouter)
+	adminRoutes := routesForTest(t, adminRouter)
+	for _, route := range []string{
+		http.MethodGet + " /api/admin/app-update-policies",
+		http.MethodPut + " /api/admin/app-update-policies/{platform}",
+		http.MethodGet + " /api/admin/app-update-policies/{platform}/history",
+		http.MethodGet + " /api/admin/app-client-builds",
+	} {
+		if publicRoutes[route] {
+			t.Fatalf("app update policy route is public: %s", route)
+		}
+		if !adminRoutes[route] {
+			t.Fatalf("app update policy route is missing: %s", route)
 		}
 	}
 }
@@ -201,7 +224,7 @@ func routesForTest(t *testing.T, router chi.Router) map[string]bool {
 
 func TestWaitingMembersCanRegisterPushWithoutAlumniApproval(t *testing.T) {
 	router := chi.NewRouter()
-	registerAuthRoutes(router, handlers{}, nil)
+	registerAuthRoutes(router, handlers{}, nil, nil)
 	var checked int
 	err := chi.Walk(router, func(method, route string, _ http.Handler, chain ...func(http.Handler) http.Handler) error {
 		if method != http.MethodPost || (route != "/api/push/device/register" && route != "/api/push/device/unregister") {

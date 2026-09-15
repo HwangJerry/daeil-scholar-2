@@ -65,6 +65,8 @@ func (h *AppSettingHandler) Update(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	case errors.Is(err, service.ErrInvalidAppSettingKey), errors.Is(err, service.ErrInvalidAppSettingValue):
 		respondError(w, http.StatusBadRequest, "INVALID_SETTING", err.Error())
+	case errors.Is(err, service.ErrAppSettingReadOnly):
+		respondError(w, http.StatusBadRequest, "READ_ONLY_SETTING", "이 설정은 전용 관리 화면에서만 수정할 수 있습니다")
 	case errors.Is(err, service.ErrAppSettingNotFound):
 		respondError(w, http.StatusNotFound, "SETTING_NOT_FOUND", "App setting not found")
 	default:
