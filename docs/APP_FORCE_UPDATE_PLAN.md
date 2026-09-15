@@ -8,9 +8,9 @@
 
 ### 현재 상태 (2026-09-15)
 
-- **단계: Phase 1(백엔드) 구현 완료, 커밋 전.** 작업 브랜치 `feat/app-force-update-backend` (`dflh-saf-v2` 저장소)
-- `go build ./...`, `go vet ./...`, `go test ./...` 전부 통과
-- 다음은 Phase 2(관리자 화면) 또는 Phase 3~5(앱). 서로 병렬 가능
+- **단계: Phase 1(백엔드) 커밋 완료(`875de7f`), Phase 2(관리자 화면) 구현 완료·커밋 전.** 작업 브랜치 `feat/app-force-update-backend` (`dflh-saf-v2` 저장소)
+- 백엔드: `go build`/`go vet`/`go test ./...` 통과. 관리자: `tsc -b`, `npm run lint`, `npm run test`(17파일 66테스트), `npm run build` 통과
+- 다음은 Phase 3~5(앱). Android와 iOS는 서로 병렬 가능
 - 앱은 아직 출시 전이고 배포된 구버전이 없다. **심사를 통과한 현재 빌드는 출시하지 않고 보류**하며, 게이트가 들어간 빌드를 첫 공개 릴리스로 낸다 (D15)
 - 따라서 게이트 없는 사용자는 처음부터 존재하지 않는다. 8절의 구버전 대응 선택지는 모두 불필요해졌다
 
@@ -81,9 +81,34 @@
 - `updatedAt`이 비어 있으면(제로값) 저장을 거부한다. 동시 수정 검사가 통째로 건너뛰어지기 때문이다
 - 한쪽 플랫폼 행이 깨져도 다른 쪽은 조회된다(`unavailable` 표시). 강제 잠금을 끄는 경로가 막히면 안 된다
 
+### Phase 2에서 실제로 만든 것 (2026-09-16)
+
+| 파일 | 역할 |
+|---|---|
+| `admin/src/types/appUpdate.ts` | 정책·이력·관측 빌드 타입 |
+| `admin/src/api/appUpdate.ts` | 관리자 API 4개 호출 |
+| `admin/src/lib/appUpdatePolicyErrors.ts` | 필드 오류 추출과 상황별 안내 문구 |
+| `admin/src/hooks/useAppUpdatePolicies.ts` 외 3개 | 정책·빌드·이력 조회, 저장 뮤테이션 |
+| `admin/src/components/appUpdate/PlatformPolicyCard.tsx` | 플랫폼 하나의 독립 폼 |
+| `admin/src/components/appUpdate/BuildSelect.tsx` | 관측 빌드 선택 + 직접 입력(경고 표시) |
+| `admin/src/components/appUpdate/PolicyChangeConfirmDialog.tsx` | 배포 완료 체크 전 저장 불가 |
+| `admin/src/components/appUpdate/PolicyHistoryList.tsx` | 펼칠 때 이력 조회 |
+| `admin/src/pages/AppUpdatePolicyPage.tsx` | `/app-update` 화면 |
+
+기존 파일 변경: `api/client.ts`(오류 본문 `payload` 보존 — 백엔드의 `details.fields`를 읽기 위해), `routes.tsx`, `navItems.ts`, `AdminSidebar.tsx`, `AppSettingsPage.tsx`(정책 키 숨김).
+
+구현하며 확정한 세부 사항:
+
+- 카드 `key`에 `updatedAt`을 넣어, 저장 후 최신 값으로 폼이 자연스럽게 리셋되게 했다
+- 빌드를 직접 입력하면 `allowUnobservedBuild`가 자동으로 켜진다. 경고 문구도 함께 표시한다
+- 확인 다이얼로그는 **강제를 새로 켤 때와 최소 빌드를 올릴 때만** 뜬다. 끄거나 낮추는 건 즉시 저장된다
+- 한쪽 정책 행이 깨져도 다른 쪽 카드는 정상 동작한다
+- 저장 요청에 `expectedPolicy`(관리자가 보고 있던 정책)를 함께 보낸다. `UPDATED_AT`이 초 단위라 같은 초에 들어온 동시 수정은 타임스탬프만으로 구분할 수 없다
+- 빌드 선택은 "직접 입력했는지"가 아니라 "실제로 관측된 적 없는 값인지"로 `allowUnobservedBuild`를 정한다. 그래야 서버의 미관측 빌드 검증이 실제로 동작한다
+
 ### 다음 작업
 
-1. Phase 2(관리자 화면) 또는 Phase 3~5(앱). 서로 병렬 가능하다
+1. Phase 3~5(앱). Android(Phase 4)와 iOS(Phase 5)는 서로 병렬 가능하다
 2. 배포 시 8.1절의 마이그레이션 승인 절차를 반드시 함께 처리한다
 3. O1(iOS 숫자 App ID)은 첫 출시 빌드를 제출하기 전까지 확보하면 된다. O3~O5는 해당 Phase 착수 전에 정한다
 4. 출시는 Phase 1~5가 모두 끝난 뒤다 (D16). 그때까지 심사 통과 빌드는 출시하지 않고 보류한다 (D15)
@@ -102,6 +127,8 @@
 | 날짜 | 내용 |
 |---|---|
 | 2026-09-15 | 최초 작성. 관리자 활성화/버전 기준 관리, 플랫폼별 개별 관리, 권장·OS 미지원 안내 UX, 심사 중 빌드 반영 |
+| 2026-09-16 | Phase 2 코드 리뷰 반영: 같은 초 동시 수정 감지(`expectedPolicy`), 미관측 빌드 판정 정확화, 직접 입력 필드 유지, 버전명 덮어쓰기 방지, 관측 실패 시 스로틀 미적용 |
+| 2026-09-16 | Phase 2(관리자 화면) 구현 완료 |
 | 2026-09-16 | Phase 1 코드 리뷰 반영: 빌드 관측을 인증 요청으로 제한, 정책 키 거부 대소문자 무시, Android API 레벨 검증, 제로 `updatedAt` 거부, `ListPolicies` 부분 실패 허용 |
 | 2026-09-16 | Phase 1(백엔드) 구현 완료. 마이그레이션 승인 다이제스트 갱신 |
 | 2026-09-15 | 첫 출시 전략 확정(D15~D17): 심사 통과 빌드 보류, Phase 1~5 완료 후 게이트 포함 빌드로 첫 출시, 단계적 출시 미사용. iOS `storeUrl` 처리 방식 확정(D18)으로 O1/O2 해소 |

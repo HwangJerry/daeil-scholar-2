@@ -18,6 +18,7 @@ import { DonationMonitorPage } from './pages/DonationMonitorPage.tsx';
 import { HistoryManagePage } from './pages/HistoryManagePage.tsx';
 import { AppMonitoringPage } from './pages/AppMonitoringPage.tsx';
 import { AppSettingsPage } from './pages/AppSettingsPage.tsx';
+import { AppUpdatePolicyPage } from './pages/AppUpdatePolicyPage.tsx';
 import { CommentReportsPage } from './pages/CommentReportsPage';
 import { MessageReportsPage } from './pages/MessageReportsPage';
 import { AccountDeletionsPage } from './pages/AccountDeletionsPage';
@@ -54,6 +55,7 @@ export function AppRoutes() {
         <Route path="donation" element={<DonationMonitorPage />} />
         <Route path="app-monitoring" element={<AppMonitoringPage />} />
         <Route path="app-settings" element={<AppSettingsPage />} />
+        <Route path="app-update" element={<AppUpdatePolicyPage />} />
         <Route path="comment-reports" element={<CommentReportsPage />} />
         <Route path="message-reports" element={<MessageReportsPage />} />
         <Route path="account-deletions" element={<AccountDeletionsPage />} />
