@@ -29,13 +29,19 @@ func (r *AppUpdatePolicyRepository) GetPolicySetting(key string) (model.AppSetti
 
 // SavePolicy replaces the policy and records the change in one transaction.
 //
-// The row is locked and its UPDATED_AT compared with the value the administrator
-// read; a mismatch reports a conflict and writes nothing, so a concurrent edit is
-// never silently overwritten. A zero expectedUpdatedAt skips that check.
+// The row is locked, and both its UPDATED_AT and its stored value are compared
+// with what the administrator read; a mismatch reports a conflict and writes
+// nothing, so a concurrent edit is never silently overwritten. The value check
+// matters because UPDATED_AT is a DATETIME with one-second precision: two saves
+// inside the same second would otherwise look identical.
+//
+// A zero expectedUpdatedAt skips the timestamp check; a nil storedValueMatches
+// skips the value check.
 func (r *AppUpdatePolicyRepository) SavePolicy(
 	key, platform, afterJSON string,
 	updatedBy int,
 	expectedUpdatedAt time.Time,
+	storedValueMatches func(storedJSON string) bool,
 ) (bool, error) {
 	tx, err := r.db.Beginx()
 	if err != nil {
@@ -56,6 +62,9 @@ func (r *AppUpdatePolicyRepository) SavePolicy(
 		return false, err
 	}
 	if !expectedUpdatedAt.IsZero() && !current.UpdatedAt.Equal(expectedUpdatedAt) {
+		return true, nil
+	}
+	if storedValueMatches != nil && !storedValueMatches(current.Value) {
 		return true, nil
 	}
 

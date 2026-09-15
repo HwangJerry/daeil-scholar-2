@@ -21,6 +21,7 @@ type appUpdatePolicyStoreStub struct {
 	savedJSON     string
 	savedBy       int
 	savedExpected time.Time
+	savedMatcher  func(storedJSON string) bool
 	history       []model.AppUpdatePolicyHistoryEntry
 }
 
@@ -32,9 +33,18 @@ func (s *appUpdatePolicyStoreStub) GetPolicySetting(key string) (model.AppSettin
 	return setting, nil
 }
 
-func (s *appUpdatePolicyStoreStub) SavePolicy(key, platform, afterJSON string, updatedBy int, expectedUpdatedAt time.Time) (bool, error) {
+func (s *appUpdatePolicyStoreStub) SavePolicy(
+	key, platform, afterJSON string,
+	updatedBy int,
+	expectedUpdatedAt time.Time,
+	storedValueMatches func(storedJSON string) bool,
+) (bool, error) {
 	s.saveCalls++
+	s.savedMatcher = storedValueMatches
 	if s.conflict {
+		return true, nil
+	}
+	if storedValueMatches != nil && !storedValueMatches(s.settings[key].Value) {
 		return true, nil
 	}
 	s.savedKey, s.savedPlatform, s.savedJSON = key, platform, afterJSON
@@ -126,7 +136,7 @@ func TestAppUpdatePolicyServiceRejectsUnknownPlatform(t *testing.T) {
 	if _, err := service.GetPolicy("windows"); !errors.Is(err, ErrUnsupportedAppUpdatePlatform) {
 		t.Fatalf("GetPolicy() error = %v", err)
 	}
-	if err := service.SavePolicy("windows", enabledIOSPolicy(), time.Now(), false, 1); !errors.Is(err, ErrUnsupportedAppUpdatePlatform) {
+	if err := service.SavePolicy(SaveAppUpdatePolicyInput{Platform: "windows", Policy: enabledIOSPolicy(), ExpectedUpdatedAt: time.Now(), UpdatedBy: 1}); !errors.Is(err, ErrUnsupportedAppUpdatePlatform) {
 		t.Fatalf("SavePolicy() error = %v", err)
 	}
 }
@@ -135,7 +145,12 @@ func TestAppUpdatePolicyServiceSaveWritesOnePlatformAndInvalidatesCache(t *testi
 	service, store, settings := newPolicyServiceFixture()
 	expected := store.settings["app_update_policy_ios"].UpdatedAt
 
-	if err := service.SavePolicy(model.AppPlatformIOS, enabledIOSPolicy(), expected, false, 7); err != nil {
+	if err := service.SavePolicy(SaveAppUpdatePolicyInput{
+		Platform:          model.AppPlatformIOS,
+		Policy:            enabledIOSPolicy(),
+		ExpectedUpdatedAt: expected,
+		UpdatedBy:         7,
+	}); err != nil {
 		t.Fatalf("SavePolicy() error = %v", err)
 	}
 
@@ -166,7 +181,12 @@ func TestAppUpdatePolicyServiceSaveOmitsEmptyStoreURL(t *testing.T) {
 		MinOSVersion: "26",
 	}
 
-	if err := service.SavePolicy(model.AppPlatformAndroid, policy, store.settings["app_update_policy_android"].UpdatedAt, false, 7); err != nil {
+	if err := service.SavePolicy(SaveAppUpdatePolicyInput{
+		Platform:          model.AppPlatformAndroid,
+		Policy:            policy,
+		ExpectedUpdatedAt: store.settings["app_update_policy_android"].UpdatedAt,
+		UpdatedBy:         7,
+	}); err != nil {
 		t.Fatalf("SavePolicy() error = %v", err)
 	}
 	if strings.Contains(store.savedJSON, "storeUrl") {
@@ -178,7 +198,12 @@ func TestAppUpdatePolicyServiceSaveReportsConflictWithoutInvalidatingCache(t *te
 	service, store, settings := newPolicyServiceFixture()
 	store.conflict = true
 
-	err := service.SavePolicy(model.AppPlatformIOS, enabledIOSPolicy(), time.Now(), false, 7)
+	err := service.SavePolicy(SaveAppUpdatePolicyInput{
+		Platform:          model.AppPlatformIOS,
+		Policy:            enabledIOSPolicy(),
+		ExpectedUpdatedAt: time.Now(),
+		UpdatedBy:         7,
+	})
 
 	if !errors.Is(err, ErrAppUpdatePolicyConflict) {
 		t.Fatalf("SavePolicy() error = %v", err)
@@ -193,7 +218,12 @@ func TestAppUpdatePolicyServiceSaveRejectsInvalidPolicyBeforeWriting(t *testing.
 	policy := enabledIOSPolicy()
 	policy.MinBuild = 999999999999
 
-	err := service.SavePolicy(model.AppPlatformIOS, policy, time.Now(), false, 7)
+	err := service.SavePolicy(SaveAppUpdatePolicyInput{
+		Platform:          model.AppPlatformIOS,
+		Policy:            policy,
+		ExpectedUpdatedAt: time.Now(),
+		UpdatedBy:         7,
+	})
 
 	var validation *AppUpdatePolicyValidationError
 	if !errors.As(err, &validation) {
@@ -270,5 +300,49 @@ func TestAppUpdatePolicyServiceListHistoryFiltersByPlatform(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Platform != model.AppPlatformIOS {
 		t.Fatalf("entries = %#v", entries)
+	}
+}
+
+// UPDATED_AT has one-second precision, so a save landing in the same second as
+// another administrator's must still be caught by the stored value.
+func TestAppUpdatePolicyServiceDetectsSameSecondConflictThroughStoredPolicy(t *testing.T) {
+	service, store, settings := newPolicyServiceFixture()
+	stale := model.AppUpdatePolicy{MinOSVersion: "17.0", StoreURL: "https://apps.apple.com/app/id1234567890"}
+	updatedAt := store.settings["app_update_policy_ios"].UpdatedAt
+
+	// Someone else already saved a different policy within the same second.
+	current := store.settings["app_update_policy_ios"]
+	current.Value = `{"forceEnabled":true,"minBuild":202609151230,"recommendEnabled":false,"recommendedBuild":0,"minOsVersion":"17.0","storeUrl":"https://apps.apple.com/app/id1"}`
+	store.settings["app_update_policy_ios"] = current
+
+	err := service.SavePolicy(SaveAppUpdatePolicyInput{
+		Platform:          model.AppPlatformIOS,
+		Policy:            enabledIOSPolicy(),
+		ExpectedUpdatedAt: updatedAt,
+		ExpectedPolicy:    &stale,
+		UpdatedBy:         7,
+	})
+
+	if !errors.Is(err, ErrAppUpdatePolicyConflict) {
+		t.Fatalf("SavePolicy() error = %v, want conflict", err)
+	}
+	if settings.invalidations != 0 {
+		t.Fatalf("cache invalidations = %d, want 0", settings.invalidations)
+	}
+}
+
+func TestAppUpdatePolicyServiceSkipsValueCheckWithoutExpectedPolicy(t *testing.T) {
+	service, store, _ := newPolicyServiceFixture()
+
+	if err := service.SavePolicy(SaveAppUpdatePolicyInput{
+		Platform:          model.AppPlatformIOS,
+		Policy:            enabledIOSPolicy(),
+		ExpectedUpdatedAt: store.settings["app_update_policy_ios"].UpdatedAt,
+		UpdatedBy:         7,
+	}); err != nil {
+		t.Fatalf("SavePolicy() error = %v", err)
+	}
+	if store.savedMatcher != nil {
+		t.Fatal("value matcher was sent without an expected policy")
 	}
 }

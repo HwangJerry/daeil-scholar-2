@@ -14,7 +14,7 @@ import (
 
 type AppUpdatePolicyServicer interface {
 	ListPolicies() ([]model.AppUpdatePolicyRecord, error)
-	SavePolicy(platform string, policy model.AppUpdatePolicy, expectedUpdatedAt time.Time, allowUnobservedBuild bool, updatedBy int) error
+	SavePolicy(input service.SaveAppUpdatePolicyInput) error
 	ListHistory(platform string) ([]model.AppUpdatePolicyHistoryEntry, error)
 }
 
@@ -49,6 +49,9 @@ type saveAppUpdatePolicyRequest struct {
 	// UpdatedAt is the value last read by the administrator. It makes concurrent
 	// edits fail loudly instead of silently overwriting each other.
 	UpdatedAt *time.Time `json:"updatedAt"`
+	// ExpectedPolicy is the policy the administrator was editing. It catches a
+	// concurrent save that lands within the same second as their own read.
+	ExpectedPolicy *model.AppUpdatePolicy `json:"expectedPolicy"`
 	// AllowUnobservedBuild confirms a threshold the API has never seen from this
 	// platform, which the administrator must opt into explicitly.
 	AllowUnobservedBuild bool `json:"allowUnobservedBuild"`
@@ -67,13 +70,14 @@ func (h *AdminAppUpdateHandler) SavePolicy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err := h.policies.SavePolicy(
-		chi.URLParam(r, "platform"),
-		*request.Policy,
-		*request.UpdatedAt,
-		request.AllowUnobservedBuild,
-		user.USRSeq,
-	)
+	err := h.policies.SavePolicy(service.SaveAppUpdatePolicyInput{
+		Platform:             chi.URLParam(r, "platform"),
+		Policy:               *request.Policy,
+		ExpectedUpdatedAt:    *request.UpdatedAt,
+		ExpectedPolicy:       request.ExpectedPolicy,
+		AllowUnobservedBuild: request.AllowUnobservedBuild,
+		UpdatedBy:            user.USRSeq,
+	})
 	if err != nil {
 		respondAppUpdateError(w, err)
 		return

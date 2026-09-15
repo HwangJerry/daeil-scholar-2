@@ -16,32 +16,21 @@ import (
 )
 
 type appUpdatePolicyServiceStub struct {
-	records              []model.AppUpdatePolicyRecord
-	entries              []model.AppUpdatePolicyHistoryEntry
-	saveErr              error
-	listErr              error
-	savedPlatform        string
-	savedPolicy          model.AppUpdatePolicy
-	savedUpdatedAt       time.Time
-	savedAllowUnobserved bool
-	savedBy              int
-	saveCalls            int
+	records    []model.AppUpdatePolicyRecord
+	entries    []model.AppUpdatePolicyHistoryEntry
+	saveErr    error
+	listErr    error
+	savedInput service.SaveAppUpdatePolicyInput
+	saveCalls  int
 }
 
 func (s *appUpdatePolicyServiceStub) ListPolicies() ([]model.AppUpdatePolicyRecord, error) {
 	return s.records, s.listErr
 }
 
-func (s *appUpdatePolicyServiceStub) SavePolicy(
-	platform string,
-	policy model.AppUpdatePolicy,
-	expectedUpdatedAt time.Time,
-	allowUnobservedBuild bool,
-	updatedBy int,
-) error {
+func (s *appUpdatePolicyServiceStub) SavePolicy(input service.SaveAppUpdatePolicyInput) error {
 	s.saveCalls++
-	s.savedPlatform, s.savedPolicy = platform, policy
-	s.savedUpdatedAt, s.savedAllowUnobserved, s.savedBy = expectedUpdatedAt, allowUnobservedBuild, updatedBy
+	s.savedInput = input
 	return s.saveErr
 }
 
@@ -60,7 +49,7 @@ func (s *appClientBuildServiceStub) List(platform string) ([]model.AppClientBuil
 	return s.builds, s.err
 }
 
-const savePolicyBody = `{"policy":{"forceEnabled":true,"minBuild":202609151230,"recommendEnabled":false,"recommendedBuild":0,"minOsVersion":"17.0","storeUrl":"https://apps.apple.com/app/id1"},"updatedAt":"2026-09-16T10:00:00Z","allowUnobservedBuild":true}`
+const savePolicyBody = `{"policy":{"forceEnabled":true,"minBuild":202609151230,"recommendEnabled":false,"recommendedBuild":0,"minOsVersion":"17.0","storeUrl":"https://apps.apple.com/app/id1"},"expectedPolicy":{"forceEnabled":false,"minBuild":202609151000,"recommendEnabled":false,"recommendedBuild":0,"minOsVersion":"17.0","storeUrl":"https://apps.apple.com/app/id1"},"updatedAt":"2026-09-16T10:00:00Z","allowUnobservedBuild":true}`
 
 func savePolicyRouter(handler *AdminAppUpdateHandler) chi.Router {
 	router := chi.NewRouter()
@@ -106,15 +95,19 @@ func TestAdminAppUpdateHandlerSavesOnePlatformWithOperatorAndPrecondition(t *tes
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
-	if policies.savedPlatform != model.AppPlatformIOS || policies.savedBy != 7 || !policies.savedAllowUnobserved {
+	saved := policies.savedInput
+	if saved.Platform != model.AppPlatformIOS || saved.UpdatedBy != 7 || !saved.AllowUnobservedBuild {
 		t.Fatalf("saved platform = %q, operator = %d, allowUnobserved = %t",
-			policies.savedPlatform, policies.savedBy, policies.savedAllowUnobserved)
+			saved.Platform, saved.UpdatedBy, saved.AllowUnobservedBuild)
 	}
-	if !policies.savedPolicy.ForceEnabled || policies.savedPolicy.MinBuild != 202609151230 {
-		t.Fatalf("saved policy = %#v", policies.savedPolicy)
+	if !saved.Policy.ForceEnabled || saved.Policy.MinBuild != 202609151230 {
+		t.Fatalf("saved policy = %#v", saved.Policy)
 	}
-	if !policies.savedUpdatedAt.Equal(time.Date(2026, 9, 16, 10, 0, 0, 0, time.UTC)) {
-		t.Fatalf("saved updatedAt = %v", policies.savedUpdatedAt)
+	if !saved.ExpectedUpdatedAt.Equal(time.Date(2026, 9, 16, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("saved updatedAt = %v", saved.ExpectedUpdatedAt)
+	}
+	if saved.ExpectedPolicy == nil || saved.ExpectedPolicy.MinBuild != 202609151000 {
+		t.Fatalf("expected policy = %#v", saved.ExpectedPolicy)
 	}
 }
 

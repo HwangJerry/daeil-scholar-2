@@ -23,9 +23,14 @@ var (
 // together or not at all.
 type AppUpdatePolicyStore interface {
 	GetPolicySetting(key string) (model.AppSetting, error)
-	// SavePolicy reports whether the row changed since expectedUpdatedAt was read;
+	// SavePolicy reports whether the row changed since the administrator read it;
 	// a conflict writes nothing.
-	SavePolicy(key, platform, afterJSON string, updatedBy int, expectedUpdatedAt time.Time) (bool, error)
+	SavePolicy(
+		key, platform, afterJSON string,
+		updatedBy int,
+		expectedUpdatedAt time.Time,
+		storedValueMatches func(storedJSON string) bool,
+	) (bool, error)
 	ListHistory(platform string, limit int) ([]model.AppUpdatePolicyHistoryEntry, error)
 }
 
@@ -92,33 +97,43 @@ func (s *AppUpdatePolicyService) ListPolicies() ([]model.AppUpdatePolicyRecord, 
 	return records, nil
 }
 
-// SavePolicy validates and stores one platform's policy. expectedUpdatedAt is the
-// UPDATED_AT the administrator last read; a mismatch means someone else saved
-// first and the write is refused instead of overwriting their change.
-func (s *AppUpdatePolicyService) SavePolicy(
-	platform string,
-	policy model.AppUpdatePolicy,
-	expectedUpdatedAt time.Time,
-	allowUnobservedBuild bool,
-	updatedBy int,
-) error {
+// SaveAppUpdatePolicyInput is one administrator's submission for one platform.
+type SaveAppUpdatePolicyInput struct {
+	Platform string
+	Policy   model.AppUpdatePolicy
+	// ExpectedUpdatedAt is the UPDATED_AT the administrator last read.
+	ExpectedUpdatedAt time.Time
+	// ExpectedPolicy is the policy they were looking at while editing. It catches
+	// a concurrent save landing in the same second, which the one-second
+	// UPDATED_AT precision cannot distinguish. Nil skips the check.
+	ExpectedPolicy *model.AppUpdatePolicy
+	// AllowUnobservedBuild confirms a threshold no client has reported yet.
+	AllowUnobservedBuild bool
+	UpdatedBy            int
+}
+
+// SavePolicy validates and stores one platform's policy. A save is refused when
+// the stored row changed since the administrator read it, rather than
+// overwriting the other person's change.
+func (s *AppUpdatePolicyService) SavePolicy(input SaveAppUpdatePolicyInput) error {
+	platform := input.Platform
 	if !model.IsSupportedAppPlatform(platform) {
 		return ErrUnsupportedAppUpdatePlatform
 	}
 
 	latestObservedBuild := int64(0)
-	if !allowUnobservedBuild {
+	if !input.AllowUnobservedBuild {
 		observed, err := s.builds.LatestBuild(platform)
 		if err != nil {
 			return err
 		}
 		latestObservedBuild = observed
 	}
-	if err := ValidateAppUpdatePolicy(platform, policy, latestObservedBuild, allowUnobservedBuild); err != nil {
+	if err := ValidateAppUpdatePolicy(platform, input.Policy, latestObservedBuild, input.AllowUnobservedBuild); err != nil {
 		return err
 	}
 
-	encoded, err := json.Marshal(policy)
+	encoded, err := json.Marshal(input.Policy)
 	if err != nil {
 		return err
 	}
@@ -126,8 +141,9 @@ func (s *AppUpdatePolicyService) SavePolicy(
 		model.AppUpdatePolicyKey(platform),
 		platform,
 		string(encoded),
-		updatedBy,
-		expectedUpdatedAt,
+		input.UpdatedBy,
+		input.ExpectedUpdatedAt,
+		storedPolicyMatcher(input.ExpectedPolicy),
 	)
 	if err != nil {
 		return translateAppUpdatePolicyStoreError(err)
@@ -165,6 +181,19 @@ func (s *AppUpdatePolicyService) getPolicyRecord(platform string) (model.AppUpda
 		UpdatedAt: setting.UpdatedAt,
 		UpdatedBy: setting.UpdatedBy,
 	}, nil
+}
+
+// storedPolicyMatcher reports whether the stored value is still the policy the
+// administrator was editing. An undecodable row never matches, so a broken row
+// is repaired through the database rather than silently overwritten.
+func storedPolicyMatcher(expected *model.AppUpdatePolicy) func(string) bool {
+	if expected == nil {
+		return nil
+	}
+	return func(storedJSON string) bool {
+		stored, err := decodeAppUpdatePolicy(storedJSON)
+		return err == nil && stored == *expected
+	}
 }
 
 // translateAppUpdatePolicyStoreError turns a missing row into a domain error so

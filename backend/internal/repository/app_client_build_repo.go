@@ -26,7 +26,9 @@ func (r *AppClientBuildRepository) Upsert(platform string, build int64, versionN
 			PLATFORM, BUILD, VERSION_NAME, FIRST_SEEN_AT, LAST_SEEN_AT
 		) VALUES (?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
-			VERSION_NAME = VALUES(VERSION_NAME),
+			-- A request without X-App-Version must not erase a recorded name:
+			-- the admin picker shows it instead of a bare build number.
+			VERSION_NAME = IF(VALUES(VERSION_NAME) = '', VERSION_NAME, VALUES(VERSION_NAME)),
 			LAST_SEEN_AT = VALUES(LAST_SEEN_AT)
 	`, platform, build, versionName, seenAt, seenAt)
 	return err

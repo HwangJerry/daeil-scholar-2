@@ -101,6 +101,21 @@ func TestAppClientBuildServiceSwallowsStoreFailures(t *testing.T) {
 	service.Observe(model.AppPlatformIOS, 10, "1.0.0")
 }
 
+// A transient write failure must not hide a brand-new build for the whole
+// throttle window: during a rollout that build is what the admin needs to pick.
+func TestAppClientBuildServiceRetriesAfterFailedUpsert(t *testing.T) {
+	store := &appClientBuildStoreStub{err: errors.New("db down")}
+	service := NewAppClientBuildService(store, cache.New(time.Minute, time.Minute), zerolog.Nop())
+
+	service.Observe(model.AppPlatformIOS, 10, "1.0.0")
+	store.err = nil
+	service.Observe(model.AppPlatformIOS, 10, "1.0.0")
+
+	if len(store.upserts) != 1 {
+		t.Fatalf("upserts = %#v, want the retry to be written", store.upserts)
+	}
+}
+
 func TestAppClientBuildServiceRejectsUnknownPlatformOnReads(t *testing.T) {
 	service, _ := newBuildServiceFixture()
 

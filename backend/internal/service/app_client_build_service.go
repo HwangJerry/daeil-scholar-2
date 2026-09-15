@@ -43,18 +43,23 @@ func (s *AppClientBuildService) Observe(platform string, build int64, versionNam
 		return
 	}
 	versionName = truncateVersionName(versionName)
+	throttleKey := appClientBuildThrottleKey(platform, build)
 	if s.cache != nil {
-		throttleKey := appClientBuildThrottleKey(platform, build)
 		if _, throttled := s.cache.Get(throttleKey); throttled {
 			return
 		}
-		s.cache.Set(throttleKey, struct{}{}, appClientBuildObserveTTL)
 	}
 	if err := s.store.Upsert(platform, build, versionName, s.now()); err != nil {
+		// The throttle is set only after a successful write, so a transient
+		// database failure does not hide a new build for the whole window.
 		s.logger.Warn().Err(err).
 			Str("platform", platform).
 			Int64("build", build).
 			Msg("failed to record observed app build")
+		return
+	}
+	if s.cache != nil {
+		s.cache.Set(throttleKey, struct{}{}, appClientBuildObserveTTL)
 	}
 }
 
