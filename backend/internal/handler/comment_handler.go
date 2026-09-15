@@ -73,7 +73,8 @@ func (h *CommentHandler) CreateComment(w http.ResponseWriter, r *http.Request) {
 // DeleteComment handles DELETE /api/feed/{seq}/comments/{cSeq}.
 func (h *CommentHandler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	cSeq := parseIntParam(chi.URLParam(r, "cSeq"))
-	if cSeq <= 0 {
+	postSeq := parseIntParam(chi.URLParam(r, "seq"))
+	if cSeq <= 0 || postSeq <= 0 {
 		respondError(w, http.StatusBadRequest, "INVALID_SEQ", "Invalid comment seq")
 		return
 	}
@@ -84,7 +85,7 @@ func (h *CommentHandler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.DeleteComment(cSeq, user.USRSeq); err != nil {
+	if err := h.service.DeleteComment(cSeq, user.USRSeq, postSeq); err != nil {
 		log.Error().Err(err).Int("cSeq", cSeq).Msg("delete comment failed")
 		respondError(w, http.StatusForbidden, "DELETE_FAILED", err.Error())
 		return

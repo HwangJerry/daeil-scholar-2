@@ -15,6 +15,16 @@ func (r *AccountDeletionRequestRepository) PurgeExpiredPrivacyRecords(ctx contex
         ORDER BY RESOLVED_AT LIMIT ?`, limit); err != nil {
 		return err
 	}
+	// Optional until migration 070 is installed; reuse the published report retention.
+	var commentReportsInstalled int
+	if err := r.DB.GetContext(ctx, &commentReportsInstalled, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_COMMENT_REPORT'`); err != nil {
+		return err
+	}
+	if commentReportsInstalled > 0 {
+		if _, err := r.DB.ExecContext(ctx, `DELETE FROM ALUMNI_COMMENT_REPORT WHERE STATUS IN ('removed','dismissed') AND RESOLVED_AT < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 90 DAY) ORDER BY RESOLVED_AT LIMIT ?`, limit); err != nil {
+			return err
+		}
+	}
 	var contextInstalled int
 	if err := r.DB.GetContext(ctx, &contextInstalled, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_ERASURE_CONTEXT'`); err != nil {
 		return err

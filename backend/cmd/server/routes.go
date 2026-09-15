@@ -41,6 +41,7 @@ type handlers struct {
 	personalDonation    *handler.PersonalDonationHandler
 	message             *handler.MessageHandler
 	messageReport       *handler.MessageReportHandler
+	commentReport       *handler.CommentReportHandler
 	donationArchive     *handler.DonationArchiveHandler
 	accountDeletion     *handler.AccountDeletionRequestHandler
 	memberBlock         *handler.MemberBlockHandler
@@ -186,6 +187,7 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		// r.Get("/api/donation/subscription", h.subscription.GetMySubscription)
 		// r.Delete("/api/donation/subscription", h.subscription.CancelSubscription)
 		r.With(mw.ApprovedAlumniMiddleware).Post("/api/messages", h.message.Send)
+		r.With(mw.CommentReportRateLimiter()).Post("/api/feed/{seq}/comments/{cSeq}/reports", h.commentReport.Create)
 		r.With(mw.ApprovedAlumniMiddleware).Post("/api/message-reports", h.messageReport.Create)
 		r.With(mw.ApprovedAlumniMiddleware).Get("/api/messages/inbox", h.message.GetInbox)
 		r.With(mw.ApprovedAlumniMiddleware).Get("/api/messages/outbox", h.message.GetOutbox)
@@ -230,6 +232,8 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Use(mw.AuthMiddleware(authService))
 		r.Use(mw.AdminAuthMiddleware)
 		r.Get("/dashboard", h.adminDashboard.Dashboard)
+		r.Get("/comment-reports", h.commentReport.List)
+		r.Put("/comment-reports/{id}", h.commentReport.Resolve)
 		r.Get("/message-reports", h.messageReport.List)
 		r.Put("/message-reports/{id}", h.messageReport.Resolve)
 		r.With(mw.RootOnlyMiddleware).Get("/donation-archives", h.donationArchive.List)

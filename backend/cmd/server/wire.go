@@ -219,6 +219,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		socialLinkPhoto:     handler.NewSocialLinkPhotoHandler(uploadOrchestrator, socialLinkTokens, logger),
 		personalDonation:    handler.NewPersonalDonationHandler(personalDonationService),
 		message:             handler.NewMessageHandler(messageService),
+		commentReport:       &handler.CommentReportHandler{Service: &service.CommentReportService{Store: &repository.CommentReportRepository{DB: db}, InvalidateFeed: func() { cacheStore.Delete("feed:hero") }}},
 		messageReport:       &handler.MessageReportHandler{Service: &service.MessageReportService{Store: &repository.MessageReportRepository{DB: db}}},
 		donationArchive:     &handler.DonationArchiveHandler{Store: &repository.DonationArchiveRepository{DB: db}, Open: donationArchiveReader(cfg.AccountErasure.ArchiveKey)},
 		accountDeletion:     &handler.AccountDeletionRequestHandler{TestUserSeq: cfg.AccountErasure.TestUserSeq, RequestsDisabled: !cfg.AccountErasure.RequestsEnabled, AutomationDisabled: !cfg.AccountErasure.WorkerEnabled, Service: &service.AccountDeletionRequestService{Store: &repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL, WaitHours: cfg.AccountErasure.WaitHours, TestUserSeq: cfg.AccountErasure.TestUserSeq}}, Auth: authService},

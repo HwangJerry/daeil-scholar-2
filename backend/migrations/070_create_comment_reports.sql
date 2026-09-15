@@ -1,0 +1,22 @@
+-- Comment abuse reports: restricted moderator evidence and resolution history.
+-- Compatible with MariaDB 10.1. Apply before deploying the report endpoints.
+CREATE TABLE IF NOT EXISTS ALUMNI_COMMENT_REPORT (
+    REPORT_ID BIGINT NOT NULL AUTO_INCREMENT,
+    POST_SEQ BIGINT NOT NULL,
+    COMMENT_SEQ BIGINT NOT NULL,
+    REPORTER_SEQ INT NOT NULL,
+    REPORTED_SEQ INT NOT NULL,
+    REASON VARCHAR(32) NOT NULL,
+    DETAILS TEXT NOT NULL,
+    CONTENT_SNAPSHOT TEXT NOT NULL,
+    STATUS VARCHAR(16) NOT NULL DEFAULT 'open',
+    MODERATOR_SEQ INT NULL,
+    MODERATOR_NOTE TEXT NULL,
+    CREATED_AT DATETIME NOT NULL,
+    RESOLVED_AT DATETIME NULL,
+    PRIMARY KEY (REPORT_ID),
+    UNIQUE KEY uq_comment_report (REPORTER_SEQ, COMMENT_SEQ),
+    KEY idx_report_queue (STATUS, REPORT_ID),
+    KEY idx_comment_reports (COMMENT_SEQ),
+    KEY idx_comment_retention (RESOLVED_AT)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

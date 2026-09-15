@@ -28,6 +28,9 @@ var previewSecretColumn = regexp.MustCompile(`(?i)(PASS|PWD|TOKEN|SECRET|HASH|CR
 // Private correspondence between members is summarized by length only.
 var previewPrivateContent = map[string]bool{
 	"ALUMNI_MESSAGE.AM_CONTENT":              true,
+	"ALUMNI_COMMENT_REPORT.CONTENT_SNAPSHOT": true,
+	"ALUMNI_COMMENT_REPORT.DETAILS":          true,
+	"ALUMNI_COMMENT_REPORT.MODERATOR_NOTE":   true,
 	"ALUMNI_MESSAGE_REPORT.CONTENT_SNAPSHOT": true,
 	"ALUMNI_MESSAGE_REPORT.DETAILS":          true,
 }

@@ -63,6 +63,7 @@ func accountReferenceSteps(s erasureSchema, user int, email string) []erasureSte
 		steps = append(steps, erasureStep{"WEO_BANNER_AD_LOG", "USR_SEQ=?", []interface{}{user}})
 	}
 	steps = append(steps,
+		erasureStep{"ALUMNI_COMMENT_REPORT", "REPORTER_SEQ=? OR REPORTED_SEQ=? OR MODERATOR_SEQ=?", []interface{}{user, user, user}},
 		erasureStep{"ALUMNI_MESSAGE_REPORT", "REPORTER_SEQ=? OR REPORTED_SEQ=?", []interface{}{user, user}},
 		erasureStep{"ALUMNI_MEMBER_BLOCK", "BLOCKER_USR_SEQ=? OR BLOCKED_USR_SEQ=?", []interface{}{user, user}},
 		erasureStep{"ALUMNI_MESSAGE", "AM_SENDER_SEQ=? OR AM_RECVR_SEQ=?", []interface{}{user, user}},

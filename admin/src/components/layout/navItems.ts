@@ -2,6 +2,7 @@
 import { Activity, LayoutDashboard, FileText, ScrollText, Images, Users, UserCheck, Briefcase, Heart, Clock, Settings2 } from 'lucide-react';
 
 export const NAV_ITEMS = [
+  { to: '/comment-reports', icon: FileText, label: '댓글 신고', end: true },
   { to: '/message-reports', icon: FileText, label: '메시지 신고', end: true },
   { to: '/account-deletions', icon: FileText, label: '계정 삭제 요청', end: true },
   { to: '/', icon: LayoutDashboard, label: '대시보드', end: true },

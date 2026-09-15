@@ -60,8 +60,8 @@ func (s *CommentService) AddComment(joinSeq int, usrSeq int, regName string, con
 }
 
 // DeleteComment soft-deletes a comment owned by the user.
-func (s *CommentService) DeleteComment(bcSeq int, usrSeq int) error {
-	affected, err := s.commentRepo.SoftDeleteComment(bcSeq, usrSeq)
+func (s *CommentService) DeleteComment(bcSeq int, usrSeq int, postSeq int) error {
+	affected, err := s.commentRepo.SoftDeleteComment(bcSeq, usrSeq, postSeq)
 	if err != nil {
 		return err
 	}

@@ -47,11 +47,11 @@ func (r *CommentRepository) InsertComment(joinSeq int, usrSeq int, regName strin
 }
 
 // SoftDeleteComment sets OPEN_YN='N' for a comment owned by the given user.
-func (r *CommentRepository) SoftDeleteComment(bcSeq int, usrSeq int) (int64, error) {
+func (r *CommentRepository) SoftDeleteComment(bcSeq int, usrSeq int, postSeq int) (int64, error) {
 	result, err := r.DB.Exec(`
 		UPDATE WEO_BOARDCOMAND SET OPEN_YN = 'N'
-		WHERE SEQ = ? AND USR_SEQ = ?
-	`, bcSeq, usrSeq)
+		WHERE SEQ = ? AND USR_SEQ = ? AND BC_TYPE='B' AND JOIN_SEQ=?
+	`, bcSeq, usrSeq, postSeq)
 	if err != nil {
 		return 0, err
 	}
