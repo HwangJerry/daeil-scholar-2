@@ -30,6 +30,8 @@ type socialLinkRequest struct {
 	USRPhonePublic  string   `json:"usrPhonePublic"`
 	USREmailPublic  string   `json:"usrEmailPublic"`
 	ProfileImageURL *string  `json:"profileImageUrl,omitempty"`
+	// PhoneVerificationToken proves the applicant controls Phone.
+	PhoneVerificationToken string `json:"phoneVerificationToken"`
 }
 
 // SocialLink creates a new member from a verified social-provider identity.
@@ -79,6 +81,9 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := service.ValidateTags(req.Tags); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_TAG", "태그에 공백을 포함할 수 없습니다")
+		return
+	}
+	if !h.requirePhoneVerification(w, req.PhoneVerificationToken, req.Phone) {
 		return
 	}
 
@@ -179,6 +184,10 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 			}
 			log.Warn().Err(saveErr).Int("usrSeq", user.USRSeq).Bool("isNew", isNew).Msg("social link: failed to save tags")
 		}
+	}
+
+	if isNew {
+		h.spendPhoneVerification(req.PhoneVerificationToken, req.Phone)
 	}
 
 	tokenConsumed = true

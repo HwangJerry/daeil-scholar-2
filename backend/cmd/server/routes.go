@@ -52,6 +52,7 @@ type handlers struct {
 	sitemap             *handler.SitemapHandler
 	rss                 *handler.RSSHandler
 	passwordReset       *handler.PasswordResetHandler
+	phoneVerification   *handler.PhoneVerificationHandler
 	passwordChange      *handler.PasswordChangeHandler
 	badge               *handler.BadgeHandler
 	adminJobCat         *handler.AdminJobCategoryHandler
@@ -148,6 +149,8 @@ func registerPublicRoutes(r chi.Router, h handlers, authService *service.AuthSer
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/mobile/login", h.auth.MobileLogin)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/refresh", h.auth.Refresh)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/login", h.auth.Login)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/phone/verification/request", h.phoneVerification.RequestCode)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/phone/verification/confirm", h.phoneVerification.ConfirmCode)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/register", h.auth.Register)
 	r.Get("/api/auth/check-id", h.auth.CheckID)
 	r.Get("/api/auth/check-phone", h.auth.CheckPhone)

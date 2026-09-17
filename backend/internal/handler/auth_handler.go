@@ -28,8 +28,47 @@ type AuthHandler struct {
 	registerSvc      *service.RegistrationService
 	cache            *cache.Cache
 	socialLinkTokens *service.SocialLinkTokenStore
+	phoneVerifier    *service.PhoneVerificationService
 	cfg              *config.Config
 	logger           zerolog.Logger
+}
+
+// AttachPhoneVerification makes signup require a verified phone number. Registration
+// endpoints reject requests without a usable grant token once this is set.
+func (h *AuthHandler) AttachPhoneVerification(verifier *service.PhoneVerificationService) {
+	h.phoneVerifier = verifier
+}
+
+// requirePhoneVerification confirms a grant exists for the phone number without
+// spending it. Returns false after writing the error response.
+func (h *AuthHandler) requirePhoneVerification(w http.ResponseWriter, token, phone string) bool {
+	if h.phoneVerifier == nil {
+		return true
+	}
+	err := h.phoneVerifier.AssertPhoneVerified(token, phone)
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, service.ErrPhoneNotVerified):
+		respondError(w, http.StatusBadRequest, "PHONE_NOT_VERIFIED", "휴대폰 인증을 먼저 완료해주세요")
+	case errors.Is(err, service.ErrInvalidPhone):
+		respondError(w, http.StatusBadRequest, "INVALID_PHONE", "유효한 전화번호를 입력해주세요")
+	default:
+		h.logger.Error().Err(err).Msg("register: phone verification check failed")
+		respondError(w, http.StatusInternalServerError, "PHONE_VERIFICATION_FAILED", "휴대폰 인증 확인에 실패했습니다")
+	}
+	return false
+}
+
+// spendPhoneVerification marks the grant used after the account exists. A failure here
+// leaves an already-created account intact, so it is logged rather than surfaced.
+func (h *AuthHandler) spendPhoneVerification(token, phone string) {
+	if h.phoneVerifier == nil {
+		return
+	}
+	if err := h.phoneVerifier.ConsumeGrantForPhone(token, phone); err != nil {
+		h.logger.Error().Err(err).Msg("register: failed to consume phone verification grant")
+	}
 }
 
 func NewAuthHandler(
@@ -174,6 +213,9 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_DEPARTMENT", "유효하지 않은 학과입니다")
 		return
 	}
+	if !h.requirePhoneVerification(w, req.PhoneVerificationToken, req.Phone) {
+		return
+	}
 	user, err := h.registerSvc.Register(req)
 	if err != nil {
 		switch {
@@ -193,6 +235,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	h.spendPhoneVerification(req.PhoneVerificationToken, req.Phone)
 	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
 	respondJSON(w, http.StatusCreated, authUser)
 }

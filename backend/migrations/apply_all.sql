@@ -980,4 +980,7 @@ SELECT 'app_update_policy_history' AS chk, COUNT(*) AS found FROM information_sc
 -- 073: Observed client builds
 SELECT 'app_client_builds' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='app_client_builds';
 
+-- 074: Signup SMS phone verification
+SELECT 'ALUMNI_PHONE_VERIFICATION' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_PHONE_VERIFICATION';
+
 SELECT '=== ALL MIGRATIONS APPLIED ===' AS status;

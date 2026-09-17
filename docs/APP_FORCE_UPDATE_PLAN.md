@@ -10,7 +10,8 @@
 
 - **단계: Phase 1(백엔드) 커밋 완료(`875de7f`), Phase 2(관리자 화면) 구현 완료·커밋 전.** 작업 브랜치 `feat/app-force-update-backend` (`dflh-saf-v2` 저장소)
 - 백엔드: `go build`/`go vet`/`go test ./...` 통과. 관리자: `tsc -b`, `npm run lint`, `npm run test`(17파일 66테스트), `npm run build` 통과
-- 다음은 Phase 3~5(앱). Android와 iOS는 서로 병렬 가능
+- **Phase 3(앱 버전 헤더) 구현 완료, 커밋 전.** 앱 저장소 2곳의 워킹 트리에 있음
+- 다음은 Phase 4(Android 게이트)와 Phase 5(iOS 게이트). 서로 병렬 가능
 - 앱은 아직 출시 전이고 배포된 구버전이 없다. **심사를 통과한 현재 빌드는 출시하지 않고 보류**하며, 게이트가 들어간 빌드를 첫 공개 릴리스로 낸다 (D15)
 - 따라서 게이트 없는 사용자는 처음부터 존재하지 않는다. 8절의 구버전 대응 선택지는 모두 불필요해졌다
 
@@ -106,9 +107,27 @@
 - 저장 요청에 `expectedPolicy`(관리자가 보고 있던 정책)를 함께 보낸다. `UPDATED_AT`이 초 단위라 같은 초에 들어온 동시 수정은 타임스탬프만으로 구분할 수 없다
 - 빌드 선택은 "직접 입력했는지"가 아니라 "실제로 관측된 적 없는 값인지"로 `allowUnobservedBuild`를 정한다. 그래야 서버의 미관측 빌드 검증이 실제로 동작한다
 
+### Phase 3에서 실제로 만든 것 (2026-09-16)
+
+| 파일 | 역할 |
+|---|---|
+| `dflh-saf-v2-kotlin/.../core/network/AppClientHeaders.kt` | 헤더 상수, `AppClientIdentity`, OkHttp 인터셉터 |
+| `dflh-saf-v2-kotlin/.../core/network/DflhApiClient.kt` | `defaultOkHttpClient()`에 인터셉터 추가 |
+| `dflh-saf-v2-swift/Sources/App/Network/AppClientHeaders.swift` | 헤더 필드, `AppClientIdentity.current()`, `apply(to:)` |
+| `dflh-saf-v2-swift/Sources/App/Network/APIClient.swift` | 일반 요청 2곳 + 업로드 1곳에 적용 |
+| `dflh-saf-v2-swift/.../Message/MessageRealtimeService.swift` | SSE 요청에도 적용 |
+
+확인한 사실:
+
+- Android 실시간 클라이언트는 `apiClient.okHttpClient.newBuilder()`로 파생되므로 인터셉터 하나로 메시지 스트림까지 덮인다
+- iOS는 요청 생성 지점이 4곳(일반 2, 업로드 1, SSE 1)이라 각각 적용했다
+- 디버그 빌드는 `BuildConfig.DEBUG` / `#if DEBUG`에서 identity가 `null`이라 헤더를 아예 보내지 않는다 (D13)
+
+검증: Android `:app:testDebugUnitTest` 통과, iOS `xcodebuild build` 성공 + 단위 테스트 185개 통과.
+
 ### 다음 작업
 
-1. Phase 3~5(앱). Android(Phase 4)와 iOS(Phase 5)는 서로 병렬 가능하다
+1. Phase 4(Android 게이트)와 Phase 5(iOS 게이트). 서로 병렬 가능하다
 2. 배포 시 8.1절의 마이그레이션 승인 절차를 반드시 함께 처리한다
 3. O1(iOS 숫자 App ID)은 첫 출시 빌드를 제출하기 전까지 확보하면 된다. O3~O5는 해당 Phase 착수 전에 정한다
 4. 출시는 Phase 1~5가 모두 끝난 뒤다 (D16). 그때까지 심사 통과 빌드는 출시하지 않고 보류한다 (D15)
@@ -127,6 +146,7 @@
 | 날짜 | 내용 |
 |---|---|
 | 2026-09-15 | 최초 작성. 관리자 활성화/버전 기준 관리, 플랫폼별 개별 관리, 권장·OS 미지원 안내 UX, 심사 중 빌드 반영 |
+| 2026-09-16 | Phase 3(앱 버전 헤더) 구현 완료 |
 | 2026-09-16 | Phase 2 코드 리뷰 반영: 같은 초 동시 수정 감지(`expectedPolicy`), 미관측 빌드 판정 정확화, 직접 입력 필드 유지, 버전명 덮어쓰기 방지, 관측 실패 시 스로틀 미적용 |
 | 2026-09-16 | Phase 2(관리자 화면) 구현 완료 |
 | 2026-09-16 | Phase 1 코드 리뷰 반영: 빌드 관측을 인증 요청으로 제한, 정책 키 거부 대소문자 무시, Android API 레벨 검증, 제로 `updatedAt` 거부, `ListPolicies` 부분 실패 허용 |

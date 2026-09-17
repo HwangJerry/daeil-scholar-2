@@ -52,12 +52,14 @@ interface ProfileFieldsSectionProps {
   values: ProfileFieldValues;
   onChange: <K extends keyof ProfileFieldValues>(key: K, value: ProfileFieldValues[K]) => void;
   phoneCheck?: FieldCheckProps;
+  /** Rendered under the phone field when signup requires SMS verification. */
+  phoneVerification?: React.ReactNode;
   emailCheck?: FieldCheckProps;
   /** Field keys that should render as disabled. */
   disabledFields?: Array<keyof ProfileFieldValues>;
 }
 
-export function ProfileFieldsSection({ values, onChange, phoneCheck, emailCheck, disabledFields }: ProfileFieldsSectionProps) {
+export function ProfileFieldsSection({ values, onChange, phoneCheck, phoneVerification, emailCheck, disabledFields }: ProfileFieldsSectionProps) {
   const disabledSet = new Set<keyof ProfileFieldValues>(disabledFields ?? []);
   const isDisabled = (k: keyof ProfileFieldValues) => disabledSet.has(k);
   const [tagInput, setTagInput] = useState('');
@@ -121,6 +123,7 @@ export function ProfileFieldsSection({ values, onChange, phoneCheck, emailCheck,
           disabled={isDisabled('phone')}
         />
         {phoneCheck && !isDisabled('phone') && <FieldCheckMessage status={phoneCheck.status} label="전화번호" />}
+        {phoneVerification}
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">

@@ -28,6 +28,7 @@ type deps struct {
 	donationJob            *job.DonationSnapshotJob
 	sessionRepo            *repository.SessionRepository
 	passwordResetRepo      *repository.PasswordResetRepository
+	phoneVerificationRepo  *repository.PhoneVerificationRepository
 	authRepo               *repository.AuthRepository
 	pgAuditLog             *service.PGAuditLogger
 	emailQueue             chan model.EmailMessage
@@ -69,6 +70,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	memberBlockRepo := repository.NewMemberBlockRepository(db)
 	pushRepo := repository.NewPushRepository(db)
 	passwordResetRepo := repository.NewPasswordResetRepository(db)
+	phoneVerificationRepo := repository.NewPhoneVerificationRepository(db)
 	identityRepo := repository.NewIdentityRepository(db)
 	credentialRepo := repository.NewCredentialRepository(db)
 	signupRepo := repository.NewSignupRepository(db)
@@ -182,6 +184,10 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	memberBlockService := service.NewMemberBlockService(memberBlockRepo)
 	pushService := service.NewPushService(pushRepo)
 	blockedMessageCleanup := job.NewBlockedMessageCleanupJob(memberBlockRepo, logger)
+	phoneVerificationService := service.NewPhoneVerificationService(
+		phoneVerificationRepo, service.NewSMSSender(cfg.SMS, logger), logger,
+	)
+
 	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
 	passwordChangeSvc := service.NewPasswordChangeService(profileRepo)
 	if canonicalPasswordReady {
@@ -237,6 +243,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		sitemap:             handler.NewSitemapHandler(sitemapService, cfg.Server.SiteBaseURL),
 		rss:                 handler.NewRSSHandler(rssService, cfg.Server.SiteBaseURL),
 		passwordReset:       handler.NewPasswordResetHandler(passwordResetService, logger),
+		phoneVerification:   handler.NewPhoneVerificationHandler(phoneVerificationService, logger),
 		passwordChange:      handler.NewPasswordChangeHandler(passwordChangeSvc),
 		badge:               handler.NewBadgeHandler(messageService, logger),
 		adminJobCat:         handler.NewAdminJobCategoryHandler(adminJobCatSvc),
@@ -268,6 +275,9 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		}
 		external = verifier
 	}
+	// Signup endpoints reject applicants whose phone number has not been verified by SMS.
+	h.auth.AttachPhoneVerification(phoneVerificationService)
+
 	erasureService := &service.AutomaticErasureService{
 		Store:         &repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL, TestUserSeq: cfg.AccountErasure.TestUserSeq, DonationRetentionTemplate: service.LedgerRetentionTemplate(cfg.AccountErasure.LedgerConfirmed, cfg.AccountErasure.ReceiptOriginalsSeparate, cfg.AccountErasure.LedgerYearEndMonth, cfg.AccountErasure.LedgerEvidence)},
 		External:      external,
@@ -284,6 +294,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		donationJob:            donationJob,
 		sessionRepo:            sessionRepo,
 		passwordResetRepo:      passwordResetRepo,
+		phoneVerificationRepo:  phoneVerificationRepo,
 		authRepo:               authRepo,
 		pgAuditLog:             pgAuditLogger,
 		emailQueue:             emailQueue,

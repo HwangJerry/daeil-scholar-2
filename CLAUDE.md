@@ -227,6 +227,13 @@ The `content.go` service handles conversion. The `FeedPresenter` calls `DecodeCo
 | `EASYPAY_BIN_BASE` | `/var/www/html/_sys/payment` | Base path for `ep_cli` binary and certs |
 | `EASYPAY_RETURN_BASE_URL` | `http://localhost:8080` | Base URL for PG return callbacks |
 | `PG_AUDIT_LOG_PATH` | `/var/logs/pg/pg-audit.log` | PG payment audit log file path |
+| `SMS_PROVIDER` | (empty) | Outbound SMS vendor key (`ncp` \| `aligo`). Empty disables delivery |
+| `SMS_SENDER` | (empty) | Console-registered 발신번호, digits only. Required by every provider |
+| `SMS_NCP_ACCESS_KEY` | (empty) | NCP SENS: Access Key (sub account recommended) |
+| `SMS_NCP_SECRET_KEY` | (empty) | NCP SENS: Secret Key |
+| `SMS_NCP_SERVICE_ID` | (empty) | NCP SENS: service ID, e.g. `ncp:sms:kr:12345678:dflh` |
+| `SMS_API_KEY` | (empty) | Aligo: API key |
+| `SMS_USER_ID` | (empty) | Aligo: account ID |
 
 ## Key Dependencies
 
