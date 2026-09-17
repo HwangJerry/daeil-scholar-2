@@ -8,6 +8,8 @@ import { useRegisterSubmit } from '../../hooks/useRegisterSubmit';
 import { useCheckUsrId } from '../../hooks/useCheckUsrId';
 import { useCheckPhone } from '../../hooks/useCheckPhone';
 import { useCheckEmail } from '../../hooks/useCheckEmail';
+import { usePhoneVerification } from '../../hooks/usePhoneVerification';
+import { PhoneVerificationField } from './PhoneVerificationField';
 import { checkPasswordStrength } from '../../hooks/usePasswordValidation';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -30,6 +32,7 @@ export function RegisterForm() {
   const idCheck = useCheckUsrId(usrId);
   const phoneCheck = useCheckPhone(profile.phone);
   const emailCheck = useCheckEmail(profile.email);
+  const phoneVerification = usePhoneVerification(profile.phone);
 
   const displayError = validationError || submitError;
   const passwordMismatch = passwordConfirm !== '' && password !== passwordConfirm;
@@ -62,6 +65,10 @@ export function RegisterForm() {
       setValidationError('아이디 중복 확인을 완료해주세요.');
       return;
     }
+    if (!phoneVerification.isVerified) {
+      setValidationError('휴대폰 인증을 완료해주세요.');
+      return;
+    }
     const validErr = validate({
       usrId,
       password,
@@ -91,6 +98,7 @@ export function RegisterForm() {
       tags: profile.tags,
       usrPhonePublic: profile.usrPhonePublic,
       usrEmailPublic: profile.usrEmailPublic,
+      phoneVerificationToken: phoneVerification.token,
     });
   };
 
@@ -154,6 +162,9 @@ export function RegisterForm() {
         values={profile}
         onChange={handleProfileChange}
         phoneCheck={phoneCheck}
+        phoneVerification={
+          <PhoneVerificationField phone={profile.phone} verification={phoneVerification} />
+        }
         emailCheck={emailCheck}
       />
 

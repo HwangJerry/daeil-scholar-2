@@ -5,6 +5,8 @@ import { defaultProfileFieldValues } from './profileFieldValues';
 import type { ProfileFieldValues } from './profileFieldValues';
 import { useCheckPhone } from '../../hooks/useCheckPhone';
 import { useCheckEmail } from '../../hooks/useCheckEmail';
+import { usePhoneVerification } from '../../hooks/usePhoneVerification';
+import { PhoneVerificationField } from './PhoneVerificationField';
 import { useSocialLinkPrefill } from '../../hooks/useSocialLinkPrefill';
 import { useAccountLinkSubmit } from '../../hooks/useAccountLinkSubmit';
 import { SignupProfileImageEditor } from './SignupProfileImageEditor';
@@ -27,6 +29,7 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
   const prefill = useSocialLinkPrefill(token);
   const phoneCheck = useCheckPhone(profile.phone);
   const emailCheck = useCheckEmail(profile.email);
+  const phoneVerification = usePhoneVerification(profile.phone);
 
   // Prefill email from Kakao once during render when it becomes available.
   // setState-during-render is the React 19 idiom; it skips the cascading effect re-render.
@@ -53,6 +56,10 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
       setError('학과를 선택해주세요.');
       return;
     }
+    if (!phoneVerification.isVerified) {
+      setError('휴대폰 인증을 완료해주세요.');
+      return;
+    }
     void submit({
       token,
       mode: 'new',
@@ -69,6 +76,7 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
       tags: profile.tags,
       usrPhonePublic: profile.usrPhonePublic,
       usrEmailPublic: profile.usrEmailPublic,
+      phoneVerificationToken: phoneVerification.token,
       ...(photoOverride !== null && { profileImageUrl: photoOverride.url ?? '' }),
     });
   };
@@ -85,6 +93,9 @@ export function AccountLinkNewForm({ token }: AccountLinkNewFormProps) {
         values={profile}
         onChange={handleProfileChange}
         phoneCheck={phoneCheck}
+        phoneVerification={
+          <PhoneVerificationField phone={profile.phone} verification={phoneVerification} />
+        }
         emailCheck={emailCheck}
       />
 

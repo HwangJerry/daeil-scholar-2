@@ -5,13 +5,22 @@ class ApiClientError extends Error {
   code: string;
   status: number;
   details: APIFieldError[];
+  /** Raw error body, for endpoints that report their own detail shape. */
+  payload?: unknown;
 
-  constructor(status: number, code: string, message: string, details: APIFieldError[] = []) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details: APIFieldError[] = [],
+    payload?: unknown,
+  ) {
     super(message);
     this.name = 'ApiClientError';
     this.status = status;
     this.code = code;
     this.details = details;
+    this.payload = payload;
   }
 }
 
@@ -32,7 +41,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     } catch {
       // response body was not JSON
     }
-    throw new ApiClientError(res.status, apiError.code, apiError.message, apiError.errors);
+    throw new ApiClientError(res.status, apiError.code, apiError.message, apiError.errors, apiError);
   }
 
   if (res.status === 204) {
@@ -76,7 +85,7 @@ export const api = {
       } catch {
         // not JSON
       }
-      throw new ApiClientError(res.status, apiError.code, apiError.message, apiError.errors);
+      throw new ApiClientError(res.status, apiError.code, apiError.message, apiError.errors, apiError);
     }
 
     return res.json() as Promise<T>;

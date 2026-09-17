@@ -48,7 +48,7 @@ const NAVIGATION_GROUPS = [
   {
     id: 'settings',
     label: '설정',
-    routes: ['/job-categories', '/app-settings', '/app-monitoring'],
+    routes: ['/job-categories', '/app-settings', '/app-update', '/app-monitoring'],
   },
 ] as const satisfies readonly NavigationGroup[];
 

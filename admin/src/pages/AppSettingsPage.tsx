@@ -9,6 +9,8 @@ import { useAppSettings } from '../hooks/useAppSettings.ts';
 import { useUpdateAppSetting } from '../hooks/useUpdateAppSetting.ts';
 import type { AppSetting } from '../types/appSettings.ts';
 
+const APP_UPDATE_POLICY_KEY_PREFIX = 'app_update_policy_';
+
 const UPDATED_AT_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
   dateStyle: 'medium',
   timeStyle: 'short',
@@ -142,7 +144,11 @@ function AppSettingsLoadingState() {
 
 export function AppSettingsPage() {
   const settingsQuery = useAppSettings();
-  const settings = settingsQuery.data ?? [];
+  // App update policies are managed on the dedicated screen, which enforces
+  // cross-field rules and records an audit trail.
+  const settings = (settingsQuery.data ?? []).filter(
+    (setting) => !setting.key.toLowerCase().startsWith(APP_UPDATE_POLICY_KEY_PREFIX),
+  );
 
   return (
     <div className="space-y-6">

@@ -14,13 +14,24 @@ import (
 // available briefly for diagnostics/support before being purged.
 const mobileRefreshTokenRevokedRetention = 7 * 24 * time.Hour
 
+// phoneVerificationRetention is how long an SMS verification row is kept after it
+// was issued. Codes and grant tokens are short-lived credentials tied to a phone
+// number, so rows are purged shortly after they can no longer be used.
+const phoneVerificationRetention = 24 * time.Hour
+
 // SessionCleanupJob periodically removes expired sessions and tokens.
 type SessionCleanupJob struct {
 	sessionRepo       *repository.SessionRepository
 	passwordResetRepo *repository.PasswordResetRepository
 	authRepo          *repository.AuthRepository
+	phoneVerifyRepo   *repository.PhoneVerificationRepository
 	logger            zerolog.Logger
 	cancel            context.CancelFunc
+}
+
+// AttachPhoneVerificationCleanup enrolls the SMS verification table in the hourly sweep.
+func (j *SessionCleanupJob) AttachPhoneVerificationCleanup(repo *repository.PhoneVerificationRepository) {
+	j.phoneVerifyRepo = repo
 }
 
 // NewSessionCleanupJob creates a SessionCleanupJob with all required repositories.
@@ -59,6 +70,7 @@ func (j *SessionCleanupJob) Start() {
 				j.cleanSessions()
 				j.cleanExpiredTokens()
 				j.cleanMobileRefreshTokens()
+				j.cleanPhoneVerifications()
 			}
 		}
 	}()
@@ -91,6 +103,20 @@ func (j *SessionCleanupJob) cleanExpiredTokens() {
 	}
 	if deleted > 0 {
 		j.logger.Info().Int64("count", deleted).Msg("expired password reset tokens cleaned")
+	}
+}
+
+func (j *SessionCleanupJob) cleanPhoneVerifications() {
+	if j.phoneVerifyRepo == nil {
+		return
+	}
+	deleted, err := j.phoneVerifyRepo.DeleteExpiredBefore(time.Now().Add(-phoneVerificationRetention))
+	if err != nil {
+		j.logger.Error().Err(err).Msg("phone verification cleanup failed")
+		return
+	}
+	if deleted > 0 {
+		j.logger.Info().Int64("count", deleted).Msg("expired phone verifications cleaned")
 	}
 }
 

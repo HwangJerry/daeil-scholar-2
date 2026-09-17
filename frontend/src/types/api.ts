@@ -272,6 +272,8 @@ export interface SocialLinkRequest {
   usrEmailPublic?: 'Y' | 'N';
   /** Override the cached provider photo. Omit to keep cached value; empty string = remove image. */
   profileImageUrl?: string;
+  /** Proof the phone number was verified by SMS. Required by the server. */
+  phoneVerificationToken: string;
 }
 
 export interface SocialLinkPhotoUploadResponse {

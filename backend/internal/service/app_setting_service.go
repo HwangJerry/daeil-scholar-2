@@ -20,6 +20,7 @@ const (
 
 var (
 	ErrAppSettingNotFound     = errors.New("app setting not found")
+	ErrAppSettingReadOnly     = errors.New("app setting is managed by a dedicated endpoint")
 	ErrInvalidAppSettingKey   = errors.New("invalid app setting key")
 	ErrInvalidAppSettingValue = errors.New("invalid app setting value")
 )
@@ -67,6 +68,13 @@ func (s *AppSettingService) GetPublicSettings() (map[string]string, error) {
 }
 
 func (s *AppSettingService) UpdateValue(key, value string, updatedBy int) error {
+	// Update policies carry cross-field rules and an audit trail, so they are
+	// writable only through the app-update endpoints. The comparison is
+	// case-insensitive because AS_KEY uses a case-insensitive collation: a
+	// differently cased key would otherwise reach the same row.
+	if strings.HasPrefix(strings.ToLower(key), model.AppUpdatePolicyKeyPrefix) {
+		return ErrAppSettingReadOnly
+	}
 	if key == "" || strings.TrimSpace(key) != key || utf8.RuneCountInString(key) > maxAppSettingKeyRunes {
 		return ErrInvalidAppSettingKey
 	}
@@ -85,6 +93,14 @@ func (s *AppSettingService) UpdateValue(key, value string, updatedBy int) error 
 		s.cache.Delete(appSettingsPublicCacheKey)
 	}
 	return nil
+}
+
+// InvalidatePublicSettingsCache drops the cached public payload so a write made
+// through another service is visible to clients immediately.
+func (s *AppSettingService) InvalidatePublicSettingsCache() {
+	if s.cache != nil {
+		s.cache.Delete(appSettingsPublicCacheKey)
+	}
 }
 
 func clonePublicSettings(settings map[string]string) map[string]string {

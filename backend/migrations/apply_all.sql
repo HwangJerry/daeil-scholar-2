@@ -971,4 +971,16 @@ SELECT 'WEO_VISIT_SUMMARY' AS chk, COUNT(*) AS found FROM information_schema.TAB
 SELECT 'USR_PHONE_PUBLIC default=N' AS chk, COUNT(*) AS found FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER' AND COLUMN_NAME='USR_PHONE_PUBLIC' AND COLUMN_DEFAULT='N';
 SELECT 'USR_EMAIL_PUBLIC default=N' AS chk, COUNT(*) AS found FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WEO_MEMBER' AND COLUMN_NAME='USR_EMAIL_PUBLIC' AND COLUMN_DEFAULT='N';
 
+-- 071: App update policies seeded (both platforms, disabled)
+SELECT 'app_update policy rows' AS chk, COUNT(*) AS found FROM app_settings WHERE AS_KEY IN ('app_update_policy_ios', 'app_update_policy_android');
+
+-- 072: App update policy audit trail
+SELECT 'app_update_policy_history' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='app_update_policy_history';
+
+-- 073: Observed client builds
+SELECT 'app_client_builds' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='app_client_builds';
+
+-- 074: Signup SMS phone verification
+SELECT 'ALUMNI_PHONE_VERIFICATION' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_PHONE_VERIFICATION';
+
 SELECT '=== ALL MIGRATIONS APPLIED ===' AS status;

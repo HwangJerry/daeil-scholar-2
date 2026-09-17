@@ -25,6 +25,8 @@ export interface RegisterRequest {
   tags?: string[];
   usrPhonePublic?: 'Y' | 'N';
   usrEmailPublic?: 'Y' | 'N';
+  /** Proof the phone number was verified by SMS. Required by the server. */
+  phoneVerificationToken: string;
 }
 
 /** Legacy ID/PW login. */

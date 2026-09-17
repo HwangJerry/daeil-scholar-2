@@ -56,7 +56,10 @@ func main() {
 			"https://client-macbook.tail04b57d.ts.net",
 		)
 	}
-	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg, logger)
+	router := registerRoutes(d.handlers, d.authService, d.cacheStore, allowedOrigins, cfg, logger, appVersionGate{
+		policies: d.appUpdatePolicyService,
+		observer: d.appClientBuildService,
+	})
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Server.Port,
@@ -82,6 +85,7 @@ func main() {
 	// donationJob := d.donationJob
 	// donationJob.Start()
 	sessionJob := job.NewSessionCleanupJob(d.sessionRepo, d.passwordResetRepo, d.authRepo, logger)
+	sessionJob.AttachPhoneVerificationCleanup(d.phoneVerificationRepo)
 	sessionJob.Start()
 	emailWorker := job.NewEmailWorker(d.emailQueue, d.emailService, logger)
 	emailWorker.Start()

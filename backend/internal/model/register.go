@@ -20,4 +20,7 @@ type RegisterRequest struct {
 	Tags           []string `json:"tags"`
 	USRPhonePublic string   `json:"usrPhonePublic"` // 'Y' | 'N'
 	USREmailPublic string   `json:"usrEmailPublic"` // 'Y' | 'N'
+	// PhoneVerificationToken proves the applicant controls Phone. Transport-only:
+	// it is spent by the verification service and never persisted on the member row.
+	PhoneVerificationToken string `json:"phoneVerificationToken"`
 }

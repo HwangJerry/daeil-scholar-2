@@ -219,6 +219,32 @@ func mvpMigrationContracts() []migrationContract {
 				"아이디/비밀번호 찾기 문의용 카카오톡 오픈채팅 URL", "'Y'",
 			},
 		},
+		{
+			name: "071_seed_app_update_policies.sql",
+			required: []string{
+				"app_update_policy_ios", "app_update_policy_android",
+				"\"forceEnabled\":false", "\"minBuild\":0",
+				"\"recommendEnabled\":false", "\"recommendedBuild\":0",
+				"\"minOsVersion\":\"17.0\"", "\"minOsVersion\":\"26\"",
+				"WHERE NOT EXISTS", "'Y'",
+			},
+		},
+		{
+			name: "072_create_app_update_policy_history.sql",
+			required: []string{
+				"CREATE TABLE IF NOT EXISTS app_update_policy_history",
+				"PLATFORM", "BEFORE_JSON", "AFTER_JSON", "CHANGED_BY", "CHANGED_AT",
+				"IDX_AUPH_PLATFORM_CHANGED", "ENGINE=InnoDB",
+			},
+		},
+		{
+			name: "073_create_app_client_builds.sql",
+			required: []string{
+				"CREATE TABLE IF NOT EXISTS app_client_builds",
+				"PLATFORM", "BUILD", "VERSION_NAME", "FIRST_SEEN_AT", "LAST_SEEN_AT",
+				"PRIMARY KEY (PLATFORM, BUILD)", "IDX_ACB_PLATFORM_LAST_SEEN", "ENGINE=InnoDB",
+			},
+		},
 	}
 }
 

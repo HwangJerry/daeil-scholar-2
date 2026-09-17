@@ -19,6 +19,7 @@ type Config struct {
 	Upload                UploadConfig
 	EasyPay               EasyPayConfig
 	SMTP                  SMTPConfig
+	SMS                   SMSConfig
 	Push                  PushConfig
 	Sentry                SentryConfig
 	PGAuditLogPath        string
@@ -69,6 +70,38 @@ type SMTPConfig struct {
 	User     string
 	Password string
 	From     string
+}
+
+// SMSConfig holds credentials for the outbound SMS provider used to deliver
+// signup verification codes. Provider is the vendor key ("ncp" | "aligo"); an
+// empty or unknown Provider leaves SMS unconfigured and delivery is skipped.
+// Sender is the console-registered 발신번호 and is required by every provider.
+type SMSConfig struct {
+	Provider string
+	Sender   string
+	// Aligo credentials.
+	APIKey string
+	UserID string
+	// NAVER Cloud Platform SENS credentials.
+	NCPAccessKey string
+	NCPSecretKey string
+	NCPServiceID string
+}
+
+// Configured reports whether outbound SMS can actually be delivered. Each provider
+// needs its own credentials, so the check is provider-specific.
+func (c SMSConfig) Configured() bool {
+	if c.Sender == "" {
+		return false
+	}
+	switch c.Provider {
+	case "ncp":
+		return c.NCPAccessKey != "" && c.NCPSecretKey != "" && c.NCPServiceID != ""
+	case "aligo":
+		return c.APIKey != "" && c.UserID != ""
+	default:
+		return false
+	}
 }
 
 type PushConfig struct {
@@ -238,6 +271,15 @@ func Load() *Config {
 			User:     getEnv("SMTP_USER", ""),
 			Password: getEnv("SMTP_PASSWORD", ""),
 			From:     getEnv("SMTP_FROM", "noreply@dflh.kr"),
+		},
+		SMS: SMSConfig{
+			Provider:     getEnv("SMS_PROVIDER", ""),
+			Sender:       getEnv("SMS_SENDER", ""),
+			APIKey:       getEnv("SMS_API_KEY", ""),
+			UserID:       getEnv("SMS_USER_ID", ""),
+			NCPAccessKey: getEnv("SMS_NCP_ACCESS_KEY", ""),
+			NCPSecretKey: getEnv("SMS_NCP_SECRET_KEY", ""),
+			NCPServiceID: getEnv("SMS_NCP_SERVICE_ID", ""),
 		},
 		Push: PushConfig{
 			Enabled:            getBoolEnv("PUSH_ENABLED", false),
