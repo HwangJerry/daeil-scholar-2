@@ -6,12 +6,12 @@
 
 ## 0. 인계 요약 (다음 세션은 여기부터 읽기)
 
-### 현재 상태 (2026-09-15)
+### 현재 상태 (2026-09-17)
 
-- **단계: Phase 1(백엔드) 커밋 완료(`875de7f`), Phase 2(관리자 화면) 구현 완료·커밋 전.** 작업 브랜치 `feat/app-force-update-backend` (`dflh-saf-v2` 저장소)
-- 백엔드: `go build`/`go vet`/`go test ./...` 통과. 관리자: `tsc -b`, `npm run lint`, `npm run test`(17파일 66테스트), `npm run build` 통과
-- **Phase 3(앱 버전 헤더) 구현 완료, 커밋 전.** 앱 저장소 2곳의 워킹 트리에 있음
-- 다음은 Phase 4(Android 게이트)와 Phase 5(iOS 게이트). 서로 병렬 가능
+- **Phase 1~5 구현·커밋 완료.** 백엔드/관리자: `dflh-saf-v2` (`875de7f`, `72bfe1e`, `670ab72`). Android: `dflh-saf-v2-kotlin` (`3464874`, 헤더는 `0f56e91`에 포함). iOS: `dflh-saf-v2-swift` (`f712567`, 헤더는 `73063a3`에 포함)
+- 남은 것: 마이페이지 상시 표시(D11·D12, 미구현), O1(iOS 숫자 App ID), 9절 출시 순서
+- 검증: 백엔드 `go build`/`go vet`/`go test ./...`, 관리자 `tsc -b`/lint/test(17파일 68테스트)/build, Android `:app:testDebugUnitTest`, iOS `xcodebuild build` + 단위 테스트 203개 모두 통과
+- 어느 저장소도 아직 푸시하지 않았고 PR도 없음
 - 앱은 아직 출시 전이고 배포된 구버전이 없다. **심사를 통과한 현재 빌드는 출시하지 않고 보류**하며, 게이트가 들어간 빌드를 첫 공개 릴리스로 낸다 (D15)
 - 따라서 게이트 없는 사용자는 처음부터 존재하지 않는다. 8절의 구버전 대응 선택지는 모두 불필요해졌다
 
@@ -27,7 +27,7 @@
 | D6 | 기준 빌드는 **앱이 보고한 빌드 목록(`app_client_builds`)에서 선택**. 목록에 없으면 경고와 함께 직접 입력 | 관리자가 빌드 번호를 외울 필요 없음 |
 | D7 | 사고 방지: 서버 검증(3절), 강제 켜기/기준 상향 시 "스토어 100% 배포 완료" 체크 필수, 동시 수정 `409`, 변경 이력 테이블 | 값 하나로 전체 사용자가 차단될 수 있음 |
 | D8 | 기존 "앱 설정" 화면과 `PUT /api/admin/settings/{key}`에서는 정책 키를 **숨기고 거부** | 검증을 우회하는 수정 경로 제거 |
-| D9 | 판정 순서: OS 미지원 → 강제 → 권장. **OS 미지원 사용자는 차단하지 않음** | 앱 안에서 해결할 방법이 없는 사용자를 가두지 않기 위해 |
+| D9 | 판정 순서: 최신 빌드면 아무것도 안 함 → OS 미지원 → 강제 → 권장. **OS 미지원 사용자는 차단하지 않음** | 앱 안에서 해결할 방법이 없는 사용자를 가두지 않기 위해. 최신 빌드 사용자에게는 OS 안내도 띄우지 않는다 (2026-09-17) |
 | D10 | Android: 강제는 Play In-App Update `IMMEDIATE`, 권장은 `FLEXIBLE`. iOS: 자체 강제 화면 + 권장 바텀시트 | 각 플랫폼의 표준 방식 |
 | D11 | 권장 노출: 메인 화면에서만, 3일 간격, 권장 빌드당 최대 3회, 이후 마이페이지 표시만 (6.1절) | 반복 팝업은 무시하는 습관만 만듦 |
 | D12 | OS 미지원 안내: 닫을 수 있는 1회성 다이얼로그, 기준 OS 값마다 1회, 마이페이지 상시 표시. iOS 설정 딥링크 금지 (6.2절) | 차단하지 않고 알리기만. 딥링크는 비공개 API라 심사 거절 사유 |
@@ -39,6 +39,8 @@
 | D18 | iOS `storeUrl`은 마이그레이션 기본값을 빈 문자열로 두고 활성화 전에 채운다. 검증 규칙으로 빈 값 상태의 강제 활성화를 막는다 | 숫자 App ID가 없어도 Phase 1 착수가 가능 |
 
 **범위 밖 (이번에 하지 않음):** 특정 빌드 차단 목록, 구빌드 "지원 종료" 정책, 서버 문구 관리, 노출 빈도의 관리자 설정화
+
+**미구현 (결정 대기):** D11·D12의 마이페이지 표시("새 버전 있음", OS 미지원 안내). 권장 팝업 3회가 끝난 뒤와 OS 미지원 기기에 남겨야 하는 상시 표시로, 양쪽 앱의 프로필 화면 수정이 필요하다
 
 ### 아직 정해야 하는 사항
 
@@ -125,9 +127,51 @@
 
 검증: Android `:app:testDebugUnitTest` 통과, iOS `xcodebuild build` 성공 + 단위 테스트 185개 통과.
 
+### Phase 4~5에서 실제로 만든 것 (2026-09-17)
+
+**Android (`dflh-saf-v2-kotlin`, `feature/appupdate/`)**
+
+| 파일 | 역할 |
+|---|---|
+| `AppUpdatePolicy.kt` | `app_update_policy_android` 파싱. 알 수 없는 필드는 무시 |
+| `AppUpdateEvaluator.kt` | 판정 규칙 (서버와 동일 순서) |
+| `AppUpdatePromptPolicy.kt` | 3일 간격·최대 3회, OS 안내 1회 |
+| `SharedPreferencesAppUpdatePromptStorage.kt` | 노출 이력 저장 |
+| `AppUpdateSignals.kt` | 426 감지 인터셉터와 신호 |
+| `PlayAppUpdateController.kt` | Play In-App Update `IMMEDIATE` 래퍼 |
+| `AppUpdateStoreNavigation.kt` | Play 스토어 페이지 이동 (미설치 시 웹 폴백) |
+| `ui/ForceUpdateScreen.kt`, `ui/AppUpdateNotices.kt` | 차단 화면, 권장·OS 안내 |
+| `AppUpdateGate.kt` | `MainActivity` 최상위 래핑, 포그라운드 재조회 |
+
+**iOS (`dflh-saf-v2-swift`, `Sources/App/Feature/AppUpdate/`)**
+
+| 파일 | 역할 |
+|---|---|
+| `AppUpdatePolicy.swift` | `app_update_policy_ios` 파싱, `storeUrl` 도메인 검증 |
+| `AppUpdateEvaluator.swift` | 판정 규칙 + 점 구분 iOS 버전 비교 |
+| `AppUpdatePromptPolicy.swift` | 3일·3회 규칙, `UserDefaults` 저장 |
+| `ForceUpdateView.swift`, `AppUpdateNotices.swift` | 차단 화면, 권장 시트, OS 안내 문구 |
+
+기존 파일 변경: `AppSettingsRepository`(공개 설정 1회 조회로 카카오 URL과 정책을 함께 반환), `AppState`(정책 상태·판정·10분 스로틀·426 수신), `APIClient`(426 콜백), `RootView`(인증 분기보다 먼저 게이트), `PublicSettingsRepository`/`AppContainer`/`MainActivity`(Android 배선).
+
+구현하며 확정한 세부 사항:
+
+- **Android 권장 업데이트는 Play `FLEXIBLE` 대신 닫을 수 있는 다이얼로그 + 스토어 이동으로 구현했다.** `FLEXIBLE`은 설치 상태 리스너와 재시작 안내까지 필요해 범위가 커진다. 강제 업데이트는 계획대로 `IMMEDIATE`를 쓴다 (D10 일부 변경)
+- 426 감지는 OkHttp 인터셉터에 두어 REST와 메시지 스트림을 한 번에 덮는다
+- 차단 상태에서는 정책 재조회에 스로틀을 적용하지 않는다. 관리자가 끄면 다음 복귀에서 풀린다
+- 정책 조회에 실패하거나 **값이 깨지면** 마지막으로 성공한 정책을 유지한다. 반면 **키가 아예 없으면** 캐시를 지우고 차단을 푼다. 설정 행을 지우는 것도 게이트를 끄는 방법이기 때문이다
+- 서버의 426은 정책 재조회가 성공해서 "강제 아님"을 확인했을 때만 해제한다. 실패한 조회로 해제하면 화면이 깜빡이는 루프가 생긴다
+- OS 미지원 판정은 426보다 우선한다 (D9). 업데이트를 설치할 수 없는 기기는 어떤 경우에도 차단하지 않는다
+- Play `IMMEDIATE`는 **사용자가 중단한 업데이트를 이어서 할 때만** 자동으로 재개한다. 그 외에는 버튼을 눌러야 시작한다. 취소할 때마다 자동 재실행되면 차단 화면에서 빠져나갈 방법이 없다
+
+검증: Android `:app:testDebugUnitTest` 통과(정책·판정·노출 빈도·설정 캐시 테스트 추가), iOS `xcodebuild build` 성공 + 단위 테스트 200개 통과.
+
 ### 다음 작업
 
-1. Phase 4(Android 게이트)와 Phase 5(iOS 게이트). 서로 병렬 가능하다
+1. 마이페이지 상시 표시(D11·D12)를 구현할지 결정한다. 권장 팝업 3회 종료 후와 OS 미지원 기기에 남는 유일한 안내 경로다
+2. O1(iOS 숫자 App ID)을 확보해 관리자 화면에서 iOS `storeUrl`을 채운다. 강제·권장을 켜려면 필수다
+3. 9절 출시 순서에 따라 게이트 포함 빌드를 제출한다
+4. 활성화 전 검증 환경(O5)을 정한다
 2. 배포 시 8.1절의 마이그레이션 승인 절차를 반드시 함께 처리한다
 3. O1(iOS 숫자 App ID)은 첫 출시 빌드를 제출하기 전까지 확보하면 된다. O3~O5는 해당 Phase 착수 전에 정한다
 4. 출시는 Phase 1~5가 모두 끝난 뒤다 (D16). 그때까지 심사 통과 빌드는 출시하지 않고 보류한다 (D15)
@@ -146,6 +190,10 @@
 | 날짜 | 내용 |
 |---|---|
 | 2026-09-15 | 최초 작성. 관리자 활성화/버전 기준 관리, 플랫폼별 개별 관리, 권장·OS 미지원 안내 UX, 심사 중 빌드 반영 |
+| 2026-09-17 | 2차 리뷰 반영: 최신 빌드 사용자에게 OS 안내를 띄우지 않도록 판정 순서 정정(서버·Android·iOS), 스트림 헤더 스레드 안전성, 설정 중복 조회 방지 |
+| 2026-09-17 | Phase 4·5 커밋 (Android `3464874`, iOS `f712567`) |
+| 2026-09-17 | Phase 4·5 코드 리뷰 반영: 차단 해제 조건 강화, OS 미지원 우선, Play 자동 재시작 제한, 정책 키 삭제 처리, 권장 노출 기록 시점, 인증 상태에서만 안내 |
+| 2026-09-17 | Phase 4(Android 게이트)·Phase 5(iOS 게이트) 구현 완료 |
 | 2026-09-16 | Phase 3(앱 버전 헤더) 구현 완료 |
 | 2026-09-16 | Phase 2 코드 리뷰 반영: 같은 초 동시 수정 감지(`expectedPolicy`), 미관측 빌드 판정 정확화, 직접 입력 필드 유지, 버전명 덮어쓰기 방지, 관측 실패 시 스로틀 미적용 |
 | 2026-09-16 | Phase 2(관리자 화면) 구현 완료 |
@@ -243,12 +291,14 @@ app_settings: app_update_policy_ios / app_update_policy_android  (JSON, 공개)
 ### 판정 규칙 (앱과 서버가 동일하게 구현)
 
 ```
-1. 디버그 빌드, 정책 없음, 정책 파싱 실패       → none
-2. 기기 OS < minOsVersion                        → unsupportedOS  (업데이트를 받을 수 없으므로 차단하지 않음)
-3. forceEnabled && build < minBuild              → force
-4. recommendEnabled && build < recommendedBuild  → recommend
-5. 그 외                                          → none
+1. 디버그 빌드, 정책 없음, 정책 파싱 실패            → none
+2. 강제·권장 어느 것에도 해당하지 않음(최신 빌드)    → none
+3. 기기 OS < minOsVersion                            → unsupportedOS  (업데이트를 받을 수 없으므로 차단하지 않음)
+4. forceEnabled && build < minBuild                  → force
+5. 그 외                                              → recommend
 ```
+
+OS 확인은 **실제로 뒤처진 빌드에만** 적용한다. 이미 최신 빌드를 쓰는 사용자에게 "이 기기는 업데이트를 받을 수 없다"고 알릴 이유가 없다 (2026-09-17 리뷰 반영).
 
 ## 4. 관리자 화면 설계
 

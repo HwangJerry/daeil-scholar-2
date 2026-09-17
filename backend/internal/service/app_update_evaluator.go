@@ -17,24 +17,29 @@ const maxOSVersionSegments = 3
 // the API agree on every outcome.
 //
 //  1. build <= 0                                    → none (unknown client)
-//  2. osVersion < policy.MinOSVersion               → unsupported_os (cannot update)
-//  3. ForceEnabled && build < MinBuild              → force
-//  4. RecommendEnabled && build < RecommendedBuild  → recommend
-//  5. otherwise                                     → none
+//  2. nothing to update to                          → none
+//  3. osVersion < policy.MinOSVersion               → unsupported_os (cannot update)
+//  4. ForceEnabled && build < MinBuild              → force
+//  5. otherwise                                     → recommend
+//
+// The OS check runs only once the build is actually behind: a user already on
+// the newest build has nothing to be told about, whatever their OS version.
 func EvaluateAppUpdate(policy model.AppUpdatePolicy, build int64, osVersion string) model.AppUpdateDecision {
 	if build <= 0 {
+		return model.AppUpdateDecisionNone
+	}
+	needsForce := policy.ForceEnabled && policy.MinBuild > 0 && build < policy.MinBuild
+	needsRecommend := policy.RecommendEnabled && policy.RecommendedBuild > 0 && build < policy.RecommendedBuild
+	if !needsForce && !needsRecommend {
 		return model.AppUpdateDecisionNone
 	}
 	if isOSVersionBelow(osVersion, policy.MinOSVersion) {
 		return model.AppUpdateDecisionUnsupportedOS
 	}
-	if policy.ForceEnabled && policy.MinBuild > 0 && build < policy.MinBuild {
+	if needsForce {
 		return model.AppUpdateDecisionForce
 	}
-	if policy.RecommendEnabled && policy.RecommendedBuild > 0 && build < policy.RecommendedBuild {
-		return model.AppUpdateDecisionRecommend
-	}
-	return model.AppUpdateDecisionNone
+	return model.AppUpdateDecisionRecommend
 }
 
 // isOSVersionBelow reports whether deviceVersion is lower than minimumVersion.

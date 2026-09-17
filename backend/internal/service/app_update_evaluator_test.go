@@ -40,6 +40,8 @@ func TestEvaluateAppUpdate(t *testing.T) {
 		{"toggles off means none", disabled, 1, "18.1", model.AppUpdateDecisionNone},
 		{"recommend toggle off leaves force only", forceOnly, 250, "18.1", model.AppUpdateDecisionNone},
 		{"unsupported os wins over force", iosPolicy(), 100, "16.7.2", model.AppUpdateDecisionUnsupportedOS},
+		// Nothing to update to: an old OS is not news to a user already current.
+		{"current build is never told about its os", iosPolicy(), 300, "16.7.2", model.AppUpdateDecisionNone},
 		{"equal os is supported", iosPolicy(), 199, "17.0", model.AppUpdateDecisionForce},
 		{"newer patch os is supported", iosPolicy(), 199, "17.0.1", model.AppUpdateDecisionForce},
 		{"unknown build never blocks", iosPolicy(), 0, "18.1", model.AppUpdateDecisionNone},
