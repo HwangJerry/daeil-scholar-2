@@ -6,9 +6,24 @@ import (
 	"github.com/dflh-saf/backend/internal/repository"
 )
 
+// NoticePublishedNotifier is told about a newly published notice so it can
+// broadcast a push. It is optional: push delivery is disabled by default, and a
+// nil notifier makes publishing a notice a no-op for notifications.
+type NoticePublishedNotifier interface {
+	NotifyNoticePublished(noticeSeq int, subject string)
+}
+
 type AdminNoticeService struct {
 	repo     *repository.AdminNoticeRepository
 	fileRepo *repository.FileRepository
+	notifier NoticePublishedNotifier
+}
+
+// SetNoticePublishedNotifier wires the push broadcast after construction, the
+// same way review notifications are wired, because the notifier only exists
+// when push delivery is enabled.
+func (s *AdminNoticeService) SetNoticePublishedNotifier(notifier NoticePublishedNotifier) {
+	s.notifier = notifier
 }
 
 func NewAdminNoticeService(repo *repository.AdminNoticeRepository, fileRepo *repository.FileRepository) *AdminNoticeService {
@@ -59,10 +74,15 @@ func (s *AdminNoticeService) Create(subject, markdownText, regName string, usrSe
 	if err != nil {
 		return 0, err
 	}
-	if err := s.fileRepo.AttachFilesToNotice(seq, attachedFileSeqs); err != nil {
-		return seq, err
+	attachErr := s.fileRepo.AttachFilesToNotice(seq, attachedFileSeqs)
+	// The notice is live and readable the moment the insert commits, so it is
+	// announced even when linking its attachments failed — the caller still
+	// gets that error. Only a newly published notice is announced: editing or
+	// pinning one is not news, so Update and TogglePin stay silent.
+	if s.notifier != nil {
+		s.notifier.NotifyNoticePublished(seq, subject)
 	}
-	return seq, nil
+	return seq, attachErr
 }
 
 func (s *AdminNoticeService) Update(seq int, subject, markdownText, isPinned string, attachedFileSeqs []int) error {

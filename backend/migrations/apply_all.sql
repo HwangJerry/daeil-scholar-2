@@ -705,6 +705,12 @@ CALL _add_column_if_not_exists(
     'ENUM(''Y'',''N'') NOT NULL DEFAULT ''Y'' AFTER MESSAGE_ENABLED'
 );
 
+CALL _add_column_if_not_exists(
+    'ALUMNI_PUSH_PREFERENCE',
+    'NOTICE_ENABLED',
+    'ENUM(''Y'',''N'') NOT NULL DEFAULT ''Y'' AFTER MESSAGE_PREVIEW_ENABLED'
+);
+
 -- =============================================================================
 -- 033: Canonical private donation ledger
 -- =============================================================================
@@ -982,5 +988,12 @@ SELECT 'app_client_builds' AS chk, COUNT(*) AS found FROM information_schema.TAB
 
 -- 074: Signup SMS phone verification
 SELECT 'ALUMNI_PHONE_VERIFICATION' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_PHONE_VERIFICATION';
+
+-- 075: Admin-editable notification templates (6 seeded keys)
+SELECT 'notification_templates' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notification_templates';
+SELECT 'notification_template rows' AS chk, COUNT(*) AS found FROM notification_templates;
+
+-- 076: Per-user notice push opt-out
+SELECT 'ALUMNI_PUSH_PREFERENCE.NOTICE_ENABLED' AS chk, COUNT(*) AS found FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_PUSH_PREFERENCE' AND COLUMN_NAME='NOTICE_ENABLED';
 
 SELECT '=== ALL MIGRATIONS APPLIED ===' AS status;

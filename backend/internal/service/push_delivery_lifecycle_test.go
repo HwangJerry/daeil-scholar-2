@@ -25,7 +25,7 @@ func (p *orderedPushProvider) Send(_ context.Context, _ model.PushDeliveryTarget
 func TestPushDeliveryStopDrainsSameRecipientInOrder(t *testing.T) {
 	store := &pushDeliveryStoreStub{targets: []model.PushDeliveryTarget{{Platform: "android", DeviceToken: "token"}}}
 	provider := &orderedPushProvider{}
-	notifier := NewPushDeliveryNotifier(store, provider, zerolog.Nop())
+	notifier := NewPushDeliveryNotifier(store, provider, NewTestNotificationTemplateService(nil), zerolog.Nop())
 	notifier.Start()
 	for _, id := range []int64{9001, 9002} {
 		notifier.NotifyMessageReceived(202, 101, "sender", &model.SendMessageResponse{MessageID: id}, "content")

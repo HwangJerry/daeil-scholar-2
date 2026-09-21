@@ -1,0 +1,21 @@
+{
+  "type": "admin.notice",
+  "eventId": "notice-501",
+  "messageId": "",
+  "conversationUserSeq": "",
+  "senderUserSeq": "",
+  "senderName": "새 소식",
+  "preview": "장학금 안내",
+  "createdAt": "2026-07-28T01:00:00Z",
+  "event_type": "admin.notice",
+  "event_id": "notice-501",
+  "user_id": "303",
+  "recvr_seq": "303",
+  "post_seq": "501",
+  "postSeq": "501",
+  "subject": "장학금 안내",
+  "ttl_sec": "86400",
+  "sent_at": "1785200400",
+  "template_key": "push.notice.new",
+  "template_version": "1"
+}

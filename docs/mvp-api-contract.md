@@ -699,14 +699,16 @@ response:
 ```json
 {
   "messageEnabled": true,
-  "messagePreviewEnabled": false
+  "messagePreviewEnabled": false,
+  "noticeEnabled": true
 }
 ```
 
-- MVP에서 계정 동기화 대상은 채팅 알림과 메시지 preview다.
-- GET에서 저장 row가 없으면 side effect 없이 `messageEnabled:true`, `messagePreviewEnabled:true`를 반환하고 PUT만 현재 계정 row를 upsert한다.
-- PUT request는 두 canonical boolean field가 모두 필수다. 기존 iOS `noticeEnabled`는 additive 호환 optional boolean field로 받을 수 있으나 저장·response에는 반영하지 않는다. 그 외 property나 잘못된 type은 `400 INVALID_REQUEST`다.
-- GET·PUT response는 `messageEnabled`, `messagePreviewEnabled` 두 필드만 포함한다.
+- MVP에서 계정 동기화 대상은 채팅 알림, 메시지 preview, 새 소식(공지) 알림이다.
+- GET에서 저장 row가 없으면 side effect 없이 `messageEnabled:true`, `messagePreviewEnabled:true`, `noticeEnabled:true`를 반환하고 PUT만 현재 계정 row를 upsert한다.
+- PUT request는 `messageEnabled`, `messagePreviewEnabled` 두 boolean field가 필수다. `noticeEnabled`는 optional이며, **생략하면 저장된 값을 그대로 보존한다**(row가 없으면 `true`). 이 field를 모르는 구 app build가 공지 수신을 의도치 않게 끄는 일은 없다. 그 외 property나 잘못된 type은 `400 INVALID_REQUEST`다.
+- GET·PUT response는 `messageEnabled`, `messagePreviewEnabled`, `noticeEnabled` 세 필드를 항상 포함한다.
+- `noticeEnabled:false`는 `admin.notice` push만 차단한다. 채팅(`messageEnabled`)과 무관하며, 반대로 `messageEnabled:false`가 공지 수신을 막지도 않는다.
 - 모든 기기에서 같은 계정 값을 읽는다.
 
 device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS='approved'`를 요구한다. 미승인 session은 `403 ALUMNI_APPROVAL_REQUIRED`다.
@@ -722,14 +724,32 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
   "senderUserSeq": "202",
   "senderName": "예시 동문",
   "preview": "안녕하세요.",
-  "createdAt": "2026-07-28T01:00:00Z"
+  "createdAt": "2026-07-28T01:00:00Z",
+  "event_type": "message",
+  "event_id": "9001",
+  "user_id": "303",
+  "recvr_seq": "303",
+  "sender_seq": "202",
+  "ttl_sec": "86400",
+  "sent_at": "1785200400",
+  "template_key": "push.message.new_preview_on",
+  "template_version": "1"
 }
 ```
 
 - provider custom data는 Android/iOS 공통 문자열 값으로 encode한다.
+- provider는 canonical camelCase set과 Android envelope snake_case key를 **함께** 내보낸다. camelCase가 canonical이고, snake_case는 Android parser가 요구하는 필수 envelope다.
+- 모든 payload type(`message`, `verification.reviewed`, `admin.notice`)에 `event_type`, `event_id`, `ttl_sec`, `sent_at`을 항상 포함한다. `event_type`은 `type`과 같은 값이며 client가 `message` → `message.new`로 alias한다.
+- `ttl_sec`은 `"86400"` 고정이다. Android는 `1..86400` 범위 밖이면 payload 전체를 버리고, iOS는 기본값으로 clamp한다.
+- `sent_at`은 `createdAt`을 RFC3339로 parse한 epoch second 문자열이다. parse할 수 없으면 발송 시각으로 대체하며, `ttl_sec` 만료 기준이 비는 일은 없다.
+- `user_id`와 `recvr_seq`는 수신자 seq가 있을 때만 내보낸다. `sender_seq`는 발신자 seq가 있을 때만 내보내므로 발신자가 없는 `verification.reviewed`에는 없다.
+- `template_key`와 `template_version`은 항상 **함께** 내보낸다. `template_version`은 `0`이어도 key와 같이 포함하며, `0`은 운영자가 편집하지 않아 catalog 기본 문구가 쓰였다는 뜻이다.
+- `message` push는 `template_key`를 항상 포함한다. `messagePreviewEnabled`에 따라 `push.message.new_preview_on` 또는 `push.message.new_preview_off`다. `verification.reviewed`는 `push.verification.approved` 또는 `push.verification.rejected`다.
+- OS가 표시하는 title·body는 운영자가 편집할 수 있는 template 결과다. `senderName`과 `preview`는 편집 대상이 아니며 template 출력이 들어가지 않는다.
+- `preview`는 앱이 목록·thread에 쓰는 원문 snippet이다(미리보기를 끈 경우에는 고정 대체 문구). title이나 body를 편집해도 `preview`와 `senderName`은 바뀌지 않는다.
 - 기본 알림은 발신자 이름과 preview를 포함한다.
 - `eventId`는 durable idempotency를 위해 decimal `messageId` 문자열과 동일하다.
-- `messagePreviewEnabled=false`이면 preview를 정확히 `새 메시지가 도착했습니다.`로 대체한다.
+- `messagePreviewEnabled=false`이면 body와 `preview`를 모두 `push.message.new_preview_off` 문구(기본값 `새 메시지가 도착했습니다.`)로 대체한다. 이 경우 message 원문은 어느 key에도 들어가지 않는다.
 - `messageEnabled=false` 또는 수신자가 발신자를 차단했으면 provider 호출 자체를 하지 않는다.
 - push에는 access token·이메일·연락처를 넣지 않는다.
 - accepted visible message는 sender request 경로에서 provider를 직접 호출하지 않고 process-local 비동기 queue에 enqueue한다. recipient 기준 4개 shard, shard당 최대 256건이며 같은 recipient의 순서를 보존한다.
@@ -738,6 +758,45 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
 - invalid provider token 응답은 해당 `(platform,deviceToken)` row만 폐기한다.
 - provider delivery는 `PUSH_ENABLED=false`가 기본이다. `PUSH_ENABLED=true`이면 FCM·APNs credential을 startup에서 모두 검증하고 누락 시 server startup을 실패시킨다.
 - FCM HTTP v1은 `FCM_PROJECT_ID`, `FCM_CREDENTIALS_FILE`; APNs token auth는 `APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_PRIVATE_KEY_FILE`을 사용한다. credential file 내용, token, payload, provider 원문 response는 로그에 기록하지 않는다.
+
+### 10.5 새 소식(공지) 알림 payload
+
+```json
+{
+  "type": "admin.notice",
+  "eventId": "notice-501",
+  "messageId": "",
+  "conversationUserSeq": "",
+  "senderUserSeq": "",
+  "senderName": "새 소식",
+  "preview": "장학금 안내",
+  "createdAt": "2026-07-28T01:00:00Z",
+  "event_type": "admin.notice",
+  "event_id": "notice-501",
+  "user_id": "303",
+  "recvr_seq": "303",
+  "post_seq": "501",
+  "postSeq": "501",
+  "subject": "장학금 안내",
+  "ttl_sec": "86400",
+  "sent_at": "1785200400",
+  "template_key": "push.notice.new",
+  "template_version": "1"
+}
+```
+
+- 관리자가 새 소식을 **등록**할 때만 발송한다. 수정(Update)과 상단 고정(TogglePin)은 발송하지 않는다.
+- `post_seq`와 `postSeq`를 **함께** 내보낸다. Android parser는 `post_seq`/`postSeq`를, iOS decoder는 `post_seq`→`postSeq`→`entityId` 순으로 읽어 공지 상세로 이동한다. `subject`는 원문 제목이다.
+- `post_seq`·`postSeq`·`subject`는 공지 push에만 있다. `message`와 `verification.reviewed`에는 포함되지 않는다.
+- 반대로 채팅용 key(`messageId`, `conversationUserSeq`, `senderUserSeq`)는 공지 push에서 **key는 존재하되 값이 빈 문자열**이다(누락이 아니다). `sender_seq`는 발신자가 없으므로 아예 내보내지 않는다.
+- `senderName`은 고정 상수 `"새 소식"`이다. 운영자가 template title을 편집해도 바뀌지 않으며, 편집된 문구가 이 key에 들어가는 일은 없다.
+- `preview`는 template 출력이 아니라 공지 원문 제목(`subject`)이다.
+- OS가 표시하는 title·body는 `push.notice.new` template의 결과다(기본값 title `새 소식`, body `{subject}`). `template_key`·`template_version`을 항상 함께 내보낸다.
+- `eventId`는 `notice-<SEQ>` 형식으로, 한 공지에 대한 모든 수신자 push가 같은 값을 갖는다.
+- 수신 대상은 `ALUMNI_PUSH_PREFERENCE.NOTICE_ENABLED`가 `'Y'`이거나 preference row 자체가 없는 계정의 모든 ACTIVE device다. 채팅용 `messageEnabled`는 공지 발송에 영향을 주지 않는다.
+- fan-out은 admin 요청 경로를 막지 않고 별도 goroutine에서 USR_SEQ keyset paging으로 진행한다. 한 수신자의 device는 page 경계에서 분리되지 않으므로 중복 발송이나 누락이 없다.
+- 공지 push의 enqueue는 chat과 달리 blocking이다. 대규모 broadcast가 queue 용량 때문에 조용히 유실되지 않으며, server shutdown 시에만 남은 수신자를 포기한다.
+- 발송 직전 공지가 여전히 공개 상태인지(`OPEN_YN='Y'`) 확인한다. fan-out 중 삭제된 공지는 발송하지 않는다.
 
 ## 11. 공개 기부 요약
 
@@ -962,7 +1021,7 @@ validation 실패 HTTP `422`:
 | 메시지 `recvrSeq`, `amSeq`, page | `userSeq`, `messageId`, cursor | alias 기간 뒤 모바일 수렴 |
 | SSE event ID·message ID 없음 | canonical event + `eventId` | reconnect/gap test 통과 |
 | push/block backend route 없음 | 본 문서 endpoint | Android/iOS fixture·integration 통과 |
-| push payload가 `event_type`, `event_id`, `args.*` 등 snake case 중심 | `type`, `eventId`, `messageId`, `conversationUserSeq` 공통 payload | Android/iOS parser와 provider adapter 동시 전환 |
+| push payload가 `event_type`, `event_id`, `args.*` 등 snake case 중심 | `type`, `eventId`, `messageId`, `conversationUserSeq` 공통 payload (단 `event_type`/`event_id`/`user_id`/`ttl_sec`/`sent_at`/`sender_seq`/`recvr_seq` snake case envelope는 Android parser가 필수로 요구하므로 계속 병행 emit하며, canonical은 camelCase set이다) | Android/iOS parser와 provider adapter 동시 전환 |
 | 기부 summary가 `displayAmount`만 반환 | 스냅샷 기준 금액·목표·기부자 수·달성률·기준일·등급 임계값 | 공통 fixture와 플랫폼 decoder 통과 |
 | 관리자 거래 route 비활성 | 통합 원장 CRUD/import | RBAC·원자성 test 통과 |
 

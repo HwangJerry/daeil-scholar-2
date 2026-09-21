@@ -172,6 +172,27 @@ func TestAppUpdatePolicyRoutesAreAdminOnly(t *testing.T) {
 	}
 }
 
+func TestNotificationTemplateRoutesAreAdminOnly(t *testing.T) {
+	publicRouter := chi.NewRouter()
+	registerPublicRoutes(publicRouter, handlers{}, nil, cache.New(0, 0))
+	adminRouter := chi.NewRouter()
+	registerAdminRoutes(adminRouter, handlers{}, nil, nil)
+
+	publicRoutes := routesForTest(t, publicRouter)
+	adminRoutes := routesForTest(t, adminRouter)
+	for _, route := range []string{
+		http.MethodGet + " /api/admin/notification-templates",
+		http.MethodPut + " /api/admin/notification-templates/{key}",
+	} {
+		if publicRoutes[route] {
+			t.Fatalf("notification template route is public: %s", route)
+		}
+		if !adminRoutes[route] {
+			t.Fatalf("notification template route is missing: %s", route)
+		}
+	}
+}
+
 func TestSentryMonitoringRoutesAreAdminOnly(t *testing.T) {
 	publicRouter := chi.NewRouter()
 	registerPublicRoutes(publicRouter, handlers{}, nil, cache.New(0, 0))

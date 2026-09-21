@@ -24,6 +24,7 @@ var canonicalFixtureNames = []string{
 	"message-send.json",
 	"push-device.json",
 	"push-message.json",
+	"push-notice.json",
 	"push-preferences.json",
 }
 

@@ -101,11 +101,12 @@ func (r *PushRepository) DeleteDevice(platform, deviceToken string) error {
 func (r *PushRepository) GetPreferences(usrSeq int) (*model.PushPreferences, error) {
 	var messageEnabled string
 	var messagePreviewEnabled string
+	var noticeEnabled string
 	err := r.db.QueryRowx(`
-		SELECT MESSAGE_ENABLED, MESSAGE_PREVIEW_ENABLED
+		SELECT MESSAGE_ENABLED, MESSAGE_PREVIEW_ENABLED, NOTICE_ENABLED
 		FROM ALUMNI_PUSH_PREFERENCE
 		WHERE USR_SEQ = ?
-	`, usrSeq).Scan(&messageEnabled, &messagePreviewEnabled)
+	`, usrSeq).Scan(&messageEnabled, &messagePreviewEnabled, &noticeEnabled)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -115,25 +116,48 @@ func (r *PushRepository) GetPreferences(usrSeq int) (*model.PushPreferences, err
 	return &model.PushPreferences{
 		MessageEnabled:        messageEnabled == "Y",
 		MessagePreviewEnabled: messagePreviewEnabled == "Y",
+		NoticeEnabled:         noticeEnabled == "Y",
 	}, nil
 }
 
-func (r *PushRepository) UpsertPreferences(usrSeq int, preferences model.PushPreferences) error {
+// UpsertPreferences writes one preferences PUT in a single statement. A nil
+// NoticeEnabled means the client omitted the field, and the COALESCE keeps the
+// stored value (or the 'Y' default on insert) without a read-modify-write that
+// two concurrent devices could interleave.
+func (r *PushRepository) UpsertPreferences(usrSeq int, update model.PushPreferencesUpdate) error {
+	noticeEnabled := optionalPushFlag(update.NoticeEnabled)
 	_, err := r.db.Exec(`
 		INSERT INTO ALUMNI_PUSH_PREFERENCE (
 			USR_SEQ,
 			MESSAGE_ENABLED,
 			MESSAGE_PREVIEW_ENABLED,
+			NOTICE_ENABLED,
 			CREATED_AT,
 			UPDATED_AT
 		)
-		VALUES (?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())
+		VALUES (?, ?, ?, COALESCE(?, 'Y'), UTC_TIMESTAMP(), UTC_TIMESTAMP())
 		ON DUPLICATE KEY UPDATE
 			MESSAGE_ENABLED = VALUES(MESSAGE_ENABLED),
 			MESSAGE_PREVIEW_ENABLED = VALUES(MESSAGE_PREVIEW_ENABLED),
+			NOTICE_ENABLED = COALESCE(?, NOTICE_ENABLED),
 			UPDATED_AT = UTC_TIMESTAMP()
-	`, usrSeq, pushFlag(preferences.MessageEnabled), pushFlag(preferences.MessagePreviewEnabled))
+	`,
+		usrSeq,
+		pushFlag(update.MessageEnabled),
+		pushFlag(update.MessagePreviewEnabled),
+		noticeEnabled,
+		noticeEnabled,
+	)
 	return err
+}
+
+// optionalPushFlag maps an omitted boolean to SQL NULL, which is what the
+// COALESCE in the upsert reads as "leave this column alone".
+func optionalPushFlag(enabled *bool) interface{} {
+	if enabled == nil {
+		return nil
+	}
+	return pushFlag(*enabled)
 }
 
 func pushFlag(enabled bool) string {

@@ -80,6 +80,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	appSettingRepo := repository.NewAppSettingRepository(db)
 	appUpdatePolicyRepo := repository.NewAppUpdatePolicyRepository(db)
 	appClientBuildRepo := repository.NewAppClientBuildRepository(db)
+	notificationTemplateRepo := repository.NewNotificationTemplateRepository(db)
 	canonicalPasswordReady, err := repository.CanonicalPasswordWriteReady(db)
 	if err != nil {
 		return nil, err
@@ -104,6 +105,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	appSettingService := service.NewAppSettingService(appSettingRepo, cacheStore)
 	appClientBuildService := service.NewAppClientBuildService(appClientBuildRepo, cacheStore, logger)
 	appUpdatePolicyService := service.NewAppUpdatePolicyService(appUpdatePolicyRepo, appSettingService, appClientBuildService)
+	notificationTemplateService := service.NewNotificationTemplateService(notificationTemplateRepo, cacheStore, logger)
 
 	realtimeHub := realtime.NewHub(logger)
 	var messageNotifier service.MessageNotifier = service.NewRealtimeMessageNotifier(realtimeHub)
@@ -113,7 +115,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		if err != nil {
 			return nil, err
 		}
-		pushDelivery = service.NewPushDeliveryNotifier(pushRepo, pushSender, logger)
+		pushDelivery = service.NewPushDeliveryNotifier(pushRepo, pushSender, notificationTemplateService, logger)
 		messageNotifier = service.NewCompositeMessageNotifier(messageNotifier, pushDelivery)
 	}
 
@@ -155,6 +157,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
 	if pushDelivery != nil {
 		adminMemberSvc.SetVerificationReviewNotifier(pushDelivery)
+		adminNoticeSvc.SetNoticePublishedNotifier(pushDelivery)
 	}
 	visitService := service.NewVisitService(visitRepo, cacheStore, cfg.VisitIPSalt, logger)
 	mobileAppEventService := service.NewMobileAppEventService(mobileAppEventRepo)
@@ -185,7 +188,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	pushService := service.NewPushService(pushRepo)
 	blockedMessageCleanup := job.NewBlockedMessageCleanupJob(memberBlockRepo, logger)
 	phoneVerificationService := service.NewPhoneVerificationService(
-		phoneVerificationRepo, service.NewSMSSender(cfg.SMS, logger), logger,
+		phoneVerificationRepo, service.NewSMSSender(cfg.SMS, logger), notificationTemplateService, logger,
 	)
 
 	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
@@ -256,6 +259,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		sentryMonitoring:    handler.NewSentryMonitoringHandler(sentryMonitoringService),
 		appSetting:          handler.NewAppSettingHandler(appSettingService),
 		adminAppUpdate:      handler.NewAdminAppUpdateHandler(appUpdatePolicyService, appClientBuildService),
+		adminNotifTemplate:  handler.NewAdminNotificationTemplateHandler(notificationTemplateService),
 	}
 
 	seal, _ := service.DonationArchiveSealer(cfg.AccountErasure.ArchiveKey)

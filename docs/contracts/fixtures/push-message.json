@@ -6,5 +6,14 @@
   "senderUserSeq": "202",
   "senderName": "예시 동문",
   "preview": "안녕하세요.",
-  "createdAt": "2026-07-28T01:00:00Z"
+  "createdAt": "2026-07-28T01:00:00Z",
+  "event_type": "message",
+  "event_id": "9001",
+  "user_id": "303",
+  "recvr_seq": "303",
+  "sender_seq": "202",
+  "ttl_sec": "86400",
+  "sent_at": "1785200400",
+  "template_key": "push.message.new_preview_on",
+  "template_version": "1"
 }
