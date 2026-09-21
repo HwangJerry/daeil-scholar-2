@@ -14,6 +14,13 @@
 | 4 | **토큰 회전 원자성이 깨져 조용한 강제 로그아웃** (리뷰의 "대기자 동반 취소"는 이 문제의 증상 하나) | **높음** | kotlin + backend | 착수 전 |
 | 5 | 계정 삭제 화면 `imePadding` 이중 적용 | 중간 | kotlin | 착수 전 |
 | 6 | `windowLightNavigationBar` v27 대응 누락 | 낮음 | kotlin | **오탐 — 대응 불필요** |
+| 7 | 새 소식 푸시 팬아웃이 메모리 큐 — 배포 재시작 중 남은 수신자 유실 | 중간 | backend | 착수 전 (2026-09-21 등록) |
+| 8 | 푸시 페이로드가 4KB 한도를 넘을 수 있음 (긴 한글 쪽지가 본문·`preview`에 두 번) | 중간 | backend | 착수 전 |
+| 9 | FCM `android.ttl` / APNs `apns-expiration` 미설정 — 만료가 클라이언트 관례에만 의존 | 낮음 | backend | 착수 전 |
+| 10 | Android 푸시 파서가 snake_case 봉투를 요구 — 계약 문서(camelCase canonical)와 불일치, 서버가 이중 발송 중 | 낮음 | kotlin + backend | 착수 전 |
+| 11 | `collapse_key` / `deep_link` 미발송 | 낮음 | backend | 착수 전 |
+| 12 | `screen.notificationSettings` 계약 등록이 다른 세션의 미커밋 트리에 섞여 있음 | 낮음 | design-system | 사용자 판단 대기 |
+| 13 | 마이그레이션 076은 바이너리 배포 **전에** 적용해야 함 | 운영 | backend | 배포 절차에 반영 필요 |
 
 권장 순서: **4-4의 1~3단계**(비용이 거의 없고 위험이 큼) → **1 → 2**(가입 흐름을 막으므로 출시 전 필수) → **5**(작고 눈에 띔) → **3** → **4-4의 4~6단계**(설계 변경·서버 변경).
 
@@ -242,3 +249,39 @@ SELECT COUNT(DISTINCT MRT_SID) FROM ALUMNI_MOBILE_REFRESH_TOKEN;
 - 이 속성은 API 27에서 추가되었으므로 `values/`(27 미만)에서는 no-op이다. 기본 리소스에서 빼고 `values-v27`에서 지정하는 현재 형태가 올바르다
 
 **대응 불필요.** 리뷰 결과를 그대로 티켓으로 옮기지 말 것.
+
+## 7. 알림 문구·새 소식 푸시 작업(2026-09-21)에서 남긴 후속 과제
+
+커밋 `b90bb5a`~`cdba0b1`(backend), `f2167d9`(kotlin), `c69e732`(swift)에서 코드 리뷰가 지적했으나 **의도적으로 미루거나 소유가 다른** 항목이다. 각 항목의 이유를 함께 남긴다.
+
+### 7-1. 새 소식 팬아웃의 재시작 안전성 (중간)
+
+`PushDeliveryNotifier.NotifyNoticePublished`는 수신자를 페이지 단위로 읽어 메모리 큐에 넣고 워커가 소비한다. **배포·재시작이 팬아웃 도중에 겹치면 아직 큐에 있거나 아직 읽지 않은 수신자는 발송되지 않고, 재개할 방법도 없다.** 미사용 테이블 `ALUMNI_PUSH_OUTBOX`가 재시작-안전 버전의 자연스러운 자리다(수신자별 행을 먼저 기록하고 워커가 테이블에서 소비).
+
+미룬 이유: 현재 등록 기기 2대, 출시 전. 공지 빈도와 회원 수가 늘어 "배포 중 공지 발송"이 현실적인 겹침이 되기 전에 처리하면 된다. 코드의 팬아웃 진입점 주석에도 같은 내용을 남겼다.
+
+### 7-2. 푸시 페이로드 4KB 한도 (중간)
+
+쪽지 본문 최대 1000자(`message_service.go`)를 한글로 채우면 UTF-8 ~3KB이고, 이 내용이 `notification.body`(또는 `aps.alert.body`)와 `data.preview`에 **두 번** 실린다. FCM/APNs 한도 4KB를 넘으면 `PayloadTooLarge`/`INVALID_ARGUMENT`로 영구 거부되어 경고 로그만 남고 푸시가 사라진다. 이번 작업 이전부터 있던 문제이며, 봉투 키 추가로 ~250바이트가 더 늘었다.
+
+대응: `payloadData()`에서 `preview`를 바이트 예산으로 자르고, OS 본문도 같은 예산으로 자른다. 잘림 규칙은 계약 문서 §10.4에 명시.
+
+### 7-3. 제공자 측 TTL (낮음)
+
+`ttl_sec`은 데이터 키로만 내려가고 FCM `message.android.ttl`, APNs `apns-expiration`은 설정하지 않는다. 기기가 이틀 꺼져 있으면 제공자는 그대로 전달하고, 만료 판단은 클라이언트 파서의 `sent_at + ttl_sec`에만 의존한다. 같은 상수(`pushTTLSeconds`)로 제공자 필드를 채우면 한 곳에서 강제된다.
+
+### 7-4. Android 파서 vs 계약 문서 (낮음)
+
+`docs/mvp-api-contract.md` §965는 "snake_case → camelCase canonical로 전환, 양 플랫폼 파서 동시 전환"을 기록하지만 **Android `PushPayloadParser`는 여전히 `event_type`/`ttl_sec`/`event_id`/`user_id`를 요구한다**(전환 미완). `b90bb5a`는 서버가 두 형식을 모두 내보내는 과도기 방식을 택했고 §10.4·§965에 그렇게 적었다. 정석은 Android 파서가 iOS의 `isCanonicalMessage`처럼 camelCase를 받도록 고친 뒤 서버의 snake_case를 제거하는 순서다. 앱이 미출시라 지금 하면 비용이 가장 낮다.
+
+### 7-5. `collapse_key` / `deep_link` (낮음)
+
+iOS 디코더는 `type`이 없는 페이로드에 `collapse_key`와 `template_key`를 요구한다. 지금은 항상 `type`을 보내므로 걸리지 않지만 안전 여유가 얇다. `deep_link`는 두 파서 모두 읽지만 서버가 보내지 않아 탭 라우팅이 앱 기본값에 의존한다.
+
+### 7-6. design-system 계약 등록 (사용자 판단)
+
+Android 알림 설정 화면을 위해 `design-system/contracts/component-contracts.json`에 `screen.notificationSettings`를 추가하고 `COMPONENT_CONTRACTS.md`를 재생성했다. 이 두 파일은 **다른 세션이 `fix/design-verification` 브랜치에서 수정 중인 미커밋 변경과 같은 파일**이라 이 작업에서 커밋하지 않았다. 해당 항목만 분리 커밋할지, 그 브랜치 마무리 때 함께 커밋할지 결정이 필요하다. 참고로 `npm run verify-design-system`은 강제 업데이트 작업의 미해결 항목(`ForceUpdateView.swift` 계약 증적 부재, 플랜 문서 O4)으로 실패 중이다.
+
+### 7-7. 배포 순서 — 마이그레이션 076 선행 (운영)
+
+`GetPreferences`가 `NOTICE_ENABLED`를 무조건 SELECT하므로, 076 적용 전에 새 바이너리가 뜨면 **모든 쪽지 푸시와 `GET/PUT /api/push/preferences`가 실패**한다. 배포 절차에 "마이그레이션 → 바이너리" 순서를 명시할 것. 승인 게이트 값: `CANONICAL_CANDIDATE_MANIFEST_SHA256=a021630456c50274fd339bb9aa03558a82e0b40f26691f81fbbab035022562eb`, `future_migrations=37` (075·076 포함).
