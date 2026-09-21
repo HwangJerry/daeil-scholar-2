@@ -41,8 +41,14 @@ type PushMessagePayload struct {
 	ConversationUserSeq string
 	SenderUserSeq       string
 	SenderName          string
-	Preview             string
-	CreatedAt           string
-	TemplateKey         string
-	TemplateVersion     int
+	// Title and Body are the admin-editable text the operating system displays.
+	// They are kept apart from SenderName and Preview, which stay the real
+	// sender's name and the raw message snippet the apps route, label, and list
+	// conversations by.
+	Title           string
+	Body            string
+	Preview         string
+	CreatedAt       string
+	TemplateKey     string
+	TemplateVersion int
 }

@@ -128,7 +128,8 @@ func (c *capturingSMSSender) sentCode(t *testing.T) string {
 func newServiceUnderTest() (*service.PhoneVerificationService, *fakePhoneVerificationStore, *capturingSMSSender) {
 	store := newFakeStore()
 	sender := &capturingSMSSender{}
-	return service.NewPhoneVerificationService(store, sender, zerolog.Nop()), store, sender
+	templates := service.NewTestNotificationTemplateService(nil)
+	return service.NewPhoneVerificationService(store, sender, templates, zerolog.Nop()), store, sender
 }
 
 func TestRequestCodeStoresOnlyTheCodeHash(t *testing.T) {
@@ -246,5 +247,71 @@ func TestConfirmCodeRetiresTheVerificationAfterRepeatedFailures(t *testing.T) {
 	// The correct code must no longer work once the verification is retired.
 	if _, err := svc.ConfirmCode(requested.VerificationID, realCode); !errors.Is(err, service.ErrPhoneVerificationNotFound) {
 		t.Fatalf("post-lockout error = %v, want ErrPhoneVerificationNotFound", err)
+	}
+}
+
+// TestRequestCodeSendsTheDefaultTemplateBody pins the wording members receive when
+// no administrator has edited the template.
+func TestRequestCodeSendsTheDefaultTemplateBody(t *testing.T) {
+	svc, _, sender := newServiceUnderTest()
+
+	if _, err := svc.RequestCode("010-1234-5678"); err != nil {
+		t.Fatalf("RequestCode() error = %v", err)
+	}
+
+	code := sender.sentCode(t)
+	want := "[대일외고장학회] 인증번호 " + code + " 를 입력해 주세요."
+	if got := sender.sent[0].Body; got != want {
+		t.Fatalf("SMS body = %q, want %q", got, want)
+	}
+}
+
+// TestRequestCodeSendsTheAdministratorEditedBody proves the edit reaches the
+// gateway and that the code is still substituted.
+func TestRequestCodeSendsTheAdministratorEditedBody(t *testing.T) {
+	store := newFakeStore()
+	sender := &capturingSMSSender{}
+	templates := service.NewTestNotificationTemplateService(map[string]model.NotificationTemplate{
+		model.NotificationTemplatePhoneVerificationSMS: {
+			Key:     model.NotificationTemplatePhoneVerificationSMS,
+			Channel: model.NotificationChannelSMS,
+			Body:    "인증번호는 {code} 입니다.",
+			Version: 4,
+		},
+	})
+	svc := service.NewPhoneVerificationService(store, sender, templates, zerolog.Nop())
+
+	if _, err := svc.RequestCode("010-1234-5678"); err != nil {
+		t.Fatalf("RequestCode() error = %v", err)
+	}
+
+	want := "인증번호는 " + sender.sentCode(t) + " 입니다."
+	if got := sender.sent[0].Body; got != want {
+		t.Fatalf("SMS body = %q, want %q", got, want)
+	}
+}
+
+// emptyTemplateRenderer stands in for a template that resolves to nothing at
+// all, which the real service can produce only for an unknown key.
+type emptyTemplateRenderer struct{}
+
+func (emptyTemplateRenderer) Render(key string, _ map[string]string) service.RenderedTemplate {
+	return service.RenderedTemplate{Key: key}
+}
+
+// TestRequestCodeRefusesToSendAnEmptyTemplate keeps a blank text off the
+// gateway: a member receiving one has no code to enter and no way to continue.
+func TestRequestCodeRefusesToSendAnEmptyTemplate(t *testing.T) {
+	store := newFakeStore()
+	sender := &capturingSMSSender{}
+	svc := service.NewPhoneVerificationService(store, sender, emptyTemplateRenderer{}, zerolog.Nop())
+
+	_, err := svc.RequestCode("010-1234-5678")
+
+	if !errors.Is(err, service.ErrSMSTemplateEmpty) {
+		t.Fatalf("RequestCode() error = %v, want ErrSMSTemplateEmpty", err)
+	}
+	if len(sender.sent) != 0 {
+		t.Fatalf("an empty SMS was sent: %#v", sender.sent)
 	}
 }

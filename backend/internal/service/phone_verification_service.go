@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"math/big"
 	"time"
 
@@ -37,6 +36,10 @@ var (
 	ErrPhoneVerificationThrottled = errors.New("phone verification requests throttled")
 	// ErrPhoneNotVerified is returned when registration presents no usable grant token.
 	ErrPhoneNotVerified = errors.New("phone number is not verified")
+	// ErrSMSTemplateEmpty stops a blank text going out when the verification
+	// template renders to nothing. A member who receives an empty message has no
+	// way to continue, so failing loudly is better than spending their quota.
+	ErrSMSTemplateEmpty = errors.New("verification SMS template rendered empty")
 )
 
 type phoneVerificationStore interface {
@@ -53,14 +56,21 @@ type phoneVerificationStore interface {
 // PhoneVerificationService owns the SMS code lifecycle: issue, confirm, and the
 // one-shot grant that registration consumes.
 type PhoneVerificationService struct {
-	store  phoneVerificationStore
-	sender SMSSender
-	logger zerolog.Logger
+	store     phoneVerificationStore
+	sender    SMSSender
+	templates notificationTextRenderer
+	logger    zerolog.Logger
 }
 
-// NewPhoneVerificationService creates a PhoneVerificationService.
-func NewPhoneVerificationService(store phoneVerificationStore, sender SMSSender, logger zerolog.Logger) *PhoneVerificationService {
-	return &PhoneVerificationService{store: store, sender: sender, logger: logger}
+// NewPhoneVerificationService creates a PhoneVerificationService. The renderer
+// supplies the code message text, which administrators may edit.
+func NewPhoneVerificationService(
+	store phoneVerificationStore,
+	sender SMSSender,
+	templates notificationTextRenderer,
+	logger zerolog.Logger,
+) *PhoneVerificationService {
+	return &PhoneVerificationService{store: store, sender: sender, templates: templates, logger: logger}
 }
 
 // RequestCode validates the number, throttles resends, and dispatches a fresh code.
@@ -90,9 +100,14 @@ func (s *PhoneVerificationService) RequestCode(phone string) (*model.PhoneVerifi
 	if err := s.store.InsertVerification(verificationID, canonicalPhone.String(), hashSecret(code), time.Now().Add(phoneCodeExpiry)); err != nil {
 		return nil, err
 	}
+	message := s.templates.Render(model.NotificationTemplatePhoneVerificationSMS, map[string]string{"code": code})
+	if message.Body == "" {
+		s.logger.Error().Str("templateKey", model.NotificationTemplatePhoneVerificationSMS).Msg("verification SMS template rendered empty")
+		return nil, ErrSMSTemplateEmpty
+	}
 	if err := s.sender.Send(model.SMSMessage{
 		To:   canonicalPhone.String(),
-		Body: fmt.Sprintf("[대일외고장학회] 인증번호 %s 를 입력해 주세요.", code),
+		Body: message.Body,
 	}); err != nil {
 		// The record stays; the user can retry within the throttle budget.
 		return nil, err

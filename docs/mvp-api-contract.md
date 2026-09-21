@@ -729,7 +729,9 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
   "recvr_seq": "303",
   "sender_seq": "202",
   "ttl_sec": "86400",
-  "sent_at": "1785200400"
+  "sent_at": "1785200400",
+  "template_key": "push.message.new_preview_on",
+  "template_version": "1"
 }
 ```
 
@@ -739,10 +741,13 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
 - `ttl_sec`은 `"86400"` 고정이다. Android는 `1..86400` 범위 밖이면 payload 전체를 버리고, iOS는 기본값으로 clamp한다.
 - `sent_at`은 `createdAt`을 RFC3339로 parse한 epoch second 문자열이다. parse할 수 없으면 발송 시각으로 대체하며, `ttl_sec` 만료 기준이 비는 일은 없다.
 - `user_id`와 `recvr_seq`는 수신자 seq가 있을 때만 내보낸다. `sender_seq`는 발신자 seq가 있을 때만 내보내므로 발신자가 없는 `verification.reviewed`에는 없다.
-- `template_key`와 `template_version`은 server template이 문구를 render했을 때만, 항상 **함께** 내보낸다. `template_version`은 `0`이어도 key와 같이 포함한다.
+- `template_key`와 `template_version`은 항상 **함께** 내보낸다. `template_version`은 `0`이어도 key와 같이 포함하며, `0`은 운영자가 편집하지 않아 catalog 기본 문구가 쓰였다는 뜻이다.
+- `message` push는 `template_key`를 항상 포함한다. `messagePreviewEnabled`에 따라 `push.message.new_preview_on` 또는 `push.message.new_preview_off`다. `verification.reviewed`는 `push.verification.approved` 또는 `push.verification.rejected`다.
+- OS가 표시하는 title·body는 운영자가 편집할 수 있는 template 결과다. `senderName`과 `preview`는 편집 대상이 아니며 template 출력이 들어가지 않는다.
+- `preview`는 앱이 목록·thread에 쓰는 원문 snippet이다(미리보기를 끈 경우에는 고정 대체 문구). title이나 body를 편집해도 `preview`와 `senderName`은 바뀌지 않는다.
 - 기본 알림은 발신자 이름과 preview를 포함한다.
 - `eventId`는 durable idempotency를 위해 decimal `messageId` 문자열과 동일하다.
-- `messagePreviewEnabled=false`이면 preview를 정확히 `새 메시지가 도착했습니다.`로 대체한다.
+- `messagePreviewEnabled=false`이면 body와 `preview`를 모두 `push.message.new_preview_off` 문구(기본값 `새 메시지가 도착했습니다.`)로 대체한다. 이 경우 message 원문은 어느 key에도 들어가지 않는다.
 - `messageEnabled=false` 또는 수신자가 발신자를 차단했으면 provider 호출 자체를 하지 않는다.
 - push에는 access token·이메일·연락처를 넣지 않는다.
 - accepted visible message는 sender request 경로에서 provider를 직접 호출하지 않고 process-local 비동기 queue에 enqueue한다. recipient 기준 4개 shard, shard당 최대 256건이며 같은 recipient의 순서를 보존한다.

@@ -19,6 +19,10 @@ var (
 const (
 	pushShardCount    = 4
 	pushShardCapacity = 256
+	// verificationReviewSenderName labels review pushes in the apps. There is no
+	// human sender behind a review, and this is a routing/label key rather than
+	// displayed text, so it stays fixed even when the title is edited.
+	verificationReviewSenderName = "동문 인증 결과"
 )
 
 type PushDeliveryStore interface {
@@ -31,25 +35,39 @@ type PushProvider interface {
 	Send(ctx context.Context, target model.PushDeliveryTarget, payload model.PushMessagePayload) error
 }
 
+// pushDeliveryItem is one queued notification. A non-empty verificationStatus
+// marks a review notification; everything else is a message.
 type pushDeliveryItem struct {
-	reviewPayload *model.PushMessagePayload
-	recvrSeq      int
-	senderSeq     int
-	senderName    string
-	accepted      *model.SendMessageResponse
-	content       string
+	verificationStatus model.VerificationStatus
+	recvrSeq           int
+	senderSeq          int
+	senderName         string
+	accepted           *model.SendMessageResponse
+	content            string
+}
+
+func (i pushDeliveryItem) isVerificationReview() bool {
+	return i.verificationStatus != ""
 }
 
 type PushDeliveryNotifier struct {
-	store    PushDeliveryStore
-	provider PushProvider
-	logger   zerolog.Logger
-	shards   [pushShardCount]chan pushDeliveryItem
-	wg       sync.WaitGroup
+	store     PushDeliveryStore
+	provider  PushProvider
+	templates notificationTextRenderer
+	logger    zerolog.Logger
+	shards    [pushShardCount]chan pushDeliveryItem
+	wg        sync.WaitGroup
 }
 
-func NewPushDeliveryNotifier(store PushDeliveryStore, provider PushProvider, logger zerolog.Logger) *PushDeliveryNotifier {
-	n := &PushDeliveryNotifier{store: store, provider: provider, logger: logger}
+// NewPushDeliveryNotifier creates the fan-out notifier. The renderer supplies
+// the visible title and body of every push, which administrators may edit.
+func NewPushDeliveryNotifier(
+	store PushDeliveryStore,
+	provider PushProvider,
+	templates notificationTextRenderer,
+	logger zerolog.Logger,
+) *PushDeliveryNotifier {
+	n := &PushDeliveryNotifier{store: store, provider: provider, templates: templates, logger: logger}
 	for i := range n.shards {
 		n.shards[i] = make(chan pushDeliveryItem, pushShardCapacity)
 	}
@@ -97,14 +115,8 @@ func (n *PushDeliveryNotifier) NotifyVerificationReviewed(userSeq int, status mo
 	if userSeq <= 0 || (status != model.VerificationApproved && status != model.VerificationRejected) {
 		return
 	}
-	now := time.Now().UTC()
-	body := "동문 인증이 승인되었습니다. 이제 동문 커뮤니티를 이용할 수 있어요."
-	if status == model.VerificationRejected {
-		body = "동문 인증 신청이 반려되었습니다. 앱에서 사유를 확인하고 다시 신청해 주세요."
-	}
-	payload := &model.PushMessagePayload{Type: "verification.reviewed", EventID: "verification-" + strconv.Itoa(userSeq) + "-" + strconv.FormatInt(now.UnixNano(), 10), RecipientUserSeq: strconv.Itoa(userSeq), VerificationStatus: status, SenderName: "동문 인증 결과", Preview: body, CreatedAt: now.Format(time.RFC3339)}
 	select {
-	case n.shards[userSeq%pushShardCount] <- pushDeliveryItem{recvrSeq: userSeq, reviewPayload: payload}:
+	case n.shards[userSeq%pushShardCount] <- pushDeliveryItem{recvrSeq: userSeq, verificationStatus: status}:
 	default:
 		n.logger.Warn().Int("recipient_seq", userSeq).Msg("verification push delivery queue full")
 	}
@@ -113,10 +125,84 @@ func (n *PushDeliveryNotifier) NotifyVerificationReviewed(userSeq int, status mo
 func (n *PushDeliveryNotifier) NotifyMessageSent(int, int)                 {}
 func (n *PushDeliveryNotifier) NotifyMessagesRead(int, int, int64, string) {}
 
+// buildVerificationPayload renders one review notification. Rejection details
+// are fetched in the authenticated app, never exposed on a lock screen, so the
+// body carries only the outcome.
+func (n *PushDeliveryNotifier) buildVerificationPayload(item pushDeliveryItem) model.PushMessagePayload {
+	templateKey := model.NotificationTemplateVerificationApproved
+	if item.verificationStatus == model.VerificationRejected {
+		templateKey = model.NotificationTemplateVerificationRejected
+	}
+	rendered := n.templates.Render(templateKey, nil)
+	now := time.Now().UTC()
+	return model.PushMessagePayload{
+		Type:               "verification.reviewed",
+		EventID:            "verification-" + strconv.Itoa(item.recvrSeq) + "-" + strconv.FormatInt(now.UnixNano(), 10),
+		RecipientUserSeq:   strconv.Itoa(item.recvrSeq),
+		VerificationStatus: item.verificationStatus,
+		SenderName:         verificationReviewSenderName,
+		Title:              rendered.Title,
+		Body:               rendered.Body,
+		// A review carries no message content, so the data key repeats the
+		// displayed body rather than holding anything the body hides.
+		Preview:         rendered.Body,
+		CreatedAt:       now.Format(time.RFC3339),
+		TemplateKey:     rendered.Key,
+		TemplateVersion: rendered.Version,
+	}
+}
+
+// buildMessagePayload renders one new-message notification. It renders once per
+// recipient rather than once per device; the template service caches, so
+// repeated renders cost a map lookup.
+func (n *PushDeliveryNotifier) buildMessagePayload(
+	item pushDeliveryItem,
+	preferences *model.PushPreferences,
+) model.PushMessagePayload {
+	previewEnabled := preferences == nil || preferences.MessagePreviewEnabled
+
+	var rendered RenderedTemplate
+	// Preview holds the raw snippet the apps list conversations by. With
+	// previews off it must not carry the content at all, so it repeats the
+	// masked body instead.
+	preview := item.content
+	if previewEnabled {
+		rendered = n.templates.Render(
+			model.NotificationTemplateMessagePreviewOn,
+			map[string]string{"senderName": item.senderName, "content": item.content},
+		)
+	} else {
+		rendered = n.templates.Render(
+			model.NotificationTemplateMessagePreviewOff,
+			map[string]string{"senderName": item.senderName},
+		)
+		preview = rendered.Body
+	}
+
+	messageID := strconv.FormatInt(item.accepted.MessageID, 10)
+	return model.PushMessagePayload{
+		Type:                "message",
+		EventID:             messageID,
+		RecipientUserSeq:    strconv.Itoa(item.recvrSeq),
+		MessageID:           messageID,
+		ConversationUserSeq: strconv.Itoa(item.senderSeq),
+		SenderUserSeq:       strconv.Itoa(item.senderSeq),
+		// SenderName stays the real sender: the apps route and label
+		// conversations by it, independently of the editable title.
+		SenderName:      item.senderName,
+		Title:           rendered.Title,
+		Body:            rendered.Body,
+		Preview:         preview,
+		CreatedAt:       item.accepted.CreatedAt,
+		TemplateKey:     rendered.Key,
+		TemplateVersion: rendered.Version,
+	}
+}
+
 func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryItem) {
 	var payload model.PushMessagePayload
-	if item.reviewPayload != nil {
-		payload = *item.reviewPayload
+	if item.isVerificationReview() {
+		payload = n.buildVerificationPayload(item)
 	} else {
 		preferences, err := n.store.GetPreferences(item.recvrSeq)
 		if err != nil {
@@ -126,23 +212,7 @@ func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryIte
 		if preferences != nil && !preferences.MessageEnabled {
 			return
 		}
-		preview := item.content
-		if preferences != nil && !preferences.MessagePreviewEnabled {
-			preview = "새 메시지가 도착했습니다."
-		}
-		messageID := strconv.FormatInt(item.accepted.MessageID, 10)
-		payload = model.PushMessagePayload{
-			Type:                "message",
-			EventID:             messageID,
-			RecipientUserSeq:    strconv.Itoa(item.recvrSeq),
-			MessageID:           messageID,
-			ConversationUserSeq: strconv.Itoa(item.senderSeq),
-			SenderUserSeq:       strconv.Itoa(item.senderSeq),
-			SenderName:          item.senderName,
-			Preview:             preview,
-			CreatedAt:           item.accepted.CreatedAt,
-		}
-
+		payload = n.buildMessagePayload(item, preferences)
 	}
 	targets, err := n.store.ListDevices(item.recvrSeq)
 	if err != nil {
@@ -153,7 +223,7 @@ func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryIte
 		for attempt := 0; attempt < 3; attempt++ {
 			if guard, ok := n.store.(interface {
 				MessageStillAvailable(int, int, int64) (bool, error)
-			}); ok && item.reviewPayload == nil {
+			}); ok && !item.isVerificationReview() {
 				available, checkErr := guard.MessageStillAvailable(item.senderSeq, item.recvrSeq, item.accepted.MessageID)
 				if checkErr != nil || !available {
 					return
@@ -161,7 +231,7 @@ func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryIte
 			}
 			if guard, ok := n.store.(interface {
 				VerificationStillCurrent(int, model.VerificationStatus) (bool, error)
-			}); ok && item.reviewPayload != nil {
+			}); ok && item.isVerificationReview() {
 				available, checkErr := guard.VerificationStillCurrent(item.recvrSeq, payload.VerificationStatus)
 				if checkErr != nil || !available {
 					return

@@ -29,7 +29,8 @@ func response(status int, body string) *http.Response {
 func providerPayload() model.PushMessagePayload {
 	return model.PushMessagePayload{
 		Type: "message", EventID: "9001", MessageID: "9001", ConversationUserSeq: "202",
-		RecipientUserSeq: "303", SenderUserSeq: "202", SenderName: "예시 동문", Preview: "안녕하세요.", CreatedAt: "2026-07-28T01:00:00Z",
+		RecipientUserSeq: "303", SenderUserSeq: "202", SenderName: "예시 동문",
+		Title: "예시 동문", Body: "안녕하세요.", Preview: "안녕하세요.", CreatedAt: "2026-07-28T01:00:00Z",
 	}
 }
 
@@ -203,5 +204,70 @@ func TestPayloadDataEmitsTemplateVersionAlongsideKeyEvenWhenZero(t *testing.T) {
 	data := payloadData(payload)
 	if data["template_key"] != "message.new" || data["template_version"] != "0" {
 		t.Fatalf("template identity = %q/%q, want the pair emitted atomically", data["template_key"], data["template_version"])
+	}
+}
+
+// titleSplitCases prove the split between the text the operating system shows
+// and the keys the apps route by: Title/Body come from the template, while
+// senderName and preview keep the real sender and the raw message snippet.
+var titleSplitCases = []struct {
+	name      string
+	title     string
+	body      string
+	wantTitle string
+	wantBody  string
+}{
+	{"default template", "예시 동문", "안녕하세요.", `"title":"예시 동문"`, `"body":"안녕하세요."`},
+	{"edited title", "대일외고 동문회", "안녕하세요.", `"title":"대일외고 동문회"`, `"body":"안녕하세요."`},
+	{"hidden preview body", "예시 동문", "새 메시지가 도착했습니다.", `"title":"예시 동문"`, `"body":"새 메시지가 도착했습니다."`},
+}
+
+func assertTitleSplit(t *testing.T, text, wantTitle, wantBody string) {
+	t.Helper()
+	for _, fragment := range []string{wantTitle, wantBody, `"senderName":"예시 동문"`, `"preview":"안녕하세요."`} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("body missing %s: %s", fragment, text)
+		}
+	}
+}
+
+func TestFCMSenderTitlesWithTheTemplateWhileDataKeepsTheSenderName(t *testing.T) {
+	for _, test := range titleSplitCases {
+		t.Run(test.name, func(t *testing.T) {
+			client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				body, _ := io.ReadAll(request.Body)
+				assertTitleSplit(t, string(body), test.wantTitle, test.wantBody)
+				return response(http.StatusOK, `{}`), nil
+			})}
+			sender := &fcmSender{projectID: "project", client: client, tokenSource: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "token"})}
+			payload := providerPayload()
+			payload.Title, payload.Body = test.title, test.body
+			if err := sender.Send(context.Background(), model.PushDeliveryTarget{Platform: "android", DeviceToken: "device-token"}, payload); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestAPNSSenderTitlesWithTheTemplateWhileDataKeepsTheSenderName(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range titleSplitCases {
+		t.Run(test.name, func(t *testing.T) {
+			client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				body, _ := io.ReadAll(request.Body)
+				assertTitleSplit(t, string(body), test.wantTitle, test.wantBody)
+				return response(http.StatusOK, ""), nil
+			})}
+			sender := &apnsSender{teamID: "team", keyID: "key", key: key, client: client}
+			payload := providerPayload()
+			payload.Title, payload.Body = test.title, test.body
+			target := model.PushDeliveryTarget{Platform: "ios", DeviceToken: "device-token", BundleID: "com.daeil.app"}
+			if err := sender.Send(context.Background(), target, payload); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

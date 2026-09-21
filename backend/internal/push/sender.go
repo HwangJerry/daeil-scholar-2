@@ -94,7 +94,7 @@ func (s *fcmSender) Send(ctx context.Context, target model.PushDeliveryTarget, p
 	body, err := json.Marshal(map[string]any{
 		"message": map[string]any{
 			"token":        target.DeviceToken,
-			"notification": map[string]string{"title": payload.SenderName, "body": payload.Preview},
+			"notification": map[string]string{"title": payload.Title, "body": payload.Body},
 			"data":         payloadData(payload),
 		},
 	})
@@ -199,7 +199,7 @@ func (s *apnsSender) Send(ctx context.Context, target model.PushDeliveryTarget, 
 	}
 	bodyValue := map[string]any{
 		"aps": map[string]any{
-			"alert": map[string]string{"title": payload.SenderName, "body": payload.Preview},
+			"alert": map[string]string{"title": payload.Title, "body": payload.Body},
 			"sound": "default",
 		},
 	}
