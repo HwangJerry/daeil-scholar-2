@@ -65,6 +65,7 @@ type handlers struct {
 	sentryMonitoring    *handler.SentryMonitoringHandler
 	appSetting          *handler.AppSettingHandler
 	adminAppUpdate      *handler.AdminAppUpdateHandler
+	adminNotifTemplate  *handler.AdminNotificationTemplateHandler
 }
 
 // appVersionGate carries what the minimum-build gate needs. A zero value leaves
@@ -308,6 +309,8 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Put("/app-update-policies/{platform}", h.adminAppUpdate.SavePolicy)
 		r.Get("/app-update-policies/{platform}/history", h.adminAppUpdate.ListHistory)
 		r.Get("/app-client-builds", h.adminAppUpdate.ListClientBuilds)
+		r.Get("/notification-templates", h.adminNotifTemplate.List)
+		r.Put("/notification-templates/{key}", h.adminNotifTemplate.Update)
 		r.Get("/history", h.history.AdminList)
 		r.Post("/history", h.history.AdminCreate)
 		r.Put("/history/{seq}", h.history.AdminUpdate)
