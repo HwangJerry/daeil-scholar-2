@@ -134,6 +134,7 @@ func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryIte
 		payload = model.PushMessagePayload{
 			Type:                "message",
 			EventID:             messageID,
+			RecipientUserSeq:    strconv.Itoa(item.recvrSeq),
 			MessageID:           messageID,
 			ConversationUserSeq: strconv.Itoa(item.senderSeq),
 			SenderUserSeq:       strconv.Itoa(item.senderSeq),

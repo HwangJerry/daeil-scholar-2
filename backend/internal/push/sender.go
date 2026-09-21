@@ -27,6 +27,10 @@ import (
 
 const firebaseMessagingScope = "https://www.googleapis.com/auth/firebase.messaging"
 
+// pushTTLSeconds is the shared client-side payload lifetime (24h), within the
+// 1..86400 window both mobile parsers validate.
+const pushTTLSeconds = "86400"
+
 type Sender struct {
 	fcm  *fcmSender
 	apns *apnsSender
@@ -275,15 +279,33 @@ func payloadData(payload model.PushMessagePayload) map[string]string {
 		"senderName":          payload.SenderName,
 		"preview":             payload.Preview,
 		"createdAt":           payload.CreatedAt,
+		"event_type":          payload.Type,
+		"event_id":            payload.EventID,
+		"ttl_sec":             pushTTLSeconds,
+		"sent_at":             strconv.FormatInt(sentAtEpochSeconds(payload.CreatedAt), 10),
 	}
-	if payload.Type == "verification.reviewed" {
-		data["event_type"] = payload.Type
-		data["event_id"] = payload.EventID
+	if payload.RecipientUserSeq != "" {
 		data["user_id"] = payload.RecipientUserSeq
-		data["ttl_sec"] = "86400"
-		if sentAt, err := time.Parse(time.RFC3339, payload.CreatedAt); err == nil {
-			data["sent_at"] = strconv.FormatInt(sentAt.Unix(), 10)
-		}
+	}
+	if payload.SenderUserSeq != "" {
+		data["sender_seq"] = payload.SenderUserSeq
+	}
+	if payload.RecipientUserSeq != "" {
+		data["recvr_seq"] = payload.RecipientUserSeq
+	}
+	if payload.TemplateKey != "" {
+		data["template_key"] = payload.TemplateKey
+		data["template_version"] = strconv.Itoa(payload.TemplateVersion)
 	}
 	return data
+}
+
+// sentAtEpochSeconds anchors ttl_sec. Producers format CreatedAt as RFC3339;
+// an unparseable value falls back to send time so the envelope is never
+// missing the anchor the clients expire against.
+func sentAtEpochSeconds(createdAt string) int64 {
+	if parsed, err := time.Parse(time.RFC3339, createdAt); err == nil {
+		return parsed.Unix()
+	}
+	return time.Now().Unix()
 }

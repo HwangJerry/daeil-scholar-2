@@ -8,8 +8,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/service"
@@ -27,7 +29,7 @@ func response(status int, body string) *http.Response {
 func providerPayload() model.PushMessagePayload {
 	return model.PushMessagePayload{
 		Type: "message", EventID: "9001", MessageID: "9001", ConversationUserSeq: "202",
-		SenderUserSeq: "202", SenderName: "예시 동문", Preview: "안녕하세요.", CreatedAt: "2026-07-28T01:00:00Z",
+		RecipientUserSeq: "303", SenderUserSeq: "202", SenderName: "예시 동문", Preview: "안녕하세요.", CreatedAt: "2026-07-28T01:00:00Z",
 	}
 }
 
@@ -119,14 +121,87 @@ func TestAPNSSenderClassifiesInvalidAndTransientResponses(t *testing.T) {
 	}
 }
 
-func TestVerificationPayloadContainsRecipientAndAndroidEnvelope(t *testing.T) {
-	data := payloadData(model.PushMessagePayload{Type: "verification.reviewed", EventID: "review-42", RecipientUserSeq: "42", CreatedAt: "2026-09-10T00:00:00Z"})
-	for key, want := range map[string]string{"type": "verification.reviewed", "event_type": "verification.reviewed", "event_id": "review-42", "user_id": "42", "ttl_sec": "86400"} {
-		if data[key] != want {
-			t.Fatalf("%s = %q", key, data[key])
+func TestPayloadDataCarriesAndroidEnvelopeForEveryType(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		payload model.PushMessagePayload
+		want    map[string]string
+		absent  []string
+	}{
+		{
+			name:    "message",
+			payload: model.PushMessagePayload{Type: "message", EventID: "9001", MessageID: "9001", RecipientUserSeq: "303", SenderUserSeq: "202", CreatedAt: "2026-07-28T01:00:00Z"},
+			want:    map[string]string{"type": "message", "event_type": "message", "event_id": "9001", "user_id": "303", "ttl_sec": "86400", "sent_at": "1785200400", "sender_seq": "202", "recvr_seq": "303"},
+			absent:  []string{},
+		},
+		{
+			name:    "verification",
+			payload: model.PushMessagePayload{Type: "verification.reviewed", EventID: "review-42", RecipientUserSeq: "42", CreatedAt: "2026-09-10T00:00:00Z"},
+			want:    map[string]string{"type": "verification.reviewed", "event_type": "verification.reviewed", "event_id": "review-42", "user_id": "42", "ttl_sec": "86400", "sent_at": "1788998400", "recvr_seq": "42"},
+			absent:  []string{"sender_seq"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			data := payloadData(test.payload)
+			for key, want := range test.want {
+				if data[key] != want {
+					t.Fatalf("%s = %q, want %q", key, data[key], want)
+				}
+			}
+			for _, key := range test.absent {
+				if _, ok := data[key]; ok {
+					t.Fatalf("%s present without a source value: %q", key, data[key])
+				}
+			}
+			if _, ok := data["template_key"]; ok {
+				t.Fatalf("template_key present without a template: %q", data["template_key"])
+			}
+			if _, ok := data["template_version"]; ok {
+				t.Fatalf("template_version present without a template: %q", data["template_version"])
+			}
+		})
+	}
+}
+
+func TestPayloadDataFallsBackToSendTimeForNonRFC3339CreatedAt(t *testing.T) {
+	before := time.Now().Unix()
+	data := payloadData(model.PushMessagePayload{Type: "message", EventID: "9001", RecipientUserSeq: "303", CreatedAt: "2026-07-28 01:00:00"})
+	sentAt, err := strconv.ParseInt(data["sent_at"], 10, 64)
+	if err != nil {
+		t.Fatalf("sent_at = %q, want epoch seconds", data["sent_at"])
+	}
+	if sentAt < before || sentAt > time.Now().Unix() {
+		t.Fatalf("sent_at = %d, want send time within [%d, now]", sentAt, before)
+	}
+	if data["ttl_sec"] != "86400" || data["event_type"] != "message" {
+		t.Fatalf("android envelope incomplete: %#v", data)
+	}
+}
+
+func TestPayloadDataOmitsRecipientKeysWhenUnset(t *testing.T) {
+	data := payloadData(model.PushMessagePayload{Type: "message", EventID: "9001", CreatedAt: "2026-07-28T01:00:00Z"})
+	for _, key := range []string{"user_id", "recvr_seq"} {
+		if _, ok := data[key]; ok {
+			t.Fatalf("%s present without a recipient: %q", key, data[key])
 		}
 	}
-	if data["sent_at"] == "" {
-		t.Fatal("missing expiry reference")
+}
+
+func TestPayloadDataCarriesTemplateIdentityWhenSet(t *testing.T) {
+	payload := providerPayload()
+	payload.TemplateKey = "message.new"
+	payload.TemplateVersion = 3
+	data := payloadData(payload)
+	if data["template_key"] != "message.new" || data["template_version"] != "3" {
+		t.Fatalf("template identity = %q/%q", data["template_key"], data["template_version"])
+	}
+}
+
+func TestPayloadDataEmitsTemplateVersionAlongsideKeyEvenWhenZero(t *testing.T) {
+	payload := providerPayload()
+	payload.TemplateKey = "message.new"
+	data := payloadData(payload)
+	if data["template_key"] != "message.new" || data["template_version"] != "0" {
+		t.Fatalf("template identity = %q/%q, want the pair emitted atomically", data["template_key"], data["template_version"])
 	}
 }

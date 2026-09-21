@@ -43,4 +43,6 @@ type PushMessagePayload struct {
 	SenderName          string
 	Preview             string
 	CreatedAt           string
+	TemplateKey         string
+	TemplateVersion     int
 }

@@ -722,11 +722,24 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
   "senderUserSeq": "202",
   "senderName": "예시 동문",
   "preview": "안녕하세요.",
-  "createdAt": "2026-07-28T01:00:00Z"
+  "createdAt": "2026-07-28T01:00:00Z",
+  "event_type": "message",
+  "event_id": "9001",
+  "user_id": "303",
+  "recvr_seq": "303",
+  "sender_seq": "202",
+  "ttl_sec": "86400",
+  "sent_at": "1785200400"
 }
 ```
 
 - provider custom data는 Android/iOS 공통 문자열 값으로 encode한다.
+- provider는 canonical camelCase set과 Android envelope snake_case key를 **함께** 내보낸다. camelCase가 canonical이고, snake_case는 Android parser가 요구하는 필수 envelope다.
+- 모든 payload type(`message`, `verification.reviewed`)에 `event_type`, `event_id`, `ttl_sec`, `sent_at`을 항상 포함한다. `event_type`은 `type`과 같은 값이며 client가 `message` → `message.new`로 alias한다.
+- `ttl_sec`은 `"86400"` 고정이다. Android는 `1..86400` 범위 밖이면 payload 전체를 버리고, iOS는 기본값으로 clamp한다.
+- `sent_at`은 `createdAt`을 RFC3339로 parse한 epoch second 문자열이다. parse할 수 없으면 발송 시각으로 대체하며, `ttl_sec` 만료 기준이 비는 일은 없다.
+- `user_id`와 `recvr_seq`는 수신자 seq가 있을 때만 내보낸다. `sender_seq`는 발신자 seq가 있을 때만 내보내므로 발신자가 없는 `verification.reviewed`에는 없다.
+- `template_key`와 `template_version`은 server template이 문구를 render했을 때만, 항상 **함께** 내보낸다. `template_version`은 `0`이어도 key와 같이 포함한다.
 - 기본 알림은 발신자 이름과 preview를 포함한다.
 - `eventId`는 durable idempotency를 위해 decimal `messageId` 문자열과 동일하다.
 - `messagePreviewEnabled=false`이면 preview를 정확히 `새 메시지가 도착했습니다.`로 대체한다.
@@ -962,7 +975,7 @@ validation 실패 HTTP `422`:
 | 메시지 `recvrSeq`, `amSeq`, page | `userSeq`, `messageId`, cursor | alias 기간 뒤 모바일 수렴 |
 | SSE event ID·message ID 없음 | canonical event + `eventId` | reconnect/gap test 통과 |
 | push/block backend route 없음 | 본 문서 endpoint | Android/iOS fixture·integration 통과 |
-| push payload가 `event_type`, `event_id`, `args.*` 등 snake case 중심 | `type`, `eventId`, `messageId`, `conversationUserSeq` 공통 payload | Android/iOS parser와 provider adapter 동시 전환 |
+| push payload가 `event_type`, `event_id`, `args.*` 등 snake case 중심 | `type`, `eventId`, `messageId`, `conversationUserSeq` 공통 payload (단 `event_type`/`event_id`/`user_id`/`ttl_sec`/`sent_at`/`sender_seq`/`recvr_seq` snake case envelope는 Android parser가 필수로 요구하므로 계속 병행 emit하며, canonical은 camelCase set이다) | Android/iOS parser와 provider adapter 동시 전환 |
 | 기부 summary가 `displayAmount`만 반환 | 스냅샷 기준 금액·목표·기부자 수·달성률·기준일·등급 임계값 | 공통 fixture와 플랫폼 decoder 통과 |
 | 관리자 거래 route 비활성 | 통합 원장 CRUD/import | RBAC·원자성 test 통과 |
 

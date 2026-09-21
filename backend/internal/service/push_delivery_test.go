@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/dflh-saf/backend/internal/model"
@@ -65,6 +66,7 @@ func TestPushDeliveryFansOutCanonicalPayloadToEveryDevice(t *testing.T) {
 	payload := provider.payloads[0]
 	if payload.Type != "message" || payload.EventID != "9001" || payload.MessageID != "9001" ||
 		payload.ConversationUserSeq != "101" || payload.SenderUserSeq != "101" ||
+		payload.RecipientUserSeq != strconv.Itoa(pushDeliveryTestItem().recvrSeq) ||
 		payload.SenderName != "예시 동문" || payload.Preview != "안녕하세요." || payload.CreatedAt != "2026-07-28T01:00:00Z" {
 		t.Fatalf("payload = %#v", payload)
 	}
