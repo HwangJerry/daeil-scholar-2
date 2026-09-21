@@ -157,6 +157,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
 	if pushDelivery != nil {
 		adminMemberSvc.SetVerificationReviewNotifier(pushDelivery)
+		adminNoticeSvc.SetNoticePublishedNotifier(pushDelivery)
 	}
 	visitService := service.NewVisitService(visitRepo, cacheStore, cfg.VisitIPSalt, logger)
 	mobileAppEventService := service.NewMobileAppEventService(mobileAppEventRepo)

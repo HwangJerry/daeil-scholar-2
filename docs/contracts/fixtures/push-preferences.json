@@ -1,10 +1,12 @@
 {
   "request": {
     "messageEnabled": true,
-    "messagePreviewEnabled": false
+    "messagePreviewEnabled": false,
+    "noticeEnabled": true
   },
   "response": {
     "messageEnabled": true,
-    "messagePreviewEnabled": false
+    "messagePreviewEnabled": false,
+    "noticeEnabled": true
   }
 }

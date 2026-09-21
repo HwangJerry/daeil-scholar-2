@@ -74,7 +74,7 @@ func TestPushRepositoryUnregistersOnlyCurrentOwnersMatchingToken(t *testing.T) {
 func TestPushRepositoryReturnsNilForMissingPreferences(t *testing.T) {
 	repo, mock, cleanup := newPushRepositoryTest(t)
 	defer cleanup()
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT MESSAGE_ENABLED, MESSAGE_PREVIEW_ENABLED`)).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT MESSAGE_ENABLED, MESSAGE_PREVIEW_ENABLED, NOTICE_ENABLED`)).
 		WithArgs(42).
 		WillReturnError(sql.ErrNoRows)
 
@@ -90,15 +90,15 @@ func TestPushRepositoryReturnsNilForMissingPreferences(t *testing.T) {
 func TestPushRepositoryMapsStoredPreferenceFlags(t *testing.T) {
 	repo, mock, cleanup := newPushRepositoryTest(t)
 	defer cleanup()
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT MESSAGE_ENABLED, MESSAGE_PREVIEW_ENABLED`)).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT MESSAGE_ENABLED, MESSAGE_PREVIEW_ENABLED, NOTICE_ENABLED`)).
 		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"MESSAGE_ENABLED", "MESSAGE_PREVIEW_ENABLED"}).AddRow("Y", "N"))
+		WillReturnRows(sqlmock.NewRows([]string{"MESSAGE_ENABLED", "MESSAGE_PREVIEW_ENABLED", "NOTICE_ENABLED"}).AddRow("Y", "N", "N"))
 
 	preferences, err := repo.GetPreferences(42)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preferences == nil || !preferences.MessageEnabled || preferences.MessagePreviewEnabled {
+	if preferences == nil || !preferences.MessageEnabled || preferences.MessagePreviewEnabled || preferences.NoticeEnabled {
 		t.Fatalf("preferences = %#v", preferences)
 	}
 }
@@ -106,11 +106,35 @@ func TestPushRepositoryMapsStoredPreferenceFlags(t *testing.T) {
 func TestPushRepositoryUpsertsCanonicalPreferenceFlags(t *testing.T) {
 	repo, mock, cleanup := newPushRepositoryTest(t)
 	defer cleanup()
-	mock.ExpectExec(`(?s)INSERT INTO ALUMNI_PUSH_PREFERENCE.*CREATED_AT.*UPDATED_AT.*VALUES.*UTC_TIMESTAMP\(\).*ON DUPLICATE KEY UPDATE.*UPDATED_AT = UTC_TIMESTAMP\(\)`).
-		WithArgs(42, "N", "Y").
+	noticeEnabled := false
+	mock.ExpectExec(`(?s)INSERT INTO ALUMNI_PUSH_PREFERENCE.*VALUES.*COALESCE\(\?, 'Y'\).*ON DUPLICATE KEY UPDATE.*NOTICE_ENABLED = COALESCE\(\?, NOTICE_ENABLED\).*UPDATED_AT = UTC_TIMESTAMP\(\)`).
+		WithArgs(42, "N", "Y", "N", "N").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	err := repo.UpsertPreferences(42, model.PushPreferences{MessageEnabled: false, MessagePreviewEnabled: true})
+	err := repo.UpsertPreferences(42, model.PushPreferencesUpdate{
+		MessageEnabled: false, MessagePreviewEnabled: true, NoticeEnabled: &noticeEnabled,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An omitted noticeEnabled binds as SQL NULL, so the COALESCE preserves the
+// stored column instead of the Go layer reading it back and racing another
+// device's write.
+func TestPushRepositoryBindsOmittedNoticeFlagAsNullToPreserveIt(t *testing.T) {
+	repo, mock, cleanup := newPushRepositoryTest(t)
+	defer cleanup()
+	mock.ExpectExec(`(?s)INSERT INTO ALUMNI_PUSH_PREFERENCE.*NOTICE_ENABLED = COALESCE\(\?, NOTICE_ENABLED\)`).
+		WithArgs(42, "Y", "Y", nil, nil).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err := repo.UpsertPreferences(42, model.PushPreferencesUpdate{
+		MessageEnabled: true, MessagePreviewEnabled: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

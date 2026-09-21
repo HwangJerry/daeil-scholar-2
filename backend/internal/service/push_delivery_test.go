@@ -250,3 +250,62 @@ func TestPushDeliveryNeverLeaksContentWhenPreviewsAreDisabled(t *testing.T) {
 		t.Fatalf("senderName = %q, want the real sender", payload.SenderName)
 	}
 }
+
+// messageGuardStoreStub counts the erasure guard's calls so the per-attempt
+// cadence can be asserted.
+type messageGuardStoreStub struct {
+	pushDeliveryStoreStub
+	checks    int
+	available bool
+}
+
+func (s *messageGuardStoreStub) MessageStillAvailable(int, int, int64) (bool, error) {
+	s.checks++
+	return s.available, nil
+}
+
+// The erasure guard protects deleted content, so it must be re-asked before
+// every send rather than once per queued item.
+func TestPushDeliveryRechecksMessageAvailabilityOnEveryAttempt(t *testing.T) {
+	store := &messageGuardStoreStub{
+		pushDeliveryStoreStub: pushDeliveryStoreStub{targets: []model.PushDeliveryTarget{
+			{Platform: "android", DeviceToken: "android-token"},
+			{Platform: "ios", DeviceToken: "ios-token", APNSEnvironment: "sandbox", BundleID: "com.daeil.dflhsafv2"},
+		}},
+		available: true,
+	}
+	// The first device exhausts all three attempts on transient errors, the
+	// second succeeds immediately: four sends, and a guard call before each.
+	provider := &pushProviderStub{errors: []error{ErrPushTransient, ErrPushTransient, nil, nil}}
+	NewPushDeliveryNotifier(store, provider, NewTestNotificationTemplateService(nil), zerolog.Nop()).
+		deliver(context.Background(), pushDeliveryTestItem())
+
+	if len(provider.calls) != 4 {
+		t.Fatalf("provider calls = %d, want 4", len(provider.calls))
+	}
+	if store.checks != 4 {
+		t.Fatalf("availability checks = %d, want one per attempt", store.checks)
+	}
+}
+
+// An erased message stops the fan-out before the first send, including for a
+// recipient's remaining devices.
+func TestPushDeliveryStopsWhenMessageBecameUnavailable(t *testing.T) {
+	store := &messageGuardStoreStub{
+		pushDeliveryStoreStub: pushDeliveryStoreStub{targets: []model.PushDeliveryTarget{
+			{Platform: "android", DeviceToken: "android-token"},
+			{Platform: "ios", DeviceToken: "ios-token", APNSEnvironment: "sandbox", BundleID: "com.daeil.dflhsafv2"},
+		}},
+		available: false,
+	}
+	provider := &pushProviderStub{}
+	NewPushDeliveryNotifier(store, provider, NewTestNotificationTemplateService(nil), zerolog.Nop()).
+		deliver(context.Background(), pushDeliveryTestItem())
+
+	if len(provider.calls) != 0 {
+		t.Fatalf("an erased message was pushed to %d devices", len(provider.calls))
+	}
+	if store.checks != 1 {
+		t.Fatalf("availability checks = %d, want the guard to stop delivery at once", store.checks)
+	}
+}

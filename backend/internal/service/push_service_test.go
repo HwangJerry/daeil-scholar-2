@@ -17,7 +17,7 @@ type pushStoreStub struct {
 	unregisterSeq   int
 	unregisterToken string
 	preferences     *model.PushPreferences
-	upserted        model.PushPreferences
+	upserted        model.PushPreferencesUpdate
 	err             error
 }
 
@@ -39,9 +39,24 @@ func (s *pushStoreStub) GetPreferences(int) (*model.PushPreferences, error) {
 	return s.preferences, s.err
 }
 
-func (s *pushStoreStub) UpsertPreferences(_ int, preferences model.PushPreferences) error {
+func (s *pushStoreStub) UpsertPreferences(_ int, update model.PushPreferencesUpdate) error {
 	s.upsertCalls++
-	s.upserted = preferences
+	s.upserted = update
+	// Stand in for the COALESCE in the real statement: an omitted flag leaves
+	// the stored value (or the default) untouched.
+	stored := s.preferences
+	if stored == nil {
+		stored = &model.PushPreferences{NoticeEnabled: true}
+	}
+	noticeEnabled := stored.NoticeEnabled
+	if update.NoticeEnabled != nil {
+		noticeEnabled = *update.NoticeEnabled
+	}
+	s.preferences = &model.PushPreferences{
+		MessageEnabled:        update.MessageEnabled,
+		MessagePreviewEnabled: update.MessagePreviewEnabled,
+		NoticeEnabled:         noticeEnabled,
+	}
 	return s.err
 }
 
@@ -131,8 +146,8 @@ func TestPushServiceReturnsDefaultPreferencesWithoutWritingMissingRow(t *testing
 	if err != nil {
 		t.Fatalf("GetPreferences error = %v", err)
 	}
-	if preferences == nil || !preferences.MessageEnabled || !preferences.MessagePreviewEnabled {
-		t.Fatalf("preferences = %#v, want true/true", preferences)
+	if preferences == nil || !preferences.MessageEnabled || !preferences.MessagePreviewEnabled || !preferences.NoticeEnabled {
+		t.Fatalf("preferences = %#v, want every channel enabled", preferences)
 	}
 	if store.getCalls != 1 || store.upsertCalls != 0 {
 		t.Fatalf("get calls = %d, upsert calls = %d", store.getCalls, store.upsertCalls)
@@ -153,7 +168,9 @@ func TestPushServiceReturnsStoredPreferences(t *testing.T) {
 
 func TestPushServiceUpsertsAndReturnsCanonicalPreferences(t *testing.T) {
 	store := &pushStoreStub{}
-	request := model.PushPreferences{MessageEnabled: false, MessagePreviewEnabled: true}
+	noticeEnabled := false
+	request := model.PushPreferencesUpdate{MessageEnabled: false, MessagePreviewEnabled: true, NoticeEnabled: &noticeEnabled}
+	want := model.PushPreferences{MessageEnabled: false, MessagePreviewEnabled: true, NoticeEnabled: false}
 	preferences, err := NewPushService(store).UpdatePreferences(42, request)
 	if err != nil {
 		t.Fatalf("UpdatePreferences error = %v", err)
@@ -161,7 +178,46 @@ func TestPushServiceUpsertsAndReturnsCanonicalPreferences(t *testing.T) {
 	if store.upsertCalls != 1 || store.upserted != request {
 		t.Fatalf("upserted = %#v, calls = %d", store.upserted, store.upsertCalls)
 	}
-	if preferences == nil || *preferences != request {
-		t.Fatalf("preferences = %#v", preferences)
+	if preferences == nil || *preferences != want {
+		t.Fatalf("preferences = %#v, want %#v", preferences, want)
+	}
+}
+
+// An app build that predates noticeEnabled omits it. The service must pass the
+// omission through to the store as unset — the store resolves it atomically —
+// and answer with whatever the row actually holds afterwards.
+func TestPushServicePreservesStoredNoticeFlagWhenRequestOmitsIt(t *testing.T) {
+	store := &pushStoreStub{preferences: &model.PushPreferences{
+		MessageEnabled: true, MessagePreviewEnabled: true, NoticeEnabled: false,
+	}}
+	preferences, err := NewPushService(store).UpdatePreferences(42, model.PushPreferencesUpdate{
+		MessageEnabled: false, MessagePreviewEnabled: false,
+	})
+	if err != nil {
+		t.Fatalf("UpdatePreferences error = %v", err)
+	}
+	if store.upserted.NoticeEnabled != nil {
+		t.Fatalf("an omitted flag must reach the store unset, got %v", *store.upserted.NoticeEnabled)
+	}
+	if preferences.NoticeEnabled {
+		t.Fatalf("stored opt-out was overwritten: %#v", preferences)
+	}
+	if preferences.MessageEnabled || preferences.MessagePreviewEnabled {
+		t.Fatalf("message flags = %#v, want both false", preferences)
+	}
+}
+
+// With no stored row at all the omitted field falls back to the default, which
+// is on.
+func TestPushServiceDefaultsOmittedNoticeFlagToEnabled(t *testing.T) {
+	store := &pushStoreStub{}
+	preferences, err := NewPushService(store).UpdatePreferences(42, model.PushPreferencesUpdate{
+		MessageEnabled: true, MessagePreviewEnabled: true,
+	})
+	if err != nil {
+		t.Fatalf("UpdatePreferences error = %v", err)
+	}
+	if !preferences.NoticeEnabled {
+		t.Fatalf("preferences = %#v, want notices enabled", preferences)
 	}
 }

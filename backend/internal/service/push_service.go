@@ -22,7 +22,7 @@ type PushStore interface {
 	RegisterDevice(usrSeq int, registration model.PushDeviceRegistration) error
 	UnregisterDevice(usrSeq int, deviceToken string) error
 	GetPreferences(usrSeq int) (*model.PushPreferences, error)
-	UpsertPreferences(usrSeq int, preferences model.PushPreferences) error
+	UpsertPreferences(usrSeq int, update model.PushPreferencesUpdate) error
 }
 
 type PushService struct {
@@ -56,19 +56,30 @@ func (s *PushService) GetPreferences(usrSeq int) (*model.PushPreferences, error)
 		return nil, err
 	}
 	if preferences == nil {
-		return &model.PushPreferences{MessageEnabled: true, MessagePreviewEnabled: true}, nil
+		return defaultPushPreferences(), nil
 	}
 	return preferences, nil
 }
 
-func (s *PushService) UpdatePreferences(usrSeq int, preferences model.PushPreferences) (*model.PushPreferences, error) {
+// UpdatePreferences writes the submitted preferences and returns the stored
+// row. A nil NoticeEnabled means the client omitted the field, which the store
+// resolves inside the upsert so the preserved value cannot be lost to a
+// concurrent write from the member's other device.
+func (s *PushService) UpdatePreferences(usrSeq int, update model.PushPreferencesUpdate) (*model.PushPreferences, error) {
 	if usrSeq <= 0 {
 		return nil, ErrInvalidPushRequest
 	}
-	if err := s.store.UpsertPreferences(usrSeq, preferences); err != nil {
+	if err := s.store.UpsertPreferences(usrSeq, update); err != nil {
 		return nil, err
 	}
-	return &preferences, nil
+	return s.GetPreferences(usrSeq)
+}
+
+// defaultPushPreferences is what an account with no stored row reads as: every
+// channel on, so a member who never opened the settings screen still receives
+// notices.
+func defaultPushPreferences() *model.PushPreferences {
+	return &model.PushPreferences{MessageEnabled: true, MessagePreviewEnabled: true, NoticeEnabled: true}
 }
 
 func validPushDeviceRegistration(registration model.PushDeviceRegistration) bool {

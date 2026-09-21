@@ -15,13 +15,16 @@ type PushServicer interface {
 	RegisterDevice(usrSeq int, registration model.PushDeviceRegistration) error
 	UnregisterDevice(usrSeq int, deviceToken string) error
 	GetPreferences(usrSeq int) (*model.PushPreferences, error)
-	UpdatePreferences(usrSeq int, preferences model.PushPreferences) (*model.PushPreferences, error)
+	UpdatePreferences(usrSeq int, update model.PushPreferencesUpdate) (*model.PushPreferences, error)
 }
 
 type PushHandler struct {
 	service PushServicer
 }
 
+// pushPreferencesRequest is the closed PUT body. The two message fields are
+// required; noticeEnabled is optional so an app build that predates it keeps
+// the stored value instead of overwriting it.
 type pushPreferencesRequest struct {
 	MessageEnabled        *bool `json:"messageEnabled"`
 	MessagePreviewEnabled *bool `json:"messagePreviewEnabled"`
@@ -89,9 +92,10 @@ func (h *PushHandler) PutPreferences(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "요청 본문이 올바르지 않습니다")
 		return
 	}
-	preferences, err := h.service.UpdatePreferences(user.USRSeq, model.PushPreferences{
+	preferences, err := h.service.UpdatePreferences(user.USRSeq, model.PushPreferencesUpdate{
 		MessageEnabled:        *request.MessageEnabled,
 		MessagePreviewEnabled: *request.MessagePreviewEnabled,
+		NoticeEnabled:         request.NoticeEnabled,
 	})
 	if err != nil {
 		h.respondMutationError(w, err, "알림 설정을 저장하지 못했습니다")

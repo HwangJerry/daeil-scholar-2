@@ -19,6 +19,12 @@ var (
 const (
 	pushShardCount    = 4
 	pushShardCapacity = 256
+	// A notice broadcast gets its own queue and workers. It enqueues blocking
+	// and in one burst, so sharing the recipient shards would fill them and
+	// make chat and verification pushes — which drop on a full queue — vanish
+	// for the whole fan-out.
+	pushBroadcastCapacity    = 256
+	pushBroadcastWorkerCount = 2
 	// verificationReviewSenderName labels review pushes in the apps. There is no
 	// human sender behind a review, and this is a routing/label key rather than
 	// displayed text, so it stays fixed even when the title is edited.
@@ -35,10 +41,12 @@ type PushProvider interface {
 	Send(ctx context.Context, target model.PushDeliveryTarget, payload model.PushMessagePayload) error
 }
 
-// pushDeliveryItem is one queued notification. A non-empty verificationStatus
-// marks a review notification; everything else is a message.
+// pushDeliveryItem is one queued notification. A non-nil notice marks a notice
+// broadcast, a non-empty verificationStatus marks a review notification, and
+// everything else is a message.
 type pushDeliveryItem struct {
 	verificationStatus model.VerificationStatus
+	notice             *noticeBroadcast
 	recvrSeq           int
 	senderSeq          int
 	senderName         string
@@ -50,13 +58,55 @@ func (i pushDeliveryItem) isVerificationReview() bool {
 	return i.verificationStatus != ""
 }
 
+func (i pushDeliveryItem) isNoticeBroadcast() bool {
+	return i.notice != nil
+}
+
 type PushDeliveryNotifier struct {
 	store     PushDeliveryStore
 	provider  PushProvider
 	templates notificationTextRenderer
 	logger    zerolog.Logger
 	shards    [pushShardCount]chan pushDeliveryItem
+	// broadcast carries notice fan-outs, kept apart from the recipient shards
+	// so a burst of announcements cannot starve chat.
+	broadcast chan pushDeliveryItem
 	wg        sync.WaitGroup
+	// closing is shut before the queues are, so a blocking broadcast producer
+	// can abandon its fan-out instead of delaying shutdown or, worse, sending
+	// on a closed channel. producers tracks those goroutines so Stop only
+	// closes the queues once every one of them has returned, and shutdownMu
+	// makes "register a producer" and "begin shutting down" mutually exclusive
+	// so a producer can never be added after Stop started waiting.
+	closing    chan struct{}
+	shutdownMu sync.Mutex
+	closed     bool
+	producers  sync.WaitGroup
+}
+
+// startProducer registers a broadcast goroutine unless shutdown has begun. It
+// reports whether the caller may proceed; a false result means the queues are
+// about to close and the caller must not enqueue anything.
+func (n *PushDeliveryNotifier) startProducer() bool {
+	n.shutdownMu.Lock()
+	defer n.shutdownMu.Unlock()
+	if n.closed {
+		return false
+	}
+	n.producers.Add(1)
+	return true
+}
+
+// beginShutdown closes the shutdown signal exactly once and blocks any further
+// producer from registering.
+func (n *PushDeliveryNotifier) beginShutdown() {
+	n.shutdownMu.Lock()
+	defer n.shutdownMu.Unlock()
+	if n.closed {
+		return
+	}
+	n.closed = true
+	close(n.closing)
 }
 
 // NewPushDeliveryNotifier creates the fan-out notifier. The renderer supplies
@@ -67,7 +117,14 @@ func NewPushDeliveryNotifier(
 	templates notificationTextRenderer,
 	logger zerolog.Logger,
 ) *PushDeliveryNotifier {
-	n := &PushDeliveryNotifier{store: store, provider: provider, templates: templates, logger: logger}
+	n := &PushDeliveryNotifier{
+		store:     store,
+		provider:  provider,
+		templates: templates,
+		logger:    logger,
+		broadcast: make(chan pushDeliveryItem, pushBroadcastCapacity),
+		closing:   make(chan struct{}),
+	}
 	for i := range n.shards {
 		n.shards[i] = make(chan pushDeliveryItem, pushShardCapacity)
 	}
@@ -75,21 +132,38 @@ func NewPushDeliveryNotifier(
 }
 
 func (n *PushDeliveryNotifier) Start() {
+	consume := func(queue <-chan pushDeliveryItem) {
+		defer n.wg.Done()
+		for item := range queue {
+			n.deliver(context.Background(), item)
+		}
+	}
 	for i := range n.shards {
 		n.wg.Add(1)
-		go func(shard <-chan pushDeliveryItem) {
-			defer n.wg.Done()
-			for item := range shard {
-				n.deliver(context.Background(), item)
-			}
-		}(n.shards[i])
+		go consume(n.shards[i])
+	}
+	// Broadcast workers run the same delivery code; only the queue differs.
+	// Ordering across recipients is meaningless for an announcement, so more
+	// than one worker is safe.
+	for i := 0; i < pushBroadcastWorkerCount; i++ {
+		n.wg.Add(1)
+		go consume(n.broadcast)
 	}
 }
 
 func (n *PushDeliveryNotifier) Stop(ctx context.Context) error {
+	n.beginShutdown()
+	producersDone := make(chan struct{})
+	go func() { n.producers.Wait(); close(producersDone) }()
+	select {
+	case <-producersDone:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	for i := range n.shards {
 		close(n.shards[i])
 	}
+	close(n.broadcast)
 	done := make(chan struct{})
 	go func() { n.wg.Wait(); close(done) }()
 	select {
@@ -199,20 +273,90 @@ func (n *PushDeliveryNotifier) buildMessagePayload(
 	}
 }
 
-func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryItem) {
-	var payload model.PushMessagePayload
-	if item.isVerificationReview() {
-		payload = n.buildVerificationPayload(item)
-	} else {
+// buildPayload renders the item. The second result is false when the item must
+// not be sent at all, which today only a message preference can decide.
+func (n *PushDeliveryNotifier) buildPayload(item pushDeliveryItem) (model.PushMessagePayload, bool) {
+	switch {
+	case item.isNoticeBroadcast():
+		// A notice is an announcement, not chat: MessageEnabled governs
+		// conversations only, and the NOTICE_ENABLED opt-out was already
+		// applied by the recipient query, so no preference is read here.
+		return n.buildNoticePayload(item), true
+	case item.isVerificationReview():
+		return n.buildVerificationPayload(item), true
+	default:
 		preferences, err := n.store.GetPreferences(item.recvrSeq)
 		if err != nil {
 			n.logger.Error().Int("recipient_seq", item.recvrSeq).Msg("push preferences lookup failed")
-			return
+			return model.PushMessagePayload{}, false
 		}
 		if preferences != nil && !preferences.MessageEnabled {
-			return
+			return model.PushMessagePayload{}, false
 		}
-		payload = n.buildMessagePayload(item, preferences)
+		return n.buildMessagePayload(item, preferences), true
+	}
+}
+
+// stillDeliverable re-checks, once per queued item, that the thing this push
+// announces still exists. Items wait in a queue, so between enqueue and send an
+// administrator can delete the notice or a review can be superseded. For these
+// the answer cannot differ between a recipient's own devices, so asking once
+// per item is both correct and cheapest. A store that does not implement the
+// guard for that kind simply has nothing to re-check.
+func (n *PushDeliveryNotifier) stillDeliverable(item pushDeliveryItem, payload model.PushMessagePayload) bool {
+	switch {
+	case item.isNoticeBroadcast():
+		guard, ok := n.store.(interface {
+			NoticeStillPublished(int) (bool, error)
+		})
+		if !ok {
+			return true
+		}
+		published, err := guard.NoticeStillPublished(item.notice.seq)
+		return err == nil && published
+	case item.isVerificationReview():
+		guard, ok := n.store.(interface {
+			VerificationStillCurrent(int, model.VerificationStatus) (bool, error)
+		})
+		if !ok {
+			return true
+		}
+		current, err := guard.VerificationStillCurrent(item.recvrSeq, payload.VerificationStatus)
+		return err == nil && current
+	default:
+		// A message is guarded per delivery attempt instead; see
+		// messageStillAvailable.
+		return true
+	}
+}
+
+// messageStillAvailable re-checks the erasure and privacy guard before every
+// single send. Unlike the notice and review guards, whose answer cannot change
+// between one recipient's own devices, this one protects erased content: a
+// member who withdraws, or a message that is deleted, must not reach even the
+// second device of the same recipient. A recipient has one or two devices, so
+// asking per attempt costs almost nothing.
+func (n *PushDeliveryNotifier) messageStillAvailable(item pushDeliveryItem) bool {
+	if item.isNoticeBroadcast() || item.isVerificationReview() {
+		return true
+	}
+	guard, ok := n.store.(interface {
+		MessageStillAvailable(int, int, int64) (bool, error)
+	})
+	if !ok {
+		return true
+	}
+	available, err := guard.MessageStillAvailable(item.senderSeq, item.recvrSeq, item.accepted.MessageID)
+	return err == nil && available
+}
+
+func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryItem) {
+	payload, ok := n.buildPayload(item)
+	if !ok {
+		return
+	}
+	if !n.stillDeliverable(item, payload) {
+		return
 	}
 	targets, err := n.store.ListDevices(item.recvrSeq)
 	if err != nil {
@@ -221,21 +365,8 @@ func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryIte
 	}
 	for _, target := range targets {
 		for attempt := 0; attempt < 3; attempt++ {
-			if guard, ok := n.store.(interface {
-				MessageStillAvailable(int, int, int64) (bool, error)
-			}); ok && !item.isVerificationReview() {
-				available, checkErr := guard.MessageStillAvailable(item.senderSeq, item.recvrSeq, item.accepted.MessageID)
-				if checkErr != nil || !available {
-					return
-				}
-			}
-			if guard, ok := n.store.(interface {
-				VerificationStillCurrent(int, model.VerificationStatus) (bool, error)
-			}); ok && item.isVerificationReview() {
-				available, checkErr := guard.VerificationStillCurrent(item.recvrSeq, payload.VerificationStatus)
-				if checkErr != nil || !available {
-					return
-				}
+			if !n.messageStillAvailable(item) {
+				return
 			}
 			err = n.provider.Send(ctx, target, payload)
 			if err == nil {

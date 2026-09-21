@@ -271,3 +271,24 @@ func TestAPNSSenderTitlesWithTheTemplateWhileDataKeepsTheSenderName(t *testing.T
 		})
 	}
 }
+
+// The notice routing keys ride along only on a notice push; a chat or review
+// payload must not carry them at all.
+func TestPayloadDataEmitsNoticeRoutingKeysOnlyWhenPostSeqIsSet(t *testing.T) {
+	notice := payloadData(model.PushMessagePayload{
+		Type: "admin.notice", EventID: "notice-501", RecipientUserSeq: "11",
+		PostSeq: "501", Subject: "장학금 안내", CreatedAt: "2026-07-28T01:00:00Z",
+	})
+	if notice["post_seq"] != "501" || notice["postSeq"] != "501" || notice["subject"] != "장학금 안내" {
+		t.Fatalf("notice envelope = %#v", notice)
+	}
+
+	message := payloadData(model.PushMessagePayload{
+		Type: "message", EventID: "9001", CreatedAt: "2026-07-28T01:00:00Z",
+	})
+	for _, key := range []string{"post_seq", "postSeq", "subject"} {
+		if _, ok := message[key]; ok {
+			t.Fatalf("%q leaked into a message payload: %#v", key, message)
+		}
+	}
+}

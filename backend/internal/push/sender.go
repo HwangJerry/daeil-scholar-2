@@ -293,6 +293,14 @@ func payloadData(payload model.PushMessagePayload) map[string]string {
 	if payload.RecipientUserSeq != "" {
 		data["recvr_seq"] = payload.RecipientUserSeq
 	}
+	// A notice push carries its target post. Both spellings go out because the
+	// Android parser reads post_seq/postSeq and iOS reads either; subject is
+	// the raw title the apps list by.
+	if payload.PostSeq != "" {
+		data["post_seq"] = payload.PostSeq
+		data["postSeq"] = payload.PostSeq
+		data["subject"] = payload.Subject
+	}
 	if payload.TemplateKey != "" {
 		data["template_key"] = payload.TemplateKey
 		data["template_version"] = strconv.Itoa(payload.TemplateVersion)

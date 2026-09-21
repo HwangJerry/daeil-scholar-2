@@ -18,7 +18,7 @@ type pushServicerStub struct {
 	registration    model.PushDeviceRegistration
 	deviceToken     string
 	preferences     *model.PushPreferences
-	updated         model.PushPreferences
+	updated         model.PushPreferencesUpdate
 	err             error
 }
 
@@ -39,10 +39,20 @@ func (s *pushServicerStub) GetPreferences(int) (*model.PushPreferences, error) {
 	return s.preferences, s.err
 }
 
-func (s *pushServicerStub) UpdatePreferences(_ int, preferences model.PushPreferences) (*model.PushPreferences, error) {
+func (s *pushServicerStub) UpdatePreferences(_ int, update model.PushPreferencesUpdate) (*model.PushPreferences, error) {
 	s.updateCalls++
-	s.updated = preferences
-	return &preferences, s.err
+	s.updated = update
+	// The real service resolves an omitted noticeEnabled against the stored
+	// row; the stub stands in for a stored value of true.
+	noticeEnabled := true
+	if update.NoticeEnabled != nil {
+		noticeEnabled = *update.NoticeEnabled
+	}
+	return &model.PushPreferences{
+		MessageEnabled:        update.MessageEnabled,
+		MessagePreviewEnabled: update.MessagePreviewEnabled,
+		NoticeEnabled:         noticeEnabled,
+	}, s.err
 }
 
 func TestPushHandlerRegistersDeviceWithClosedCanonicalResponse(t *testing.T) {
@@ -112,7 +122,7 @@ func TestPushHandlerRequiresAuthenticatedPrincipal(t *testing.T) {
 }
 
 func TestPushHandlerGetsClosedCanonicalPreferences(t *testing.T) {
-	stub := &pushServicerStub{preferences: &model.PushPreferences{MessageEnabled: true, MessagePreviewEnabled: false}}
+	stub := &pushServicerStub{preferences: &model.PushPreferences{MessageEnabled: true, MessagePreviewEnabled: false, NoticeEnabled: true}}
 	h := &PushHandler{service: stub}
 	recorder := httptest.NewRecorder()
 	h.GetPreferences(recorder, authenticatedPushRequest(http.MethodGet, "/api/push/preferences", ""))
@@ -120,7 +130,7 @@ func TestPushHandlerGetsClosedCanonicalPreferences(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
 	}
-	if recorder.Body.String() != "{\"messageEnabled\":true,\"messagePreviewEnabled\":false}\n" {
+	if recorder.Body.String() != "{\"messageEnabled\":true,\"messagePreviewEnabled\":false,\"noticeEnabled\":true}\n" {
 		t.Fatalf("body = %q", recorder.Body.String())
 	}
 	if stub.getCalls != 1 {
@@ -128,7 +138,7 @@ func TestPushHandlerGetsClosedCanonicalPreferences(t *testing.T) {
 	}
 }
 
-func TestPushHandlerUpdatesPreferencesAndIgnoresOptionalNoticeEnabled(t *testing.T) {
+func TestPushHandlerUpdatesPreferencesIncludingNoticeEnabled(t *testing.T) {
 	stub := &pushServicerStub{}
 	h := &PushHandler{service: stub}
 	body := `{"messageEnabled":false,"messagePreviewEnabled":true,"noticeEnabled":false}`
@@ -138,11 +148,34 @@ func TestPushHandlerUpdatesPreferencesAndIgnoresOptionalNoticeEnabled(t *testing
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
 	}
-	if recorder.Body.String() != "{\"messageEnabled\":false,\"messagePreviewEnabled\":true}\n" {
+	if recorder.Body.String() != "{\"messageEnabled\":false,\"messagePreviewEnabled\":true,\"noticeEnabled\":false}\n" {
 		t.Fatalf("body = %q", recorder.Body.String())
 	}
 	if stub.updateCalls != 1 || stub.updated.MessageEnabled || !stub.updated.MessagePreviewEnabled {
 		t.Fatalf("updated = %#v, calls = %d", stub.updated, stub.updateCalls)
+	}
+	if stub.updated.NoticeEnabled == nil || *stub.updated.NoticeEnabled {
+		t.Fatalf("noticeEnabled = %v, want an explicit false", stub.updated.NoticeEnabled)
+	}
+}
+
+// Omitting noticeEnabled must reach the service as nil, which is what tells it
+// to preserve the stored value instead of writing one.
+func TestPushHandlerPassesOmittedNoticeEnabledThroughAsUnset(t *testing.T) {
+	stub := &pushServicerStub{}
+	h := &PushHandler{service: stub}
+	body := `{"messageEnabled":true,"messagePreviewEnabled":true}`
+	recorder := httptest.NewRecorder()
+	h.PutPreferences(recorder, authenticatedPushRequest(http.MethodPut, "/api/push/preferences", body))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if stub.updateCalls != 1 || stub.updated.NoticeEnabled != nil {
+		t.Fatalf("updated = %#v, calls = %d", stub.updated, stub.updateCalls)
+	}
+	if recorder.Body.String() != "{\"messageEnabled\":true,\"messagePreviewEnabled\":true,\"noticeEnabled\":true}\n" {
+		t.Fatalf("body = %q", recorder.Body.String())
 	}
 }
 
@@ -150,6 +183,7 @@ func TestPushHandlerRequiresBothCanonicalPreferenceBooleans(t *testing.T) {
 	for _, body := range []string{
 		`{"messageEnabled":true}`,
 		`{"messagePreviewEnabled":true}`,
+		`{"noticeEnabled":true}`,
 		`{"messageEnabled":true,"messagePreviewEnabled":true,"extra":false}`,
 	} {
 		stub := &pushServicerStub{}
