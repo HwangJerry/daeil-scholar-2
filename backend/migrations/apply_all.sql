@@ -983,4 +983,8 @@ SELECT 'app_client_builds' AS chk, COUNT(*) AS found FROM information_schema.TAB
 -- 074: Signup SMS phone verification
 SELECT 'ALUMNI_PHONE_VERIFICATION' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ALUMNI_PHONE_VERIFICATION';
 
+-- 075: Admin-editable notification templates (6 seeded keys)
+SELECT 'notification_templates' AS chk, COUNT(*) AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notification_templates';
+SELECT 'notification_template rows' AS chk, COUNT(*) AS found FROM notification_templates;
+
 SELECT '=== ALL MIGRATIONS APPLIED ===' AS status;
