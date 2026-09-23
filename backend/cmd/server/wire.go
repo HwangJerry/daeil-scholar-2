@@ -196,6 +196,21 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		logger.Warn().Msg("SMS_REVIEW_TEST_PHONES/SMS_REVIEW_TEST_CODE incomplete or code not 6 digits; reviewer bypass disabled")
 	}
 
+	consentTableReady, err := repository.ConsentTableReady(db)
+	if err != nil {
+		return nil, err
+	}
+	var consentStore *repository.ConsentRepository
+	if consentTableReady {
+		consentStore = repository.NewConsentRepository(db)
+	} else {
+		logger.Warn().Msg("AUTH_CONSENT missing (migration 041 not applied); signup consent is evaluated but not recorded")
+	}
+	if cfg.PrivacyConsent.Version == "" {
+		logger.Warn().Msg("PRIVACY_CONSENT_VERSION empty; consent version check disabled")
+	}
+	consentService := service.NewConsentService(consentStore, cfg.PrivacyConsent, logger)
+
 	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
 	passwordChangeSvc := service.NewPasswordChangeService(profileRepo)
 	if canonicalPasswordReady {
@@ -286,6 +301,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	}
 	// Signup endpoints reject applicants whose phone number has not been verified by SMS.
 	h.auth.AttachPhoneVerification(phoneVerificationService)
+	h.auth.AttachPrivacyConsent(consentService)
 
 	erasureService := &service.AutomaticErasureService{
 		Store:         &repository.AccountDeletionRequestRepository{DB: db, SiteOrigin: cfg.Server.SiteBaseURL, TestUserSeq: cfg.AccountErasure.TestUserSeq, DonationRetentionTemplate: service.LedgerRetentionTemplate(cfg.AccountErasure.LedgerConfirmed, cfg.AccountErasure.ReceiptOriginalsSeparate, cfg.AccountErasure.LedgerYearEndMonth, cfg.AccountErasure.LedgerEvidence)},

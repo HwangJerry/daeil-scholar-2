@@ -23,4 +23,7 @@ type RegisterRequest struct {
 	// PhoneVerificationToken proves the applicant controls Phone. Transport-only:
 	// it is spent by the verification service and never persisted on the member row.
 	PhoneVerificationToken string `json:"phoneVerificationToken"`
+	// PrivacyConsent records acceptance of the signup data-collection notice. Nil
+	// means an older client that has no consent UI; see service.ConsentService.
+	PrivacyConsent *PrivacyConsent `json:"privacyConsent"`
 }

@@ -21,12 +21,24 @@ type Config struct {
 	EasyPay               EasyPayConfig
 	SMTP                  SMTPConfig
 	SMS                   SMSConfig
+	PrivacyConsent        PrivacyConsentConfig
 	Push                  PushConfig
 	Sentry                SentryConfig
 	PGAuditLogPath        string
 	Environment           string // "dev" exposes manual subscription billing trigger; "prod" hides it
 	VisitIPSalt           string
 	MessageBlockedPhrases []string
+}
+
+// PrivacyConsentConfig controls the signup 개인정보 수집·이용 동의 requirement.
+// Version is the current notice version clients must present (the privacy policy
+// publication date). Enforce=false is the rollout stage: requests without consent
+// are accepted and logged so clients built before the consent UI keep working;
+// Enforce=true rejects missing or outdated consent. An explicit refusal
+// (accepted=false) is rejected in both stages.
+type PrivacyConsentConfig struct {
+	Version string
+	Enforce bool
 }
 
 // AccountErasureConfig holds private server-side automation integrations.
@@ -298,6 +310,10 @@ func Load() *Config {
 			NCPServiceID:     getEnv("SMS_NCP_SERVICE_ID", ""),
 			ReviewTestPhones: getCSVEnv("SMS_REVIEW_TEST_PHONES", ""),
 			ReviewTestCode:   getEnv("SMS_REVIEW_TEST_CODE", ""),
+		},
+		PrivacyConsent: PrivacyConsentConfig{
+			Version: getEnv("PRIVACY_CONSENT_VERSION", ""),
+			Enforce: getBoolEnv("PRIVACY_CONSENT_ENFORCE", false),
 		},
 		Push: PushConfig{
 			Enabled:            getBoolEnv("PUSH_ENABLED", false),
