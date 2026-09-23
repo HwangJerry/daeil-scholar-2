@@ -26,7 +26,8 @@ func TestSearchAlumniUsesApprovedVerificationAndCanonicalResponse(t *testing.T) 
 		WithArgs(20, 0).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"USR_SEQ", "USR_NAME", "USR_PHOTO", "GRADUATION_YEAR", "COHORT", "DEPARTMENT", "AJC_NAME", "USR_POSITION",
-		}).AddRow(202, "예시 동문", nil, 2004, "18", "영어", "교육", "교사"))
+			"USR_BIZ_NAME", "USR_BIZ_CARD",
+		}).AddRow(202, "예시 동문", nil, 2004, "18", "영어", "교육", "교사", "대일", "/uploads/card.jpg"))
 
 	response, err := alumniService.Search(model.AlumniSearchParams{})
 	if err != nil {
@@ -40,13 +41,14 @@ func TestSearchAlumniUsesApprovedVerificationAndCanonicalResponse(t *testing.T) 
 	for _, required := range []string{
 		`"userSeq":202`, `"name":"예시 동문"`, `"photoUrl":null`,
 		`"cohort":"18"`, `"department":"영어"`, `"jobCategory":"교육"`, `"jobRole":"교사"`,
+		`"bizName":"대일"`, `"bizCardUrl":"/uploads/card.jpg"`,
 		`"page":1`, `"size":20`, `"totalCount":1`, `"totalPages":1`,
 	} {
 		if !strings.Contains(body, required) {
 			t.Fatalf("body = %s, missing %s", body, required)
 		}
 	}
-	for _, forbidden := range []string{"fmSeq", "fmName", "fmFn", "fmDept", "weeklyCount", "phone", "email", "bizCard", "tags"} {
+	for _, forbidden := range []string{"fmSeq", "fmName", "fmFn", "fmDept", "weeklyCount", "phone", "email", "phonePublic", "emailPublic", "bizAddr", "bizDesc", "bizCard", "tags", "blockState"} {
 		if strings.Contains(body, `"`+forbidden+`"`) {
 			t.Fatalf("body = %s, contains forbidden field %s", body, forbidden)
 		}
@@ -73,6 +75,7 @@ func TestSearchAlumniAppliesCanonicalCompositeFiltersAndPagination(t *testing.T)
 		WithArgs(selectArgs...).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"USR_SEQ", "USR_NAME", "USR_PHOTO", "GRADUATION_YEAR", "COHORT", "DEPARTMENT", "AJC_NAME", "USR_POSITION",
+			"USR_BIZ_NAME", "USR_BIZ_CARD",
 		}))
 
 	response, err := alumniService.Search(model.AlumniSearchParams{

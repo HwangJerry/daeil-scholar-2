@@ -7,7 +7,9 @@
       "cohort": "18",
       "department": "영어",
       "jobCategory": "교육",
-      "jobRole": "교사"
+      "jobRole": "교사",
+      "bizName": "대일",
+      "bizCardUrl": "/uploads/card.jpg"
     }
   ],
   "page": 1,

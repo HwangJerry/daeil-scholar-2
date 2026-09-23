@@ -420,7 +420,9 @@ query:
       "cohort": "18",
       "department": "영어",
       "jobCategory": "교육",
-      "jobRole": "교사"
+      "jobRole": "교사",
+      "bizName": "대일",
+      "bizCardUrl": "/uploads/card.jpg"
     }
   ],
   "page": 1,
@@ -430,13 +432,18 @@ query:
 }
 ```
 
-검색 결과의 허용 필드는 이름·사진·기수·학과·직종·직무와 `userSeq`뿐이다. 연락처·이메일·회사 상세·명함·주석은 반환하지 않는다.
+검색 결과의 허용 필드는 이름·사진·기수·학과·직종·직무, 회사명 `bizName`, 명함 이미지 `bizCardUrl`, `userSeq`이다. 연락처·이메일·회사 주소·회사 소개·태그·관리자 주석은 반환하지 않는다.
+
+- `bizName`은 항상 포함하는 string이며, `WEO_MEMBER.USR_BIZ_NAME`이 NULL이거나 빈 값이면 `""`이다.
+- `bizCardUrl`은 항상 포함하는 nullable string이며, `WEO_MEMBER.USR_BIZ_CARD`가 NULL이거나 빈 값이면 `null`이다. 값이 있으면 상세 API와 동일하게 저장된 URL/경로를 변환 없이 반환한다.
+- 검색과 상세 모두 인증 및 동문 승인 middleware를 적용하고, 승인된 `CCC`/`ZZZ` 회원만 조회한다. 회사명·명함에는 별도 공개 설정이 없으며, 상세 API와 동일하게 차단 여부나 전화·이메일 공개 설정으로 숨기지 않는다.
+- 두 필드는 기존 페이지 조회 SELECT에 포함한다. 페이지 수를 위한 COUNT 외에 회원별 추가 조회는 없다.
 
 ### 7.2 상세
 
 `GET /api/alumni/{userSeq}`
 
-MVP 상세 response의 허용 필드는 검색 결과 필드, 조건부 `phone`·`email`, `blockState.blockedByMe`로 고정한다. 자기소개·회사 상세·명함·태그·관리자 주석 등은 별도 계약 개정 전까지 포함하지 않는다.
+상세 response는 검색 결과 필드와 `graduationYear`, `bizAddr`, `bizDesc`, `tags`, `phonePublic`, `emailPublic`, 조건부 `phone`·`email`, `blockState.blockedByMe`를 포함한다. 관리자 주석은 포함하지 않는다.
 
 ```json
 {
@@ -447,6 +454,14 @@ MVP 상세 response의 허용 필드는 검색 결과 필드, 조건부 `phone`�
   "department": "영어",
   "jobCategory": "교육",
   "jobRole": "교사",
+  "graduationYear": 2004,
+  "bizName": "대일",
+  "bizAddr": "서울",
+  "bizDesc": "소개글",
+  "bizCardUrl": "/uploads/card.jpg",
+  "tags": ["교육", "멘토링"],
+  "phonePublic": true,
+  "emailPublic": true,
   "phone": "01000000000",
   "email": "member@example.com",
   "blockState": { "blockedByMe": false }

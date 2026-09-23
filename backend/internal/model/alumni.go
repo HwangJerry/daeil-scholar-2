@@ -35,6 +35,8 @@ type AlumniCard struct {
 	Department  string  `json:"department"`
 	JobCategory string  `json:"jobCategory"`
 	JobRole     string  `json:"jobRole"`
+	BizName     string  `json:"bizName"`
+	BizCardURL  *string `json:"bizCardUrl"`
 }
 
 // AlumniSearchParams holds the query parameters for alumni search.

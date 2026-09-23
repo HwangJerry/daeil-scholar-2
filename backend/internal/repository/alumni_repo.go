@@ -47,7 +47,8 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 		SELECT
 			m.USR_SEQ, m.USR_NAME, m.USR_PHOTO,
 			v.GRADUATION_YEAR, v.COHORT, v.DEPARTMENT,
-			jc.AJC_NAME, m.USR_POSITION
+			jc.AJC_NAME, m.USR_POSITION,
+			m.USR_BIZ_NAME, m.USR_BIZ_CARD
 		FROM WEO_MEMBER m
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
