@@ -42,8 +42,8 @@ func (o *DonationConfigOrchestrator) GetConfig() (*model.DonationConfig, error) 
 
 // UpdateConfig persists the config, refreshes today's snapshot, and invalidates the cache.
 func (o *DonationConfigOrchestrator) UpdateConfig(update DonationConfigUpdate, operSeq int) error {
-	if !validDonationTierThresholds(update) {
-		return ErrInvalidTierThresholds
+	if _, err := normalizeDonationConfigUpdate(update); err != nil {
+		return err
 	}
 	err := o.adminSvc.RunInTransaction(func(tx *sqlx.Tx) error {
 		if err := o.adminSvc.UpdateConfigTx(tx, update, operSeq); err != nil {

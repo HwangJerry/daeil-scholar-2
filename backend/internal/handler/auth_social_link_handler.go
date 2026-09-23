@@ -32,6 +32,8 @@ type socialLinkRequest struct {
 	ProfileImageURL *string  `json:"profileImageUrl,omitempty"`
 	// PhoneVerificationToken proves the applicant controls Phone.
 	PhoneVerificationToken string `json:"phoneVerificationToken"`
+	// PrivacyConsent records acceptance of the signup data-collection notice.
+	PrivacyConsent *model.PrivacyConsent `json:"privacyConsent"`
 }
 
 // SocialLink creates a new member from a verified social-provider identity.
@@ -81,6 +83,9 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := service.ValidateTags(req.Tags); err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_TAG", "태그에 공백을 포함할 수 없습니다")
+		return
+	}
+	if !h.requirePrivacyConsent(w, req.PrivacyConsent) {
 		return
 	}
 	if !h.requirePhoneVerification(w, req.PhoneVerificationToken, req.Phone) {
@@ -188,6 +193,7 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 
 	if isNew {
 		h.spendPhoneVerification(req.PhoneVerificationToken, req.Phone)
+		h.recordPrivacyConsent(user.USRSeq, req.PrivacyConsent)
 	}
 
 	tokenConsumed = true

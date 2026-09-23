@@ -47,6 +47,8 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 			Department:  nullString(record.Department),
 			JobCategory: nullString(record.AJCName),
 			JobRole:     nullString(record.USRPosition),
+			BizName:     nullString(record.USRBizName),
+			BizCardURL:  nullableString(record.USRBizCard),
 		})
 	}
 	totalPages := 0

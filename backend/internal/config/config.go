@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -20,12 +21,24 @@ type Config struct {
 	EasyPay               EasyPayConfig
 	SMTP                  SMTPConfig
 	SMS                   SMSConfig
+	PrivacyConsent        PrivacyConsentConfig
 	Push                  PushConfig
 	Sentry                SentryConfig
 	PGAuditLogPath        string
 	Environment           string // "dev" exposes manual subscription billing trigger; "prod" hides it
 	VisitIPSalt           string
 	MessageBlockedPhrases []string
+}
+
+// PrivacyConsentConfig controls the signup 개인정보 수집·이용 동의 requirement.
+// Version is the current notice version clients must present (the privacy policy
+// publication date). Enforce=false is the rollout stage: requests without consent
+// are accepted and logged so clients built before the consent UI keep working;
+// Enforce=true rejects missing or outdated consent. An explicit refusal
+// (accepted=false) is rejected in both stages.
+type PrivacyConsentConfig struct {
+	Version string
+	Enforce bool
 }
 
 // AccountErasureConfig holds private server-side automation integrations.
@@ -86,7 +99,22 @@ type SMSConfig struct {
 	NCPAccessKey string
 	NCPSecretKey string
 	NCPServiceID string
+	// ReviewTestPhones lists phone numbers (digits only) that never receive a real
+	// SMS; RequestCode records ReviewTestCode for them instead. Intended for App
+	// Store / Play review accounts whose reviewers cannot receive Korean SMS.
+	ReviewTestPhones []string
+	// ReviewTestCode is the fixed 6-digit code accepted for ReviewTestPhones.
+	ReviewTestCode string
 }
+
+// ReviewTestConfigured reports whether the reviewer bypass is usable: at least one
+// number and a well-formed code. A malformed code disables the bypass rather than
+// silently accepting anything.
+func (c SMSConfig) ReviewTestConfigured() bool {
+	return len(c.ReviewTestPhones) > 0 && reviewTestCodePattern.MatchString(c.ReviewTestCode)
+}
+
+var reviewTestCodePattern = regexp.MustCompile(`^[0-9]{6}$`)
 
 // Configured reports whether outbound SMS can actually be delivered. Each provider
 // needs its own credentials, so the check is provider-specific.
@@ -273,13 +301,19 @@ func Load() *Config {
 			From:     getEnv("SMTP_FROM", "noreply@dflh.kr"),
 		},
 		SMS: SMSConfig{
-			Provider:     getEnv("SMS_PROVIDER", ""),
-			Sender:       getEnv("SMS_SENDER", ""),
-			APIKey:       getEnv("SMS_API_KEY", ""),
-			UserID:       getEnv("SMS_USER_ID", ""),
-			NCPAccessKey: getEnv("SMS_NCP_ACCESS_KEY", ""),
-			NCPSecretKey: getEnv("SMS_NCP_SECRET_KEY", ""),
-			NCPServiceID: getEnv("SMS_NCP_SERVICE_ID", ""),
+			Provider:         getEnv("SMS_PROVIDER", ""),
+			Sender:           getEnv("SMS_SENDER", ""),
+			APIKey:           getEnv("SMS_API_KEY", ""),
+			UserID:           getEnv("SMS_USER_ID", ""),
+			NCPAccessKey:     getEnv("SMS_NCP_ACCESS_KEY", ""),
+			NCPSecretKey:     getEnv("SMS_NCP_SECRET_KEY", ""),
+			NCPServiceID:     getEnv("SMS_NCP_SERVICE_ID", ""),
+			ReviewTestPhones: getCSVEnv("SMS_REVIEW_TEST_PHONES", ""),
+			ReviewTestCode:   getEnv("SMS_REVIEW_TEST_CODE", ""),
+		},
+		PrivacyConsent: PrivacyConsentConfig{
+			Version: getEnv("PRIVACY_CONSENT_VERSION", ""),
+			Enforce: getBoolEnv("PRIVACY_CONSENT_ENFORCE", false),
 		},
 		Push: PushConfig{
 			Enabled:            getBoolEnv("PUSH_ENABLED", false),

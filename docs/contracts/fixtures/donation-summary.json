@@ -10,5 +10,8 @@
     "tree": 50000,
     "blooming": 100000,
     "fruiting": 300000
-  }
+  },
+  "monthAmount": 3500000,
+  "balanceAmount": 98765432,
+  "balanceAsOf": "2026-09-23"
 }

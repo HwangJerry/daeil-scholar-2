@@ -162,6 +162,49 @@ func TestUpdateConfigRejectsInvalidDonationTierThresholds(t *testing.T) {
 	}
 }
 
+func TestNormalizeDonationConfigBalance(t *testing.T) {
+	zero, positive, negative := int64(0), int64(5000000000), int64(-1)
+	validDate, leapDate, invalidDate, nonISO, empty, outOfRange := "2026-09-23", "2024-02-29", "2026-02-29", "2026-9-23", "", "0000-01-01"
+	for _, tc := range []struct {
+		name    string
+		amount  *int64
+		date    *string
+		invalid bool
+	}{
+		{"unset", nil, nil, false},
+		{"clear date with balance", nil, &validDate, false},
+		{"zero", &zero, &validDate, false},
+		{"positive bigint", &positive, &validDate, false},
+		{"leap day", &positive, &leapDate, false},
+		{"negative", &negative, &validDate, true},
+		{"missing date", &zero, nil, true},
+		{"empty date", &positive, &empty, true},
+		{"invalid date", &positive, &invalidDate, true},
+		{"not ISO", &positive, &nonISO, true},
+		{"unsupported MariaDB date", &positive, &outOfRange, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config, err := normalizeDonationConfigUpdate(DonationConfigUpdate{
+				BalanceAmount: tc.amount, BalanceAsOf: tc.date,
+				TierSproutMin: 1, TierSaplingMin: 10000, TierTreeMin: 50000,
+				TierBloomingMin: 100000, TierFruitingMin: 300000,
+			})
+			if tc.invalid {
+				if !errors.Is(err, ErrInvalidDonationBalance) {
+					t.Fatalf("error = %v, want invalid balance", err)
+				}
+				return
+			}
+			if err != nil || config.BalanceAmount != tc.amount {
+				t.Fatalf("config = %+v, error = %v", config, err)
+			}
+			if tc.amount == nil && config.BalanceAsOf != nil || tc.amount != nil && config.BalanceAsOf != tc.date {
+				t.Fatalf("balance date = %v", config.BalanceAsOf)
+			}
+		})
+	}
+}
+
 func TestUpdateConfigPersistsValidDonationTierThresholds(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -181,6 +224,7 @@ func TestUpdateConfigPersistsValidDonationTierThresholds(t *testing.T) {
 			update.Goal, update.ManualAdj, update.ManualDonorCnt,
 			update.TierSproutMin, update.TierSaplingMin, update.TierTreeMin,
 			update.TierBloomingMin, update.TierFruitingMin,
+			update.BalanceAmount, update.BalanceAsOf,
 			update.Note, "Y", 7,
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))

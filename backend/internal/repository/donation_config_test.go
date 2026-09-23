@@ -1,6 +1,8 @@
 package repository_test
 
 import (
+	"database/sql/driver"
+	"fmt"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -8,6 +10,45 @@ import (
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/jmoiron/sqlx"
 )
+
+func TestDonationConfigBalanceReadWrite(t *testing.T) {
+	for _, amount := range []driver.Value{nil, int64(0), int64(5000000000)} {
+		t.Run(fmt.Sprint(amount), func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			sqlxDB := sqlx.NewDb(db, "sqlmock")
+			var date driver.Value
+			if amount != nil {
+				date = "2026-09-23"
+			}
+			mock.ExpectQuery(`(?s)DC_BALANCE_AMOUNT, DATE_FORMAT\(DC_BALANCE_AS_OF, '%Y-%m-%d'\) AS DC_BALANCE_AS_OF.*WHERE IS_ACTIVE = 'Y'.*ORDER BY DC_SEQ DESC`).
+				WillReturnRows(sqlmock.NewRows([]string{"DC_BALANCE_AMOUNT", "DC_BALANCE_AS_OF"}).AddRow(amount, date))
+			config, err := repository.NewDonationRepository(sqlxDB).GetActiveConfig()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if amount == nil {
+				if config.BalanceAmount != nil || config.BalanceAsOf != nil {
+					t.Fatalf("unset balance = %+v", config)
+				}
+			} else if config.BalanceAmount == nil || *config.BalanceAmount != amount || config.BalanceAsOf == nil || *config.BalanceAsOf != date {
+				t.Fatalf("balance = %+v, want %v/%v", config, amount, date)
+			}
+			mock.ExpectExec(`(?s)UPDATE DONATION_CONFIG.*DC_BALANCE_AMOUNT = \?, DC_BALANCE_AS_OF = \?.*WHERE IS_ACTIVE = 'Y'`).
+				WithArgs(0, 0, 0, 0, 0, 0, 0, 0, amount, date, "", "", 7).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			if err := repository.NewAdminDonationRepository(sqlxDB).UpdateConfig(*config, 7); err != nil {
+				t.Fatal(err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
 
 func TestGetActiveConfigReturnsDefaultDonationTierThresholds(t *testing.T) {
 	db, mock, err := sqlmock.New()
@@ -66,6 +107,7 @@ func TestUpdateConfigPersistsDonationTierThresholds(t *testing.T) {
 			config.Goal, config.ManualAdj, config.ManualDonorCnt,
 			config.TierSproutMin, config.TierSaplingMin, config.TierTreeMin,
 			config.TierBloomingMin, config.TierFruitingMin,
+			config.BalanceAmount, config.BalanceAsOf,
 			config.Note, config.Overwrite, 7,
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))

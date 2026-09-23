@@ -7,6 +7,7 @@ import { Button } from '../ui/Button.tsx';
 import { ErrorState } from '../ui/ErrorState.tsx';
 import { useDonationConfig } from '../../hooks/useDonationConfig.ts';
 import { formatAmount } from '../../lib/formatAmount.ts';
+import { parseDonationBalance } from './donationBalanceForm.ts';
 import type { DonationConfig, DonationConfigUpdateRequest } from '../../types/api.ts';
 
 type TierThresholdKey =
@@ -103,6 +104,9 @@ interface DonationConfigFormProps {
 }
 
 function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProps) {
+  const [balanceAmount, setBalanceAmount] = useState(() => String(data.dcBalanceAmount ?? ''));
+  const [balanceAsOf, setBalanceAsOf] = useState(() => data.dcBalanceAsOf ?? '');
+  const [balanceError, setBalanceError] = useState<string | null>(null);
   const [goal, setGoal] = useState(() => String(data.dcGoal));
   const [manualAdj, setManualAdj] = useState(() => String(data.dcManualAdj));
   const [manualDonorCnt, setManualDonorCnt] = useState(() => String(data.dcManualDonorCnt));
@@ -111,8 +115,16 @@ function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProp
   const [note, setNote] = useState(() => data.dcNote ?? '');
   const [overwrite, setOverwrite] = useState(() => data.dcOverwrite === 'Y');
   const [isEditing, setIsEditing] = useState(false);
+  const hasValidBalanceAmount = balanceAmount !== ''
+    && /^\d+$/.test(balanceAmount)
+    && Number.isSafeInteger(Number(balanceAmount));
 
   const handleSave = () => {
+    const balance = parseDonationBalance(balanceAmount, balanceAsOf);
+    if (!balance.ok) {
+      setBalanceError(balance.message);
+      return;
+    }
     const parsedTierThresholds = parseTierThresholds(tierThresholds);
     const validationError = validateTierThresholds(parsedTierThresholds);
     if (validationError) {
@@ -122,6 +134,8 @@ function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProp
 
     onSave(
       {
+        balanceAmount: balance.balanceAmount,
+        balanceAsOf: balance.balanceAsOf,
         goal: Number(goal),
         manualAdj: Number(manualAdj),
         manualDonorCnt: Number(manualDonorCnt),
@@ -129,11 +143,20 @@ function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProp
         note,
         overwrite,
       },
-      { onSuccess: () => setIsEditing(false) },
+      {
+        onSuccess: () => {
+          setBalanceAmount(String(balance.balanceAmount ?? ''));
+          setBalanceAsOf(balance.balanceAsOf ?? '');
+          setIsEditing(false);
+        },
+      },
     );
   };
 
   const handleCancel = () => {
+    setBalanceAmount(String(data.dcBalanceAmount ?? ''));
+    setBalanceAsOf(data.dcBalanceAsOf ?? '');
+    setBalanceError(null);
     setGoal(String(data.dcGoal));
     setManualAdj(String(data.dcManualAdj));
     setManualDonorCnt(String(data.dcManualDonorCnt));
@@ -204,6 +227,60 @@ function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProp
               덮어쓰기 — 체크 시 누적 금액·기부자 수를 수동 입력값으로 표시
             </label>
           </div>
+          <fieldset>
+            <legend className="text-sm font-semibold text-dark-slate">계좌 잔액</legend>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="cfg-balance" className="mb-1 block text-sm font-medium text-dark-slate">
+                  계좌 잔액(원)
+                </label>
+                <Input
+                  id="cfg-balance"
+                  inputMode="numeric"
+                  value={balanceAmount}
+                  onChange={(event) => {
+                    setBalanceAmount(event.target.value);
+                    setBalanceError(null);
+                  }}
+                  aria-invalid={Boolean(balanceError)}
+                  aria-describedby="cfg-balance-preview cfg-balance-help"
+                  aria-errormessage={balanceError ? 'cfg-balance-error' : undefined}
+                />
+                <p id="cfg-balance-preview" className="mt-1 text-xs text-cool-gray" aria-live="polite">
+                  {hasValidBalanceAmount
+                    ? `${formatAmount(Number(balanceAmount))}원`
+                    : '—'}
+                </p>
+              </div>
+              <div>
+                <label htmlFor="cfg-balance-as-of" className="mb-1 block text-sm font-medium text-dark-slate">
+                  잔액 기준일
+                </label>
+                <Input
+                  id="cfg-balance-as-of"
+                  type="date"
+                  min="1000-01-01"
+                  max="9999-12-31"
+                  required={balanceAmount !== ''}
+                  value={balanceAsOf}
+                  onChange={(event) => {
+                    setBalanceAsOf(event.target.value);
+                    setBalanceError(null);
+                  }}
+                  aria-invalid={Boolean(balanceError)}
+                  aria-errormessage={balanceError ? 'cfg-balance-error' : undefined}
+                />
+              </div>
+            </div>
+            <p id="cfg-balance-help" className="mt-1 text-xs text-cool-gray">
+              잔액을 비우면 계좌 잔액이 표시되지 않습니다.
+            </p>
+            {balanceError && (
+              <p id="cfg-balance-error" role="alert" className="mt-2 text-sm text-error-text">
+                {balanceError}
+              </p>
+            )}
+          </fieldset>
           <fieldset>
             <legend className="text-sm font-semibold text-dark-slate">나무 성장 단계 임계값</legend>
             <p className="mt-1 text-xs text-cool-gray">
@@ -280,6 +357,18 @@ function DonationConfigForm({ data, onSave, isUpdating }: DonationConfigFormProp
             <div>
               <dt className="text-xs text-cool-gray">메모</dt>
               <dd className="text-sm text-dark-slate">{data.dcNote || '—'}</dd>
+            </div>
+          </dl>
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs text-cool-gray">계좌 잔액(원)</dt>
+              <dd className="text-sm font-medium text-dark-slate">
+                {data.dcBalanceAmount == null ? '—' : `${formatAmount(data.dcBalanceAmount)}원`}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-cool-gray">잔액 기준일</dt>
+              <dd className="text-sm font-medium text-dark-slate">{data.dcBalanceAsOf ?? '—'}</dd>
             </div>
           </dl>
           <div className="border-t border-border-light pt-4">

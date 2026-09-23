@@ -60,6 +60,9 @@ type PhoneVerificationService struct {
 	sender    SMSSender
 	templates notificationTextRenderer
 	logger    zerolog.Logger
+	// reviewTestPhones maps canonical phone numbers to the fixed code they accept.
+	// Empty unless ConfigureReviewTestNumbers was called.
+	reviewTestPhones map[string]string
 }
 
 // NewPhoneVerificationService creates a PhoneVerificationService. The renderer
@@ -73,11 +76,32 @@ func NewPhoneVerificationService(
 	return &PhoneVerificationService{store: store, sender: sender, templates: templates, logger: logger}
 }
 
+// ConfigureReviewTestNumbers registers phone numbers that never receive a real SMS.
+// RequestCode stores the fixed code for them so an app-store reviewer, who cannot
+// receive Korean SMS, can still complete signup. Every other rule (throttling, attempt
+// limits, grant lifetime, phone-to-grant binding) applies unchanged. Numbers that do
+// not normalize to a valid phone number are ignored.
+func (s *PhoneVerificationService) ConfigureReviewTestNumbers(phones []string, code string) {
+	s.reviewTestPhones = make(map[string]string, len(phones))
+	for _, phone := range phones {
+		canonical := model.NormalizePhoneNumber(phone)
+		if canonical.Valid() {
+			s.reviewTestPhones[canonical.String()] = code
+		}
+	}
+	if len(s.reviewTestPhones) > 0 {
+		s.logger.Warn().Int("count", len(s.reviewTestPhones)).Msg("phone verification: review test numbers enabled; no SMS is sent to them")
+	}
+}
+
 // RequestCode validates the number, throttles resends, and dispatches a fresh code.
 func (s *PhoneVerificationService) RequestCode(phone string) (*model.PhoneVerificationRequestResult, error) {
 	canonicalPhone := model.NormalizePhoneNumber(phone)
 	if !canonicalPhone.Valid() {
 		return nil, ErrInvalidPhone
+	}
+	if fixedCode, isReviewNumber := s.reviewTestPhones[canonicalPhone.String()]; isReviewNumber {
+		return s.requestReviewTestCode(canonicalPhone.String(), fixedCode)
 	}
 
 	recent, err := s.store.CountRecentRequests(canonicalPhone.String(), time.Now().Add(-phoneRequestWindow))
@@ -113,6 +137,31 @@ func (s *PhoneVerificationService) RequestCode(phone string) (*model.PhoneVerifi
 		return nil, err
 	}
 
+	return &model.PhoneVerificationRequestResult{
+		VerificationID: verificationID,
+		ExpiresInSec:   int(phoneCodeExpiry.Seconds()),
+	}, nil
+}
+
+// requestReviewTestCode records the fixed code for a review test number without
+// sending SMS. The throttle still applies so the bypass cannot be used to flood the
+// verification table.
+func (s *PhoneVerificationService) requestReviewTestCode(canonicalPhone, fixedCode string) (*model.PhoneVerificationRequestResult, error) {
+	recent, err := s.store.CountRecentRequests(canonicalPhone, time.Now().Add(-phoneRequestWindow))
+	if err != nil {
+		return nil, err
+	}
+	if recent >= phoneRequestsPerWindow {
+		return nil, ErrPhoneVerificationThrottled
+	}
+	verificationID, err := randomHex(phoneVerificationIDLen)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.store.InsertVerification(verificationID, canonicalPhone, hashSecret(fixedCode), time.Now().Add(phoneCodeExpiry)); err != nil {
+		return nil, err
+	}
+	s.logger.Info().Str("verificationId", verificationID).Msg("phone verification: review test number, SMS skipped")
 	return &model.PhoneVerificationRequestResult{
 		VerificationID: verificationID,
 		ExpiresInSec:   int(phoneCodeExpiry.Seconds()),

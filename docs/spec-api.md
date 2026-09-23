@@ -180,9 +180,11 @@ func (h *AdHandler) TrackView(w http.ResponseWriter, r *http.Request) {
 
 | Method | Endpoint | 인증 | 설명 |
 |--------|----------|------|------|
-| GET | `/api/donation/summary` | 불필요 | 최신 기부 요약 (총액, 기부자 수, 달성률) |
+| GET | `/api/donation/summary` | 불필요 | 최신 기부 요약 (총액, 서울 기준 이번 달 기부액, 계좌 잔액·기준일, 기부자 수, 달성률) |
 
 **폴백 로직:** 오늘 스냅샷이 없으면 가장 최근 스냅샷을 반환합니다.
+
+현재 응답 계약과 관리자 잔액 설정·월 집계 원천은 [MVP API 계약 11절](mvp-api-contract.md#11-공개-기부-요약)을 따른다. 아래 코드는 누적 금액 계산의 개념 예시다.
 
 ```go
 func (s *DonationService) GetSummary() (*DonationSummary, error) {
@@ -303,34 +305,53 @@ EasyPay에서 사용자 결제 완료 후 리다이렉트합니다 (`sp_return_u
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| GET | `/api/alumni` | 동문 검색 (로그인 필수) |
-| GET | `/api/alumni/filters` | 검색 필터 옵션 (기수 목록, 학과 목록) |
+| GET | `/api/alumni` | 동문 검색 (로그인 및 동문 승인 필수) |
+| GET | `/api/alumni/filters` | 검색 필터 옵션 (졸업연도, 기수, 학과, 직종, 직무) |
 
 **검색 쿼리 파라미터:**
 
 | 파라미터 | 타입 | 설명 |
 |----------|------|------|
-| `fn` | int | 기수 |
-| `dept` | string | 학과 |
-| `name` | string | 이름 (전방 일치) |
-| `company` | string | 회사 (전방 일치) |
-| `position` | string | 직책 (전방 일치) |
+| `name` | string | 이름 (부분 일치) |
+| `graduationYear` | int | 졸업연도 |
+| `cohort` | string | 기수 |
+| `department` | string | 학과 |
+| `jobCategory` | int | 직종 식별자 |
+| `jobRole` | string | 직무 (완전 일치) |
 | `page` | int | 페이지 번호 (기본 1) |
-| `size` | int | 페이지 크기 (기본 20) |
+| `size` | int | 페이지 크기 (기본 20, 최대 50) |
 
-**검색 성능 주의사항:**
+**검색 응답:**
 
-```sql
--- ✅ 전방 일치: 인덱스 사용 가능
-WHERE FM_NAME LIKE '홍%'
-WHERE FM_COMPANY LIKE '삼성%'
-
--- ❌ 중간 일치: 인덱스 사용 불가 → 풀스캔
-WHERE FM_NAME LIKE '%길동%'
-WHERE FM_COMPANY LIKE '%전자%'
+```json
+{
+  "items": [
+    {
+      "userSeq": 202,
+      "name": "예시 동문",
+      "photoUrl": "/files/profile/example.jpg",
+      "cohort": "18",
+      "department": "영어",
+      "jobCategory": "교육",
+      "jobRole": "교사",
+      "bizName": "대일",
+      "bizCardUrl": "/uploads/card.jpg"
+    }
+  ],
+  "page": 1,
+  "size": 20,
+  "totalCount": 1,
+  "totalPages": 1
+}
 ```
 
-**설계 결정:** 이름과 회사는 **전방 일치(`keyword%`)** 로 검색합니다. 중간 일치가 필요한 경우 데이터 규모가 커지면 별도 검색 인덱스(MariaDB FULLTEXT 또는 외부 검색 엔진) 도입을 검토합니다.
+- `bizName` (string): 회사명. `WEO_MEMBER.USR_BIZ_NAME`에서 읽으며 NULL/빈 값은 `""`로 반환한다.
+- `bizCardUrl` (string | null): 명함 이미지. `WEO_MEMBER.USR_BIZ_CARD`의 URL/경로를 상세 API와 동일하게 변환 없이 반환하며 NULL/빈 값은 `null`로 반환한다. 두 property는 항상 포함한다.
+- 회사명·명함에는 별도 공개 설정이 없으며 상세 API처럼 차단 여부나 전화·이메일 공개 설정으로 숨기지 않는다. 목록에는 연락처·이메일·회사 주소·회사 소개·태그를 포함하지 않는다.
+
+**조회 방식:** `ALUMNI_VERIFICATION.STATUS = 'approved'`이고 `WEO_MEMBER.USR_STATUS IN ('CCC','ZZZ')`인 회원 중 `USR_SEQ > 0`만 이름·회원번호 오름차순으로 조회한다. 회사명·명함은 기존 페이지 SELECT에서 함께 읽는다. 페이지 수를 위한 COUNT와 페이지 SELECT만 실행하며 회원별 추가 조회는 없다. 기존 필터 동작은 유지한다.
+
+정식 계약과 fixture는 [MVP API 계약 §7](mvp-api-contract.md#7-동문-검색상세-계약) 및 [alumni-search.json](contracts/fixtures/alumni-search.json)을 따른다.
 
 ### 6.6 마이페이지
 

@@ -33,20 +33,24 @@ func (h *AdminDonationHandler) GetConfig(w http.ResponseWriter, r *http.Request)
 }
 
 type updateDonationConfigRequest struct {
-	Goal            int64  `json:"goal"`
-	ManualAdj       int64  `json:"manualAdj"`
-	ManualDonorCnt  int    `json:"manualDonorCnt"`
-	TierSproutMin   int64  `json:"tierSproutMin"`
-	TierSaplingMin  int64  `json:"tierSaplingMin"`
-	TierTreeMin     int64  `json:"tierTreeMin"`
-	TierBloomingMin int64  `json:"tierBloomingMin"`
-	TierFruitingMin int64  `json:"tierFruitingMin"`
-	Note            string `json:"note"`
-	Overwrite       bool   `json:"overwrite"`
+	BalanceAmount   *int64  `json:"balanceAmount"`
+	BalanceAsOf     *string `json:"balanceAsOf"`
+	Goal            int64   `json:"goal"`
+	ManualAdj       int64   `json:"manualAdj"`
+	ManualDonorCnt  int     `json:"manualDonorCnt"`
+	TierSproutMin   int64   `json:"tierSproutMin"`
+	TierSaplingMin  int64   `json:"tierSaplingMin"`
+	TierTreeMin     int64   `json:"tierTreeMin"`
+	TierBloomingMin int64   `json:"tierBloomingMin"`
+	TierFruitingMin int64   `json:"tierFruitingMin"`
+	Note            string  `json:"note"`
+	Overwrite       bool    `json:"overwrite"`
 }
 
 func (r updateDonationConfigRequest) serviceInput() service.DonationConfigUpdate {
 	return service.DonationConfigUpdate{
+		BalanceAmount:   r.BalanceAmount,
+		BalanceAsOf:     r.BalanceAsOf,
 		Goal:            r.Goal,
 		ManualAdj:       r.ManualAdj,
 		ManualDonorCnt:  r.ManualDonorCnt,
@@ -72,6 +76,10 @@ func (h *AdminDonationHandler) UpdateConfig(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err := h.service.UpdateConfig(req.serviceInput(), user.USRSeq); err != nil {
+		if errors.Is(err, service.ErrInvalidDonationBalance) {
+			respondError(w, http.StatusBadRequest, "INVALID_DONATION_BALANCE", err.Error())
+			return
+		}
 		if errors.Is(err, service.ErrInvalidTierThresholds) {
 			respondError(w, http.StatusBadRequest, "INVALID_TIER_THRESHOLDS", err.Error())
 			return

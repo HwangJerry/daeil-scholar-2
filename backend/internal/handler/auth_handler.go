@@ -29,6 +29,7 @@ type AuthHandler struct {
 	cache            *cache.Cache
 	socialLinkTokens *service.SocialLinkTokenStore
 	phoneVerifier    *service.PhoneVerificationService
+	consentSvc       *service.ConsentService
 	cfg              *config.Config
 	logger           zerolog.Logger
 }
@@ -37,6 +38,44 @@ type AuthHandler struct {
 // endpoints reject requests without a usable grant token once this is set.
 func (h *AuthHandler) AttachPhoneVerification(verifier *service.PhoneVerificationService) {
 	h.phoneVerifier = verifier
+}
+
+// AttachPrivacyConsent makes signup evaluate and record the data-collection consent.
+// Without it, consent fields are ignored (pre-rollout behaviour).
+func (h *AuthHandler) AttachPrivacyConsent(consentSvc *service.ConsentService) {
+	h.consentSvc = consentSvc
+}
+
+// requirePrivacyConsent applies the consent policy before an account is created.
+// Returns false after writing the error response.
+func (h *AuthHandler) requirePrivacyConsent(w http.ResponseWriter, consent *model.PrivacyConsent) bool {
+	if h.consentSvc == nil {
+		return true
+	}
+	err := h.consentSvc.Evaluate(consent)
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, service.ErrConsentRequired):
+		respondError(w, http.StatusBadRequest, "CONSENT_REQUIRED", "개인정보 수집·이용에 동의해야 가입할 수 있습니다")
+	case errors.Is(err, service.ErrConsentVersionOutdated):
+		respondError(w, http.StatusBadRequest, "CONSENT_VERSION_OUTDATED", "개인정보 안내 내용이 변경되었습니다. 앱을 최신 버전으로 업데이트한 뒤 다시 시도해주세요")
+	default:
+		h.logger.Error().Err(err).Msg("register: consent evaluation failed")
+		respondError(w, http.StatusInternalServerError, "CONSENT_CHECK_FAILED", "동의 확인 중 오류가 발생했습니다")
+	}
+	return false
+}
+
+// recordPrivacyConsent stores the consent after the account exists. Like the phone
+// grant, a failure here must not undo the signup, so it is logged.
+func (h *AuthHandler) recordPrivacyConsent(accountID int, consent *model.PrivacyConsent) {
+	if h.consentSvc == nil {
+		return
+	}
+	if err := h.consentSvc.Record(accountID, consent); err != nil {
+		h.logger.Error().Err(err).Int("usrSeq", accountID).Msg("register: failed to record privacy consent")
+	}
 }
 
 // requirePhoneVerification confirms a grant exists for the phone number without
@@ -213,6 +252,9 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_DEPARTMENT", "유효하지 않은 학과입니다")
 		return
 	}
+	if !h.requirePrivacyConsent(w, req.PrivacyConsent) {
+		return
+	}
 	if !h.requirePhoneVerification(w, req.PhoneVerificationToken, req.Phone) {
 		return
 	}
@@ -236,6 +278,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.spendPhoneVerification(req.PhoneVerificationToken, req.Phone)
+	h.recordPrivacyConsent(user.USRSeq, req.PrivacyConsent)
 	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
 	respondJSON(w, http.StatusCreated, authUser)
 }
