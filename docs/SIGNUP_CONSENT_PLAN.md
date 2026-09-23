@@ -13,11 +13,11 @@
 | T2 | 처리방침 수정안 반영 (`policyContent.ts`, 갱신일) | dflh-saf-v2 frontend | T1 | 착수 전 |
 | T3 | 백엔드: 가입·소셜 연동 요청에 동의 필드 수신, `AUTH_CONSENT` 기록 | dflh-saf-v2 backend | T1 | **1단계 구현 완료(2026-09-23)**. 2단계는 `PRIVACY_CONSENT_ENFORCE=true` 전환만 남음 |
 | T4 | iOS: 가입 2화면에 동의 체크·동의 표 시트, 전화번호 hint | dflh-saf-v2-swift | T1, T3 | 착수 전 |
-| T5 | 웹: 가입·소셜 연동 폼에 동의 체크·모달, 인증 안내 문구 | dflh-saf-v2 frontend | T1, T3 | 착수 전 |
-| T6 | Android: 가입 화면에 **휴대폰 인증 자체가 없음** → OTP + 동의 체크 | dflh-saf-v2-kotlin | T1, T3 | 착수 전, 별도 규모 산정 |
+| T5 | ~~웹 가입 폼 동의 UI~~ → **범위 제외(2026-09-23)**: 웹은 가입·로그인을 제공하지 않을 예정. 웹 `/register` 제거는 별도 작업 | dflh-saf-v2 frontend | — | 제외 |
+| T6 | Android: 가입 화면에 **휴대폰 인증 자체가 없음** → OTP + 동의 체크 | dflh-saf-v2-kotlin | T1, T3 | 착수 전. **T4와 병행**(2026-09-23 결정) |
 | T7 | 심사 재제출: 회신문 문장 수정, 스크린샷, 빌드 교체, 우회 번호 env 배포, App Privacy 라벨 | swift docs, 운영 | T2, T4 | 착수 전 |
 
-권장 순서: **T1 → T3 → T4 ∥ T5 → T2 → T7**. T6은 iOS 재제출을 막지 않으므로 병행하되, Android 출시 전에는 반드시 끝나야 한다.
+권장 순서: **T1 → T3 → T4 ∥ T6 → T2 → T7**. 웹(T5)은 범위에서 제외했다. 서버가 강제 단계로 전환되면 남아 있는 웹 `/register`에서의 가입은 `CONSENT_REQUIRED`로 거부되므로, 그 전에 웹 가입 경로 제거 여부를 결정한다.
 
 ## 1. 현황 (코드로 확인)
 
@@ -81,7 +81,10 @@
 - 디자인: Remember 스타일 토큰 사용, 디자인 시스템 저장소에 `consentRow` 컴포넌트 계약 등록(기존 T14 등록 방식 참고).
 - 검증: 체크 전 submit 비활성, 시트 열림, 페이로드 포함 여부 단위 테스트, 심사용 스크린샷(iPhone·iPad) 확보.
 
-## 6. T5. 웹
+## 6. T5. 웹 — 범위 제외
+
+2026-09-23 결정으로 제외. 웹은 가입·로그인을 제공하지 않을 예정이며, iOS가 웹 가입 페이지로 넘기는 경로는 이미 없다. 아래는 제외 전 초안으로 남긴다.
+
 
 - `RegisterForm.tsx`, `AccountLinkNewForm.tsx` submit 버튼 위에 동의 체크 + "내용 보기" 모달(동의 표 컴포넌트 공유, `consentContent.ts` 사용).
 - `PhoneVerificationField.tsx` 83행 안내문을 "전화번호를 입력하면 인증번호가 문자로 발송됩니다."로 정리.
@@ -92,7 +95,8 @@
 
 - 현재 네이티브 가입은 인증 토큰을 보내지 않아 서버에서 거부된다. 이는 이번 리젹과 무관하게 **Android 가입이 깨져 있는 상태**다.
 - 필요 작업: 인증번호 요청·확인 API 연동, `RegisterRequestDto`에 `phoneVerificationToken`·`privacyConsent` 추가, 화면에 인증 단계와 동의 체크 추가. iOS `PhoneVerificationController` 상태 기계를 참고해 이식.
-- 규모는 iOS 인증 구현(`73063a3` + 후속 수정 2건)과 유사. 별도 계획 항목으로 산정하고 Android 출시 전 필수.
+- 규모는 iOS 인증 구현(`73063a3` + 후속 수정 2건)과 유사. T4와 병행 착수한다. 인증 상태 기계는 iOS `PhoneVerificationController`(idle → sending → awaitingCode → verified, 번호 변경 시 무효화)를 그대로 이식하고, 동의 표 문구·버전은 T1과 동일 값을 리소스로 둔다.
+- Android 소셜 연동 가입(`AuthApi.kt`의 social/link)도 같은 서버 검사를 받으므로 인증·동의 필드를 함께 보낸다.
 
 ## 8. T7. 심사 재제출
 
