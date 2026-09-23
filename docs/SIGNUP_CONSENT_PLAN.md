@@ -10,7 +10,7 @@
 | # | 작업 | 저장소 | 의존 | 상태 |
 |---|---|---|---|---|
 | T1 | 동의 표 문구·버전 확정 | docs | 없음 | **문구 확정(2026-09-23)**, 버전 값은 T2 게시일로 결정 |
-| T2 | 처리방침 수정안 반영 (`policyContent.ts`, 갱신일) | dflh-saf-v2 frontend | T1 | 착수 전 |
+| T2 | 처리방침 수정안 반영 (`policyContent.ts`, 갱신일) | dflh-saf-v2 frontend | T1 | **완료(2026-09-23)**. 게시일·동의 버전 `2026-09-23`. 웹 배포와 운영 `PRIVACY_CONSENT_VERSION` 설정 필요 |
 | T3 | 백엔드: 가입·소셜 연동 요청에 동의 필드 수신, `AUTH_CONSENT` 기록 | dflh-saf-v2 backend | T1 | **1단계 구현 완료(2026-09-23)**. 2단계는 `PRIVACY_CONSENT_ENFORCE=true` 전환만 남음 |
 | T4 | iOS: 가입 2화면에 동의 체크·동의 표 시트, 전화번호 hint | dflh-saf-v2-swift | T1, T3 | **완료 `478fd24`(2026-09-23)**. 시뮬레이터 육안·VoiceOver 확인은 T7 |
 | T5 | ~~웹 가입 폼 동의 UI~~ → **범위 제외(2026-09-23)**: 웹은 가입·로그인을 제공하지 않을 예정. 웹 `/register` 제거는 별도 작업 | dflh-saf-v2 frontend | — | 제외 |

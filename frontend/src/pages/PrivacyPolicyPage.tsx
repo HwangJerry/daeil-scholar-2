@@ -59,7 +59,7 @@ export function PrivacyPolicyPage() {
             {PRIVACY_CONTACT.organization}의 웹사이트와 대일외고 장학회 앱에서 개인정보를 이용하고 관리하는 방법을 안내합니다.
           </p>
           <p className="mt-6 text-sm text-text-secondary">
-            최종 수정일 <time dateTime={PRIVACY_UPDATED_AT}>2026년 9월 14일</time>
+            최종 수정일 <time dateTime={PRIVACY_UPDATED_AT}>2026년 9월 23일</time>
           </p>
         </div>
       </header>
@@ -104,7 +104,7 @@ export function PrivacyPolicyPage() {
           </PolicySection>
 
           <PolicySection id="sharing">
-            <p>동문 검색과 프로필 화면에서는 이름, 기수, 학과와 입력한 프로필 정보를 다른 승인 동문이 볼 수 있습니다. 전화번호와 이메일은 각각의 공개 설정에 따라 표시됩니다.</p>
+            <p>동문 검색과 프로필 화면에서는 이름, 기수, 학과와 입력한 프로필 정보를 다른 승인 동문이 볼 수 있습니다. 전화번호와 이메일은 본인이 프로필에서 공개로 설정한 경우에만 다른 승인 동문에게 표시됩니다. 신규 가입자의 기본 설정은 비공개입니다.</p>
             <p>쪽지는 송수신자가 확인하며, 신고된 메시지의 원문·신고 사유·설명은 권한 있는 운영자가 검토합니다. 신고자 정보는 신고 대상자에게 공개하지 않습니다.</p>
             <p>장학회가 게시하는 소식과 기부 관련 공개 콘텐츠는 로그인하지 않은 방문자도 볼 수 있습니다. 게시 내용에 관한 개인정보 문의는 아래 담당자에게 남겨주세요.</p>
           </PolicySection>
