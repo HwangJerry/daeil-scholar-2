@@ -22,6 +22,14 @@ export function useDonationConfig() {
       addToast({ variant: 'success', title: '기부 설정이 저장되었습니다.' });
     },
     onError: (error) => {
+      if (error instanceof ApiClientError && error.code === 'INVALID_DONATION_BALANCE') {
+        addToast({
+          variant: 'error',
+          title: '계좌 잔액 저장 실패',
+          description: '계좌 잔액은 0 이상의 정수로, 잔액 기준일은 올바른 날짜로 입력해 주세요.',
+        });
+        return;
+      }
       if (error instanceof ApiClientError && error.code === 'INVALID_TIER_THRESHOLDS') {
         addToast({
           variant: 'error',

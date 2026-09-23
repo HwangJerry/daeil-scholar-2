@@ -180,9 +180,11 @@ func (h *AdHandler) TrackView(w http.ResponseWriter, r *http.Request) {
 
 | Method | Endpoint | 인증 | 설명 |
 |--------|----------|------|------|
-| GET | `/api/donation/summary` | 불필요 | 최신 기부 요약 (총액, 기부자 수, 달성률) |
+| GET | `/api/donation/summary` | 불필요 | 최신 기부 요약 (총액, 서울 기준 이번 달 기부액, 계좌 잔액·기준일, 기부자 수, 달성률) |
 
 **폴백 로직:** 오늘 스냅샷이 없으면 가장 최근 스냅샷을 반환합니다.
+
+현재 응답 계약과 관리자 잔액 설정·월 집계 원천은 [MVP API 계약 11절](mvp-api-contract.md#11-공개-기부-요약)을 따른다. 아래 코드는 누적 금액 계산의 개념 예시다.
 
 ```go
 func (s *DonationService) GetSummary() (*DonationSummary, error) {

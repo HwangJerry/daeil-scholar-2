@@ -15,25 +15,53 @@ type DonationService struct {
 	snapshotStale atomic.Bool
 }
 
+type cachedDonationSummary struct {
+	month   string
+	summary *model.DonationSummary
+}
+
 func NewDonationService(repo *repository.DonationRepository, cacheStore *cache.Cache) *DonationService {
 	return &DonationService{repo: repo, cache: cacheStore}
 }
 
 func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
+	return s.getSummaryAt(time.Now())
+}
+
+func (s *DonationService) getSummaryAt(now time.Time) (*model.DonationSummary, error) {
+	seoul, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		return nil, err
+	}
+	now = now.In(seoul)
+	month := now.Format("2006-01")
+	if !s.snapshotStale.Load() {
+		if cached, found := s.cache.Get("donation_summary"); found {
+			if entry, ok := cached.(cachedDonationSummary); ok && entry.month == month {
+				return entry.summary, nil
+			}
+		}
+	}
+
+	summary, err := s.computeSummary(now)
+	if err != nil {
+		return nil, err
+	}
+	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, seoul)
+	summary.MonthAmount, err = s.repo.GetReceivedDonationAmountBetween(start, start.AddDate(0, 1, 0))
+	if err != nil {
+		return nil, err
+	}
+	// Validate the calendar month on cache reads even within the five-minute TTL.
+	s.cache.Set("donation_summary", cachedDonationSummary{month: month, summary: summary}, 5*time.Minute)
+	return summary, nil
+}
+
+func (s *DonationService) computeSummary(now time.Time) (*model.DonationSummary, error) {
 	if s.snapshotStale.Load() {
-		summary, err := s.computeLiveSummary()
-		if err != nil {
-			return nil, err
-		}
-		s.cache.Set("donation_summary", summary, 5*time.Minute)
-		return summary, nil
+		return s.computeLiveSummary(now)
 	}
-	if cached, found := s.cache.Get("donation_summary"); found {
-		if summary, ok := cached.(*model.DonationSummary); ok {
-			return summary, nil
-		}
-	}
-	snapshot, err := s.repo.GetSnapshotByDate(time.Now())
+	snapshot, err := s.repo.GetSnapshotByDate(now)
 	if err != nil {
 		return nil, err
 	}
@@ -44,12 +72,7 @@ func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
 		}
 	}
 	if snapshot == nil {
-		summary, err := s.computeLiveSummary()
-		if err != nil {
-			return nil, err
-		}
-		s.cache.Set("donation_summary", summary, 5*time.Minute)
-		return summary, nil
+		return s.computeLiveSummary(now)
 	}
 
 	config, err := s.repo.GetActiveConfig()
@@ -76,6 +99,8 @@ func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
 		SnapshotDate:    snapshot.DSDate,
 	}
 	if config != nil {
+		summary.BalanceAmount = config.BalanceAmount
+		summary.BalanceAsOf = config.BalanceAsOf
 		summary.TierThresholds = model.DonationTierThresholds{
 			Sprout:   config.TierSproutMin,
 			Sapling:  config.TierSaplingMin,
@@ -84,7 +109,6 @@ func (s *DonationService) GetSummary() (*model.DonationSummary, error) {
 			Fruiting: config.TierFruitingMin,
 		}
 	}
-	s.cache.Set("donation_summary", summary, 5*time.Minute)
 	return summary, nil
 }
 
@@ -103,7 +127,7 @@ func (s *DonationService) MarkSnapshotStale() {
 	s.InvalidateCache()
 }
 
-func (s *DonationService) computeLiveSummary() (*model.DonationSummary, error) {
+func (s *DonationService) computeLiveSummary(now time.Time) (*model.DonationSummary, error) {
 	total, donorCount, err := s.repo.GetReceivedDonationAggregate()
 	if err != nil {
 		return nil, err
@@ -138,12 +162,17 @@ func (s *DonationService) computeLiveSummary() (*model.DonationSummary, error) {
 		achievementRate = float64(displayAmount) / float64(goal) * 100
 	}
 
-	return &model.DonationSummary{
+	summary := &model.DonationSummary{
 		DisplayAmount:   displayAmount,
 		GoalAmount:      goal,
 		DonorCount:      donorCount,
 		AchievementRate: achievementRate,
-		SnapshotDate:    time.Now().Format("2006-01-02"),
+		SnapshotDate:    now.Format("2006-01-02"),
 		TierThresholds:  tierThresholds,
-	}, nil
+	}
+	if config != nil {
+		summary.BalanceAmount = config.BalanceAmount
+		summary.BalanceAsOf = config.BalanceAsOf
+	}
+	return summary, nil
 }

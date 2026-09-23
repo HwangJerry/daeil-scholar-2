@@ -805,6 +805,9 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
 ```json
 {
   "displayAmount": 123456789,
+  "monthAmount": 3500000,
+  "balanceAmount": 98765432,
+  "balanceAsOf": "2026-09-23",
   "goalAmount": 200000000,
   "donorCount": 342,
   "achievementRate": 61.7283945,
@@ -819,13 +822,25 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
 }
 ```
 
-- `displayAmount`, `goalAmount`, 등급 임계값은 KRW 정수다.
+- `displayAmount`, `monthAmount`, `balanceAmount`, `goalAmount`, 등급 임계값은 KRW 정수다. 금액은 서버에서 `int64`를 사용한다.
+- `monthAmount`는 요청 시점의 `Asia/Seoul` 달력 월 기준이다. 월초 포함·다음 달 월초 제외 범위의 `WEO_ORDER.O_DONATION_DATE`에 대해 `O_TYPE='A'`, `O_LIFECYCLE_STATUS IN ('completed', 'partially_refunded')`인 `O_NET_RECEIVED_AMOUNT`를 합산하며, 내역이 없으면 `0`이다.
+- 누적 표시의 스냅샷은 일별 누적치이며 개별 기부일이 없으므로, 월 합계는 스냅샷 원천이자 개인·관리자 기부 내역에서 사용하는 위 원장을 직접 조회한다. 날짜 없는 수동 보정·덮어쓰기 금액과 `ALUMNI_ERASED_DONATION_TOTAL`의 탈퇴자 누적 보존 합계는 월에 배분하지 않는다. 월 합계는 원장의 기부일 의미를 그대로 따른다(해피나눔 가져오기 날짜는 기존 계약의 등록일 기준).
+- `balanceAmount`, `balanceAsOf`는 활성 `DONATION_CONFIG`의 관리자 입력값이다. 미설정 시 두 키를 모두 `null`로 반환하며 `0`원은 유효한 잔액이다. `balanceAsOf`는 `YYYY-MM-DD` 날짜다.
+- 요약 캐시는 최대 5분이며 서울 기준 월이 바뀌면 TTL이 남아 있어도 재계산한다. 기부 원장·설정 저장 시 기존 캐시 무효화 동작을 유지한다.
 - 오늘 스냅샷이 있으면 사용하고, 없으면 최신 스냅샷을 사용한다. 스냅샷이 전혀 없을 때만 주문과 활성 설정으로 동일 값을 실시간 계산한다.
 - 일반 모드의 `displayAmount`는 스냅샷 합계와 수동 보정액의 합이다. 수동 덮어쓰기 모드에서는 수동 보정액 자체를 사용한다.
-- `donorCount`는 스냅샷 기부자 수이며, 수동 덮어쓰기 모드에서는 활성 설정의 수동 기부자 수다.
+- `donorCount`는 호환성을 위해 계속 반환한다. 스냅샷 기부자 수이며, 수동 덮어쓰기 모드에서는 활성 설정의 수동 기부자 수다.
 - `achievementRate`는 목표액이 양수일 때 `displayAmount / goalAmount * 100`, 아니면 `0`이다.
 - `snapshotDate`는 계산 기준일의 `YYYY-MM-DD` 문자열이다.
 - donor rows, 이름, 익명/마스킹 이름은 반환하지 않는다.
+
+### 관리자 계좌 잔액 설정
+
+- 배포 전 `backend/migrations/077_add_donation_account_balance.sql`을 적용한다(MariaDB 10.1.38, 재실행 가능). `DC_BALANCE_AMOUNT BIGINT NULL`, `DC_BALANCE_AS_OF DATE NULL`을 추가하며 기존 설정은 미설정 상태를 유지한다.
+- `GET /api/admin/donation/config`는 `dcBalanceAmount: number | null`, `dcBalanceAsOf: string | null`을 포함한다.
+- `PUT /api/admin/donation/config`의 기존 전체 설정 요청에 `balanceAmount: number | null`, `balanceAsOf: string | null`을 추가한다. 금액이 있으면(0 포함) 기준일이 필수다. 금액은 0 이상 정수이고, 기준일은 MariaDB DATE 범위(1000–9999년)의 실제 `YYYY-MM-DD` 날짜여야 한다.
+- 금액을 `null`로 보내거나 생략하면 잔액과 기준일을 모두 지운다. 날짜를 제공했다면 유효성 검증 후 금액이 없는 경우 함께 지운다. 기존 클라이언트의 전체 설정 저장도 이 규칙을 따른다.
+- 음수·누락/잘못된 기준일은 `400 INVALID_DONATION_BALANCE`, 소수·문자열 금액·int64 범위 초과는 `400 INVALID_BODY`다. 관리자 SPA는 숫자 정밀도를 지키기 위해 JavaScript 안전 정수 범위도 검증한다.
 
 ## 12. 관리자 기부 원장·Excel
 

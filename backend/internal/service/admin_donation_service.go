@@ -17,6 +17,7 @@ import (
 var (
 	ErrInvalidDonationOrder    = errors.New("invalid donation order")
 	ErrInvalidTierThresholds   = errors.New("donation tier thresholds must be non-negative and strictly increasing")
+	ErrInvalidDonationBalance  = errors.New("balance must be a non-negative integer with a valid YYYY-MM-DD as-of date")
 	ErrDonationAccountNotFound = repository.ErrDonationAccountNotFound
 )
 
@@ -149,6 +150,8 @@ func (s *AdminDonationService) GetConfig() (*model.DonationConfig, error) {
 }
 
 type DonationConfigUpdate struct {
+	BalanceAmount   *int64
+	BalanceAsOf     *string
 	Goal            int64
 	ManualAdj       int64
 	ManualDonorCnt  int
@@ -185,11 +188,26 @@ func normalizeDonationConfigUpdate(update DonationConfigUpdate) (model.DonationC
 	if !validDonationTierThresholds(update) {
 		return model.DonationConfig{}, ErrInvalidTierThresholds
 	}
+	if update.BalanceAmount != nil && (*update.BalanceAmount < 0 || update.BalanceAsOf == nil) {
+		return model.DonationConfig{}, ErrInvalidDonationBalance
+	}
+	if update.BalanceAsOf != nil {
+		date, err := time.Parse("2006-01-02", *update.BalanceAsOf)
+		if err != nil || date.Year() < 1000 || date.Format("2006-01-02") != *update.BalanceAsOf {
+			return model.DonationConfig{}, ErrInvalidDonationBalance
+		}
+	}
+	// Clearing the balance also clears its date; zero is a supplied balance.
+	if update.BalanceAmount == nil {
+		update.BalanceAsOf = nil
+	}
 	overwrite := "N"
 	if update.Overwrite {
 		overwrite = "Y"
 	}
 	return model.DonationConfig{
+		BalanceAmount:   update.BalanceAmount,
+		BalanceAsOf:     update.BalanceAsOf,
 		Goal:            update.Goal,
 		ManualAdj:       update.ManualAdj,
 		ManualDonorCnt:  update.ManualDonorCnt,

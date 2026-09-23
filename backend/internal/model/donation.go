@@ -14,20 +14,22 @@ type DonationSnapshot struct {
 
 // DonationConfig represents a row in DONATION_CONFIG table.
 type DonationConfig struct {
-	DCSeq           int    `db:"DC_SEQ"                json:"dcSeq"`
-	Goal            int64  `db:"DC_GOAL"               json:"dcGoal"`
-	ManualAdj       int64  `db:"DC_MANUAL_ADJ"         json:"dcManualAdj"`
-	ManualDonorCnt  int    `db:"DC_MANUAL_DONOR_CNT"   json:"dcManualDonorCnt"`
-	TierSproutMin   int64  `db:"DC_TIER_SPROUT_MIN"    json:"dcTierSproutMin"`
-	TierSaplingMin  int64  `db:"DC_TIER_SAPLING_MIN"   json:"dcTierSaplingMin"`
-	TierTreeMin     int64  `db:"DC_TIER_TREE_MIN"      json:"dcTierTreeMin"`
-	TierBloomingMin int64  `db:"DC_TIER_BLOOMING_MIN"  json:"dcTierBloomingMin"`
-	TierFruitingMin int64  `db:"DC_TIER_FRUITING_MIN"  json:"dcTierFruitingMin"`
-	Note            string `db:"DC_NOTE"               json:"dcNote"`
-	Overwrite       string `db:"DC_OVERWRITE"          json:"dcOverwrite"`
-	IsActive        string `db:"IS_ACTIVE"             json:"isActive"`
-	RegDate         string `db:"REG_DATE"              json:"regDate"`
-	RegOper         int    `db:"REG_OPER"              json:"regOper"`
+	BalanceAmount   *int64  `db:"DC_BALANCE_AMOUNT" json:"dcBalanceAmount"`
+	BalanceAsOf     *string `db:"DC_BALANCE_AS_OF" json:"dcBalanceAsOf"`
+	DCSeq           int     `db:"DC_SEQ"                json:"dcSeq"`
+	Goal            int64   `db:"DC_GOAL"               json:"dcGoal"`
+	ManualAdj       int64   `db:"DC_MANUAL_ADJ"         json:"dcManualAdj"`
+	ManualDonorCnt  int     `db:"DC_MANUAL_DONOR_CNT"   json:"dcManualDonorCnt"`
+	TierSproutMin   int64   `db:"DC_TIER_SPROUT_MIN"    json:"dcTierSproutMin"`
+	TierSaplingMin  int64   `db:"DC_TIER_SAPLING_MIN"   json:"dcTierSaplingMin"`
+	TierTreeMin     int64   `db:"DC_TIER_TREE_MIN"      json:"dcTierTreeMin"`
+	TierBloomingMin int64   `db:"DC_TIER_BLOOMING_MIN"  json:"dcTierBloomingMin"`
+	TierFruitingMin int64   `db:"DC_TIER_FRUITING_MIN"  json:"dcTierFruitingMin"`
+	Note            string  `db:"DC_NOTE"               json:"dcNote"`
+	Overwrite       string  `db:"DC_OVERWRITE"          json:"dcOverwrite"`
+	IsActive        string  `db:"IS_ACTIVE"             json:"isActive"`
+	RegDate         string  `db:"REG_DATE"              json:"regDate"`
+	RegOper         int     `db:"REG_OPER"              json:"regOper"`
 }
 
 type DonationDonor struct {

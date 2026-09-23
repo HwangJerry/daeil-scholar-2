@@ -3,6 +3,9 @@ package model
 // DonationSummary is the API response for GET /api/donation/summary.
 type DonationSummary struct {
 	DisplayAmount   int64                  `json:"displayAmount"`
+	MonthAmount     int64                  `json:"monthAmount"`
+	BalanceAmount   *int64                 `json:"balanceAmount"`
+	BalanceAsOf     *string                `json:"balanceAsOf"`
 	GoalAmount      int64                  `json:"goalAmount"`
 	DonorCount      int                    `json:"donorCount"`
 	AchievementRate float64                `json:"achievementRate"`

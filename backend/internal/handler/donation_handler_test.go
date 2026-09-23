@@ -30,8 +30,10 @@ func TestDonationSummaryExposesRestoredSnapshotFieldsAndTierThresholds(t *testin
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"DC_TIER_SPROUT_MIN", "DC_TIER_SAPLING_MIN", "DC_TIER_TREE_MIN",
-			"DC_TIER_BLOOMING_MIN", "DC_TIER_FRUITING_MIN",
-		}).AddRow(int64(1), int64(10000), int64(50000), int64(100000), int64(300000)))
+			"DC_TIER_BLOOMING_MIN", "DC_TIER_FRUITING_MIN", "DC_BALANCE_AMOUNT", "DC_BALANCE_AS_OF",
+		}).AddRow(int64(1), int64(10000), int64(50000), int64(100000), int64(300000), int64(123456789), "2026-09-23"))
+	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*O_DONATION_DATE >= \? AND O_DONATION_DATE < \?`).
+		WillReturnRows(sqlmock.NewRows([]string{"MONTH_AMOUNT"}).AddRow(int64(30000)))
 	request := httptest.NewRequest(http.MethodGet, "/api/donation/summary", nil)
 	response := httptest.NewRecorder()
 
@@ -40,7 +42,7 @@ func TestDonationSummaryExposesRestoredSnapshotFieldsAndTierThresholds(t *testin
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
-	want := `{"displayAmount":200000,"goalAmount":500000,"donorCount":12,"achievementRate":40,"snapshotDate":"2026-08-20","tierThresholds":{"sprout":1,"sapling":10000,"tree":50000,"blooming":100000,"fruiting":300000}}` + "\n"
+	want := `{"displayAmount":200000,"monthAmount":30000,"balanceAmount":123456789,"balanceAsOf":"2026-09-23","goalAmount":500000,"donorCount":12,"achievementRate":40,"snapshotDate":"2026-08-20","tierThresholds":{"sprout":1,"sapling":10000,"tree":50000,"blooming":100000,"fruiting":300000}}` + "\n"
 	if response.Body.String() != want {
 		t.Fatalf("body = %s, want %s", response.Body.String(), want)
 	}

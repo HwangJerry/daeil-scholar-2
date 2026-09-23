@@ -141,6 +141,20 @@ func getReceivedDonationAggregate(queryer sqlx.Queryer) (int64, int, error) {
 	return aggregate.TotalAmount, aggregate.DonorCount, nil
 }
 
+// GetReceivedDonationAmountBetween sums the dated canonical ledger in [start, end).
+// Snapshots, manual adjustments and erased lifetime totals cannot be allocated
+// to a month. O_DONATION_DATE is the DATE used by personal/admin donation history.
+func (r *DonationRepository) GetReceivedDonationAmountBetween(start, end time.Time) (int64, error) {
+	var amount int64
+	err := r.DB.Get(&amount, `
+		SELECT CAST(COALESCE(SUM(O_NET_RECEIVED_AMOUNT), 0) AS SIGNED)
+		FROM WEO_ORDER
+		WHERE `+canonicalReceivedDonationPredicate+`
+		  AND O_DONATION_DATE >= ? AND O_DONATION_DATE < ?
+	`, start.Format("2006-01-02"), end.Format("2006-01-02"))
+	return amount, err
+}
+
 func (r *DonationRepository) GetActiveConfig() (*model.DonationConfig, error) {
 	return getActiveDonationConfig(r.DB)
 }
@@ -153,6 +167,7 @@ func getActiveDonationConfig(queryer sqlx.Queryer) (*model.DonationConfig, error
 	var cfg model.DonationConfig
 	err := sqlx.Get(queryer, &cfg, `
 		SELECT DC_SEQ, DC_GOAL, DC_MANUAL_ADJ,
+		       DC_BALANCE_AMOUNT, DATE_FORMAT(DC_BALANCE_AS_OF, '%Y-%m-%d') AS DC_BALANCE_AS_OF,
 		       IFNULL(DC_MANUAL_DONOR_CNT,0) AS DC_MANUAL_DONOR_CNT,
 		       DC_TIER_SPROUT_MIN, DC_TIER_SAPLING_MIN, DC_TIER_TREE_MIN,
 		       DC_TIER_BLOOMING_MIN, DC_TIER_FRUITING_MIN,

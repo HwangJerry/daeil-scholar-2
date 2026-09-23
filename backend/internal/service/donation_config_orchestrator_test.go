@@ -46,6 +46,8 @@ func TestDonationOrderCreateRefreshesExistingSnapshotBeforeNextSummaryRead(t *te
 
 	expectSnapshot(mock, "2026-08-20", 100000, 0, 1, 500000, "N")
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("N", 0))
+	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*O_DONATION_DATE >= \? AND O_DONATION_DATE < \?`).
+		WillReturnRows(sqlmock.NewRows([]string{"MONTH_AMOUNT"}).AddRow(int64(30000)))
 	before, err := donationService.GetSummary()
 	if err != nil {
 		t.Fatalf("initial GetSummary() error = %v", err)
@@ -77,6 +79,8 @@ func TestDonationOrderCreateRefreshesExistingSnapshotBeforeNextSummaryRead(t *te
 
 	expectSnapshot(mock, "2026-08-20", 150000, 0, 2, 500000, "N")
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("N", 0))
+	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*O_DONATION_DATE >= \? AND O_DONATION_DATE < \?`).
+		WillReturnRows(sqlmock.NewRows([]string{"MONTH_AMOUNT"}).AddRow(int64(30000)))
 	after, err := donationService.GetSummary()
 	if err != nil {
 		t.Fatalf("refreshed GetSummary() error = %v", err)
@@ -124,6 +128,8 @@ func TestSnapshotRefreshFailureForcesCanonicalLiveSummary(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(50000), 1))
 	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM information_schema.TABLES`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("N", 0))
+	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*O_DONATION_DATE >= \? AND O_DONATION_DATE < \?`).
+		WillReturnRows(sqlmock.NewRows([]string{"MONTH_AMOUNT"}).AddRow(int64(30000)))
 	summary, err := donationService.GetSummary()
 	if err != nil {
 		t.Fatalf("live GetSummary() error = %v", err)

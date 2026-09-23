@@ -432,11 +432,13 @@ func updateDonationConfig(execer sqlx.Execer, config model.DonationConfig, operS
 		SET DC_GOAL = ?, DC_MANUAL_ADJ = ?, DC_MANUAL_DONOR_CNT = ?,
 		    DC_TIER_SPROUT_MIN = ?, DC_TIER_SAPLING_MIN = ?, DC_TIER_TREE_MIN = ?,
 		    DC_TIER_BLOOMING_MIN = ?, DC_TIER_FRUITING_MIN = ?,
+		    DC_BALANCE_AMOUNT = ?, DC_BALANCE_AS_OF = ?,
 		    DC_NOTE = ?, DC_OVERWRITE = ?, REG_OPER = ?, REG_DATE = NOW()
 		WHERE IS_ACTIVE = 'Y'
 	`, config.Goal, config.ManualAdj, config.ManualDonorCnt,
 		config.TierSproutMin, config.TierSaplingMin, config.TierTreeMin,
 		config.TierBloomingMin, config.TierFruitingMin,
+		config.BalanceAmount, config.BalanceAsOf,
 		config.Note, config.Overwrite, operSeq)
 	return err
 }

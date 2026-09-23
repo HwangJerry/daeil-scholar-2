@@ -25,6 +25,8 @@ func TestDonationSummaryUsesSnapshotCalculationAndCacheInvalidation(t *testing.T
 
 	expectSnapshot(mock, "2026-08-20", 180000, 20000, 12, 500000, "N")
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("N", 0))
+	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*O_DONATION_DATE >= \? AND O_DONATION_DATE < \?`).
+		WillReturnRows(sqlmock.NewRows([]string{"MONTH_AMOUNT"}).AddRow(int64(30000)))
 	first, err := donationService.GetSummary()
 	if err != nil {
 		t.Fatalf("GetSummary() error = %v", err)
@@ -33,7 +35,7 @@ func TestDonationSummaryUsesSnapshotCalculationAndCacheInvalidation(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"displayAmount":200000,"goalAmount":500000,"donorCount":12,"achievementRate":40,"snapshotDate":"2026-08-20","tierThresholds":{"sprout":1,"sapling":10000,"tree":50000,"blooming":100000,"fruiting":300000}}`
+	want := `{"displayAmount":200000,"monthAmount":30000,"balanceAmount":null,"balanceAsOf":null,"goalAmount":500000,"donorCount":12,"achievementRate":40,"snapshotDate":"2026-08-20","tierThresholds":{"sprout":1,"sapling":10000,"tree":50000,"blooming":100000,"fruiting":300000}}`
 	if string(encoded) != want {
 		t.Fatalf("summary JSON = %s, want %s", encoded, want)
 	}
@@ -44,6 +46,8 @@ func TestDonationSummaryUsesSnapshotCalculationAndCacheInvalidation(t *testing.T
 	donationService.InvalidateCache()
 	expectSnapshot(mock, "2026-08-20", 200000, 20000, 13, 500000, "N")
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("N", 0))
+	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*O_DONATION_DATE >= \? AND O_DONATION_DATE < \?`).
+		WillReturnRows(sqlmock.NewRows([]string{"MONTH_AMOUNT"}).AddRow(int64(30000)))
 	refreshed, err := donationService.GetSummary()
 	if err != nil {
 		t.Fatalf("refreshed GetSummary() error = %v", err)
@@ -71,6 +75,8 @@ func TestDonationSummaryFallsBackToLiveCalculationWithManualOverwrite(t *testing
 		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(180000), 12))
 	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM information_schema.TABLES`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("Y", 25))
+	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*O_DONATION_DATE >= \? AND O_DONATION_DATE < \?`).
+		WillReturnRows(sqlmock.NewRows([]string{"MONTH_AMOUNT"}).AddRow(int64(30000)))
 
 	summary, err := donationService.GetSummary()
 	if err != nil {
@@ -79,7 +85,7 @@ func TestDonationSummaryFallsBackToLiveCalculationWithManualOverwrite(t *testing
 	if summary.DisplayAmount != 20000 || summary.DonorCount != 25 || summary.AchievementRate != 4 {
 		t.Fatalf("summary = %+v", summary)
 	}
-	if summary.SnapshotDate != time.Now().Format("2006-01-02") {
+	if summary.SnapshotDate != time.Now().In(time.FixedZone("KST", 9*60*60)).Format("2006-01-02") {
 		t.Fatalf("snapshotDate = %q", summary.SnapshotDate)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -103,6 +109,8 @@ func TestDonationSummaryIgnoresCacheWhenSnapshotIsStale(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"TOTAL_AMOUNT", "DONOR_COUNT"}).AddRow(int64(50000), 2))
 	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM information_schema.TABLES`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`FROM DONATION_CONFIG`).WillReturnRows(donationConfigRows("N", 0))
+	mock.ExpectQuery(`(?s)SUM\(O_NET_RECEIVED_AMOUNT\).*O_DONATION_DATE >= \? AND O_DONATION_DATE < \?`).
+		WillReturnRows(sqlmock.NewRows([]string{"MONTH_AMOUNT"}).AddRow(int64(30000)))
 
 	summary, err := donationService.GetSummary()
 	if err != nil {

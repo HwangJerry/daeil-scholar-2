@@ -84,7 +84,7 @@ func TestRestrictedAuthFixturesContainSessionAndVerification(t *testing.T) {
 
 func TestPublicDonationSummaryContainsRestoredSnapshotContract(t *testing.T) {
 	fixture := readFixture(t, "donation-summary.json")
-	wantKeys := []string{"achievementRate", "displayAmount", "donorCount", "goalAmount", "snapshotDate", "tierThresholds"}
+	wantKeys := []string{"achievementRate", "balanceAmount", "balanceAsOf", "displayAmount", "donorCount", "goalAmount", "monthAmount", "snapshotDate", "tierThresholds"}
 	if !reflect.DeepEqual(sortedKeys(fixture), wantKeys) {
 		t.Fatalf("public donation keys = %v, want %v", sortedKeys(fixture), wantKeys)
 	}

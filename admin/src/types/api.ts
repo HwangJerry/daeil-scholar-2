@@ -1,4 +1,8 @@
 // API contract types for Admin SPA — mirrors backend model/admin.go + shared user types
+import type { DonationSummary } from './donation.ts';
+export type {
+  DonationConfig, DonationConfigUpdateRequest, DonationSnapshot, DonationSummary,
+} from './donation.ts';
 
 export interface APIError {
   code: string;
@@ -150,45 +154,6 @@ export interface AdminBannerAdSaveRequest {
   imageUrls: string[];
 }
 
-// --- Donation ---
-
-export interface DonationConfig {
-  dcSeq: number;
-  dcGoal: number;
-  dcManualAdj: number;
-  dcManualDonorCnt: number;
-  dcTierSproutMin: number;
-  dcTierSaplingMin: number;
-  dcTierTreeMin: number;
-  dcTierBloomingMin: number;
-  dcTierFruitingMin: number;
-  dcNote: string;
-  dcOverwrite: string; // "Y" | "N"
-  isActive: string;
-  regDate: string;
-}
-
-export interface DonationConfigUpdateRequest {
-  goal: number;
-  manualAdj: number;
-  manualDonorCnt: number;
-  tierSproutMin: number;
-  tierSaplingMin: number;
-  tierTreeMin: number;
-  tierBloomingMin: number;
-  tierFruitingMin: number;
-  note: string;
-  overwrite: boolean;
-}
-
-export interface DonationSnapshot {
-  dsDate: string;
-  dsTotal: number;
-  dsManualAdj: number;
-  dsDonorCnt: number;
-  dsGoal: number;
-}
-
 // --- Member ---
 
 export interface AdminMemberListItem {
@@ -272,21 +237,6 @@ export interface ActiveUsersResponse {
   points: ActiveUsersPoint[];
   dauToday: number;
   mauCurrent: number;
-}
-
-export interface DonationSummary {
-  displayAmount: number;
-  goalAmount: number;
-  donorCount: number;
-  achievementRate: number;
-  snapshotDate: string;
-  tierThresholds: {
-    sprout: number;
-    sapling: number;
-    tree: number;
-    blooming: number;
-    fruiting: number;
-  };
 }
 
 export interface DashboardAdStats {
