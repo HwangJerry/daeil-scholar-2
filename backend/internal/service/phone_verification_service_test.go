@@ -315,3 +315,46 @@ func TestRequestCodeRefusesToSendAnEmptyTemplate(t *testing.T) {
 		t.Fatalf("an empty SMS was sent: %#v", sender.sent)
 	}
 }
+
+func TestReviewTestNumberSkipsSMSAndAcceptsTheFixedCode(t *testing.T) {
+	svc, _, sender := newServiceUnderTest()
+	svc.ConfigureReviewTestNumbers([]string{"010-9999-0001"}, "246810")
+
+	request, err := svc.RequestCode("01099990001")
+	if err != nil {
+		t.Fatalf("RequestCode: %v", err)
+	}
+	if len(sender.sent) != 0 {
+		t.Fatalf("expected no SMS for a review test number, got %d", len(sender.sent))
+	}
+
+	if _, err := svc.ConfirmCode(request.VerificationID, "000000"); !errors.Is(err, service.ErrPhoneVerificationCodeMismatch) {
+		t.Fatalf("wrong code should mismatch, got %v", err)
+	}
+	confirm, err := svc.ConfirmCode(request.VerificationID, "246810")
+	if err != nil {
+		t.Fatalf("ConfirmCode with fixed code: %v", err)
+	}
+	if err := svc.AssertPhoneVerified(confirm.VerificationToken, "01099990001"); err != nil {
+		t.Fatalf("grant should verify the review number: %v", err)
+	}
+	if err := svc.AssertPhoneVerified(confirm.VerificationToken, "01099990002"); !errors.Is(err, service.ErrPhoneNotVerified) {
+		t.Fatalf("grant must stay bound to the review number, got %v", err)
+	}
+}
+
+func TestReviewTestNumberDoesNotAffectOtherNumbers(t *testing.T) {
+	svc, _, sender := newServiceUnderTest()
+	svc.ConfigureReviewTestNumbers([]string{"01099990001"}, "246810")
+
+	request, err := svc.RequestCode("01012345678")
+	if err != nil {
+		t.Fatalf("RequestCode: %v", err)
+	}
+	if len(sender.sent) != 1 {
+		t.Fatalf("a normal number must still receive SMS, got %d", len(sender.sent))
+	}
+	if _, err := svc.ConfirmCode(request.VerificationID, "246810"); !errors.Is(err, service.ErrPhoneVerificationCodeMismatch) {
+		t.Fatalf("fixed code must not work for a normal number, got %v", err)
+	}
+}

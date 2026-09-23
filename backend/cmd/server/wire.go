@@ -190,6 +190,11 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	phoneVerificationService := service.NewPhoneVerificationService(
 		phoneVerificationRepo, service.NewSMSSender(cfg.SMS, logger), notificationTemplateService, logger,
 	)
+	if cfg.SMS.ReviewTestConfigured() {
+		phoneVerificationService.ConfigureReviewTestNumbers(cfg.SMS.ReviewTestPhones, cfg.SMS.ReviewTestCode)
+	} else if len(cfg.SMS.ReviewTestPhones) > 0 || cfg.SMS.ReviewTestCode != "" {
+		logger.Warn().Msg("SMS_REVIEW_TEST_PHONES/SMS_REVIEW_TEST_CODE incomplete or code not 6 digits; reviewer bypass disabled")
+	}
 
 	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
 	passwordChangeSvc := service.NewPasswordChangeService(profileRepo)
