@@ -12,9 +12,9 @@
 | T1 | 동의 표 문구·버전 확정 | docs | 없음 | **문구 확정(2026-09-23)**, 버전 값은 T2 게시일로 결정 |
 | T2 | 처리방침 수정안 반영 (`policyContent.ts`, 갱신일) | dflh-saf-v2 frontend | T1 | 착수 전 |
 | T3 | 백엔드: 가입·소셜 연동 요청에 동의 필드 수신, `AUTH_CONSENT` 기록 | dflh-saf-v2 backend | T1 | **1단계 구현 완료(2026-09-23)**. 2단계는 `PRIVACY_CONSENT_ENFORCE=true` 전환만 남음 |
-| T4 | iOS: 가입 2화면에 동의 체크·동의 표 시트, 전화번호 hint | dflh-saf-v2-swift | T1, T3 | 착수 전 |
+| T4 | iOS: 가입 2화면에 동의 체크·동의 표 시트, 전화번호 hint | dflh-saf-v2-swift | T1, T3 | **완료 `478fd24`(2026-09-23)**. 시뮬레이터 육안·VoiceOver 확인은 T7 |
 | T5 | ~~웹 가입 폼 동의 UI~~ → **범위 제외(2026-09-23)**: 웹은 가입·로그인을 제공하지 않을 예정. 웹 `/register` 제거는 별도 작업 | dflh-saf-v2 frontend | — | 제외 |
-| T6 | Android: 가입 화면에 **휴대폰 인증 자체가 없음** → OTP + 동의 체크 | dflh-saf-v2-kotlin | T1, T3 | 착수 전. **T4와 병행**(2026-09-23 결정) |
+| T6 | Android: 가입 화면에 **휴대폰 인증 자체가 없음** → OTP + 동의 체크 | dflh-saf-v2-kotlin | T1, T3 | **완료 `1d8d9b4`(2026-09-23)**. 계측 UI 테스트 미실행(기기 없음) |
 | T7 | 심사 재제출: 회신문 문장 수정, 스크린샷, 빌드 교체, 우회 번호 env 배포, App Privacy 라벨 | swift docs, 운영 | T2, T4 | 착수 전 |
 
 권장 순서: **T1 → T3 → T4 ∥ T6 → T2 → T7**. 웹(T5)은 범위에서 제외했다. 서버가 강제 단계로 전환되면 남아 있는 웹 `/register`에서의 가입은 `CONSENT_REQUIRED`로 거부되므로, 그 전에 웹 가입 경로 제거 여부를 결정한다.
