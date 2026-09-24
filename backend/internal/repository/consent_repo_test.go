@@ -28,3 +28,22 @@ func TestConsentRecordAcceptedUpsertsOnAccountTypeVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPhoneHasPendingDeletionOnlyCountsWithdrawnMembersWithOpenRequests(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := &AuthRepository{DB: sqlx.NewDb(db, "sqlmock")}
+	mock.ExpectQuery(`FROM WEO_MEMBER m[\s\S]*m.USR_STATUS = 'AAA'[\s\S]*ALUMNI_ACCOUNT_DELETION_REQUEST d[\s\S]*d.STATUS IN \('pending', 'processing'\)`).
+		WithArgs("01012345678", "01012345678").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	pending, err := repo.PhoneHasPendingDeletion("010-1234-5678")
+	if err != nil || !pending {
+		t.Fatalf("pending=%v err=%v", pending, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

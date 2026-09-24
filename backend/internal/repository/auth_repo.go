@@ -924,6 +924,26 @@ func (r *AuthRepository) CheckPhoneExists(phone string) (bool, error) {
 	return count > 0, err
 }
 
+// PhoneHasPendingDeletion reports whether the number belongs to a withdrawn member
+// whose deletion request has not finished. Until erasure removes that member, the
+// number must not be reused by any signup path (ID or social).
+func (r *AuthRepository) PhoneHasPendingDeletion(phone string) (bool, error) {
+	canonicalPhone := model.NormalizePhoneNumber(phone).String()
+	var count int
+	err := r.DB.Get(&count, `
+		SELECT COUNT(*) FROM WEO_MEMBER m
+		WHERE (m.USR_PHONE = ? OR `+legacyCanonicalPhoneSQL+` = ?)
+		  AND m.USR_STATUS = 'AAA'
+		  AND EXISTS (
+		    SELECT 1 FROM ALUMNI_ACCOUNT_DELETION_REQUEST d
+		    WHERE d.USR_SEQ = m.USR_SEQ AND d.STATUS IN ('pending', 'processing')
+		  )`,
+		canonicalPhone,
+		canonicalPhone,
+	)
+	return count > 0, err
+}
+
 func (r *AuthRepository) CheckEmailExists(email string) (bool, error) {
 	var count int
 	err := r.DB.Get(&count, `SELECT COUNT(*) FROM WEO_MEMBER WHERE USR_EMAIL = ?`, email)

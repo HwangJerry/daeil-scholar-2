@@ -22,6 +22,7 @@ type RegistrationService struct {
 type registrationMemberRepository interface {
 	CheckIDExists(string) (bool, error)
 	CheckPhoneExists(string) (bool, error)
+	PhoneHasPendingDeletion(string) (bool, error)
 	CheckEmailExists(string) (bool, error)
 	InsertMemberWithPwd(model.RegisterRequest, string) (int, error)
 	GetMemberBySeq(int) (*model.User, error)
@@ -109,6 +110,13 @@ func (s *RegistrationService) Register(req model.RegisterRequest) (*model.User, 
 		return nil, err
 	}
 	if phoneExists {
+		pendingDeletion, err := s.memberRepo.PhoneHasPendingDeletion(req.Phone)
+		if err != nil {
+			return nil, err
+		}
+		if pendingDeletion {
+			return nil, ErrPhonePendingDeletion
+		}
 		return nil, ErrPhoneTaken
 	}
 

@@ -19,6 +19,11 @@ var ErrIDTaken = errors.New("user ID already taken")
 // ErrPhoneTaken is returned when the phone number is already registered.
 var ErrPhoneTaken = errors.New("phone number already taken")
 
+// ErrPhonePendingDeletion is returned when the phone number belongs to a withdrawn
+// member whose account has not been erased yet. The number becomes available again
+// once erasure completes.
+var ErrPhonePendingDeletion = errors.New("phone number belongs to an account pending deletion")
+
 var ErrInvalidPhone = errors.New("phone number is invalid")
 
 // ErrEmailTaken is returned when the email address is already registered.
@@ -35,6 +40,7 @@ type memberRepository interface {
 	FindMemberByEmailAndPwdAny(string, string) (*model.User, error)
 	GetMemberBySeq(int) (*model.User, error)
 	FindMemberByPhone(string) (*model.User, error)
+	PhoneHasPendingDeletion(string) (bool, error)
 	InsertMember(string, string, string, string, string, string, *int, string, string, string, string, string, string, string) (int, error)
 }
 
@@ -123,6 +129,12 @@ func (s *MemberService) canonicalPasswordLogin(authentication CanonicalPasswordA
 		return nil, err
 	}
 	return user, nil
+}
+
+// PhoneHasPendingDeletion reports whether the number belongs to a member whose
+// deletion request is still waiting for or undergoing erasure.
+func (s *MemberService) PhoneHasPendingDeletion(phone string) (bool, error) {
+	return s.repo.PhoneHasPendingDeletion(model.NormalizePhoneNumber(phone).String())
 }
 
 // FindMemberByPhone finds an active member by phone number.

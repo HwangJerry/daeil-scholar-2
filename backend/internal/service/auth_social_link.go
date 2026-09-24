@@ -65,6 +65,13 @@ func (s *AuthService) LinkSocialAccount(params SocialLinkParams, memberSvc *Memb
 }
 
 func (s *AuthService) createNewSocialAccount(params SocialLinkParams, memberSvc *MemberService) (*model.User, bool, error) {
+	pendingDeletion, err := memberSvc.PhoneHasPendingDeletion(params.Phone)
+	if err != nil {
+		return nil, false, err
+	}
+	if pendingDeletion {
+		return nil, false, ErrPhonePendingDeletion
+	}
 	existing, err := memberSvc.FindMemberByPhone(params.Phone)
 	if err != nil {
 		return nil, false, err
