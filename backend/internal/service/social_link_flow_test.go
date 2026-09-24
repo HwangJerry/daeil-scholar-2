@@ -21,6 +21,9 @@ func TestSocialLinkTransactionFailureLeavesTokenRetryable(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	mock.ExpectQuery(`ALUMNI_ACCOUNT_DELETION_REQUEST d`).
+		WithArgs("01012345678", "01012345678").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`WHERE \(USR_PHONE = \? OR`).
 		WithArgs("01012345678", "01012345678").
 		WillReturnError(sql.ErrNoRows)
@@ -53,6 +56,9 @@ func TestSocialLinkClassifiesAlreadyLinkedSocialAccount(t *testing.T) {
 	defer cleanup()
 	memberService := NewMemberService(auth.repo)
 
+	mock.ExpectQuery(`ALUMNI_ACCOUNT_DELETION_REQUEST d`).
+		WithArgs("01012345678", "01012345678").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`WHERE \(USR_PHONE = \? OR`).
 		WithArgs("01012345678", "01012345678").
 		WillReturnError(sql.ErrNoRows)

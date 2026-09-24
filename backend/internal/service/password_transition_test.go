@@ -58,6 +58,7 @@ func (s *stubMemberRepository) FindMemberByEmailAndPwdAny(_ string, _ string) (*
 
 func (s *stubMemberRepository) GetMemberBySeq(int) (*model.User, error)       { return s.user, nil }
 func (s *stubMemberRepository) FindMemberByPhone(string) (*model.User, error) { return s.user, nil }
+func (s *stubMemberRepository) PhoneHasPendingDeletion(string) (bool, error)  { return false, nil }
 func (s *stubMemberRepository) InsertMember(string, string, string, string, string, string, *int, string, string, string, string, string, string, string) (int, error) {
 	return 42, nil
 }
@@ -137,6 +138,9 @@ type stubRegistrationMemberRepository struct {
 
 func (s *stubRegistrationMemberRepository) CheckIDExists(string) (bool, error)    { return false, nil }
 func (s *stubRegistrationMemberRepository) CheckPhoneExists(string) (bool, error) { return false, nil }
+func (s *stubRegistrationMemberRepository) PhoneHasPendingDeletion(string) (bool, error) {
+	return false, nil
+}
 func (s *stubRegistrationMemberRepository) CheckEmailExists(string) (bool, error) { return false, nil }
 func (s *stubRegistrationMemberRepository) InsertMemberWithPwd(_ model.RegisterRequest, hash string) (int, error) {
 	s.insertedLegacyHash = hash

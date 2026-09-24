@@ -263,6 +263,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, service.ErrIDTaken):
 			respondError(w, http.StatusConflict, "ID_TAKEN", "이미 사용 중인 아이디입니다")
+		case errors.Is(err, service.ErrPhonePendingDeletion):
+			respondError(w, http.StatusConflict, "PHONE_PENDING_DELETION", "탈퇴 처리 중인 전화번호입니다. 탈퇴 처리가 끝난 뒤 다시 가입해주세요")
 		case errors.Is(err, service.ErrPhoneTaken):
 			respondError(w, http.StatusConflict, "PHONE_TAKEN", "이미 등록된 전화번호입니다")
 		case errors.Is(err, service.ErrInvalidPhone):
