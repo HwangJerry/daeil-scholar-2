@@ -3,7 +3,7 @@
 - 작성일: 2026-09-26
 - 범위: 운영 서버 `daeil-prod`의 Apache/PHP 설정, `dflh-saf-v2/deploy`, root crontab, EasyPay 모듈 경로
 - 목표: 운영 서버에서 PHP(mod_php, php-fpm)를 제거하고, 메인 사이트(`/`)·관리자(`/admin/`)·Go API가 PHP와 무관하게 동작하게 한다.
-- 상태: **A·B·D 완료 (2026-09-26).** 나머지는 계획 단계. 실행 순서와 진행 상황은 0-2절.
+- 상태: **A·B·D·E·F·G 완료 (2026-09-26). C는 운영자 본인 결정으로 생략.** 남은 단계는 H·I·J. 결과 보고서: `docs/LEGACY_PHP_REMOVAL_REPORT_20260926.md`.
 
 ## 0. 요약
 
@@ -43,6 +43,10 @@
 - **B 완료** 2026-09-26 release `20260926T100033Z-b01d46ea70ff` (이전 운영 `93f1a8c` → `b01d46e`, 마이그레이션 없음). 배포 후 `--activate-all-users`로 배포 전과 같은 상태(탈퇴 접수·워커 ON, 보관 만료 OFF) 복원. 확인: 메인·관리자·API 200, 새 관리자 API 무인증 401, 관리자 번들에 새 화면 포함, 백엔드 오류 로그 없음, A의 차단 설정 유지. **root 계정으로 화면에서 직접 하는 확인(10.2절 4번)은 아직 하지 않았다.**
 
 - **D 완료** 2026-09-26. Phase 0 백업 `/root/php-removal/phase0`(httpd 설정, php-fpm 설정, root crontab, env, 모듈·vhost 목록, `.html` 안 PHP 파일 목록: adms 1개·v1 19개, SPA·업로드 경로 0개). Phase 1: root crontab의 `_profile_batch.php` 줄 주석 처리(다른 줄 변경 없음). Phase 2: `httpd.conf:283`을 `.php`만으로 줄이고 `/etc/httpd/conf.d/zz-legacy-php-html.conf`로 레거시 두 디렉터리에만 `.html` PHP 처리 유지(백업 `/root/php-removal/httpd.conf.phase2`). 확인: `/`·`/admin/`·`/notice` 200 `text/html` `X-Powered-By` 없음, 응답 본문이 디스크의 `index.html`과 해시 동일, JS 번들·API 정상, adms 인증 유지와 로그인 화면 200, adms `excel.html`은 여전히 PHP로 실행됨. `Server` 헤더의 PHP 버전 표기는 모듈을 내리는 Phase 5에서 사라진다.
+- **C 생략** 2026-09-26. 운영자 본인이 새 관리자로 업무 이전이 가능하다고 판단 (G1 충족으로 기록). 화면 직접 확인은 보고서 7절 1번.
+- **E 완료** release `20260926T101058Z-8978a901ce37` (`8978a90`). `/old/` 410, 배포 도구가 PHP 보조 파일을 더 이상 설치하지 않음.
+- **F 완료** adms vhost 파일을 `/root/php-removal/phase4`로 이동. adms 도메인은 메인 사이트가 응답.
+- **G 완료** mod_php 언로드, `php.conf`·`zz-legacy-php-html.conf` 이동, `httpd.conf`의 PHP 타입 2줄 주석, php-fpm 중지·비활성화. 백업 `/root/php-removal/phase5`.
 - Phase 1 사후 확인: 다음 레거시 결제일 10-02 다음 날(10-03)에 새 배치 주문이 0건인지 확인 (4절 Phase 1 쿼리).
 - Phase 0에서 `httpd.conf:174`에 `DirectoryIndex index.html ...`이 있음을 확인했다. `php.conf`를 내려도 `/`·`/admin/`이 403이 되지 않으므로 7절의 해당 위험은 해소됐다.
 
