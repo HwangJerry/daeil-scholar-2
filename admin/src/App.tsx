@@ -11,7 +11,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter basename="/admin">
+        <BrowserRouter>
           <AuthInitializer>
             <ToastProvider>
               <AppRoutes />

@@ -27,6 +27,8 @@ GATES = ('ACCOUNT_ERASURE_REQUESTS_ENABLED', 'ACCOUNT_ERASURE_WORKER_ENABLED', '
 ROLLOUT_ENV = Path('/app/backend/release-rollout.env')
 ROLLOUT_UNIT = Path('/etc/systemd/system/alumni-backend.service.d/90-release-rollout.conf')
 HTTPD_CONFIG = Path('/etc/httpd/conf.d/alumni.conf')
+# Must sort after alumni.conf so the member site stays Apache's default vhost.
+ADMIN_HTTPD_CONFIG = Path('/etc/httpd/conf.d/alumni_admin.conf')
 
 
 @contextmanager
@@ -330,7 +332,7 @@ def deploy(root, apply_schema):
     backup = root / 'backup'
     backup.mkdir(mode=0o700)
     records = []
-    targets = [HTTPD_CONFIG]
+    targets = [HTTPD_CONFIG, ADMIN_HTTPD_CONFIG]
     if backend:
         targets += [Path('/app/backend/server'), Path('/app/backend/backfill'), ROLLOUT_ENV, ROLLOUT_UNIT]
     targets += [Path('/var/www') / ('app' if c == 'frontend' else 'admin') for c in manifest['components'] if c != 'backend']
@@ -360,11 +362,15 @@ def deploy(root, apply_schema):
             if component in manifest['components']:
                 install_web(artifacts / component, Path('/var/www') / ('app' if component == 'frontend' else 'admin'))
         install_file(artifacts / 'deploy/httpd-alumni.conf', HTTPD_CONFIG, 0o644)
+        install_file(artifacts / 'deploy/httpd-admin.conf', ADMIN_HTTPD_CONFIG, 0o644)
         run(['httpd', '-t'])
         run(['systemctl', 'start', HTTPD])
         healthy(env)
         origin = env.get('SITE_BASE_URL', '').rstrip('/')
         verify_local_https(origin)
+        admin_origin = env.get('ADMIN_ORIGIN', '').strip().rstrip('/')
+        if admin_origin:
+            verify_local_https(admin_origin)
         (root / 'result.json').write_text(json.dumps({'status': 'DEPLOYED_ERASURE_PAUSED' if backend else 'DEPLOYED', 'commit': manifest['commit'], 'backup': str(backup)}, indent=2))
         print('Deployment verified. Erasure activation is a separate operation; recovery data: ' + str(backup))
     except BaseException:
