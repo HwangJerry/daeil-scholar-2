@@ -2,6 +2,7 @@
 import { LogOut, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth.ts';
 import { Button } from '../ui/Button.tsx';
+import { USER_SITE_URL } from '../../constants/siteUrls.ts';
 
 export function AdminHeader() {
   const { user, logout } = useAuth();
@@ -13,7 +14,7 @@ export function AdminHeader() {
       </div>
       <div className="flex items-center gap-3">
         <a
-          href="/"
+          href={USER_SITE_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1 text-sm text-cool-gray hover:text-royal-indigo"

@@ -152,8 +152,12 @@ func (c PushConfig) Validate() error {
 }
 
 type ServerConfig struct {
-	Port            string
-	AllowedOrigin   string
+	Port          string
+	AllowedOrigin string
+	// AdminOrigin is the admin SPA's own origin (https://adms.daeilfoundation.or.kr).
+	// It is kept apart from AllowedOrigin because AllowedOrigin is also used as the
+	// single redirect base for Kakao web login.
+	AdminOrigin     string
 	SiteBaseURL     string
 	ShutdownTimeout time.Duration
 }
@@ -234,6 +238,7 @@ func Load() *Config {
 		Server: ServerConfig{
 			Port:            getEnv("SERVER_PORT", "8080"),
 			AllowedOrigin:   getEnv("ALLOWED_ORIGIN", "http://localhost:8000"),
+			AdminOrigin:     getEnv("ADMIN_ORIGIN", ""),
 			SiteBaseURL:     getEnv("SITE_BASE_URL", "http://localhost:8000"),
 			ShutdownTimeout: getDurationEnv("SHUTDOWN_TIMEOUT", 10*time.Second),
 		},

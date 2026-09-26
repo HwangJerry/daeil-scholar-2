@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -39,11 +38,7 @@ func main() {
 	}
 	defer d.pgAuditLog.Close()
 
-	rawOrigins := strings.Split(cfg.Server.AllowedOrigin, ",")
-	for i := range rawOrigins {
-		rawOrigins[i] = strings.TrimSpace(rawOrigins[i])
-	}
-	allowedOrigins := rawOrigins
+	allowedOrigins := configuredOrigins(cfg.Server)
 	if cfg.Environment == "dev" {
 		allowedOrigins = append(allowedOrigins,
 			"http://localhost:3000",

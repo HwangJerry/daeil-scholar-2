@@ -22,7 +22,7 @@ class ReleaseTests(unittest.TestCase):
 
     def candidate(self):
         files = ['backend/server', 'backend/backfill', 'frontend/index.html', 'frontend/assets/new.js',
-                 'deploy/remote_release.py', 'deploy/httpd-alumni.conf',
+                 'deploy/remote_release.py', 'deploy/httpd-alumni.conf', 'deploy/httpd-admin.conf',
                  'migrations/063_bind_donation_retention_source.sql']
         for name in files:
             path = self.root / 'artifacts' / name
@@ -44,6 +44,17 @@ class ReleaseTests(unittest.TestCase):
         with patch.object(remote.subprocess, 'check_output', return_value=b'{"status":"error"}'):
             with self.assertRaises(RuntimeError):
                 remote.verify_local_https('https://daeilfoundation.or.kr')
+
+    def test_https_probe_checks_admin_origin_host(self):
+        with patch.object(remote.subprocess, 'check_output', return_value=b'{"status":"ok"}') as command:
+            remote.verify_local_https('https://adms.daeilfoundation.or.kr')
+        args = command.call_args.args[0]
+        self.assertIn('adms.daeilfoundation.or.kr:443:127.0.0.1', args)
+        self.assertIn('https://adms.daeilfoundation.or.kr/api/health', args)
+
+    def test_admin_vhost_sorts_after_member_vhost(self):
+        # Apache loads conf.d alphabetically and the first vhost is the default server.
+        self.assertLess(remote.HTTPD_CONFIG.name, remote.ADMIN_HTTPD_CONFIG.name)
 
     def test_legacy_index_settings_block_before_services_stop(self):
         manifest = self.candidate()

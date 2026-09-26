@@ -36,7 +36,7 @@ def verify(root):
     if not set(manifest['components']) <= COMPONENTS or not manifest['components']:
         raise ValueError('invalid release components')
     expected = manifest['files']
-    required = {'deploy/remote_release.py', 'deploy/httpd-alumni.conf'}
+    required = {'deploy/remote_release.py', 'deploy/httpd-alumni.conf', 'deploy/httpd-admin.conf'}
     for component in manifest['components']:
         required.update({'backend/server', 'backend/backfill'} if component == 'backend' else {component + '/index.html'})
     if not required <= set(expected) or 'migrations/' + manifest['minimum_web_migration'] not in expected:

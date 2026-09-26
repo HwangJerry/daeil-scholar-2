@@ -48,7 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
               새로고침
             </button>
             <a
-              href="/admin"
+              href="/"
               className="text-sm text-error-text underline-offset-4 hover:underline"
             >
               대시보드로 이동

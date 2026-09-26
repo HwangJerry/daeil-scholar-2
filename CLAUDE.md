@@ -43,14 +43,14 @@ cd frontend && npm run lint     # ESLint
 ### Admin SPA
 
 ```bash
-cd admin && npm run dev         # Vite dev server on :3001, base path /admin/
+cd admin && npm run dev         # Vite dev server on http://127.0.0.1:3001 (root path; proxies /api to :8080)
 cd admin && npm run build       # tsc + vite build → dist/
 cd admin && npm run lint        # ESLint
 ```
 
 ### Nginx Dev Proxy
 
-Unifies all three services behind `localhost:8000`:
+Unifies the user SPA and backend behind `localhost:8000` (the admin SPA runs on its own origin, see below):
 
 ```bash
 nginx -c "$(pwd)/nginx/dev.conf" -p "$(pwd)/nginx/"
@@ -59,7 +59,6 @@ nginx -c "$(pwd)/nginx/dev.conf" -p "$(pwd)/nginx/"
 | Path | Target |
 |------|--------|
 | `/` | Frontend Vite `:5173` |
-| `/admin/` | Admin Vite `:3001` |
 | `/api/`, `/files/`, `/uploads/` | Go backend `:8080` |
 
 ### Deployment
@@ -146,6 +145,10 @@ On Go login (Kakao OAuth), the backend issues both JWT + legacy `DDusr*` cookies
 
 `/api/auth/kakao` → Kakao OAuth → `/api/auth/kakao/callback` → JWT issued. If the Kakao account isn't linked to an alumni member, a linking flow (`/api/auth/kakao/link`) is triggered.
 
+### Admin Site (separate host)
+
+The admin SPA is served at the root of `https://adms.daeilfoundation.or.kr` (`deploy/httpd-admin.conf`, installed as `/etc/httpd/conf.d/alumni_admin.conf`). The member site no longer serves `/admin` (404, no redirect) and denies `/api/admin/*`. The backend accepts the admin origin through `ADMIN_ORIGIN`; keep it separate from `ALLOWED_ORIGIN`, which is also the Kakao web-login redirect base.
+
 ### Admin Auth
 
 Admin endpoints (`/api/admin/*`) require both the standard auth middleware and an additional `AdminAuthMiddleware` that checks the user's operator status.
@@ -206,7 +209,8 @@ The `content.go` service handles conversion. The `FeedPresenter` calls `DecodeCo
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SERVER_PORT` | `8080` | Go server port |
-| `ALLOWED_ORIGIN` | `http://localhost:3000` | CORS origin |
+| `ALLOWED_ORIGIN` | `http://localhost:3000` | Member-site origin (CORS/CSRF, Kakao web-login redirect base) |
+| `ADMIN_ORIGIN` | (empty) | Admin SPA origin, e.g. `https://adms.daeilfoundation.or.kr` (CORS/CSRF) |
 | `DB_HOST` | `127.0.0.1` | MariaDB host |
 | `DB_PORT` | `3306` | MariaDB port |
 | `DB_USER` | `daeilUSER` | DB user |

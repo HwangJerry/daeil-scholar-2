@@ -3,9 +3,10 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from './ui/Button';
 import { createAccountDeletionOnBehalf, type ProxyIntakeResult } from '../api/accountDeletions';
+import { USER_SITE_URL } from '../constants/siteUrls.ts';
 
 const EVIDENCE_MAX = 150;
-const STATUS_PAGE_URL = 'https://daeilfoundation.or.kr/account-deletion';
+const STATUS_PAGE_URL = `${USER_SITE_URL}/account-deletion`;
 
 function IssuedTokens({ result }: { result: ProxyIntakeResult }) {
   return (
