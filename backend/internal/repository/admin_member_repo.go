@@ -24,20 +24,33 @@ func NewAdminMemberRepository(db *sqlx.DB) *AdminMemberRepository {
 	return &AdminMemberRepository{DB: db}
 }
 
-func (r *AdminMemberRepository) GetMembers(page, size int, q, fn, status string) ([]model.AdminMemberRow, int, error) {
+func (r *AdminMemberRepository) GetMembers(page, size int, filter model.AdminMemberFilter) ([]model.AdminMemberRow, int, error) {
 	args := []interface{}{}
 	conditions := []string{}
-	if q != "" {
+	if filter.Query != "" {
 		conditions = append(conditions, "(USR_NAME LIKE ? OR USR_PHONE LIKE ?)")
-		args = append(args, q+"%", q+"%")
+		args = append(args, filter.Query+"%", filter.Query+"%")
 	}
-	if fn != "" {
+	if filter.FN != "" {
 		conditions = append(conditions, "USR_FN = ?")
-		args = append(args, fn)
+		args = append(args, filter.FN)
 	}
-	if status != "" {
+	if filter.Dept != "" {
+		conditions = append(conditions, "USR_DEPT = ?")
+		args = append(args, filter.Dept)
+	}
+	if filter.Status != "" {
 		conditions = append(conditions, "USR_STATUS = ?")
-		args = append(args, status)
+		args = append(args, filter.Status)
+	}
+	if filter.RegFrom != "" {
+		conditions = append(conditions, "REG_DATE >= ?")
+		args = append(args, filter.RegFrom)
+	}
+	if filter.RegTo != "" {
+		// Inclusive end date: everything before the next day.
+		conditions = append(conditions, "REG_DATE < DATE_ADD(?, INTERVAL 1 DAY)")
+		args = append(args, filter.RegTo)
 	}
 
 	where := ""
@@ -73,7 +86,8 @@ func (r *AdminMemberRepository) GetMemberDetail(seq int) (*model.AdminMemberDeta
 	var m model.AdminMemberDetail
 	err := r.DB.Get(&m, `
 		SELECT USR_SEQ, USR_ID, USR_NAME, USR_STATUS,
-		       IFNULL(USR_FN,'') AS USR_FN, IFNULL(USR_PHONE,'') AS USR_PHONE,
+		       IFNULL(USR_FN,'') AS USR_FN, IFNULL(USR_DEPT,'') AS USR_DEPT,
+		       IFNULL(USR_PHONE,'') AS USR_PHONE,
 		       IFNULL(USR_EMAIL,'') AS USR_EMAIL, IFNULL(USR_NICK,'') AS USR_NICK,
 		       IFNULL(USR_PHOTO,'') AS USR_PHOTO,
 		       IFNULL(DATE_FORMAT(REG_DATE,'%Y-%m-%d %H:%i:%s'),'') AS REG_DATE,

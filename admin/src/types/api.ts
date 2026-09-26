@@ -180,6 +180,7 @@ export interface AdminMemberDetail {
   usrName: string;
   usrStatus: string;
   usrFn: string | null;
+  usrDept: string | null;
   usrPhone: string | null;
   usrEmail: string | null;
   usrNick: string | null;
@@ -187,6 +188,15 @@ export interface AdminMemberDetail {
   regDate: string | null;
   visitCnt: number;
   visitDate: string | null;
+}
+
+/** Body of PUT /api/admin/member/{seq}/profile. Empty phone, cohort and department keep the stored value. */
+export interface AdminMemberProfileInput {
+  usrName: string;
+  usrPhone: string;
+  usrEmail: string;
+  usrFn: string;
+  usrDept: string;
 }
 
 export interface AdminMemberDetailResponse {

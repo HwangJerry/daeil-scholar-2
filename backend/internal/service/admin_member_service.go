@@ -54,15 +54,19 @@ func NewAdminMemberService(repo *repository.AdminMemberRepository) *AdminMemberS
 	return &AdminMemberService{repo: repo}
 }
 
-// List returns paginated member rows.
-func (s *AdminMemberService) List(page, size int, q, fn, status string) ([]model.AdminMemberRow, int, error) {
+// List returns paginated member rows matching the filter.
+func (s *AdminMemberService) List(page, size int, filter model.AdminMemberFilter) ([]model.AdminMemberRow, int, error) {
 	if page < 1 {
 		page = 1
 	}
 	if size <= 0 || size > 50 {
 		size = 20
 	}
-	return s.repo.GetMembers(page, size, q, fn, status)
+	filter, err := normalizeMemberFilter(filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	return s.repo.GetMembers(page, size, filter)
 }
 
 // GetDetail returns the full detail for a single member.

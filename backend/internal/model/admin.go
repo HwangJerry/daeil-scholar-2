@@ -101,6 +101,7 @@ type AdminMemberDetail struct {
 	USRName   string `db:"USR_NAME" json:"usrName"`
 	USRStatus string `db:"USR_STATUS" json:"usrStatus"`
 	USRFN     string `db:"USR_FN" json:"usrFn"`
+	USRDept   string `db:"USR_DEPT" json:"usrDept"`
 	USRPhone  string `db:"USR_PHONE" json:"usrPhone"`
 	USREmail  string `db:"USR_EMAIL" json:"usrEmail"`
 	USRNick   string `db:"USR_NICK" json:"usrNick"`
