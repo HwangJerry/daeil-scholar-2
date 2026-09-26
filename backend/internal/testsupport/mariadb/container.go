@@ -25,6 +25,15 @@ const (
 	pingInterval   = 500 * time.Millisecond
 )
 
+// prodServerOptions mirror the production server variables (read 2026-09-27) that
+// change DDL or SQL behaviour: long InnoDB index prefixes for ROW_FORMAT=DYNAMIC
+// tables and the permissive sql_mode.
+var prodServerOptions = [...]string{
+	"--innodb-file-format=Barracuda",
+	"--innodb-large-prefix=ON",
+	"--sql-mode=NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+}
+
 var errDockerUnavailable = errors.New("Docker CLI or daemon is unavailable")
 
 // Server connects only to a loopback port published by its disposable container.
@@ -59,7 +68,7 @@ func startServer() (_ *Server, err error) {
 	}()
 	if _, err := docker(startupTimeout, "run", "-d", "--name", name,
 		"--platform", "linux/amd64", "-e", "MYSQL_ROOT_PASSWORD="+password,
-		"-p", "127.0.0.1::3306", image); err != nil {
+		"-p", "127.0.0.1::3306", image, prodServerOptions[0], prodServerOptions[1], prodServerOptions[2]); err != nil {
 		return nil, err
 	}
 	address, err := docker(dockerTimeout, "port", name, "3306/tcp")
@@ -129,25 +138,34 @@ func docker(timeout time.Duration, args ...string) (string, error) {
 }
 
 func pinnedImage() (string, error) {
+	root, err := backendRoot()
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(filepath.Join(root, "migrations", "testdata", "mariadb-10.1.38.image"))
+	if err != nil {
+		return "", err
+	}
+	image := strings.TrimSpace(string(data))
+	if !strings.HasPrefix(image, "mariadb@sha256:") {
+		return "", fmt.Errorf("expected pinned MariaDB image digest")
+	}
+	return image, nil
+}
+
+// backendRoot walks up from the test's working directory to the backend go.mod.
+func backendRoot() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			data, err := os.ReadFile(filepath.Join(dir, "migrations", "testdata", "mariadb-10.1.38.image"))
-			if err != nil {
-				return "", err
-			}
-			image := strings.TrimSpace(string(data))
-			if !strings.HasPrefix(image, "mariadb@sha256:") {
-				return "", fmt.Errorf("expected pinned MariaDB image digest")
-			}
-			return image, nil
+			return dir, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", errors.New("cannot find backend go.mod for pinned MariaDB image")
+			return "", errors.New("cannot find backend go.mod")
 		}
 		dir = parent
 	}
