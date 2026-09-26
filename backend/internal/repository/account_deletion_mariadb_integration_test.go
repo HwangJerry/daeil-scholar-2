@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dflh-saf/backend/internal/testsupport/mariadb"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -67,11 +68,7 @@ func TestPhoneClaimWriteLockSerializesMigrationStartOnMariaDB101(t *testing.T) {
 }
 
 func TestAccountDeletionUpdatesOnlyMemberStatusOnMariaDB101(t *testing.T) {
-	if os.Getenv("PASSWORD_RESET_DOCKER_INTEGRATION") != "1" {
-		t.Skip("set PASSWORD_RESET_DOCKER_INTEGRATION=1 to run pinned MariaDB integration")
-	}
-
-	db := startPasswordResetMariaDB101(t)
+	db := mariadb.Start(t, "PASSWORD_RESET_DOCKER_INTEGRATION").NewDatabase(t).DB
 	createAccountDeletionIntegrationSchema(t, db)
 	repo := NewAuthRepository(db)
 
