@@ -34,6 +34,7 @@ type handlers struct {
 	adminDonation       *handler.AdminDonationHandler
 	adminDonationImport *handler.AdminDonationImportHandler
 	adminMember         *handler.AdminMemberHandler
+	adminOperator       *handler.AdminOperatorHandler
 	adminDashboard      *handler.AdminDashboardHandler
 	adminUpload         *handler.AdminUploadHandler
 	adminAttachUpload   *handler.AdminAttachmentUploadHandler
@@ -290,6 +291,9 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Get("/member/{seq}", h.adminMember.Detail)
 		r.Put("/member/{seq}", h.adminMember.Update)
 		r.Put("/member/{seq}/profile", h.adminMember.UpdateProfile)
+		r.With(mw.RootOnlyMiddleware).Get("/operators", h.adminOperator.List)
+		r.With(mw.RootOnlyMiddleware).Put("/operators/{usrSeq}", h.adminOperator.SetRole)
+		r.With(mw.RootOnlyMiddleware).Delete("/operators/{usrSeq}", h.adminOperator.Revoke)
 		r.Get("/member/stats", h.adminMember.Stats)
 		r.Get("/alumni-verifications", h.adminMember.ListAlumniVerifications)
 		r.Get("/alumni-verifications/{userSeq}", h.adminMember.GetAlumniVerificationDetail)

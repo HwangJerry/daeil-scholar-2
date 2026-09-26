@@ -23,6 +23,7 @@ import { NotificationTemplatesPage } from './pages/NotificationTemplatesPage.tsx
 import { CommentReportsPage } from './pages/CommentReportsPage';
 import { MessageReportsPage } from './pages/MessageReportsPage';
 import { AccountDeletionsPage } from './pages/AccountDeletionsPage';
+import { OperatorManagePage } from './pages/OperatorManagePage.tsx';
 
 import { DonationArchivesPage } from './pages/DonationArchivesPage';
 
@@ -61,6 +62,7 @@ export function AppRoutes() {
         <Route path="comment-reports" element={<CommentReportsPage />} />
         <Route path="message-reports" element={<MessageReportsPage />} />
         <Route path="account-deletions" element={<AccountDeletionsPage />} />
+        <Route path="operators" element={<OperatorManagePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

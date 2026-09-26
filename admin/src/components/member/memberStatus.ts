@@ -20,3 +20,8 @@ export function getMemberStatusLabel(status: string) {
 export function isEditableMemberStatus(status: string) {
   return (EDITABLE_MEMBER_STATUSES as readonly string[]).includes(status);
 }
+
+/** 탈퇴·휴면·정지 accounts cannot hold an admin role. */
+export function isInactiveMemberStatus(status: string) {
+  return isEditableMemberStatus(status);
+}
