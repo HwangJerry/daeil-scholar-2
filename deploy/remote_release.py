@@ -27,7 +27,6 @@ GATES = ('ACCOUNT_ERASURE_REQUESTS_ENABLED', 'ACCOUNT_ERASURE_WORKER_ENABLED', '
 ROLLOUT_ENV = Path('/app/backend/release-rollout.env')
 ROLLOUT_UNIT = Path('/etc/systemd/system/alumni-backend.service.d/90-release-rollout.conf')
 HTTPD_CONFIG = Path('/etc/httpd/conf.d/alumni.conf')
-SHIMS = ('_set_docroot.php', '_legacy_docroot.php', '_legacy_url_rewriter.php')
 
 
 @contextmanager
@@ -331,7 +330,7 @@ def deploy(root, apply_schema):
     backup = root / 'backup'
     backup.mkdir(mode=0o700)
     records = []
-    targets = [HTTPD_CONFIG] + [Path('/var/www/html') / p for p in SHIMS]
+    targets = [HTTPD_CONFIG]
     if backend:
         targets += [Path('/app/backend/server'), Path('/app/backend/backfill'), ROLLOUT_ENV, ROLLOUT_UNIT]
     targets += [Path('/var/www') / ('app' if c == 'frontend' else 'admin') for c in manifest['components'] if c != 'backend']
@@ -361,8 +360,6 @@ def deploy(root, apply_schema):
             if component in manifest['components']:
                 install_web(artifacts / component, Path('/var/www') / ('app' if component == 'frontend' else 'admin'))
         install_file(artifacts / 'deploy/httpd-alumni.conf', HTTPD_CONFIG, 0o644)
-        for shim in SHIMS:
-            install_file(artifacts / 'deploy' / shim, Path('/var/www/html') / shim, 0o644)
         run(['httpd', '-t'])
         run(['systemctl', 'start', HTTPD])
         healthy(env)
