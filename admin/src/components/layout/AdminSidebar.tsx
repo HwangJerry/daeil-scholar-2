@@ -54,6 +54,7 @@ const NAVIGATION_GROUPS = [
       '/app-update',
       '/notification-templates',
       '/app-monitoring',
+      '/operators',
     ],
   },
 ] as const satisfies readonly NavigationGroup[];

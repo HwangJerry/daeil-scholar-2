@@ -248,6 +248,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		adminDonation:       handler.NewAdminDonationHandler(adminDonationOrchestrator),
 		adminDonationImport: handler.NewAdminDonationImportHandler(donationImportSvc, cfg.Upload.MaxFileSizeMB),
 		adminMember:         handler.NewAdminMemberHandler(adminMemberSvc),
+		adminOperator:       handler.NewAdminOperatorHandler(service.NewAdminOperatorService(repository.NewAdminOperatorRepository(db))),
 		adminDashboard:      handler.NewAdminDashboardHandler(adminDashboardSvc),
 		adminUpload:         handler.NewAdminUploadHandler(uploadOrchestrator, cfg.Upload.MaxFileSizeMB),
 		adminAttachUpload:   handler.NewAdminAttachmentUploadHandler(attachmentUploadOrchestrator, cfg.Upload.MaxFileSizeMB),
