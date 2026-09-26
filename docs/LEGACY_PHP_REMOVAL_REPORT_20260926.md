@@ -3,7 +3,7 @@
 - 작업일: 2026-09-26
 - 대상: 운영 서버 `daeil-prod` (Apache, PHP, root crontab), `dflh-saf-v2` 저장소
 - 계획서: `docs/LEGACY_PHP_REMOVAL_PLAN.md` (실행 순서 0-2절, 단계별 명령·롤백 4절·10절)
-- 검토 요청: 7절 "미확인·검토 필요 사항"을 우선 확인해 주세요.
+- 검토 요청: 7절 "미확인·검토 필요 사항"을 우선 확인해 주세요. 관리자 도메인 이전은 9절.
 
 ## 1. 요약
 
@@ -78,6 +78,7 @@ G·F를 되돌리면 adms가 다시 열린다. adms의 무인증 취약점이 �
 ## 7. 미확인·검토 필요 사항
 
 1. **새 관리자 화면을 사람이 직접 써 보지 않았다.** 확인한 것은 자동 테스트(백엔드 전체, 관리자 147개), 배포 후 API·번들 점검까지다. 운영자 확인 단계(C)는 운영자 본인 결정으로 생략했다. root 계정으로 아래를 확인해 주세요.
+   - 접속 주소는 이제 `https://adms.daeilfoundation.or.kr` (9절)
    - 설정 → 운영자 관리: 목록이 보이고 본인 행이 잠겨 있는지
    - 회원 관리: 기수·학과·가입일 필터
    - 회원 상세 → 정보 수정: 창이 열리는지(저장은 시험 계정으로만)
@@ -96,3 +97,34 @@ G·F를 되돌리면 adms가 다시 열린다. adms의 무인증 취약점이 �
 | H | 관찰: 오류 로그, 메인·관리자·API, 운영자 문의 | 2026-10-10까지 (최소 2주) |
 | I | EasyPay 모듈을 `/opt/easypay`로 이전, `EASYPAY_BIN_BASE` 변경, 결제 확인 | H 기간 중 |
 | J | `/var/www/html`·`/var/www/dadms` 보관(서버 밖 사본 포함) 후 삭제, PHP 패키지 제거, `zz-legacy-guard.conf`·htpasswd·비밀번호 파일 삭제, adms DNS·인증서 정리, `conf.d`의 `.bak`/`.rpm*` 정리 | H·I 완료 후, 7절 4·6번 처리 후 |
+
+## 9. 관리자 도메인 이전 (2026-09-26 23:54 KST)
+
+요청: 관리자 페이지를 `adms.daeilfoundation.or.kr`로 완전히 옮기고, `/admin/`은 리다이렉트 없이 폐기.
+
+| 항목 | 변경 |
+|---|---|
+| 관리자 주소 | `https://adms.daeilfoundation.or.kr/` (루트 경로). http는 https로 301 |
+| 기존 `daeilfoundation.or.kr/admin` | 404 (리다이렉트 없음) |
+| 회원 사이트의 관리자 API | `daeilfoundation.or.kr/api/admin/*` 403. 관리자 API는 관리자 도메인에서만 동작 |
+| Apache | 새 vhost `deploy/httpd-admin.conf` → `/etc/httpd/conf.d/alumni_admin.conf`. `/api/`는 Go로, `/uploads`·`/files`는 미리보기용으로 서빙. 파일 이름은 회원 사이트가 기본 vhost로 남도록 `alumni.conf` 뒤에 읽히게 정함 |
+| 로그 | `/var/log/httpd/admin-access_log`, `admin-error_log` (28일 순환 대상 경로) |
+| 백엔드 | `ADMIN_ORIGIN` 설정 추가(CORS/CSRF 허용). `ALLOWED_ORIGIN`은 카카오 웹 로그인 리다이렉트에도 쓰여 건드리지 않음. 운영 env에 `ADMIN_ORIGIN=https://adms.daeilfoundation.or.kr` 추가(백업 `/root/php-removal/alumni-backend.env.before-admin-origin`) |
+| 배포 도구 | 새 vhost 설치·스냅샷·복구, `ADMIN_ORIGIN`이 있으면 관리자 도메인으로 `/api/health` 확인 |
+| 관리자 화면 | 루트 경로로 빌드, "사용자 사이트" 링크와 계정 삭제 안내 주소를 회원 사이트 절대 주소로 변경 |
+
+커밋 `69a804f`, 병합 `011418d`, release `20260926T145322Z-011418d4f5a3`. 배포 후 탈퇴 처리 기능은 배포 전 상태로 복원했다.
+
+확인 결과: 관리자 도메인 `/`·`/operators`(화면 경로) 200, `/api/health` 200, 관리자 API 무인증 401, 번들에 새 화면 포함, 업로드 이미지 200, 관리자 도메인에서 로그인 POST가 CSRF에 걸리지 않음. 회원 사이트 `/` 200, `/admin`·`/admin/`·`/admin/operators` 404, `/api/admin/*` 403, `/api/health` 200, `/old/` 410. 회원 사이트 로그인 CSRF 정상, 외부 출처는 여전히 거부. 기본 vhost는 회원 사이트 그대로. 백엔드 오류 없음.
+
+영향:
+- **관리자는 새 주소에서 다시 로그인해야 한다.** 로그인 쿠키가 도메인별로 저장되기 때문이다. 기존 즐겨찾기(`/admin/`)는 404가 된다.
+- 회원 사이트에서 관리자 계정으로 로그인해도 관리자 API는 쓸 수 없다(의도한 분리).
+
+되돌리기: 이전 release(`20260926T101058Z-8978a901ce37`) 묶음 재배포 후 `--activate-all-users`. `alumni_admin.conf`는 배포 복구 대상이라 함께 제거된다. `ADMIN_ORIGIN` 줄은 남아도 무해하다.
+
+## 10. 작업 중 발견한 기존 문제: 회원 사이트 접속 로그 미순환
+
+- `/var/logs/alumni/httpd-access.log`(IP 포함, 53MB)와 `httpd-error.log`가 2026-03-22부터 한 번도 순환되지 않았다. `/etc/logrotate.d/httpd`는 `/var/log/httpd/*log`만 대상으로 하기 때문이다.
+- 개인정보처리방침의 서버 로그 28일 보관과 맞지 않는다.
+- 이번 작업에서는 바꾸지 않았다. 조치안: `alumni.conf`의 로그 경로를 `/var/log/httpd/`로 옮기거나, `/var/logs/alumni/*.log`용 logrotate 설정(maxage 28)을 추가하고 기존 파일의 28일 이전 기록을 정리한다. 결정이 필요하다.
