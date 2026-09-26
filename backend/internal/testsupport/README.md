@@ -62,3 +62,20 @@ coverage and the weighted total. Its temporary profile is removed on exit.
 Docker integrations are opt-in; `DFLH_DOCKER_TESTS=1` includes shared-harness
 tests, while unmigrated tests still require their original opt-in variables.
 The script clears `SOCIAL_LINK_TEST_DSN` so it cannot use an inherited external DB.
+
+## Production baseline schema
+
+`mariadb.ProdBaseline(t)` returns the production schema (no rows) as of migration 077 plus its
+`_migration_history` rows, taken read-only from daeil-prod on 2026-09-27
+(`migrations/testdata/prod_baseline_schema_20260927.sql`, `prod_baseline_applied_migrations_20260927.sql`).
+
+```go
+db := mariadb.Start(t).NewDatabase(t, append(mariadb.ProdBaseline(t),
+    mariadb.Statement("INSERT INTO WEO_MEMBER (...) VALUES (...)"), // synthetic seed only
+)...).DB
+```
+
+The container starts with the production server options that affect DDL/SQL (`innodb_file_format=Barracuda`,
+`innodb_large_prefix=ON`, permissive `sql_mode`). Apply migrations newer than 077 with `mariadb.File`.
+To refresh the baseline, re-run the read-only `mysqldump --no-data --routines --triggers --events`,
+strip `AUTO_INCREMENT`/`DEFINER` and `DELIMITER` lines, and replace both files together.
