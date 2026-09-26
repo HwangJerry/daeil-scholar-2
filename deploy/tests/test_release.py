@@ -23,7 +23,7 @@ class ReleaseTests(unittest.TestCase):
     def candidate(self):
         files = ['backend/server', 'backend/backfill', 'frontend/index.html', 'frontend/assets/new.js',
                  'deploy/remote_release.py', 'deploy/httpd-alumni.conf',
-                 *['deploy/' + name for name in remote.SHIMS], 'migrations/063_bind_donation_retention_source.sql']
+                 'migrations/063_bind_donation_retention_source.sql']
         for name in files:
             path = self.root / 'artifacts' / name
             path.parent.mkdir(parents=True, exist_ok=True)
