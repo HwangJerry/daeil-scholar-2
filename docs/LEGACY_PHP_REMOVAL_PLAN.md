@@ -3,7 +3,7 @@
 - 작성일: 2026-09-26
 - 범위: 운영 서버 `daeil-prod`의 Apache/PHP 설정, `dflh-saf-v2/deploy`, root crontab, EasyPay 모듈 경로
 - 목표: 운영 서버에서 PHP(mod_php, php-fpm)를 제거하고, 메인 사이트(`/`)·관리자(`/admin/`)·Go API가 PHP와 무관하게 동작하게 한다.
-- 상태: **계획. 아직 아무것도 실행하지 않았다.** 이 문서를 작성하며 운영 서버에서 한 작업은 읽기 전용 조회뿐이다.
+- 상태: **A·B·D 완료 (2026-09-26).** 나머지는 계획 단계. 실행 순서와 진행 상황은 0-2절.
 
 ## 0. 요약
 
@@ -20,6 +20,34 @@
 - 모든 SQL이 문자열 연결로 만들어져 SQL 인젝션도 가능하다.
 - 즉 `adms.daeilfoundation.or.kr`에서 **로그인 없이 회원 정보·상태·비밀번호, 게시글, 배너, 기부 내역을 바꿀 수 있는 상태**다. 실제 악용 여부나 공격 가능성은 운영에서 시험하지 않았다.
 - 대응: Phase 4(adms 비활성화)를 다른 단계와 무관하게 **먼저** 하거나, 최소한 adms vhost에 IP 제한(`Require ip <운영자 IP>`)을 즉시 건다. 대체 기능 검토(9절) 결과, 운영자가 Go 관리자로 옮기지 못하는 필수 업무는 회원 정보 수정뿐이다.
+
+## 0-2. 실행 순서 (2026-09-26 개정)
+
+`main` `b01d46e` 기준. 새 관리자 기능(회원 정보 수정·검색 필터·상태 드롭다운 수정·운영자 관리)은 병합됐지만 운영에는 아직 배포되지 않았다.
+
+| 순서 | 작업 | 상세 | 선행 조건 | 운영 영향 | 되돌리기 |
+|---|---|---|---|---|---|
+| **A** | **adms와 `/old/` 긴급 차단** | 10.1절 | 없음 (오늘) | adms에 추가 인증 1단계, `/old/` 403 | 설정 파일 1개 삭제 + reload |
+| B | 새 관리자 기능 운영 배포 | 10.2절 | A 권장 | 배포 중 수 분간 웹·API 중단 | 이전 묶음 재배포 |
+| C | adms 운영자 2명 업무 이전 확인 (G1) | 10.3절 | B | 없음 | — |
+| D | Phase 1 (PHP cron 중지), Phase 2 (`.html` PHP 분리) | 4절 | A 이후 언제든 | 없음 (검증 필수) | 각 Phase 롤백 |
+| E | Phase 3 (저장소에서 `/old/`·PHP 보조 파일 제거) 배포 | 4절 | D | B와 같은 배포 중단 | 이전 묶음 재배포 |
+| F | Phase 4 (adms vhost 비활성화) | 4절 | C 완료 | adms 접속 불가 | vhost 파일 복원 |
+| G | Phase 5 (mod_php 언로드, php-fpm 중지) | 4절 | E, F | httpd restart 수 초 | 모듈·설정 복원 |
+| H | Phase 6 관찰 (최소 2주) | 4절 | G | 없음 | — |
+| I | Phase 7 (EasyPay 모듈 이전) | 4절 | G | Go 재시작 수 초 | env 복원 |
+| J | Phase 8 (보관 후 삭제, 되돌릴 수 없음) | 4절 | H, I, G2, G3 | 없음 | 보관본으로만 |
+
+진행 기록:
+- **A 완료** 2026-09-26 18:57 KST. `/etc/httpd/conf.d/zz-legacy-guard.conf`, 계정 `adms-ops`, 비밀번호는 서버의 `/root/php-removal/stepA/adms-ops.password`(root만 읽기)에 있다. 적용 전 설정 백업은 `/root/php-removal/stepA/etc-httpd-before`. 확인: adms 무인증 401(`_module` 포함), 틀린 비밀번호 401, 올바른 인증으로 로그인 화면 200, `/old/` 403, 메인·관리자·API 200.
+- **B 완료** 2026-09-26 release `20260926T100033Z-b01d46ea70ff` (이전 운영 `93f1a8c` → `b01d46e`, 마이그레이션 없음). 배포 후 `--activate-all-users`로 배포 전과 같은 상태(탈퇴 접수·워커 ON, 보관 만료 OFF) 복원. 확인: 메인·관리자·API 200, 새 관리자 API 무인증 401, 관리자 번들에 새 화면 포함, 백엔드 오류 로그 없음, A의 차단 설정 유지. **root 계정으로 화면에서 직접 하는 확인(10.2절 4번)은 아직 하지 않았다.**
+
+- **D 완료** 2026-09-26. Phase 0 백업 `/root/php-removal/phase0`(httpd 설정, php-fpm 설정, root crontab, env, 모듈·vhost 목록, `.html` 안 PHP 파일 목록: adms 1개·v1 19개, SPA·업로드 경로 0개). Phase 1: root crontab의 `_profile_batch.php` 줄 주석 처리(다른 줄 변경 없음). Phase 2: `httpd.conf:283`을 `.php`만으로 줄이고 `/etc/httpd/conf.d/zz-legacy-php-html.conf`로 레거시 두 디렉터리에만 `.html` PHP 처리 유지(백업 `/root/php-removal/httpd.conf.phase2`). 확인: `/`·`/admin/`·`/notice` 200 `text/html` `X-Powered-By` 없음, 응답 본문이 디스크의 `index.html`과 해시 동일, JS 번들·API 정상, adms 인증 유지와 로그인 화면 200, adms `excel.html`은 여전히 PHP로 실행됨. `Server` 헤더의 PHP 버전 표기는 모듈을 내리는 Phase 5에서 사라진다.
+- Phase 1 사후 확인: 다음 레거시 결제일 10-02 다음 날(10-03)에 새 배치 주문이 0건인지 확인 (4절 Phase 1 쿼리).
+- Phase 0에서 `httpd.conf:174`에 `DirectoryIndex index.html ...`이 있음을 확인했다. `php.conf`를 내려도 `/`·`/admin/`이 403이 되지 않으므로 7절의 해당 위험은 해소됐다.
+
+권장 일정: A·D는 당일, B는 1~2일 안, C는 B 후 1주 안, E·F·G는 C 완료 주, H는 그 후 2주, I는 H 중, J는 H 종료 후.
+사용자 측 병행 과제: 레거시 정기후원자 7명 조치(G2, 명단 `prod-db-backups/legacy_recurring_donors_20260926.tsv`는 조치 후 삭제).
 
 ## 1. 현재 상태 (2026-09-26 조사)
 
@@ -49,7 +77,7 @@
 
 | # | 조건 | 담당 | 막는 단계 |
 |---|---|---|---|
-| G1 | adms 운영자 2명 확인. 대조 결과(9절): 회원 정보 수정·회원 검색 필터 외에는 대체됐거나 불필요 | 운영/재단 | Phase 4 (긴급 시 IP 제한으로 선조치) |
+| G1 | adms 운영자 2명 확인 (10.3절). 대조 결과(9절·9-1절)의 공백은 모두 구현·병합됨 | 운영/재단 | Phase 4 (그 전까지 A로 차단) |
 | G2 | 레거시 정기후원자 7명 조치 방향 결정 (Phase 1은 이 결정과 무관하게 진행 가능) | 재단 | Phase 8 (`WEO_ORDER_PROFILE` 원본 보관 방식) |
 | G3 | 운영 서버 백업 공간 확인 (`/var/www/html`, `/var/www/dadms` 보관용) | 개발 | Phase 8 |
 | G4 | 작업 창: 접속이 적은 시간대. Phase 3은 정식 배포라 httpd가 잠시 멈춤 | 개발 | Phase 3 |
@@ -343,3 +371,76 @@ curl -sk $H https://daeilfoundation.or.kr/old/_sys/sys_config.php | grep -c '<?'
 결론: adms를 내리기 전에 결정할 것은 **운영자 지정·해제 방법** 하나다. 빈도가 낮으므로 (a) 서버 CLI로 운영하거나 (b) root 전용 "운영자 관리" 화면을 추가한다. 나머지 차이는 부가 기능이거나 레거시에서도 동작하지 않던 기능이다.
 
 → (b)로 결정 (2026-09-26). `feature/admin-operator-management`에서 root 전용 "운영자 관리" 화면(`/operators`)과 `GET/PUT/DELETE /api/admin/operators` 구현. 본인 권한 변경 금지, root 최소 1명 유지(행 잠금으로 동시 강등 방지), 탈퇴·휴면·정지 회원 지정 불가.
+
+## 10. 선행 작업 상세 (A·B·C)
+
+### 10.1 A. adms와 `/old/` 긴급 차단
+
+목적: 0-1절의 무인증 쓰기 취약점을 운영자 업무를 멈추지 않고 즉시 막는다. `/old/`의 v1 사이트는 실사용이 없고(8~9월 접속은 스캐너뿐) 같은 종류의 코드일 가능성이 높아 함께 막는다.
+
+방식: 배포가 덮어쓰지 않는 **별도 설정 파일**(`/etc/httpd/conf.d/zz-legacy-guard.conf`)을 둔다. 배포 도구는 `alumni.conf`만 교체하므로 이 파일은 유지된다.
+파일 이름의 `zz-`는 의도적이다. `conf.d`는 알파벳 순으로 읽히므로 adms vhost(`virthost*.conf`)의 `Require all granted`보다 뒤에 적용되고, `AuthMerging` 기본값(Off)에서는 뒤의 `Require`가 앞의 것을 대체한다. `<Location>`은 `<Directory>`보다 나중에 병합되므로 `/old/` 차단이 `alumni.conf`의 `Require all granted`를 이긴다. 적용 전 `sudo grep -il require /var/www/dadms/.htaccess /var/www/html/.htaccess`로 `.htaccess`에 `Require`가 없는지 확인한다(있으면 그 파일이 마지막에 병합되어 차단을 풀 수 있다).
+
+- adms: IP 제한 대신 **Basic 인증**을 권장한다. 운영자 2명의 접속 IP가 고정인지 확인되지 않았고, 재택·모바일 접속이면 IP 제한이 업무를 막는다. Basic 인증은 `/_module/*`을 포함한 `/var/www/dadms` 전체에 PHP 실행 전에 적용된다. 운영자는 Basic 인증 후 기존 adms 로그인을 한 번 더 한다.
+- 운영자 IP가 고정으로 확인되면 `Require valid-user` 대신 `Require ip <IP>`를 써도 된다.
+
+```bash
+sudo mkdir -p /root/php-removal/stepA
+sudo htpasswd -c -B /etc/httpd/adms.htpasswd adms-ops   # 비밀번호는 대화형 입력, 운영자에게 별도 안전한 경로로 전달
+sudo chown root:nobody /etc/httpd/adms.htpasswd && sudo chmod 640 /etc/httpd/adms.htpasswd   # 운영 httpd는 nobody로 실행된다 (apache 그룹이면 500)
+sudo tee /etc/httpd/conf.d/zz-legacy-guard.conf >/dev/null <<'CONF'
+# Temporary guard until the legacy PHP sites are removed (docs/LEGACY_PHP_REMOVAL_PLAN.md step A).
+# adms: extra Basic auth in front of the legacy admin, including its unauthenticated _module endpoints.
+<Directory /var/www/dadms>
+    AuthType Basic
+    AuthName "adms"
+    AuthUserFile /etc/httpd/adms.htpasswd
+    Require valid-user
+</Directory>
+# /old/: legacy v1 site on the main domain has no real traffic; deny it outright.
+<Location /old/>
+    Require all denied
+</Location>
+CONF
+sudo apachectl configtest && sudo systemctl reload httpd
+```
+
+검증 (서버에서, 쓰기 엔드포인트는 호출하지 않는다):
+```bash
+for u in https://adms.daeilfoundation.or.kr/ https://adms.daeilfoundation.or.kr/login.php; do
+  curl -sk -o /dev/null -w "%{http_code} $u\n" --resolve adms.daeilfoundation.or.kr:443:127.0.0.1 "$u"; done   # 401
+curl -sk -o /dev/null -w "%{http_code}\n" --resolve daeilfoundation.or.kr:443:127.0.0.1 https://daeilfoundation.or.kr/old/index.php  # 403
+```
+그리고 6절 A(메인·관리자·API가 200)를 확인한다. 운영자 1명에게 Basic 인증 후 adms 로그인이 되는지 확인받는다.
+
+롤백: `sudo rm /etc/httpd/conf.d/zz-legacy-guard.conf && sudo apachectl configtest && sudo systemctl reload httpd`
+
+주의: `/old/`를 막으면 Phase 3의 410 규칙이 적용되기 전까지 403이 나간다. Phase 3 배포 후 `<Location /old/>` 블록은 지워도 되고, adms 블록은 Phase 4에서 파일째 지운다.
+
+### 10.2 B. 새 관리자 기능 운영 배포
+
+대상: `main` `b01d46e` (백엔드·관리자 SPA). `93f1a8c..b01d46e` 사이에 **DB 마이그레이션 변경은 없다.** 절차는 `docs/RELEASE_ROLLOUT_RUNBOOK.md`를 따른다.
+
+1. 묶음 준비(로컬): `./deploy.sh --prepare-only --patch-mode=false --output=/절대경로/후보-b01d46e`
+2. 배포: `./deploy.sh daeil-prod --bundle=/절대경로/후보-b01d46e`. 배포 도구가 미적용 마이그레이션을 보고하면 **중단하고 원인부터 확인한다** (이번 변경에는 마이그레이션이 없다).
+3. 배포 도구가 탈퇴 처리 기능을 멈춘 상태(`DEPLOYED_ERASURE_PAUSED`)로 끝나므로, 평소 운영 상태대로 다시 켠다: `./deploy.sh --activate-all-users --release-id=<이번 release-id>` 후 적용 여부 확인. 보관 만료(`--activate-retention`)는 별도 결정 사항이라 건드리지 않는다.
+4. 확인:
+   - 6절 A 검증, `/api/health` 정상
+   - root 계정으로 관리자 → 설정 → 운영자 관리: 목록이 보이고 본인 행이 잠겨 있다
+   - 일반 관리자 계정(있다면)으로 같은 화면: root 전용 안내만 보인다
+   - 회원 관리: 기수·학과·가입일 필터 동작, 학과 열 표시
+   - 회원 상세: 상태 드롭다운에 탈퇴·휴면·정지만 있다
+   - 정보 수정은 운영 회원 데이터로 시험하지 않는다. 필요하면 시험 계정의 이름만 바꿨다가 되돌린다
+5. 롤백: 이전 묶음(현재 운영 release)으로 재배포 후 3번을 다시 실행한다. 이번 변경은 스키마를 바꾸지 않으므로 DB 조치는 없다.
+
+### 10.3 C. adms 운영자 업무 이전 확인 (G1)
+
+1. 운영자 2명에게 9절 대조표 기준으로 새 관리자 사용 위치를 안내한다.
+   - 회원 정보 수정 → 회원 관리 > 회원 상세 > 정보 수정
+   - 회원 승인·반려 → 가입 신청
+   - 공지(장학사업 현황) → 공지 관리
+   - 기부 조회·수정·엑셀 반영 → 기부 관리
+   - 배너 → 배너광고 관리
+   - 운영자 지정 → 설정 > 운영자 관리 (root만)
+2. 확인 기한(1주) 동안 adms는 A의 Basic 인증 상태로 유지한다.
+3. 두 운영자가 "adms 없이 업무 가능"을 확인하면 G1 충족으로 기록하고 Phase 4로 간다. 빠진 업무가 나오면 새 관리자에 추가한 뒤 다시 확인한다.
