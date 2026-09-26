@@ -3,7 +3,7 @@
 - 작성일: 2026-09-26
 - 범위: 운영 서버 `daeil-prod`의 Apache/PHP 설정, `dflh-saf-v2/deploy`, root crontab, EasyPay 모듈 경로
 - 목표: 운영 서버에서 PHP(mod_php, php-fpm)를 제거하고, 메인 사이트(`/`)·관리자(`/admin/`)·Go API가 PHP와 무관하게 동작하게 한다.
-- 상태: **계획. 운영 서버 변경은 아직 아무것도 실행하지 않았다.** 운영 서버에서 한 작업은 읽기 전용 조회뿐이다. 실행 순서는 0-2절.
+- 상태: **A·B 완료 (2026-09-26).** 나머지는 계획 단계. 실행 순서와 진행 상황은 0-2절.
 
 ## 0. 요약
 
@@ -37,6 +37,10 @@
 | H | Phase 6 관찰 (최소 2주) | 4절 | G | 없음 | — |
 | I | Phase 7 (EasyPay 모듈 이전) | 4절 | G | Go 재시작 수 초 | env 복원 |
 | J | Phase 8 (보관 후 삭제, 되돌릴 수 없음) | 4절 | H, I, G2, G3 | 없음 | 보관본으로만 |
+
+진행 기록:
+- **A 완료** 2026-09-26 18:57 KST. `/etc/httpd/conf.d/zz-legacy-guard.conf`, 계정 `adms-ops`, 비밀번호는 서버의 `/root/php-removal/stepA/adms-ops.password`(root만 읽기)에 있다. 적용 전 설정 백업은 `/root/php-removal/stepA/etc-httpd-before`. 확인: adms 무인증 401(`_module` 포함), 틀린 비밀번호 401, 올바른 인증으로 로그인 화면 200, `/old/` 403, 메인·관리자·API 200.
+- **B 완료** 2026-09-26 release `20260926T100033Z-b01d46ea70ff` (이전 운영 `93f1a8c` → `b01d46e`, 마이그레이션 없음). 배포 후 `--activate-all-users`로 배포 전과 같은 상태(탈퇴 접수·워커 ON, 보관 만료 OFF) 복원. 확인: 메인·관리자·API 200, 새 관리자 API 무인증 401, 관리자 번들에 새 화면 포함, 백엔드 오류 로그 없음, A의 차단 설정 유지. **root 계정으로 화면에서 직접 하는 확인(10.2절 4번)은 아직 하지 않았다.**
 
 권장 일정: A·D는 당일, B는 1~2일 안, C는 B 후 1주 안, E·F·G는 C 완료 주, H는 그 후 2주, I는 H 중, J는 H 종료 후.
 사용자 측 병행 과제: 레거시 정기후원자 7명 조치(G2, 명단 `prod-db-backups/legacy_recurring_donors_20260926.tsv`는 조치 후 삭제).
@@ -379,7 +383,7 @@ curl -sk $H https://daeilfoundation.or.kr/old/_sys/sys_config.php | grep -c '<?'
 ```bash
 sudo mkdir -p /root/php-removal/stepA
 sudo htpasswd -c -B /etc/httpd/adms.htpasswd adms-ops   # 비밀번호는 대화형 입력, 운영자에게 별도 안전한 경로로 전달
-sudo chown root:apache /etc/httpd/adms.htpasswd && sudo chmod 640 /etc/httpd/adms.htpasswd
+sudo chown root:nobody /etc/httpd/adms.htpasswd && sudo chmod 640 /etc/httpd/adms.htpasswd   # 운영 httpd는 nobody로 실행된다 (apache 그룹이면 500)
 sudo tee /etc/httpd/conf.d/zz-legacy-guard.conf >/dev/null <<'CONF'
 # Temporary guard until the legacy PHP sites are removed (docs/LEGACY_PHP_REMOVAL_PLAN.md step A).
 # adms: extra Basic auth in front of the legacy admin, including its unauthenticated _module endpoints.
