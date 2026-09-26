@@ -1,0 +1,29 @@
+{
+  "session": {
+    "accessExpiresAt": "<volatile>",
+    "accessIssuedAt": "<volatile>",
+    "accessToken": "<token>",
+    "jti": "<volatile>",
+    "refreshExpiresAt": "<volatile>",
+    "refreshToken": "<token>",
+    "sid": "<volatile>",
+    "user": {
+      "adminRole": null,
+      "email": "member@example.test",
+      "usrId": "golden_member",
+      "usrName": "합성 동문",
+      "usrSeq": 100,
+      "usrStatus": "CCC",
+      "verification": {
+        "cohort": "20",
+        "department": "영어",
+        "graduationYear": 2007,
+        "rejectionReason": null,
+        "reviewedAt": "<timestamp>",
+        "status": "approved",
+        "submittedAt": "<timestamp>"
+      }
+    }
+  },
+  "status": "authenticated"
+}

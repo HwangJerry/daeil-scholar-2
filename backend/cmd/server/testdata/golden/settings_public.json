@@ -1,0 +1,4 @@
+{
+  "app_update_policy_android": "{\"forceEnabled\":true,\"minBuild\":100,\"recommendEnabled\":true,\"recommendedBuild\":110,\"minOsVersion\":\"1.0\",\"storeUrl\":\"https://store.example.test/android\"}",
+  "app_update_policy_ios": "{\"forceEnabled\":true,\"minBuild\":100,\"recommendEnabled\":true,\"recommendedBuild\":110,\"minOsVersion\":\"1.0\",\"storeUrl\":\"https://store.example.test/ios\"}"
+}
