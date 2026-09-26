@@ -55,6 +55,75 @@ identified with volatile keys, which become `<volatile>` at any depth.
 Nulls and empty token strings remain visible to catch contract regressions.
 This is a fixture stabilizer for synthetic responses, not a data anonymizer.
 
+### Tier 1 router goldens (TS07)
+
+`cmd/server/tier1_golden_test.go` exercises `wireDeps` and `registerRoutes` through
+`httptest.NewServer`, using a fresh production-baseline MariaDB database and the
+real middleware, handlers, services and repositories. Fixtures are committed in
+`cmd/server/testdata/golden/`:
+
+| Files (`.json`) | Contract |
+| --- | --- |
+| `settings_public` | Public settings, including both update policies as JSON **strings** |
+| `check_id_available`, `check_phone_taken` | Availability booleans (both HTTP 200) |
+| `phone_verification_request`, `phone_verification_confirm` | Review-number OTP request and grant |
+| `register_success`, `register_id_taken` | Pending native signup (201) and duplicate ID (409) |
+| `mobile_login_success`, `mobile_login_invalid_password` | Mobile session and invalid credentials (401) |
+| `refresh_success`, `auth_me` | Rotated session and approved member |
+| `app_update_required_426` | Forced update error below the minimum build |
+| `account_deletion_request`, `account_deletion_receipt` | Cancellable deletion acceptance (202) and unauthenticated receipt lookup |
+
+From `backend/`, regenerate and then compare without update mode:
+
+```bash
+DFLH_DOCKER_TESTS=1 GOLDEN_UPDATE=1 go test ./cmd/server -run Golden -count=1
+DFLH_DOCKER_TESTS=1 go test ./cmd/server -run Golden -count=1 -v
+```
+
+Docker-off runs skip the four top-level golden tests. Docker-unavailable runs
+also skip cleanly through the shared harness. Review generated diffs before
+committing; snapshots are always captured from HTTP responses.
+
+The harness loads configuration from explicitly set test environment variables,
+never env files. SMS delivery and push are disabled; `01000000001` / `123456`
+exercise the configured review-number OTP path. Erasure requests are enabled
+with distinct synthetic keys, manual external processing and temporary storage;
+`validateErasureRuntime` must pass. Erasure/retention workers and all other
+background jobs are not started. The schema-only baseline has no identity
+backfill records, so synthetic completed run/journal rows activate canonical
+password wiring. Approved members and their companion rows are synthetic SQL
+seeds; signup itself creates its rows through HTTP. No schema alterations or
+production test seams are used.
+
+Request shapes were checked against Android `core/auth/AuthApi.kt`,
+`core/network/AppClientHeaders.kt`, and `AccountDeletionRepository.kt`, and iOS
+`Feature/Login/AuthRepository.swift`, `Network/AppClientHeaders.swift`, and
+`Infrastructure/Token/TokenRefresher.swift`. Both send `{usrId, password}` to
+`POST /api/auth/mobile/login`, JSON content type, and bearer auth on protected
+requests. Session tests run with both platforms' release headers against
+separate databases/caches. Both apps use **POST**, not GET, for the public
+`/api/account-deletion/receipt` lookup, with `{receiptToken}` in the body.
+
+Explicit volatile keys are `verificationId` for the OTP request and `sid`,
+`jti`, `accessIssuedAt`, `accessExpiresAt`, `refreshExpiresAt` for login/refresh.
+The helper automatically normalizes tokens and timestamp strings. Fixed member
+and receipt IDs remain numeric. Raw responses are decoded and their business
+facts checked before normalization, including numeric token lifetimes, password
+credentials, consent, phone claims, OTP consumption, refresh rotation and
+deletion/session revocation. Downstream DTO tests (TS08) must materialize the
+normalizer placeholders: epoch fields marked `<volatile>` need JSON numbers,
+timestamp markers need valid date strings, and opaque ID/token markers need
+synthetic strings. The signup response intentionally preserves the server's
+current empty email/verification fields.
+
+The coverage script instruments each package separately. To include these
+`cmd/server` tests in handler/service coverage, additionally run:
+
+```bash
+DFLH_DOCKER_TESTS=1 go test ./... \
+  -coverpkg=./internal/handler,./internal/service -coverprofile=/tmp/ts07-coverage.out
+```
+
 ## Coverage
 
 Run `bash scripts/test-coverage.sh` from `backend/` for per-package statement

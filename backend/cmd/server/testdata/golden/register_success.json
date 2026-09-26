@@ -1,0 +1,17 @@
+{
+  "adminRole": null,
+  "email": "",
+  "usrId": "golden_signup",
+  "usrName": "합성 가입자",
+  "usrSeq": 101,
+  "usrStatus": "BBB",
+  "verification": {
+    "cohort": null,
+    "department": null,
+    "graduationYear": null,
+    "rejectionReason": null,
+    "reviewedAt": null,
+    "status": "",
+    "submittedAt": null
+  }
+}

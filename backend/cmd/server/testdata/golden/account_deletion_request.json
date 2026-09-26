@@ -1,0 +1,21 @@
+{
+  "receipt": {
+    "canCancel": true,
+    "cancelledAt": null,
+    "completedAt": null,
+    "databaseErased": false,
+    "dueAt": "<timestamp>",
+    "expeditedAt": null,
+    "needsAttention": false,
+    "receiptWorkPending": false,
+    "requestId": 1,
+    "requestedAt": "<timestamp>",
+    "retainedRecords": "",
+    "retentionUntil": null,
+    "scheduledAt": "<timestamp>",
+    "status": "pending",
+    "targetAt": "<timestamp>"
+  },
+  "receiptToken": "<token>",
+  "sessionCleanupPending": false
+}
