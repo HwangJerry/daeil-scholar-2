@@ -261,28 +261,8 @@ func (r *ProfileRepository) UpdateProfile(usrSeq int, req model.ProfileUpdateReq
 	`, usrSeq); err != nil {
 		return err
 	}
-	currentCanonicalPhone := model.NormalizePhoneNumber(currentPhone).String()
-	if req.USRPhone != currentCanonicalPhone {
-		result, err := tx.Exec(`
-			UPDATE AUTH_PHONE_CLAIM
-			SET CANONICAL_PHONE = ?
-			WHERE ACCOUNT_ID = ?
-		`, req.USRPhone, usrSeq)
-		if err != nil {
-			return classifyPhoneClaimError(err)
-		}
-		affected, err := result.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if affected == 0 {
-			if _, err := tx.Exec(`
-				INSERT INTO AUTH_PHONE_CLAIM (CANONICAL_PHONE, ACCOUNT_ID, CREATED_AT)
-				VALUES (?, ?, NOW())
-			`, req.USRPhone, usrSeq); err != nil {
-				return classifyPhoneClaimError(err)
-			}
-		}
+	if err := transferPhoneClaim(tx, usrSeq, currentPhone, req.USRPhone); err != nil {
+		return err
 	}
 	if err := updateProfileFields(tx, usrSeq, req); err != nil {
 		return err
@@ -339,6 +319,37 @@ func updateProfileFields(execer profileExecer, usrSeq int, req model.ProfileUpda
 
 func (r *ProfileRepository) updateProfileWithoutPhoneClaim(usrSeq int, req model.ProfileUpdateRequest) error {
 	return updateProfileFields(r.DB, usrSeq, req)
+}
+
+// transferPhoneClaim moves the account's AUTH_PHONE_CLAIM to canonicalPhone
+// inside the caller's transaction. The caller must hold the WEO_MEMBER row lock
+// and pass the stored phone; an unchanged number is a no-op. A number claimed by
+// another account returns ErrPhoneAlreadyClaimed.
+func transferPhoneClaim(tx *sqlx.Tx, usrSeq int, currentPhone, canonicalPhone string) error {
+	if canonicalPhone == model.NormalizePhoneNumber(currentPhone).String() {
+		return nil
+	}
+	result, err := tx.Exec(`
+		UPDATE AUTH_PHONE_CLAIM
+		SET CANONICAL_PHONE = ?
+		WHERE ACCOUNT_ID = ?
+	`, canonicalPhone, usrSeq)
+	if err != nil {
+		return classifyPhoneClaimError(err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		if _, err := tx.Exec(`
+			INSERT INTO AUTH_PHONE_CLAIM (CANONICAL_PHONE, ACCOUNT_ID, CREATED_AT)
+			VALUES (?, ?, NOW())
+		`, canonicalPhone, usrSeq); err != nil {
+			return classifyPhoneClaimError(err)
+		}
+	}
+	return nil
 }
 
 func classifyPhoneClaimError(err error) error {

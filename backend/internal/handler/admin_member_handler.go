@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dflh-saf/backend/internal/middleware"
+	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 )
@@ -25,8 +26,19 @@ func (h *AdminMemberHandler) List(w http.ResponseWriter, r *http.Request) {
 	rows, total, err := h.service.List(
 		parseIntParam(q.Get("page")),
 		parseIntParam(q.Get("size")),
-		q.Get("q"), q.Get("fn"), q.Get("status"),
+		model.AdminMemberFilter{
+			Query:   q.Get("q"),
+			FN:      q.Get("fn"),
+			Dept:    q.Get("dept"),
+			Status:  q.Get("status"),
+			RegFrom: q.Get("regFrom"),
+			RegTo:   q.Get("regTo"),
+		},
 	)
+	if errors.Is(err, service.ErrInvalidMemberFilter) {
+		respondError(w, http.StatusBadRequest, "INVALID_FILTER", "검색 조건이 올바르지 않습니다")
+		return
+	}
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "LIST_FAILED", "Failed to list members")
 		return

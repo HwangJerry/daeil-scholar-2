@@ -289,6 +289,7 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Get("/member", h.adminMember.List)
 		r.Get("/member/{seq}", h.adminMember.Detail)
 		r.Put("/member/{seq}", h.adminMember.Update)
+		r.Put("/member/{seq}/profile", h.adminMember.UpdateProfile)
 		r.Get("/member/stats", h.adminMember.Stats)
 		r.Get("/alumni-verifications", h.adminMember.ListAlumniVerifications)
 		r.Get("/alumni-verifications/{userSeq}", h.adminMember.GetAlumniVerificationDetail)
