@@ -64,6 +64,12 @@ Every login below uses **`Synthetic-password-09!`**.
 | `e2e_pending` | 101 | pending | `01000000004` |
 | `e2e_friend` | 102 | approved | `01000000005` |
 | `e2e_delete` | 103 | approved; disposable deletion test account | `01000000006` |
+| `e2e_delete_ios` | 104 | approved; disposable iOS deletion test account | `01000000007` |
+| `e2e_msg_read` | 105 | approved; Android message read test | `01000000008` |
+| `e2e_msg_send` | 106 | approved; Android message send test | `01000000009` |
+| `e2e_msg_compose` | 107 | approved; Android new-conversation test | `01000000010` |
+| `e2e_msg_live` | 108 | approved; Android realtime message test | `01000000011` |
+| `e2e_msg_block` | 109 | approved; Android block test | `01000000012` |
 
 The seed includes canonical account state, identities, phone claims and password
 credentials, plus synthetic completed identity-backfill records to enable the
@@ -84,8 +90,12 @@ with version `2026-09-27-test`. Reset after signup to free the phone for another
 
 Feed notice IDs **900** and **901** contain synthetic Korean text. Member 100 and
 friend 102 have messages **800** and **801**, including an unread reply to 100;
-both users are approved so Tier 2 can send replies. Both public app-update policies
-start with forced and recommended updates **OFF**. There are no admin accounts.
+both users are approved so Tier 2 can send replies. Accounts 105–109 each own one
+Android message scenario (TS15), so those tests stay independent within one reset:
+105, 106, 108 and 109 each have a two-message thread with friend 102 (messages
+**802**–**809**; only 803, from 102 to 105, is unread), and 107 starts with no
+conversations. Both public app-update policies start with forced and recommended
+updates **OFF**. There are no admin accounts.
 
 SMS delivery, push, email, erasure/retention workers and real social/payment
 integrations are disabled or unconfigured. The review SMS path still records and
