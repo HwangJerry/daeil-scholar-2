@@ -1,5 +1,8 @@
 # Backend test helpers
 
+For mobile end-to-end tests, use the [local Docker Compose backend](../../../e2e/local-backend/README.md).
+One command starts the pinned MariaDB baseline and API with disposable synthetic accounts.
+
 ## MariaDB 10.1.38
 
 Install package cleanup once in `main_test.go`:

@@ -1,0 +1,66 @@
+name: dflh-local-e2e
+
+services:
+  db:
+    image: mariadb@sha256:e4e5e5e2fb7c089688ddb55cc5ef38c9acff4aeb0aa25375f92f0708795b7a1c
+    platform: linux/amd64
+    command:
+      - --innodb-file-format=Barracuda
+      - --innodb-large-prefix=ON
+      - --sql-mode=NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+    environment:
+      MYSQL_ROOT_PASSWORD: ts09-synthetic-root
+      MYSQL_DATABASE: alumni_e2e
+      MYSQL_USER: e2e
+      MYSQL_PASSWORD: ts09-synthetic-db
+      TZ: Asia/Seoul
+    ports:
+      - "127.0.0.1:13306:3306"
+    tmpfs:
+      - /var/lib/mysql
+    volumes:
+      - ./init-db.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+      - ../../backend/migrations:/migrations:ro
+      - ./seed.sql:/seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql --protocol=tcp -h 127.0.0.1 -u e2e alumni_e2e -Nse 'SELECT 1' >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 30s
+
+  api:
+    build:
+      # up.sh stages only tracked Go sources, embedded templates and module files,
+      # plus an unchanged copy of backend/Dockerfile. No env files or dumps enter it.
+      context: ./.build/backend
+      dockerfile: Dockerfile
+      args:
+        HTTP_PROXY: ""
+        HTTPS_PROXY: ""
+        ALL_PROXY: ""
+    env_file:
+      - path: ./local.env
+        format: raw
+    # Docker 29 does not publish ports on internal-only bridges. Remove the
+    # API default route instead, keeping host ingress and the local DB route.
+    cap_add: [NET_ADMIN]
+    command: ["/bin/sh", "/local/start-api.sh"]
+    dns: [127.0.0.1]
+    volumes:
+      - ./start-api.sh:/local/start-api.sh:ro
+    ports:
+      - "127.0.0.1:18080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+networks:
+  default:
+    driver: bridge
