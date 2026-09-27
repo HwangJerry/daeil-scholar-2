@@ -63,6 +63,7 @@ Every login below uses **`Synthetic-password-09!`**.
 | `e2e_member` | 100 | approved | `01000000003` |
 | `e2e_pending` | 101 | pending | `01000000004` |
 | `e2e_friend` | 102 | approved | `01000000005` |
+| `e2e_delete` | 103 | approved; disposable deletion test account | `01000000006` |
 
 The seed includes canonical account state, identities, phone claims and password
 credentials, plus synthetic completed identity-backfill records to enable the
