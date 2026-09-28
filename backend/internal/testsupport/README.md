@@ -79,6 +79,8 @@ real middleware, handlers, services and repositories. Fixtures are committed in
 | `realtime_message_created` | `message.created` on the recipient's stream after `POST /api/messages` (TS16) |
 | `realtime_conversation_updated_sender`, `realtime_conversation_updated_recipient` | `conversation.updated` on each party's stream; `conversationUserSeq` is the other party (TS16) |
 | `realtime_message_read` | `message.read` on the sender's stream after `PUT /api/messages/conversations/{userSeq}/read` (TS16) |
+| `realtime_notification_created` | `notification.created` on every open stream after an operator's `POST /api/admin/feed`, with push disabled |
+| `badges_unread_notification`, `notifications_list`, `notifications_invalid_cursor_400` | Inbox badge and list before `POST /api/notifications/seen`, and a malformed cursor |
 
 From `backend/`, regenerate and then compare without update mode:
 
@@ -87,7 +89,7 @@ DFLH_DOCKER_TESTS=1 GOLDEN_UPDATE=1 go test ./cmd/server -run Golden -count=1
 DFLH_DOCKER_TESTS=1 go test ./cmd/server -run Golden -count=1 -v
 ```
 
-Docker-off runs skip the five top-level golden tests. Docker-unavailable runs
+Docker-off runs skip the six top-level golden tests. Docker-unavailable runs
 also skip cleanly through the shared harness. Review generated diffs before
 committing; snapshots are always captured from HTTP responses.
 

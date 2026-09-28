@@ -266,3 +266,19 @@ func TestWaitingMembersCanRegisterPushWithoutAlumniApproval(t *testing.T) {
 		t.Fatalf("checked=%d err=%v", checked, err)
 	}
 }
+
+func TestAuthenticatedRoutesIncludeNotificationInboxEndpoints(t *testing.T) {
+	router := chi.NewRouter()
+	registerAuthRoutes(router, handlers{}, nil, nil)
+	found := routesForTest(t, router)
+
+	for _, route := range []string{
+		http.MethodGet + " /api/notifications",
+		http.MethodPost + " /api/notifications/seen",
+		http.MethodGet + " /api/badges",
+	} {
+		if !found[route] {
+			t.Fatalf("missing route %s", route)
+		}
+	}
+}

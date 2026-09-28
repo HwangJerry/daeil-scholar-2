@@ -56,6 +56,7 @@ type handlers struct {
 	phoneVerification   *handler.PhoneVerificationHandler
 	passwordChange      *handler.PasswordChangeHandler
 	badge               *handler.BadgeHandler
+	notificationInbox   *handler.NotificationInboxHandler
 	adminJobCat         *handler.AdminJobCategoryHandler
 	history             *handler.HistoryHandler
 	realtime            *handler.RealtimeHandler
@@ -222,6 +223,11 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.With(mw.ApprovedAlumniMiddleware).Get("/api/push/preferences", h.push.GetPreferences)
 		r.With(mw.ApprovedAlumniMiddleware).Put("/api/push/preferences", h.push.PutPreferences)
 		r.With(mw.ApprovedAlumniMiddleware).Get("/api/badges", h.badge.GetBadges)
+		// Notices are public (the feed is optional-auth) and their pushes reach
+		// members still awaiting approval, so the inbox needs a login but not
+		// alumni approval.
+		r.Get("/api/notifications", h.notificationInbox.List)
+		r.Post("/api/notifications/seen", h.notificationInbox.MarkSeen)
 		r.With(mw.ApprovedAlumniMiddleware).Get("/api/messages/stream", h.realtime.Stream)
 	})
 }

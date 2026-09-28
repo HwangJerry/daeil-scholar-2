@@ -1,0 +1,14 @@
+{
+  "data": {
+    "body": "합성 새 소식",
+    "createdAt": "<timestamp>",
+    "deepLink": "/feed/1",
+    "eventId": 1,
+    "notificationId": "notice-1",
+    "postSeq": 1,
+    "title": "새 소식",
+    "type": "admin.notice"
+  },
+  "event": "notification.created",
+  "raw": "id: 1\nevent: notification.created\ndata: {\"body\":\"합성 새 소식\",\"createdAt\":\"<timestamp>\",\"deepLink\":\"/feed/1\",\"eventId\":1,\"notificationId\":\"notice-1\",\"postSeq\":1,\"title\":\"새 소식\",\"type\":\"admin.notice\"}\n\n"
+}

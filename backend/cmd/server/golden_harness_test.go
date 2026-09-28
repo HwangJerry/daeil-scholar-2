@@ -42,7 +42,7 @@ type goldenServer struct {
 
 func newGoldenServer(t *testing.T) *goldenServer {
 	t.Helper()
-	db := mariadb.Start(t).NewDatabase(t, mariadb.ProdBaseline(t)...).DB
+	db := mariadb.Start(t).NewDatabase(t, append(mariadb.ProdBaseline(t), postBaselineMigrations()...)...).DB
 	seedGoldenIdentityReadiness(t, db)
 	cfg := goldenConfig(t)
 	if err := validateErasureRuntime(cfg); err != nil {
@@ -68,6 +68,15 @@ func newGoldenServer(t *testing.T) *goldenServer {
 	client.Timeout = 10 * time.Second
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &goldenServer{db: db, server: server, client: client, deps: d}
+}
+
+// postBaselineMigrations are the migrations newer than the production baseline
+// (077). They are applied in order on top of it so the harness serves the schema
+// this branch deploys; drop an entry once a refreshed baseline includes it.
+func postBaselineMigrations() []mariadb.SQL {
+	return []mariadb.SQL{
+		mariadb.File(filepath.Join("..", "..", "migrations", "078_create_notification_inbox_state.sql")),
+	}
 }
 
 func goldenConfig(t *testing.T) *config.Config {
