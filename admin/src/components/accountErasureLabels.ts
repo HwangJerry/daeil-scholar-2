@@ -14,6 +14,7 @@ const TABLE_LABELS: Record<string, string> = {
   ALUMNI_MOBILE_DEVICE_TOKEN: '푸시 기기 등록',
   ALUMNI_PUSH_DEVICE: '푸시 기기 등록',
   ALUMNI_PUSH_PREFERENCE: '알림 설정',
+  ALUMNI_NOTIFICATION_INBOX_STATE: '알림함 확인 기록',
   ALUMNI_MOBILE_REFRESH_TOKEN: '앱 로그인 세션',
   USER_SESSION: '로그인 세션',
   ALUMNI_PASSWORD_RESET: '비밀번호 재설정 요청',
