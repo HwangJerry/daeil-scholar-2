@@ -19,12 +19,13 @@ const (
 )
 
 // NotificationInboxStore is the persistence the inbox needs. The inbox has no
-// per-member rows: it is derived from notices, and only "last seen" is stored.
+// per-member rows: it is derived from notices, and only the newest notice SEQ
+// the member has seen is stored.
 type NotificationInboxStore interface {
 	ListNoticeNotifications(beforeSeq, size int) ([]model.NoticeNotificationRow, error)
-	GetLastSeenAt(userSeq int) (*time.Time, error)
+	GetLastSeenPostSeq(userSeq int) (int, error)
 	CountUnseenNotices(userSeq int) (int, error)
-	MarkSeen(userSeq int) error
+	MarkSeenThrough(userSeq, lastSeenPostSeq int) error
 }
 
 type NotificationInboxService struct {
@@ -44,7 +45,7 @@ func (s *NotificationInboxService) List(userSeq, beforeSeq, size int) (*model.No
 	if size > notificationPageMaxSize {
 		size = notificationPageMaxSize
 	}
-	lastSeen, err := s.store.GetLastSeenAt(userSeq)
+	lastSeen, err := s.store.GetLastSeenPostSeq(userSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -73,14 +74,16 @@ func (s *NotificationInboxService) CountUnread(userSeq int) (int, error) {
 	return s.store.CountUnseenNotices(userSeq)
 }
 
-// MarkAllSeen clears the red dot: opening the inbox marks everything as seen.
-func (s *NotificationInboxService) MarkAllSeen(userSeq int) error {
-	return s.store.MarkSeen(userSeq)
+// MarkSeenThrough clears the red dot up to the newest notice the app has shown.
+// Reporting the SEQ the client actually displayed, rather than "now", keeps a
+// notice published while the inbox was open unread.
+func (s *NotificationInboxService) MarkSeenThrough(userSeq, lastSeenPostSeq int) error {
+	return s.store.MarkSeenThrough(userSeq, lastSeenPostSeq)
 }
 
 // noticeNotificationItem mirrors the notice push: id matches its eventId and
 // the deep link opens the same notice detail the push opens.
-func noticeNotificationItem(row model.NoticeNotificationRow, lastSeen *time.Time) model.NotificationItem {
+func noticeNotificationItem(row model.NoticeNotificationRow, lastSeenPostSeq int) model.NotificationItem {
 	seq := strconv.Itoa(row.SEQ)
 	return model.NotificationItem{
 		ID:        "notice-" + seq,
@@ -88,7 +91,7 @@ func noticeNotificationItem(row model.NoticeNotificationRow, lastSeen *time.Time
 		Title:     noticeNotificationTitle,
 		Body:      row.Subject,
 		CreatedAt: row.RegDate.UTC().Format(time.RFC3339),
-		IsUnread:  lastSeen == nil || row.RegDate.After(*lastSeen),
+		IsUnread:  row.SEQ > lastSeenPostSeq,
 		DeepLink:  "/feed/" + seq,
 		PostSeq:   row.SEQ,
 	}

@@ -47,25 +47,40 @@ func TestNotificationInboxRepositoryPagesBeforeCursor(t *testing.T) {
 	}
 }
 
-func TestNotificationInboxRepositoryReportsNeverSeenAsNil(t *testing.T) {
+func TestNotificationInboxRepositoryReportsNeverSeenAsZero(t *testing.T) {
 	repo, mock := newNotificationInboxRepositoryTest(t)
-	mock.ExpectQuery(`SELECT LAST_SEEN_AT FROM ALUMNI_NOTIFICATION_INBOX_STATE WHERE USR_SEQ = \?`).
+	mock.ExpectQuery(`SELECT LAST_SEEN_POST_SEQ FROM ALUMNI_NOTIFICATION_INBOX_STATE WHERE USR_SEQ = \?`).
 		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"LAST_SEEN_AT"}))
+		WillReturnRows(sqlmock.NewRows([]string{"LAST_SEEN_POST_SEQ"}))
 
-	lastSeen, err := repo.GetLastSeenAt(42)
-	if err != nil || lastSeen != nil {
-		t.Fatalf("lastSeen = %v, err = %v", lastSeen, err)
+	lastSeen, err := repo.GetLastSeenPostSeq(42)
+	if err != nil || lastSeen != 0 {
+		t.Fatalf("lastSeen = %d, err = %v", lastSeen, err)
 	}
 }
 
-func TestNotificationInboxRepositoryMarksSeenWithUpsert(t *testing.T) {
+func TestNotificationInboxRepositoryCountsBySeqMarker(t *testing.T) {
 	repo, mock := newNotificationInboxRepositoryTest(t)
-	mock.ExpectExec(`(?s)INSERT INTO ALUMNI_NOTIFICATION_INBOX_STATE.*VALUES \(\?, NOW\(\), NOW\(\)\).*ON DUPLICATE KEY UPDATE LAST_SEEN_AT = NOW\(\)`).
-		WithArgs(42).
+	mock.ExpectQuery(`(?s)GATE = 'NOTICE' AND OPEN_YN = 'Y'.*INTERVAL \? DAY.*SEQ > COALESCE\(.*SELECT LAST_SEEN_POST_SEQ FROM ALUMNI_NOTIFICATION_INBOX_STATE WHERE USR_SEQ = \?.*0\)`).
+		WithArgs(NotificationInboxWindowDays, 42).
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(3))
+
+	count, err := repo.CountUnseenNotices(42)
+	if err != nil || count != 3 {
+		t.Fatalf("count = %d, err = %v", count, err)
+	}
+}
+
+// The marker is clamped to the newest notice SEQ before the forward-only upsert.
+func TestNotificationInboxRepositoryClampsAndOnlyMovesSeenForward(t *testing.T) {
+	repo, mock := newNotificationInboxRepositoryTest(t)
+	mock.ExpectQuery(`SELECT COALESCE\(MAX\(SEQ\), 0\) FROM WEO_BOARDBBS WHERE GATE = 'NOTICE'`).
+		WillReturnRows(sqlmock.NewRows([]string{"MAX"}).AddRow(510))
+	mock.ExpectExec(`(?s)INSERT INTO ALUMNI_NOTIFICATION_INBOX_STATE \(USR_SEQ, LAST_SEEN_POST_SEQ, UPD_DATE\).*VALUES \(\?, \?, NOW\(\)\).*ON DUPLICATE KEY UPDATE.*LAST_SEEN_POST_SEQ = GREATEST\(LAST_SEEN_POST_SEQ, VALUES\(LAST_SEEN_POST_SEQ\)\)`).
+		WithArgs(42, 510).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	if err := repo.MarkSeen(42); err != nil {
+	if err := repo.MarkSeenThrough(42, 999999); err != nil {
 		t.Fatal(err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

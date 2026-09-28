@@ -80,7 +80,7 @@ real middleware, handlers, services and repositories. Fixtures are committed in
 | `realtime_conversation_updated_sender`, `realtime_conversation_updated_recipient` | `conversation.updated` on each party's stream; `conversationUserSeq` is the other party (TS16) |
 | `realtime_message_read` | `message.read` on the sender's stream after `PUT /api/messages/conversations/{userSeq}/read` (TS16) |
 | `realtime_notification_created` | `notification.created` on every open stream after an operator's `POST /api/admin/feed`, with push disabled |
-| `badges_unread_notification`, `notifications_list`, `notifications_invalid_cursor_400` | Inbox badge and list before `POST /api/notifications/seen`, and a malformed cursor |
+| `badges_unread_notification`, `notifications_list`, `notifications_invalid_cursor_400`, `notifications_seen_invalid_400` | Inbox badge and list before `POST /api/notifications/seen {lastSeenPostSeq}`, a malformed cursor, and a seen body without `lastSeenPostSeq` |
 
 From `backend/`, regenerate and then compare without update mode:
 

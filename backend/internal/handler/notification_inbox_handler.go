@@ -2,6 +2,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/dflh-saf/backend/internal/middleware"
@@ -11,7 +12,13 @@ import (
 
 type NotificationInboxServicer interface {
 	List(userSeq, beforeSeq, size int) (*model.NotificationListResponse, error)
-	MarkAllSeen(userSeq int) error
+	MarkSeenThrough(userSeq, lastSeenPostSeq int) error
+}
+
+// markSeenRequest carries the newest postSeq the app has shown. A pointer tells
+// a missing field apart from an explicit 0; both are rejected.
+type markSeenRequest struct {
+	LastSeenPostSeq *int `json:"lastSeenPostSeq"`
 }
 
 type NotificationInboxHandler struct {
@@ -44,15 +51,21 @@ func (h *NotificationInboxHandler) List(w http.ResponseWriter, r *http.Request) 
 	respondJSON(w, http.StatusOK, response)
 }
 
-// MarkSeen handles POST /api/notifications/seen — opening the inbox marks
-// every notification as seen, which clears the bell's red dot.
+// MarkSeen handles POST /api/notifications/seen {"lastSeenPostSeq": n} — the
+// inbox is seen through the newest notice the app displayed, which clears the
+// bell's red dot for it and everything older.
 func (h *NotificationInboxHandler) MarkSeen(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetAuthUser(r.Context())
 	if user == nil {
 		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
 		return
 	}
-	if err := h.service.MarkAllSeen(user.USRSeq); err != nil {
+	var request markSeenRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.LastSeenPostSeq == nil || *request.LastSeenPostSeq <= 0 {
+		respondError(w, http.StatusBadRequest, "INVALID_LAST_SEEN", "확인한 알림 정보가 올바르지 않습니다")
+		return
+	}
+	if err := h.service.MarkSeenThrough(user.USRSeq, *request.LastSeenPostSeq); err != nil {
 		log.Error().Err(err).Int("usr_seq", user.USRSeq).Msg("notification mark seen failed")
 		respondError(w, http.StatusInternalServerError, "NOTIFICATIONS_SEEN_FAILED", "알림 확인 처리에 실패했습니다")
 		return

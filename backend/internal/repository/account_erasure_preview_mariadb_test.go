@@ -57,7 +57,7 @@ INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
 		t.Fatal(err)
 	}
 	db.MustExec(string(inbox))
-	db.MustExec(`INSERT INTO ALUMNI_NOTIFICATION_INBOX_STATE (USR_SEQ,LAST_SEEN_AT,UPD_DATE) VALUES (42,NOW(),NOW()),(43,NOW(),NOW())`)
+	db.MustExec(`INSERT INTO ALUMNI_NOTIFICATION_INBOX_STATE (USR_SEQ,LAST_SEEN_POST_SEQ,UPD_DATE) VALUES (42,10,NOW()),(43,11,NOW())`)
 	links, err := os.ReadFile("../../migrations/039_create_social_link_continuation.sql")
 	if err != nil {
 		t.Fatal(err)

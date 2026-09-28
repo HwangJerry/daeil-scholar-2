@@ -815,7 +815,7 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
 
 ### 10.6 알림함 (header bell)
 
-앱 header의 종 아이콘이 여는 알림 목록이다. 범위는 **관리자 새 소식(공지) push만**이며 채팅·동문 인증 결과는 포함하지 않는다. 회원별 알림 row를 만들지 않고, 공개 중인 공지(`WEO_BOARDBBS` `GATE='NOTICE' AND OPEN_YN='Y'`) 가운데 최근 **90일** 안에 등록된 것을 알림 형태로 보여 준다. 회원별 상태는 "마지막 확인 시각" 하나(`ALUMNI_NOTIFICATION_INBOX_STATE`, migration `078`)뿐이다.
+앱 header의 종 아이콘이 여는 알림 목록이다. 범위는 **관리자 새 소식(공지) push만**이며 채팅·동문 인증 결과는 포함하지 않는다. 회원별 알림 row를 만들지 않고, 공개 중인 공지(`WEO_BOARDBBS` `GATE='NOTICE' AND OPEN_YN='Y'`) 가운데 최근 **90일** 안에 등록된 것을 알림 형태로 보여 준다. 회원별 상태는 "마지막으로 확인한 공지 SEQ" 하나(`ALUMNI_NOTIFICATION_INBOX_STATE.LAST_SEEN_POST_SEQ`, migration `078`, row가 없으면 `0`)뿐이다.
 
 - push 설정(`noticeEnabled`, `messageEnabled`)이나 서버의 push 활성 여부와 무관하게 모든 공지가 보인다.
 - 인증: 로그인 필요(`401 UNAUTHORIZED`). 공지는 공개 feed와 같은 자료이고 공지 push가 승인 대기 회원에게도 가므로 **동문 승인은 요구하지 않는다**. 단 `GET /api/badges`와 `GET /api/messages/stream`은 기존대로 승인 동문 전용이다.
@@ -852,15 +852,24 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
 - `id`는 같은 공지 push의 `eventId`(`notice-<SEQ>`)와 같다. push로 받은 알림과 목록 항목을 이 값으로 맞춘다.
 - `type`은 공지 push와 같은 `admin.notice`. `title`은 고정 `"새 소식"`(template title 편집과 무관), `body`는 공지 원문 제목.
 - `createdAt`은 공지 등록 시각(UTC RFC 3339).
-- `isUnread`는 마지막 확인 시각 **이후**에 등록된 공지면 `true`. 한 번도 확인하지 않은 회원은 모두 `true`.
+- `isUnread`는 `postSeq > LAST_SEEN_POST_SEQ`이면 `true`. 한 번도 확인하지 않은 회원(`0`)은 모두 `true`. 등록 시각은 판단에 쓰지 않는다.
 - `deepLink`는 앱 내부 경로 `/feed/<SEQ>`, `postSeq`는 JSON number다(공지 push의 `postSeq`는 문자열인 점에 유의).
 - 실패: `500 NOTIFICATIONS_FAILED`.
 
-#### 모두 확인
+#### 확인 처리
 
 `POST /api/notifications/seen`
 
-- body 없음. 성공 `204`. 알림함을 열 때 호출하며 지금까지의 알림을 모두 확인 처리한다(red dot 해제).
+```json
+{ "lastSeenPostSeq": 502 }
+```
+
+- 알림함을 연 뒤, 화면에 표시한 알림 중 **가장 큰 `postSeq`**(보통 첫 page 첫 항목)를 보낸다. 성공 `204`. 그 SEQ 이하가 모두 확인 처리된다(red dot 해제).
+- 목록을 읽은 뒤 등록된 공지는 보낸 SEQ보다 크므로 계속 unread로 남는다. "지금 시각까지 모두 확인" 방식이 아니다.
+- 저장값은 증가만 한다(`GREATEST`). 더 작은 값이나 재시도는 아무것도 바꾸지 않고 `204`를 반환한다.
+- 서버는 값을 `GATE='NOTICE'` 공지의 최대 SEQ로 제한한다. 과도하게 큰 값을 보내도 이후 등록되는 공지를 미리 확인 처리할 수 없다.
+- `lastSeenPostSeq`가 없거나, `null`·문자열·소수·`0` 이하이거나, body가 JSON이 아니면 `400 INVALID_LAST_SEEN`.
+- 알림함이 비어 있으면(표시한 항목이 없으면) 호출하지 않는다.
 - 모바일 client는 `Origin`/`Referer` 없이 bearer로 호출하므로 CSRF 검사를 통과한다(다른 모바일 POST와 동일).
 - 실패: `500 NOTIFICATIONS_SEEN_FAILED`.
 
@@ -872,7 +881,7 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
 { "unreadMessages": 0, "unreadNotifications": 1 }
 ```
 
-- `unreadNotifications`는 목록에서 `isUnread=true`인 항목 수와 같은 기준(90일·공개 공지·마지막 확인 이후)이다. 계산이 실패하면 해당 값만 `0`으로 응답한다.
+- `unreadNotifications`는 목록에서 `isUnread=true`인 항목 수와 같은 기준(90일·공개 공지·`postSeq > LAST_SEEN_POST_SEQ`)이다. 계산이 실패하면 해당 값만 `0`으로 응답한다.
 
 #### SSE `notification.created`
 
@@ -1102,7 +1111,7 @@ validation 실패 HTTP `422`:
 
 ### 채팅·차단·push
 
-`INVALID_USER_SEQ`, `INVALID_MESSAGE`, `MESSAGE_TOO_LONG`, `MESSAGE_NOT_FOUND`, `INVALID_CURSOR`, `INVALID_DEVICE_TOKEN`, `INVALID_PLATFORM`, `PUSH_PROVIDER_UNAVAILABLE`, `NOTIFICATIONS_FAILED`, `NOTIFICATIONS_SEEN_FAILED`
+`INVALID_USER_SEQ`, `INVALID_MESSAGE`, `MESSAGE_TOO_LONG`, `MESSAGE_NOT_FOUND`, `INVALID_CURSOR`, `INVALID_DEVICE_TOKEN`, `INVALID_PLATFORM`, `PUSH_PROVIDER_UNAVAILABLE`, `NOTIFICATIONS_FAILED`, `NOTIFICATIONS_SEEN_FAILED`, `INVALID_LAST_SEEN`
 
 차단된 발신자에게는 `BLOCKED` 계열 오류를 반환하지 않는다.
 

@@ -12,6 +12,7 @@ import (
 
 type notificationInboxServicerStub struct {
 	userSeq, beforeSeq, size int
+	lastSeenPostSeq          int
 	listCalls, seenCalls     int
 	response                 *model.NotificationListResponse
 	err                      error
@@ -23,9 +24,9 @@ func (s *notificationInboxServicerStub) List(userSeq, beforeSeq, size int) (*mod
 	return s.response, s.err
 }
 
-func (s *notificationInboxServicerStub) MarkAllSeen(userSeq int) error {
+func (s *notificationInboxServicerStub) MarkSeenThrough(userSeq, lastSeenPostSeq int) error {
 	s.seenCalls++
-	s.userSeq = userSeq
+	s.userSeq, s.lastSeenPostSeq = userSeq, lastSeenPostSeq
 	return s.err
 }
 
@@ -103,19 +104,32 @@ func TestNotificationInboxHandlerListFailureIs500(t *testing.T) {
 	}
 }
 
-func TestNotificationInboxHandlerMarksSeenWithNoContent(t *testing.T) {
+func TestNotificationInboxHandlerMarksSeenThroughPostSeqWithNoContent(t *testing.T) {
 	stub := &notificationInboxServicerStub{}
 	recorder := httptest.NewRecorder()
-	NewNotificationInboxHandler(stub).MarkSeen(recorder, authenticatedPushRequest(http.MethodPost, "/api/notifications/seen", ""))
+	NewNotificationInboxHandler(stub).MarkSeen(recorder, authenticatedPushRequest(http.MethodPost, "/api/notifications/seen", `{"lastSeenPostSeq":502}`))
 
-	if recorder.Code != http.StatusNoContent || recorder.Body.Len() != 0 || stub.seenCalls != 1 || stub.userSeq != 42 {
-		t.Fatalf("status %d body %q calls %d user %d", recorder.Code, recorder.Body.String(), stub.seenCalls, stub.userSeq)
+	if recorder.Code != http.StatusNoContent || recorder.Body.Len() != 0 || stub.seenCalls != 1 || stub.userSeq != 42 || stub.lastSeenPostSeq != 502 {
+		t.Fatalf("status %d body %q calls %d user %d seq %d", recorder.Code, recorder.Body.String(), stub.seenCalls, stub.userSeq, stub.lastSeenPostSeq)
 	}
 
 	stub.err = errors.New("db down")
 	recorder = httptest.NewRecorder()
-	NewNotificationInboxHandler(stub).MarkSeen(recorder, authenticatedPushRequest(http.MethodPost, "/api/notifications/seen", ""))
+	NewNotificationInboxHandler(stub).MarkSeen(recorder, authenticatedPushRequest(http.MethodPost, "/api/notifications/seen", `{"lastSeenPostSeq":502}`))
 	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), `"code":"NOTIFICATIONS_SEEN_FAILED"`) {
 		t.Fatalf("status %d body %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestNotificationInboxHandlerRejectsInvalidLastSeen(t *testing.T) {
+	for _, body := range []string{"", "{}", `{"lastSeenPostSeq":null}`, `{"lastSeenPostSeq":0}`, `{"lastSeenPostSeq":-3}`,
+		`{"lastSeenPostSeq":"502"}`, `{"lastSeenPostSeq":1.5}`, `not json`} {
+		stub := &notificationInboxServicerStub{}
+		recorder := httptest.NewRecorder()
+		NewNotificationInboxHandler(stub).MarkSeen(recorder, authenticatedPushRequest(http.MethodPost, "/api/notifications/seen", body))
+
+		if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"code":"INVALID_LAST_SEEN"`) || stub.seenCalls != 0 {
+			t.Fatalf("body %q: status %d response %s", body, recorder.Code, recorder.Body.String())
+		}
 	}
 }

@@ -4,7 +4,6 @@ package repository
 import (
 	"database/sql"
 	"errors"
-	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
@@ -48,39 +47,52 @@ func (r *NotificationInboxRepository) ListNoticeNotifications(beforeSeq, size in
 	return rows, nil
 }
 
-// GetLastSeenAt returns when the member last opened the inbox, or nil if never.
-func (r *NotificationInboxRepository) GetLastSeenAt(userSeq int) (*time.Time, error) {
-	var lastSeen time.Time
-	err := r.db.Get(&lastSeen, `SELECT LAST_SEEN_AT FROM ALUMNI_NOTIFICATION_INBOX_STATE WHERE USR_SEQ = ?`, userSeq)
+// GetLastSeenPostSeq returns the newest notice SEQ the member has seen, or 0
+// if the member never opened the inbox.
+func (r *NotificationInboxRepository) GetLastSeenPostSeq(userSeq int) (int, error) {
+	var lastSeen int
+	err := r.db.Get(&lastSeen, `SELECT LAST_SEEN_POST_SEQ FROM ALUMNI_NOTIFICATION_INBOX_STATE WHERE USR_SEQ = ?`, userSeq)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+		return 0, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	return &lastSeen, nil
+	return lastSeen, err
 }
 
-// CountUnseenNotices counts inbox notices registered after the member last
-// opened the inbox. A member who never opened it has every inbox notice unseen.
+// CountUnseenNotices counts inbox notices newer than the member's last seen
+// SEQ. A member who never opened the inbox has every inbox notice unseen.
 func (r *NotificationInboxRepository) CountUnseenNotices(userSeq int) (int, error) {
 	var count int
 	err := r.db.Get(&count, `
 		SELECT COUNT(*) FROM WEO_BOARDBBS
 		WHERE `+noticeInboxFilter+`
-		  AND REG_DATE > COALESCE(
-		      (SELECT LAST_SEEN_AT FROM ALUMNI_NOTIFICATION_INBOX_STATE WHERE USR_SEQ = ?),
-		      '1970-01-01')
+		  AND SEQ > COALESCE(
+		      (SELECT LAST_SEEN_POST_SEQ FROM ALUMNI_NOTIFICATION_INBOX_STATE WHERE USR_SEQ = ?),
+		      0)
 	`, NotificationInboxWindowDays, userSeq)
 	return count, err
 }
 
-// MarkSeen records that the member opened the inbox now.
-func (r *NotificationInboxRepository) MarkSeen(userSeq int) error {
+// MarkSeenThrough records that the member's app has shown every notice up to
+// lastSeenPostSeq. The marker only moves forward (GREATEST), so an older or
+// retried request cannot bring the red dot back, and it is clamped to the
+// newest existing notice SEQ, so a bogus large value cannot hide notices that
+// are published later. The clamp is read first rather than via INSERT ... SELECT,
+// which would take shared locks on the notice rows it scans; a concurrent new
+// notice can only make the clamp stale-low, which never hides it.
+func (r *NotificationInboxRepository) MarkSeenThrough(userSeq, lastSeenPostSeq int) error {
+	var newestNoticeSeq int
+	if err := r.db.Get(&newestNoticeSeq, `SELECT COALESCE(MAX(SEQ), 0) FROM WEO_BOARDBBS WHERE GATE = 'NOTICE'`); err != nil {
+		return err
+	}
+	if lastSeenPostSeq > newestNoticeSeq {
+		lastSeenPostSeq = newestNoticeSeq
+	}
 	_, err := r.db.Exec(`
-		INSERT INTO ALUMNI_NOTIFICATION_INBOX_STATE (USR_SEQ, LAST_SEEN_AT, UPD_DATE)
-		VALUES (?, NOW(), NOW())
-		ON DUPLICATE KEY UPDATE LAST_SEEN_AT = NOW(), UPD_DATE = NOW()
-	`, userSeq)
+		INSERT INTO ALUMNI_NOTIFICATION_INBOX_STATE (USR_SEQ, LAST_SEEN_POST_SEQ, UPD_DATE)
+		VALUES (?, ?, NOW())
+		ON DUPLICATE KEY UPDATE
+		    LAST_SEEN_POST_SEQ = GREATEST(LAST_SEEN_POST_SEQ, VALUES(LAST_SEEN_POST_SEQ)),
+		    UPD_DATE = NOW()
+	`, userSeq, lastSeenPostSeq)
 	return err
 }

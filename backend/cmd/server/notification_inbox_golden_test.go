@@ -11,7 +11,7 @@ import (
 // TestGoldenNotificationInbox drives the inbox through the real router with push
 // disabled (as in the harness config): an operator publishes a notice, every open
 // stream gets notification.created, the badge and list show it unread, and
-// POST /api/notifications/seen clears it.
+// POST /api/notifications/seen clears it only through the SEQ the app displayed.
 func TestGoldenNotificationInbox(t *testing.T) {
 	s := newGoldenServer(t)
 	operator, member := defaultGoldenMember, goldenRecipient
@@ -62,18 +62,38 @@ func TestGoldenNotificationInbox(t *testing.T) {
 	invalid := s.request(t, http.MethodGet, "/api/notifications?cursor=page_2", nil, memberSession.AccessToken, "ios", "100", http.StatusBadRequest)
 	golden.Assert(t, "notifications_invalid_cursor_400", invalid)
 
-	s.request(t, http.MethodPost, "/api/notifications/seen", nil, memberSession.AccessToken, "ios", "100", http.StatusNoContent)
-	seen := decodeGolden[model.BadgeResponse](t, s.request(t, http.MethodGet, "/api/badges", nil, memberSession.AccessToken, "ios", "100", http.StatusOK))
-	if seen.UnreadNotifications != 0 {
-		t.Fatalf("seen must clear the notification badge, got %d", seen.UnreadNotifications)
-	}
+	badSeen := s.request(t, http.MethodPost, "/api/notifications/seen", map[string]any{}, memberSession.AccessToken, "ios", "100", http.StatusBadRequest)
+	golden.Assert(t, "notifications_seen_invalid_400", badSeen)
+
+	// A second notice lands while the member's inbox still shows only the first:
+	// seen-through the displayed SEQ must leave the new one unread.
+	s.request(t, http.MethodPost, "/api/admin/feed", map[string]any{
+		"subject": "합성 두 번째 소식", "contentMd": "합성 본문",
+	}, operatorSession.AccessToken, "android", "100", http.StatusCreated)
+	memberStream.next(t, "notification.created")
+	s.request(t, http.MethodPost, "/api/notifications/seen", map[string]any{"lastSeenPostSeq": noticeSeq}, memberSession.AccessToken, "ios", "100", http.StatusNoContent)
+	assertInboxBadge(t, s, memberSession.AccessToken, "ios", 1)
 	after := decodeGolden[model.NotificationListResponse](t, s.request(t, http.MethodGet, "/api/notifications", nil, memberSession.AccessToken, "ios", "100", http.StatusOK))
-	if len(after.Items) != 1 || after.Items[0].IsUnread {
-		t.Fatalf("seen notice must stay listed as read: %#v", after)
+	if len(after.Items) != 2 || !after.Items[0].IsUnread || after.Items[1].IsUnread || after.Items[1].PostSeq != noticeSeq {
+		t.Fatalf("only the notice published after the displayed one stays unread: %#v", after)
 	}
-	// The operator never opened the inbox, so the notice is still unread for them.
-	operatorBadges := decodeGolden[model.BadgeResponse](t, s.request(t, http.MethodGet, "/api/badges", nil, operatorSession.AccessToken, "android", "100", http.StatusOK))
-	if operatorBadges.UnreadNotifications != 1 {
-		t.Fatalf("seen state must be per member, operator unread = %d", operatorBadges.UnreadNotifications)
+
+	// A bogus large SEQ is clamped to the newest notice, so it clears the rest
+	// but cannot pre-mark future notices.
+	s.request(t, http.MethodPost, "/api/notifications/seen", map[string]any{"lastSeenPostSeq": 1 << 30}, memberSession.AccessToken, "ios", "100", http.StatusNoContent)
+	assertInboxBadge(t, s, memberSession.AccessToken, "ios", 0)
+	s.request(t, http.MethodPost, "/api/admin/feed", map[string]any{
+		"subject": "합성 세 번째 소식", "contentMd": "합성 본문",
+	}, operatorSession.AccessToken, "android", "100", http.StatusCreated)
+	assertInboxBadge(t, s, memberSession.AccessToken, "ios", 1)
+	// The operator never reported anything seen, so every notice is unread for them.
+	assertInboxBadge(t, s, operatorSession.AccessToken, "android", 3)
+}
+
+func assertInboxBadge(t *testing.T, s *goldenServer, accessToken, platform string, want int) {
+	t.Helper()
+	badges := decodeGolden[model.BadgeResponse](t, s.request(t, http.MethodGet, "/api/badges", nil, accessToken, platform, "100", http.StatusOK))
+	if badges.UnreadNotifications != want {
+		t.Fatalf("unreadNotifications = %d, want %d", badges.UnreadNotifications, want)
 	}
 }

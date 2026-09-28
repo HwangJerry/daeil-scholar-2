@@ -11,7 +11,7 @@ import (
 
 type notificationInboxStoreStub struct {
 	rows      []model.NoticeNotificationRow
-	lastSeen  *time.Time
+	lastSeen  int
 	beforeSeq int
 	size      int
 	unseen    int
@@ -27,12 +27,12 @@ func (s *notificationInboxStoreStub) ListNoticeNotifications(beforeSeq, size int
 	return s.rows, s.err
 }
 
-func (s *notificationInboxStoreStub) GetLastSeenAt(int) (*time.Time, error) { return s.lastSeen, s.err }
+func (s *notificationInboxStoreStub) GetLastSeenPostSeq(int) (int, error) { return s.lastSeen, s.err }
 
 func (s *notificationInboxStoreStub) CountUnseenNotices(int) (int, error) { return s.unseen, s.err }
 
-func (s *notificationInboxStoreStub) MarkSeen(userSeq int) error {
-	s.marked = append(s.marked, userSeq)
+func (s *notificationInboxStoreStub) MarkSeenThrough(userSeq, lastSeenPostSeq int) error {
+	s.marked = append(s.marked, userSeq, lastSeenPostSeq)
 	return s.err
 }
 
@@ -64,15 +64,13 @@ func TestNotificationInboxShapesNoticesLikeThePush(t *testing.T) {
 	}
 }
 
-// Only notices registered after the last visit are unread; one registered at
-// the exact moment of the visit was already on screen.
-func TestNotificationInboxMarksOnlyNoticesAfterLastSeenUnread(t *testing.T) {
-	lastSeen := time.Date(2026, 9, 28, 10, 0, 0, 0, inboxSeoul)
+// Only notices newer than the last seen SEQ are unread, whatever their
+// registration time: a notice published while the inbox was open stays unread.
+func TestNotificationInboxMarksOnlyNoticesAfterLastSeenSeqUnread(t *testing.T) {
+	now := time.Now()
 	store := &notificationInboxStoreStub{
-		lastSeen: &lastSeen,
-		rows: []model.NoticeNotificationRow{
-			inboxRow(3, lastSeen.Add(time.Second)), inboxRow(2, lastSeen), inboxRow(1, lastSeen.Add(-time.Hour)),
-		},
+		lastSeen: 2,
+		rows:     []model.NoticeNotificationRow{inboxRow(3, now.Add(-time.Hour)), inboxRow(2, now), inboxRow(1, now)},
 	}
 	response, err := NewNotificationInboxService(store).List(42, 0, 10)
 	if err != nil {
@@ -122,7 +120,7 @@ func TestNotificationInboxPropagatesStoreErrors(t *testing.T) {
 	if _, err := service.CountUnread(42); err == nil {
 		t.Fatal("count must fail when the store fails")
 	}
-	if err := service.MarkAllSeen(42); err == nil || len(store.marked) != 1 || store.marked[0] != 42 {
+	if err := service.MarkSeenThrough(42, 501); err == nil || len(store.marked) != 2 || store.marked[0] != 42 || store.marked[1] != 501 {
 		t.Fatalf("mark seen must reach the store for the member: %v %v", err, store.marked)
 	}
 }

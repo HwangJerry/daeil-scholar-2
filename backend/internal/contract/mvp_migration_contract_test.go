@@ -249,7 +249,7 @@ func mvpMigrationContracts() []migrationContract {
 			name: "078_create_notification_inbox_state.sql",
 			required: []string{
 				"CREATE TABLE IF NOT EXISTS ALUMNI_NOTIFICATION_INBOX_STATE",
-				"USR_SEQ", "LAST_SEEN_AT", "UPD_DATE", "PRIMARY KEY (USR_SEQ)",
+				"USR_SEQ", "LAST_SEEN_POST_SEQ INT NOT NULL DEFAULT 0", "UPD_DATE", "PRIMARY KEY (USR_SEQ)",
 				"ENGINE=InnoDB", "utf8mb4",
 			},
 		},
