@@ -136,27 +136,42 @@ func seedGoldenIdentityReadiness(t *testing.T, db *sqlx.DB) {
 	}
 }
 
+// goldenMemberSeed describes one synthetic approved member and its companion rows.
+type goldenMemberSeed struct {
+	seq                       int
+	usrID, name, phone, email string
+}
+
+var defaultGoldenMember = goldenMemberSeed{
+	seq: goldenMemberID, usrID: "golden_member", name: "합성 동문", phone: "01000000002", email: "member@example.test",
+}
+
 func seedGoldenMember(t *testing.T, db *sqlx.DB) {
 	t.Helper()
-	credential, err := service.NewPasswordHasher().NewCredential(goldenMemberID, model.IdentityProviderLocalUsername, goldenPassword)
+	seedGoldenMemberAs(t, db, defaultGoldenMember)
+}
+
+func seedGoldenMemberAs(t *testing.T, db *sqlx.DB, member goldenMemberSeed) {
+	t.Helper()
+	credential, err := service.NewPasswordHasher().NewCredential(int64(member.seq), model.IdentityProviderLocalUsername, goldenPassword)
 	if err != nil {
 		t.Fatal(err)
 	}
 	goldenExec(t, db, `INSERT INTO WEO_MEMBER
 		(USR_SEQ, USR_ID, USR_NAME, USR_PWD, USR_STATUS, USR_PHONE, USR_EMAIL, USR_FN, USR_DEPT, REG_DATE)
-		VALUES (?, 'golden_member', '합성 동문', ?, 'CCC', '01000000002', 'member@example.test', 20, '영어', NOW())`,
-		goldenMemberID, service.MysqlNativePassword(goldenPassword))
-	goldenExec(t, db, `INSERT INTO AUTH_ACCOUNT_STATE (ACCOUNT_ID, STATUS, CREATED_AT, UPDATED_AT) VALUES (?, 'ACTIVE', NOW(), NOW())`, goldenMemberID)
-	goldenExec(t, db, `INSERT INTO AUTH_PHONE_CLAIM (CANONICAL_PHONE, ACCOUNT_ID, CREATED_AT) VALUES ('01000000002', ?, NOW())`, goldenMemberID)
+		VALUES (?, ?, ?, ?, 'CCC', ?, ?, 20, '영어', NOW())`,
+		member.seq, member.usrID, member.name, service.MysqlNativePassword(goldenPassword), member.phone, member.email)
+	goldenExec(t, db, `INSERT INTO AUTH_ACCOUNT_STATE (ACCOUNT_ID, STATUS, CREATED_AT, UPDATED_AT) VALUES (?, 'ACTIVE', NOW(), NOW())`, member.seq)
+	goldenExec(t, db, `INSERT INTO AUTH_PHONE_CLAIM (CANONICAL_PHONE, ACCOUNT_ID, CREATED_AT) VALUES (?, ?, NOW())`, member.phone, member.seq)
 	goldenExec(t, db, `INSERT INTO ALUMNI_VERIFICATION
 		(USR_SEQ, STATUS, GRADUATION_YEAR, COHORT, DEPARTMENT, SUBMITTED_AT, REVIEWED_AT, CREATED_AT, UPDATED_AT)
-		VALUES (?, 'approved', 2007, '20', '영어', NOW(), NOW(), NOW(), NOW())`, goldenMemberID)
+		VALUES (?, 'approved', 2007, '20', '영어', NOW(), NOW(), NOW(), NOW())`, member.seq)
 	goldenExec(t, db, `INSERT INTO AUTH_IDENTITY
 		(IDENTITY_ID, ACCOUNT_ID, PROVIDER, SUBJECT_KEY, STATUS, VERIFIED_AT, CREATED_AT, UPDATED_AT)
-		VALUES (?, ?, 'LOCAL_USERNAME', 'golden_member', 'ACTIVE', NOW(), NOW(), NOW())`, goldenMemberID, goldenMemberID)
+		VALUES (?, ?, 'LOCAL_USERNAME', ?, 'ACTIVE', NOW(), NOW(), NOW())`, member.seq, member.seq, member.usrID)
 	goldenExec(t, db, `INSERT INTO AUTH_PASSWORD_CREDENTIAL
 		(IDENTITY_ID, PROVIDER, ALGORITHM, PARAMETERS_TEXT, PASSWORD_HASH, STATUS, CREATED_AT, UPDATED_AT)
-		VALUES (?, 'LOCAL_USERNAME', ?, ?, ?, 'ACTIVE', NOW(), NOW())`, goldenMemberID, credential.Algorithm, credential.ParametersText, credential.PasswordHash)
+		VALUES (?, 'LOCAL_USERNAME', ?, ?, ?, 'ACTIVE', NOW(), NOW())`, member.seq, credential.Algorithm, credential.ParametersText, credential.PasswordHash)
 }
 
 func goldenExec(t *testing.T, db *sqlx.DB, query string, args ...any) {
@@ -193,17 +208,7 @@ func (s *goldenServer) request(t *testing.T, method, path string, body any, acce
 	}
 	// Native clients send JSON and bearer auth, without browser Origin or cookies.
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-App-Platform", platform)
-	req.Header.Set("X-App-Build", build)
-	req.Header.Set("X-App-Version", "1.0.0")
-	osVersion := "18.1"
-	if platform == "android" {
-		osVersion = "34"
-	}
-	req.Header.Set("X-App-OS-Version", osVersion)
-	if accessToken != "" {
-		req.Header.Set("Authorization", "Bearer "+accessToken)
-	}
+	setGoldenClientHeaders(req, accessToken, platform, build)
 	resp, err := s.client.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -216,10 +221,24 @@ func (s *goldenServer) request(t *testing.T, method, path string, body any, acce
 	if resp.StatusCode != wantStatus {
 		t.Fatalf("%s %s: status %d, want %d: %s", method, path, resp.StatusCode, wantStatus, data)
 	}
-	if resp.Header.Get("Content-Type") != "application/json" {
+	if wantStatus != http.StatusNoContent && resp.Header.Get("Content-Type") != "application/json" {
 		t.Fatalf("unexpected content type: %s", resp.Header.Get("Content-Type"))
 	}
 	return data
+}
+
+func setGoldenClientHeaders(req *http.Request, accessToken, platform, build string) {
+	req.Header.Set("X-App-Platform", platform)
+	req.Header.Set("X-App-Build", build)
+	req.Header.Set("X-App-Version", "1.0.0")
+	osVersion := "18.1"
+	if platform == "android" {
+		osVersion = "34"
+	}
+	req.Header.Set("X-App-OS-Version", osVersion)
+	if accessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+	}
 }
 
 func decodeGolden[T any](t *testing.T, data []byte) T {
@@ -233,20 +252,30 @@ func decodeGolden[T any](t *testing.T, data []byte) T {
 
 func (s *goldenServer) login(t *testing.T, platform string) ([]byte, model.MobileSession) {
 	t.Helper()
+	return s.loginAs(t, defaultGoldenMember, platform)
+}
+
+func (s *goldenServer) loginAs(t *testing.T, member goldenMemberSeed, platform string) ([]byte, model.MobileSession) {
+	t.Helper()
 	body := s.request(t, http.MethodPost, "/api/auth/mobile/login", map[string]string{
-		"usrId": "golden_member", "password": goldenPassword,
+		"usrId": member.usrID, "password": goldenPassword,
 	}, "", platform, "100", http.StatusOK)
 	result := decodeGolden[model.SocialAuthResult](t, body)
 	if result.Status != model.SocialAuthAuthenticated || result.Session == nil {
 		t.Fatalf("login did not authenticate: %s", body)
 	}
-	assertGoldenSession(t, *result.Session)
+	assertGoldenSessionFor(t, *result.Session, member.seq)
 	return body, *result.Session
 }
 
 func assertGoldenSession(t *testing.T, session model.MobileSession) {
 	t.Helper()
-	if session.User.USRSeq != goldenMemberID || session.User.Verification.Status != model.VerificationApproved ||
+	assertGoldenSessionFor(t, session, goldenMemberID)
+}
+
+func assertGoldenSessionFor(t *testing.T, session model.MobileSession, memberSeq int) {
+	t.Helper()
+	if session.User.USRSeq != memberSeq || session.User.Verification.Status != model.VerificationApproved ||
 		session.AccessToken == "" || session.RefreshToken == "" || session.SID == "" || session.JTI == "" ||
 		session.AccessIssuedAt <= 0 || session.AccessExpiresAt-session.AccessIssuedAt != 15*60 ||
 		session.RefreshExpiresAt-session.AccessIssuedAt != 30*24*60*60 {

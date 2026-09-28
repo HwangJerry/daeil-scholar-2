@@ -1,0 +1,15 @@
+{
+  "data": {
+    "conversationUserSeq": 100,
+    "createdAt": "<timestamp>",
+    "eventId": 1,
+    "messageId": 1,
+    "preview": "합성 실시간 쪽지",
+    "sender": {
+      "name": "합성 동문",
+      "userSeq": 100
+    }
+  },
+  "event": "message.created",
+  "raw": "id: 1\nevent: message.created\ndata: {\"conversationUserSeq\":100,\"createdAt\":\"<timestamp>\",\"eventId\":1,\"messageId\":1,\"preview\":\"합성 실시간 쪽지\",\"sender\":{\"name\":\"합성 동문\",\"userSeq\":100}}\n\n"
+}

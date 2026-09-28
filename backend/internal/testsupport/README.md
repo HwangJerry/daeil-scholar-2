@@ -75,6 +75,10 @@ real middleware, handlers, services and repositories. Fixtures are committed in
 | `refresh_success`, `auth_me` | Rotated session and approved member |
 | `app_update_required_426` | Forced update error below the minimum build |
 | `account_deletion_request`, `account_deletion_receipt` | Cancellable deletion acceptance (202) and unauthenticated receipt lookup |
+| `realtime_ready` | SSE `ready` frame written right after subscription (TS16) |
+| `realtime_message_created` | `message.created` on the recipient's stream after `POST /api/messages` (TS16) |
+| `realtime_conversation_updated_sender`, `realtime_conversation_updated_recipient` | `conversation.updated` on each party's stream; `conversationUserSeq` is the other party (TS16) |
+| `realtime_message_read` | `message.read` on the sender's stream after `PUT /api/messages/conversations/{userSeq}/read` (TS16) |
 
 From `backend/`, regenerate and then compare without update mode:
 
@@ -83,9 +87,27 @@ DFLH_DOCKER_TESTS=1 GOLDEN_UPDATE=1 go test ./cmd/server -run Golden -count=1
 DFLH_DOCKER_TESTS=1 go test ./cmd/server -run Golden -count=1 -v
 ```
 
-Docker-off runs skip the four top-level golden tests. Docker-unavailable runs
+Docker-off runs skip the five top-level golden tests. Docker-unavailable runs
 also skip cleanly through the shared harness. Review generated diffs before
 committing; snapshots are always captured from HTTP responses.
+
+### Realtime SSE goldens (TS16)
+
+`cmd/server/realtime_golden_test.go` opens `GET /api/messages/stream` over real HTTP
+for two synthetic approved members (A = 100 `golden_member`, B = 101
+`golden_recipient`), waits for both `ready` frames, then A sends B a message and B
+marks the conversation read. Each `realtime_*.json` stores
+`{"event", "data", "raw"}`: `data` is the parsed payload and `raw` is the exact
+frame text (`id:`/`event:`/`data:` lines plus the terminating blank line) rebuilt
+from the same normalized payload, so apps can feed `raw` line by line to their
+real SSE decoders. The hub's clock-based `eventId` is renumbered from 1 in publish
+order in both the `id:` line and `data.eventId` (still numbers); message and member
+IDs are fixed by the fresh database; `createdAt`/`readAt` become `<timestamp>`. Before
+normalization the test checks frame shape, `data.eventId == id:`, and the business
+fields against the send response. The same `Golden` run pattern regenerates them.
+They exist because Android kept decoding pre-`8dcba0b` event names for two months
+(fixed `1528631`). Their first iOS run exposed a separate stream-reader bug, recorded
+in the app's `docs/operations/UNIT_TESTS.md` (TS16).
 
 The harness loads configuration from explicitly set test environment variables,
 never env files. SMS delivery and push are disabled; `01000000001` / `123456`
