@@ -135,3 +135,52 @@ func receiveEvent(t *testing.T, sub *Subscriber) Event {
 		return Event{}
 	}
 }
+
+func TestHubPublishToConnectedReachesEveryOpenStreamWithOwnEventID(t *testing.T) {
+	hub := NewHub(zerolog.Nop())
+	first := hub.Subscribe(42)
+	defer hub.Unsubscribe(first)
+	second := hub.Subscribe(42)
+	defer hub.Unsubscribe(second)
+	other := hub.Subscribe(43)
+	defer hub.Unsubscribe(other)
+
+	payload := map[string]any{"notificationId": "notice-501"}
+	if users := hub.PublishToConnected(Event{Type: "notification.created", Payload: payload}); users != 2 {
+		t.Fatalf("published to %d users, want 2", users)
+	}
+	if _, mutated := payload["eventId"]; mutated {
+		t.Fatal("caller's payload must not be mutated")
+	}
+	firstEvent, secondEvent, otherEvent := receiveEvent(t, first), receiveEvent(t, second), receiveEvent(t, other)
+	for _, event := range []Event{firstEvent, secondEvent, otherEvent} {
+		if event.Type != "notification.created" || event.Payload.(map[string]any)["notificationId"] != "notice-501" {
+			t.Fatalf("unexpected event %#v", event)
+		}
+	}
+	ownID := firstEvent.Payload.(map[string]any)["eventId"].(int64)
+	otherID := otherEvent.Payload.(map[string]any)["eventId"].(int64)
+	if ownID <= 0 || otherID <= 0 || ownID == otherID {
+		t.Fatalf("each user needs its own positive eventId: %d, %d", ownID, otherID)
+	}
+	if secondEvent.Payload.(map[string]any)["eventId"].(int64) != ownID {
+		t.Fatal("two streams of the same user share that user's event")
+	}
+}
+
+func TestHubPublishToConnectedSkipsOfflineUsers(t *testing.T) {
+	hub := NewHub(zerolog.Nop())
+	gone := hub.Subscribe(42)
+	hub.Unsubscribe(gone)
+
+	if users := hub.PublishToConnected(Event{Type: "notification.created", Payload: map[string]any{}}); users != 0 {
+		t.Fatalf("published to %d users, want 0", users)
+	}
+	replay := hub.Subscribe(42, 0)
+	defer hub.Unsubscribe(replay)
+	select {
+	case event := <-replay.Ch:
+		t.Fatalf("offline user must not accumulate history: %#v", event)
+	case <-time.After(20 * time.Millisecond):
+	}
+}
