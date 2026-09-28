@@ -1,0 +1,10 @@
+{
+  "data": {
+    "conversationUserSeq": 101,
+    "eventId": 4,
+    "readAt": "<timestamp>",
+    "throughMessageId": 1
+  },
+  "event": "message.read",
+  "raw": "id: 4\nevent: message.read\ndata: {\"conversationUserSeq\":101,\"eventId\":4,\"readAt\":\"<timestamp>\",\"throughMessageId\":1}\n\n"
+}

@@ -1,0 +1,7 @@
+{
+  "data": {
+    "ok": true
+  },
+  "event": "ready",
+  "raw": "event: ready\ndata: {\"ok\":true}\n\n"
+}

@@ -1,0 +1,8 @@
+{
+  "data": {
+    "conversationUserSeq": 101,
+    "eventId": 2
+  },
+  "event": "conversation.updated",
+  "raw": "id: 2\nevent: conversation.updated\ndata: {\"conversationUserSeq\":101,\"eventId\":2}\n\n"
+}
