@@ -1,0 +1,26 @@
+{
+  "items": [
+    {
+      "id": "notice-502",
+      "type": "admin.notice",
+      "title": "새 소식",
+      "body": "장학금 안내",
+      "createdAt": "2026-07-28T01:00:00Z",
+      "isUnread": true,
+      "deepLink": "/feed/502",
+      "postSeq": 502
+    },
+    {
+      "id": "notice-501",
+      "type": "admin.notice",
+      "title": "새 소식",
+      "body": "동문회 정기총회",
+      "createdAt": "2026-07-20T01:00:00Z",
+      "isUnread": false,
+      "deepLink": "/feed/501",
+      "postSeq": 501
+    }
+  ],
+  "nextCursor": "seq_501",
+  "hasMore": true
+}

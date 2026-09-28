@@ -22,6 +22,7 @@ var canonicalFixtureNames = []string{
 	"error-approval-required.json",
 	"message-event.json",
 	"message-send.json",
+	"notifications-list.json",
 	"push-device.json",
 	"push-message.json",
 	"push-notice.json",
@@ -105,6 +106,36 @@ func TestBlockedSendFixtureDoesNotRevealDeliveryState(t *testing.T) {
 		if _, exists := fixture[key]; exists {
 			t.Fatalf("message send fixture leaks delivery state through %q", key)
 		}
+	}
+}
+
+// The inbox mirrors the notice push: its id is the push eventId, and the page
+// uses the same seq_<n> cursor as the feed.
+func TestNotificationListFixtureMirrorsNoticePush(t *testing.T) {
+	fixture := readFixture(t, "notifications-list.json")
+	if !reflect.DeepEqual(sortedKeys(fixture), []string{"hasMore", "items", "nextCursor"}) {
+		t.Fatalf("notification list keys = %v", sortedKeys(fixture))
+	}
+	items, ok := fixture["items"].([]any)
+	if !ok || len(items) == 0 {
+		t.Fatal("notification list fixture must contain items")
+	}
+	push := readFixture(t, "push-notice.json")
+	wantKeys := []string{"body", "createdAt", "deepLink", "id", "isUnread", "postSeq", "title", "type"}
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok || !reflect.DeepEqual(sortedKeys(item), wantKeys) {
+			t.Fatalf("notification item keys = %v, want %v", sortedKeys(item), wantKeys)
+		}
+		if item["type"] != push["type"] || item["title"] != push["senderName"] {
+			t.Fatalf("notification item must use the notice push type and title: %v", item)
+		}
+		if _, isNumber := item["postSeq"].(float64); !isNumber {
+			t.Fatalf("postSeq must be a JSON number: %v", item["postSeq"])
+		}
+	}
+	if cursor, _ := fixture["nextCursor"].(string); len(cursor) < 5 || cursor[:4] != "seq_" {
+		t.Fatalf("nextCursor = %v, want seq_<n>", fixture["nextCursor"])
 	}
 }
 

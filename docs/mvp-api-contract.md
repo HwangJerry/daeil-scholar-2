@@ -813,6 +813,81 @@ device와 preferences endpoint는 모두 인증 및 `ALUMNI_VERIFICATION.STATUS=
 - 공지 push의 enqueue는 chat과 달리 blocking이다. 대규모 broadcast가 queue 용량 때문에 조용히 유실되지 않으며, server shutdown 시에만 남은 수신자를 포기한다.
 - 발송 직전 공지가 여전히 공개 상태인지(`OPEN_YN='Y'`) 확인한다. fan-out 중 삭제된 공지는 발송하지 않는다.
 
+### 10.6 알림함 (header bell)
+
+앱 header의 종 아이콘이 여는 알림 목록이다. 범위는 **관리자 새 소식(공지) push만**이며 채팅·동문 인증 결과는 포함하지 않는다. 회원별 알림 row를 만들지 않고, 공개 중인 공지(`WEO_BOARDBBS` `GATE='NOTICE' AND OPEN_YN='Y'`) 가운데 최근 **90일** 안에 등록된 것을 알림 형태로 보여 준다. 회원별 상태는 "마지막 확인 시각" 하나(`ALUMNI_NOTIFICATION_INBOX_STATE`, migration `078`)뿐이다.
+
+- push 설정(`noticeEnabled`, `messageEnabled`)이나 서버의 push 활성 여부와 무관하게 모든 공지가 보인다.
+- 인증: 로그인 필요(`401 UNAUTHORIZED`). 공지는 공개 feed와 같은 자료이고 공지 push가 승인 대기 회원에게도 가므로 **동문 승인은 요구하지 않는다**. 단 `GET /api/badges`와 `GET /api/messages/stream`은 기존대로 승인 동문 전용이다.
+- 공지를 삭제(비공개)하면 목록과 unread 수에서 즉시 빠진다. 수정해도 새 알림이 되지 않으며 `body`만 현재 제목으로 바뀐다.
+
+#### 목록
+
+`GET /api/notifications?cursor=seq_502&size=10`
+
+- 최신순(`postSeq` 내림차순). `cursor`가 없으면 첫 page, 있으면 그 공지보다 오래된 것부터.
+- `size` 기본 10, 최대 20(feed와 동일). 0 이하나 숫자가 아니면 기본값.
+- `cursor`는 `seq_<n>`(양의 정수 `n`) 형식이다. 이 외의 값은 `400 INVALID_CURSOR`.
+- `nextCursor`는 `hasMore=true`일 때만 문자열이고 아니면 `null`이다. 다음 요청의 `cursor`에 그대로 넣는다.
+
+```json
+{
+  "items": [
+    {
+      "id": "notice-502",
+      "type": "admin.notice",
+      "title": "새 소식",
+      "body": "장학금 안내",
+      "createdAt": "2026-07-28T01:00:00Z",
+      "isUnread": true,
+      "deepLink": "/feed/502",
+      "postSeq": 502
+    }
+  ],
+  "nextCursor": "seq_502",
+  "hasMore": true
+}
+```
+
+- `id`는 같은 공지 push의 `eventId`(`notice-<SEQ>`)와 같다. push로 받은 알림과 목록 항목을 이 값으로 맞춘다.
+- `type`은 공지 push와 같은 `admin.notice`. `title`은 고정 `"새 소식"`(template title 편집과 무관), `body`는 공지 원문 제목.
+- `createdAt`은 공지 등록 시각(UTC RFC 3339).
+- `isUnread`는 마지막 확인 시각 **이후**에 등록된 공지면 `true`. 한 번도 확인하지 않은 회원은 모두 `true`.
+- `deepLink`는 앱 내부 경로 `/feed/<SEQ>`, `postSeq`는 JSON number다(공지 push의 `postSeq`는 문자열인 점에 유의).
+- 실패: `500 NOTIFICATIONS_FAILED`.
+
+#### 모두 확인
+
+`POST /api/notifications/seen`
+
+- body 없음. 성공 `204`. 알림함을 열 때 호출하며 지금까지의 알림을 모두 확인 처리한다(red dot 해제).
+- 모바일 client는 `Origin`/`Referer` 없이 bearer로 호출하므로 CSRF 검사를 통과한다(다른 모바일 POST와 동일).
+- 실패: `500 NOTIFICATIONS_SEEN_FAILED`.
+
+#### badge
+
+`GET /api/badges`에 `unreadNotifications`가 추가된다. `unreadMessages`는 그대로다.
+
+```json
+{ "unreadMessages": 0, "unreadNotifications": 1 }
+```
+
+- `unreadNotifications`는 목록에서 `isUnread=true`인 항목 수와 같은 기준(90일·공개 공지·마지막 확인 이후)이다. 계산이 실패하면 해당 값만 `0`으로 응답한다.
+
+#### SSE `notification.created`
+
+관리자가 새 소식을 **등록**하면, 그 순간 `GET /api/messages/stream`에 연결된 **모든** 회원 stream에 전송한다. push 비활성·push 수신 거부와 무관하다. 연결되지 않은 회원에게는 저장하지 않으며, 다음 badge 조회나 목록 조회로 따라잡는다.
+
+```text
+id: 12002
+event: notification.created
+data: {"eventId":12002,"notificationId":"notice-502","type":"admin.notice","title":"새 소식","body":"장학금 안내","deepLink":"/feed/502","postSeq":502,"createdAt":"2026-07-28T01:00:00Z"}
+```
+
+- `eventId`는 다른 SSE event와 같은 hub의 **숫자** event ID이며 SSE `id:`와 같다(`Last-Event-ID` 재연결 계약 유지). 공지 식별자는 `notificationId`(`notice-<SEQ>`)로, 목록의 `id`와 같다.
+- 앱은 이 event를 받으면 red dot을 켜거나 badge/목록을 다시 읽는다. 기존 `message.*`, `conversation.updated` event는 변경 없다.
+- 수정(Update)·상단 고정(TogglePin)은 event를 보내지 않는다.
+
 ## 11. 공개 기부 요약
 
 `GET /api/donation/summary`
@@ -1027,7 +1102,7 @@ validation 실패 HTTP `422`:
 
 ### 채팅·차단·push
 
-`INVALID_USER_SEQ`, `INVALID_MESSAGE`, `MESSAGE_TOO_LONG`, `MESSAGE_NOT_FOUND`, `INVALID_CURSOR`, `INVALID_DEVICE_TOKEN`, `INVALID_PLATFORM`, `PUSH_PROVIDER_UNAVAILABLE`
+`INVALID_USER_SEQ`, `INVALID_MESSAGE`, `MESSAGE_TOO_LONG`, `MESSAGE_NOT_FOUND`, `INVALID_CURSOR`, `INVALID_DEVICE_TOKEN`, `INVALID_PLATFORM`, `PUSH_PROVIDER_UNAVAILABLE`, `NOTIFICATIONS_FAILED`, `NOTIFICATIONS_SEEN_FAILED`
 
 차단된 발신자에게는 `BLOCKED` 계열 오류를 반환하지 않는다.
 
@@ -1067,6 +1142,7 @@ canonical fixture는 `docs/contracts/fixtures/`에 둔다.
 - `alumni-search.json`
 - `message-send.json`
 - `message-event.json`
+- `notifications-list.json`
 - `push-device.json`
 - `push-preferences.json`
 - `donation-summary.json`
