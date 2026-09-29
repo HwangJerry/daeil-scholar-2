@@ -3,6 +3,7 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,8 @@ type mockFeedRepo struct {
 	files        []model.FileRecord
 	filesErr     error
 	ownerSeq     int
+	categories   []model.FeedCategory
+	categoryErr  error
 }
 
 func (m *mockFeedRepo) GetNotices(cursor int, size int, heroSeq int, userSeq int) ([]model.NoticeItem, error) {
@@ -44,6 +47,9 @@ func (m *mockFeedRepo) GetPrevPost(seq int) (*model.PostSibling, error)    { ret
 func (m *mockFeedRepo) GetNextPost(seq int) (*model.PostSibling, error)    { return m.nextPost, nil }
 func (m *mockFeedRepo) GetFilesByPost(seq int) ([]model.FileRecord, error) { return m.files, m.filesErr }
 func (m *mockFeedRepo) GetPostOwnerSeq(seq int) (int, error)               { return m.ownerSeq, nil }
+func (m *mockFeedRepo) GetOpenFeedCategories() ([]model.FeedCategory, error) {
+	return m.categories, m.categoryErr
+}
 
 func newTestFeedService(repo *mockFeedRepo) *FeedService {
 	cacheStore := cache.New(5*time.Minute, 10*time.Minute)
@@ -187,5 +193,33 @@ func TestGetFeed_SerializesNoticeType(t *testing.T) {
 	}
 	if !strings.Contains(string(payload), `"type":"notice"`) {
 		t.Fatalf("expected serialized notice type, got %s", payload)
+	}
+}
+
+func TestGetFeed_IncludesOpenCategoriesInOrder(t *testing.T) {
+	categories := []model.FeedCategory{{Code: "notice", Name: "공지"}, {Code: "etc", Name: "기타"}}
+	repo := &mockFeedRepo{notices: []model.NoticeItem{{SEQ: 5, Category: "etc", CategoryName: "기타"}}, categories: categories}
+	resp, err := newTestFeedService(repo).GetFeed(0, 10, 0, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	body, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"categories":[{"code":"notice","name":"공지"},{"code":"etc","name":"기타"}]`,
+		`"category":"etc","categoryName":"기타"`,
+	} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("feed JSON missing %s: %s", want, body)
+		}
+	}
+}
+
+func TestGetFeed_CategoryErrorFailsTheFeed(t *testing.T) {
+	repo := &mockFeedRepo{notices: []model.NoticeItem{}, categoryErr: errors.New("db down")}
+	if _, err := newTestFeedService(repo).GetFeed(0, 10, 0, 0); err == nil {
+		t.Fatal("expected the category read error")
 	}
 }

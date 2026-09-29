@@ -35,6 +35,10 @@ func (s *FeedService) GetFeed(cursor int, size int, excludeSeq int, userSeq int)
 	if err != nil {
 		return nil, err
 	}
+	categories, err := s.repo.GetOpenFeedCategories()
+	if err != nil {
+		return nil, err
+	}
 	hasMore := len(notices) > size
 	if hasMore {
 		notices = notices[:size]
@@ -46,7 +50,7 @@ func (s *FeedService) GetFeed(cursor int, size int, excludeSeq int, userSeq int)
 			NoticeItem: &notices[i],
 		})
 	}
-	response := &model.FeedResponse{Items: items, HasMore: hasMore}
+	response := &model.FeedResponse{Items: items, HasMore: hasMore, Categories: categories}
 	if len(notices) > 0 {
 		last := notices[len(notices)-1]
 		response.NextCursor = "seq_" + strconv.Itoa(last.SEQ)

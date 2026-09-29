@@ -28,8 +28,8 @@ func (r *FeedRepository) GetNotices(cursor int, size int, heroSeq int, userSeq i
 		        WHERE JOIN_SEQ = b.SEQ AND BC_TYPE = 'B' AND OPEN_YN = 'Y') AS comment_cnt,
 		       IFNULL((SELECT 1 FROM WEO_BOARDLIKE
 		               WHERE BBS_SEQ = b.SEQ AND USR_SEQ = ? AND OPEN_YN = 'Y'
-		               LIMIT 1), 0) AS user_liked
-		FROM WEO_BOARDBBS b
+		               LIMIT 1), 0) AS user_liked,` + feedCategoryColumns + `
+		FROM WEO_BOARDBBS b` + feedCategoryJoin + `
 		WHERE b.GATE = 'NOTICE' AND b.OPEN_YN = 'Y'
 	`)
 	args = append(args, userSeq)
@@ -54,11 +54,11 @@ func (r *FeedRepository) GetNotices(cursor int, size int, heroSeq int, userSeq i
 func (r *FeedRepository) GetHeroNotice() (*model.NoticeItem, error) {
 	var notice model.NoticeItem
 	err := r.DB.Get(&notice, `
-		SELECT SEQ, SUBJECT, IFNULL(SUMMARY,'') AS SUMMARY, IFNULL(THUMBNAIL_URL,'') AS THUMBNAIL_URL,
-		       REG_DATE, REG_NAME, HIT, IS_PINNED
-		FROM WEO_BOARDBBS
-		WHERE GATE = 'NOTICE' AND OPEN_YN = 'Y'
-		ORDER BY (IS_PINNED = 'Y') DESC, SEQ DESC
+		SELECT b.SEQ, b.SUBJECT, IFNULL(b.SUMMARY,'') AS SUMMARY, IFNULL(b.THUMBNAIL_URL,'') AS THUMBNAIL_URL,
+		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED,`+feedCategoryColumns+`
+		FROM WEO_BOARDBBS b`+feedCategoryJoin+`
+		WHERE b.GATE = 'NOTICE' AND b.OPEN_YN = 'Y'
+		ORDER BY (b.IS_PINNED = 'Y') DESC, b.SEQ DESC
 		LIMIT 1
 	`)
 	if err != nil {
@@ -73,13 +73,13 @@ func (r *FeedRepository) GetHeroNotice() (*model.NoticeItem, error) {
 func (r *FeedRepository) GetNoticeDetail(seq int) (*model.NoticeDetail, error) {
 	var detail model.NoticeDetail
 	err := r.DB.Get(&detail, `
-		SELECT SEQ, SUBJECT, IFNULL(CONTENTS,'') AS CONTENTS,
-		       IFNULL(CONTENTS_MD,'') AS CONTENTS_MD,
-		       IFNULL(CONTENT_FORMAT,'LEGACY') AS CONTENT_FORMAT,
-		       IFNULL(SUMMARY,'') AS SUMMARY, IFNULL(THUMBNAIL_URL,'') AS THUMBNAIL_URL,
-		       REG_DATE, REG_NAME, HIT, IS_PINNED
-		FROM WEO_BOARDBBS
-		WHERE SEQ = ? AND GATE = 'NOTICE' AND OPEN_YN = 'Y'
+		SELECT b.SEQ, b.SUBJECT, IFNULL(b.CONTENTS,'') AS CONTENTS,
+		       IFNULL(b.CONTENTS_MD,'') AS CONTENTS_MD,
+		       IFNULL(b.CONTENT_FORMAT,'LEGACY') AS CONTENT_FORMAT,
+		       IFNULL(b.SUMMARY,'') AS SUMMARY, IFNULL(b.THUMBNAIL_URL,'') AS THUMBNAIL_URL,
+		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED,`+feedCategoryColumns+`
+		FROM WEO_BOARDBBS b`+feedCategoryJoin+`
+		WHERE b.SEQ = ? AND b.GATE = 'NOTICE' AND b.OPEN_YN = 'Y'
 		LIMIT 1
 	`, seq)
 	if err != nil {
@@ -89,6 +89,20 @@ func (r *FeedRepository) GetNoticeDetail(seq int) (*model.NoticeDetail, error) {
 		return nil, err
 	}
 	return &detail, nil
+}
+
+// GetOpenFeedCategories returns the categories apps show as feed tabs, in order.
+func (r *FeedRepository) GetOpenFeedCategories() ([]model.FeedCategory, error) {
+	categories := make([]model.FeedCategory, 0)
+	err := r.DB.Select(&categories, `
+		SELECT FC_CODE, FC_NAME FROM ALUMNI_FEED_CATEGORY
+		WHERE OPEN_YN = 'Y'
+		ORDER BY SORT_ORDER ASC, FC_SEQ ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return categories, nil
 }
 
 func (r *FeedRepository) IncrementHit(seq int) error {

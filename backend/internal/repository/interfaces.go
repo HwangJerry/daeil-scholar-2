@@ -27,6 +27,7 @@ type FeedQuerier interface {
 	GetNextPost(seq int) (*model.PostSibling, error)
 	GetFilesByPost(seq int) ([]model.FileRecord, error)
 	GetPostOwnerSeq(seq int) (int, error)
+	GetOpenFeedCategories() ([]model.FeedCategory, error)
 }
 
 // MessageQuerier defines the methods used by MessageService for messaging operations.

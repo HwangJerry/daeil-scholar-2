@@ -39,6 +39,9 @@ func (s *stubFeedRepo) GetPrevPost(seq int) (*model.PostSibling, error)  { retur
 func (s *stubFeedRepo) GetNextPost(seq int) (*model.PostSibling, error)  { return nil, nil }
 func (s *stubFeedRepo) GetFilesByPost(seq int) ([]model.FileRecord, error) { return nil, nil }
 func (s *stubFeedRepo) GetPostOwnerSeq(seq int) (int, error)             { return 0, nil }
+func (s *stubFeedRepo) GetOpenFeedCategories() ([]model.FeedCategory, error) {
+	return nil, nil
+}
 
 func newTestLikeHandler() *LikeHandler {
 	svc := service.NewLikeService(&stubLikeRepo{}, &stubFeedRepo{})

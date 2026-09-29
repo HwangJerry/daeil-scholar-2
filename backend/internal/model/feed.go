@@ -37,6 +37,8 @@ type NoticeItem struct {
 	CommentCnt   int    `db:"comment_cnt" json:"commentCnt"`
 	IsPinned     string `db:"IS_PINNED" json:"isPinned,omitempty"`
 	UserLiked    bool   `db:"user_liked" json:"userLiked"`
+	Category     string `db:"category" json:"category"`
+	CategoryName string `db:"category_name" json:"categoryName"`
 }
 
 // NoticeDetail is the full detail of a notice post (DB scan target).
@@ -52,6 +54,10 @@ type NoticeDetail struct {
 	RegName       string `db:"REG_NAME" json:"regName"`
 	Hit           int    `db:"HIT" json:"hit"`
 	IsPinned      string `db:"IS_PINNED" json:"isPinned"`
+	Category      string `db:"category" json:"category"`
+	CategoryName  string `db:"category_name" json:"categoryName"`
+	// CategorySeq is selected only by the admin read, so public details omit it.
+	CategorySeq   int    `db:"category_seq" json:"categorySeq,omitempty"`
 	LikeCnt       int    `json:"likeCnt"`
 	CommentCnt    int    `json:"commentCnt"`
 	UserLiked     bool   `json:"userLiked"`
@@ -129,6 +135,8 @@ type FeedResponse struct {
 	Items      []FeedItem `json:"items"`
 	NextCursor string     `json:"nextCursor"`
 	HasMore    bool       `json:"hasMore"`
+	// Categories lists the open (app tab) categories in admin order.
+	Categories []FeedCategory `json:"categories"`
 }
 
 // OGData holds the minimum fields needed for bot OG rendering.
