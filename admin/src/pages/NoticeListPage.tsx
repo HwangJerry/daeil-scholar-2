@@ -6,6 +6,7 @@ import { Input } from '../components/ui/Input.tsx';
 import { Pagination } from '../components/ui/Pagination.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
 import { ErrorState } from '../components/ui/ErrorState.tsx';
+import { NoticeCategoryFilter } from '../components/notice/NoticeCategoryFilter.tsx';
 import { SortableHeader } from '../components/ui/SortableHeader.tsx';
 import { useAdminNoticeList } from '../hooks/useAdminNoticeList.ts';
 import { useNoticeListActions } from '../hooks/useNoticeListActions.ts';
@@ -14,12 +15,13 @@ import type { AdminNoticeListItem } from '../types/api.ts';
 
 const SORT_ACCESSORS: Record<string, (item: AdminNoticeListItem) => string | number | null> = {
   subject: (n) => n.subject,
+  categoryName: (n) => n.categoryName,
   regDate: (n) => n.regDate,
   hit: (n) => n.hit,
 };
 
 export function NoticeListPage() {
-  const { data, isLoading, isError, refetch, page, pageSize, search, setPage, handleSearchChange, handlePageSizeChange } = useAdminNoticeList();
+  const { data, isLoading, isError, refetch, page, pageSize, search, category, setPage, handleSearchChange, handleCategoryChange, handlePageSizeChange } = useAdminNoticeList();
   const { togglePin } = useNoticeListActions();
   const { sort, toggleSort, getSortedItems } = useTableSort();
 
@@ -38,6 +40,7 @@ export function NoticeListPage() {
       </div>
 
       <div className="flex gap-2">
+        <NoticeCategoryFilter value={category} onChange={handleCategoryChange} />
         <Input
           aria-label="제목 검색"
           placeholder="제목 검색..."
@@ -52,6 +55,7 @@ export function NoticeListPage() {
           <thead>
             <tr className="border-b border-border-light text-left text-cool-gray">
               <SortableHeader label="제목" column="subject" sort={sort} onToggle={toggleSort} className="px-4 py-3" />
+              <SortableHeader label="카테고리" column="categoryName" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-28" />
               <SortableHeader label="작성일" column="regDate" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-28" />
               <SortableHeader label="조회" column="hit" sort={sort} onToggle={toggleSort} className="px-4 py-3 w-20 text-center" />
               <th className="px-4 py-3 font-medium w-20 text-center">포맷</th>
@@ -60,9 +64,9 @@ export function NoticeListPage() {
           </thead>
           <tbody aria-live="polite">
             {isError ? (
-              <ErrorState colSpan={5} onRetry={() => void refetch()} />
+              <ErrorState colSpan={6} onRetry={() => void refetch()} />
             ) : isLoading ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-cool-gray">로딩 중...</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-cool-gray">로딩 중...</td></tr>
             ) : items.length ? (
               items.map((n) => (
                 <tr key={n.seq} className="border-b border-border-light hover:bg-background">
@@ -72,6 +76,9 @@ export function NoticeListPage() {
                       {n.isPinned === 'Y' && <Pin className="mr-1 inline h-3.5 w-3.5 text-error-text" />}
                       {n.subject}
                     </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant="muted">{n.categoryName}</Badge>
                   </td>
                   <td className="px-4 py-3 text-cool-gray">{n.regDate.slice(0, 10)}</td>
                   <td className="px-4 py-3 text-center text-cool-gray">{n.hit}</td>
@@ -93,7 +100,7 @@ export function NoticeListPage() {
                 </tr>
               ))
             ) : (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-cool-gray">공지가 없습니다.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-cool-gray">공지가 없습니다.</td></tr>
             )}
           </tbody>
         </table>

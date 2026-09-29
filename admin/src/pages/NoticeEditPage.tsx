@@ -13,6 +13,7 @@ import { useNoticeDelete } from '../hooks/useNoticeDelete.ts';
 import { useNoticeAttachments } from '../hooks/useNoticeAttachments.ts';
 import { AttachmentDropzone } from '../components/editor/AttachmentDropzone.tsx';
 import { AttachmentList } from '../components/editor/AttachmentList.tsx';
+import { NoticeCategorySelect } from '../components/notice/NoticeCategorySelect.tsx';
 import type { NoticeDetail } from '../types/api.ts';
 
 export function NoticeEditPage() {
@@ -33,11 +34,21 @@ function NoticeEditForm({
 }) {
   const navigate = useNavigate();
   const form = useNoticeForm(notice);
-  const { save, isSaving, deleteNotice } = useNoticeMutations(seq);
+  const { save, saveCategory, isSaving, deleteNotice } = useNoticeMutations(seq);
   const del = useNoticeDelete(deleteNotice);
   const att = useNoticeAttachments(notice?.files);
 
   const isLegacy = notice?.contentFormat === 'LEGACY';
+  const savedCategorySeq = notice?.categorySeq ?? null;
+  const categorySelect = (
+    <NoticeCategorySelect
+      value={form.categorySeq}
+      savedSeq={savedCategorySeq}
+      onChange={form.setCategorySeq}
+      disabled={isSaving}
+      className="w-40 shrink-0"
+    />
+  );
 
   return (
     <div className="space-y-4">
@@ -56,6 +67,16 @@ function NoticeEditForm({
             이 글은 기존 시스템에서 작성되었습니다.
             Markdown 에디터로 수정하려면 기존 내용을 복사하여 새 글로 작성해주세요.
           </div>
+          <div className="mb-4 flex items-center gap-2">
+            {categorySelect}
+            <Button
+              variant="outline"
+              onClick={() => { if (form.categorySeq !== null) saveCategory(form.categorySeq); }}
+              disabled={isSaving || form.categorySeq === null || form.categorySeq === savedCategorySeq}
+            >
+              카테고리 저장
+            </Button>
+          </div>
           <HtmlContent html={notice?.contentHtml ?? ''} />
           {seq && (
             <div className="mt-4 flex justify-start">
@@ -68,13 +89,16 @@ function NoticeEditForm({
         </div>
       ) : (
         <div className="space-y-4">
-          <Input
-            aria-label="제목"
-            placeholder="제목을 입력하세요"
-            value={form.subject}
-            onChange={(e) => form.setSubject(e.target.value)}
-            className="text-lg font-medium"
-          />
+          <div className="flex gap-2">
+            {categorySelect}
+            <Input
+              aria-label="제목"
+              placeholder="제목을 입력하세요"
+              value={form.subject}
+              onChange={(e) => form.setSubject(e.target.value)}
+              className="text-lg font-medium"
+            />
+          </div>
 
           <MarkdownEditor value={form.contentMd} onChange={form.setContentMd} />
 
@@ -108,7 +132,7 @@ function NoticeEditForm({
             <div className="flex gap-3 ml-auto">
               <Button variant="outline" onClick={() => navigate('/notice')}>취소</Button>
               <Button
-                onClick={() => save(form.subject, form.contentMd, form.isPinned, att.fSeqs)}
+                onClick={() => { if (form.categorySeq !== null) save(form.subject, form.contentMd, form.isPinned, att.fSeqs, form.categorySeq); }}
                 disabled={isSaving || !form.isValid}
               >
                 {isSaving ? '저장 중...' : '저장'}

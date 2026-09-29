@@ -46,10 +46,17 @@ export function useNoticeMutations(seq: string | undefined) {
     },
   });
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  // Legacy (HTML) posts cannot be saved through the Markdown editor, so only their category is saved.
+  const categoryMutation = useMutation({
+    mutationFn: (categorySeq: number) => api.put(`/api/admin/feed/${seq}/category`, { categorySeq }),
+    onSuccess: onSaveSuccess,
+    onError: onSaveError,
+  });
 
-  const save = (subject: string, contentMd: string, isPinned: boolean, attachedFileSeqs: number[]) => {
-    const payload = { subject, contentMd, isPinned: isPinned ? 'Y' : 'N', attachedFileSeqs };
+  const isSaving = createMutation.isPending || updateMutation.isPending || categoryMutation.isPending;
+
+  const save = (subject: string, contentMd: string, isPinned: boolean, attachedFileSeqs: number[], categorySeq: number) => {
+    const payload = { subject, contentMd, isPinned: isPinned ? 'Y' : 'N', attachedFileSeqs, categorySeq };
     if (seq) {
       updateMutation.mutate(payload);
     } else {
@@ -58,6 +65,7 @@ export function useNoticeMutations(seq: string | undefined) {
   };
 
   const deleteNotice = (seqToDelete: number) => deleteMutation.mutate(seqToDelete);
+  const saveCategory = (categorySeq: number) => categoryMutation.mutate(categorySeq);
 
-  return { save, isSaving, deleteNotice };
+  return { save, saveCategory, isSaving, deleteNotice };
 }
