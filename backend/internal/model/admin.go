@@ -12,6 +12,8 @@ type AdminNoticeRow struct {
 	OpenYN        string `db:"OPEN_YN" json:"openYn"`
 	IsPinned      string `db:"IS_PINNED" json:"isPinned"`
 	ContentFormat string `db:"CONTENT_FORMAT" json:"contentFormat"`
+	CategorySeq   int    `db:"category_seq" json:"categorySeq"`
+	CategoryName  string `db:"category_name" json:"categoryName"`
 }
 
 type AdminNoticeInsert struct {
@@ -23,6 +25,9 @@ type AdminNoticeInsert struct {
 	IsPinned     string
 	RegName      string
 	USRSeq       int
+	// FeedCategorySeq is the post's category; nil stores NULL (the default) on
+	// insert and keeps the current category on update.
+	FeedCategorySeq *int
 }
 
 // --- Disclosure (공익법인 의무공시) ---

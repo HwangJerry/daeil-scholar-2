@@ -148,7 +148,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	bannerAdSvc := service.NewBannerAdService(bannerAdRepo)
 	adminFeedCategoryRepo := repository.NewAdminFeedCategoryRepository(db)
 	adminFeedCategorySvc := service.NewAdminFeedCategoryService(adminFeedCategoryRepo, cacheStore)
-	adminNoticeSvc := service.NewAdminNoticeService(adminNoticeRepo, fileRepo)
+	adminNoticeSvc := service.NewAdminNoticeService(adminNoticeRepo, fileRepo, adminFeedCategoryRepo)
 	adminDisclosureSvc := service.NewAdminDisclosureService(adminDisclosureRepo, fileRepo)
 	disclosureSvc := service.NewDisclosureService(disclosureRepo)
 	adminAdSvc := service.NewAdminAdService(adminAdRepo)

@@ -16,24 +16,32 @@ func NewAdminNoticeRepository(db *sqlx.DB) *AdminNoticeRepository {
 	return &AdminNoticeRepository{DB: db}
 }
 
-func (r *AdminNoticeRepository) GetNotices(page, size int, keyword string) ([]model.AdminNoticeRow, int, error) {
+// GetNotices lists NOTICE posts newest first. categorySeq > 0 keeps only that
+// category; filtering by the default also matches posts with no category.
+func (r *AdminNoticeRepository) GetNotices(page, size int, keyword string, categorySeq int) ([]model.AdminNoticeRow, int, error) {
 	args := []interface{}{}
-	where := "WHERE GATE = 'NOTICE'"
+	from := "FROM WEO_BOARDBBS b" + feedCategoryJoin
+	where := " WHERE b.GATE = 'NOTICE'"
 	if keyword != "" {
-		where += " AND SUBJECT LIKE ?"
+		where += " AND b.SUBJECT LIKE ?"
 		args = append(args, keyword+"%")
+	}
+	if categorySeq > 0 {
+		where += " AND " + feedCategorySeqExpr + " = ?"
+		args = append(args, categorySeq)
 	}
 
 	var total int
 	countArgs := make([]interface{}, len(args))
 	copy(countArgs, args)
-	if err := r.DB.Get(&total, "SELECT COUNT(*) FROM WEO_BOARDBBS "+where, countArgs...); err != nil {
+	if err := r.DB.Get(&total, "SELECT COUNT(*) "+from+where, countArgs...); err != nil {
 		return nil, 0, err
 	}
 
 	offset := (page - 1) * size
-	query := `SELECT SEQ, SUBJECT, REG_DATE, REG_NAME, HIT, OPEN_YN, IS_PINNED, CONTENT_FORMAT
-		FROM WEO_BOARDBBS ` + where + ` ORDER BY SEQ DESC LIMIT ? OFFSET ?`
+	query := `SELECT b.SEQ, b.SUBJECT, b.REG_DATE, b.REG_NAME, b.HIT, b.OPEN_YN, b.IS_PINNED, b.CONTENT_FORMAT,
+		` + feedCategorySeqExpr + ` AS category_seq, IFNULL(fc.FC_NAME, IFNULL(fd.FC_NAME, '공지')) AS category_name
+		` + from + where + ` ORDER BY b.SEQ DESC LIMIT ? OFFSET ?`
 	args = append(args, size, offset)
 
 	var rows []model.AdminNoticeRow
@@ -46,8 +54,11 @@ func (r *AdminNoticeRepository) GetNotices(page, size int, keyword string) ([]mo
 func (r *AdminNoticeRepository) GetNoticeForEdit(seq int) (*model.NoticeDetail, error) {
 	var detail model.NoticeDetail
 	err := r.DB.Get(&detail, `
-		SELECT SEQ, SUBJECT, CONTENTS, CONTENTS_MD, CONTENT_FORMAT, SUMMARY, THUMBNAIL_URL, REG_DATE, REG_NAME, HIT, IS_PINNED
-		FROM WEO_BOARDBBS WHERE SEQ = ? AND GATE = 'NOTICE' LIMIT 1
+		SELECT b.SEQ, b.SUBJECT, b.CONTENTS, b.CONTENTS_MD, b.CONTENT_FORMAT, b.SUMMARY, b.THUMBNAIL_URL,
+		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED,`+feedCategoryColumns+`,
+		       `+feedCategorySeqExpr+` AS category_seq
+		FROM WEO_BOARDBBS b`+feedCategoryJoin+`
+		WHERE b.SEQ = ? AND b.GATE = 'NOTICE' LIMIT 1
 	`, seq)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -72,14 +83,14 @@ func (r *AdminNoticeRepository) InsertNotice(n *model.AdminNoticeInsert) (int, e
 			(SEQ, GATE, P_ID, B_NO, R_NO,
 			 SUBJECT, CONTENTS, CONTENTS_MD, CONTENT_FORMAT, CONTENTS_TYPE,
 			 SUMMARY, THUMBNAIL_URL, IS_PINNED, OPEN_YN, OPEN_TYPE, REPLY_MAIL,
-			 STEP, USR_SEQ, REG_NAME, REG_DATE, HIT, LIKE_CNT)
+			 STEP, USR_SEQ, REG_NAME, REG_DATE, HIT, LIKE_CNT, FEED_CATEGORY_SEQ)
 		VALUES (?, 'NOTICE', 0, 0, 0,
 		        ?, ?, ?, 'MARKDOWN', 'H',
 		        ?, ?, ?, 'Y', 'Y', 'N',
-		        'U', ?, ?, NOW(), 0, 0)
+		        'U', ?, ?, NOW(), 0, 0, ?)
 	`, nextSeq, n.Subject, n.Contents, n.ContentsMD,
 		n.Summary, n.ThumbnailURL, n.IsPinned,
-		n.USRSeq, n.RegName)
+		n.USRSeq, n.RegName, n.FeedCategorySeq)
 	if err != nil {
 		return 0, err
 	}
@@ -90,9 +101,19 @@ func (r *AdminNoticeRepository) UpdateNotice(seq int, n *model.AdminNoticeInsert
 	_, err := r.DB.Exec(`
 		UPDATE WEO_BOARDBBS
 		SET SUBJECT = ?, CONTENTS = ?, CONTENTS_MD = ?, CONTENT_FORMAT = 'MARKDOWN',
-		    SUMMARY = ?, THUMBNAIL_URL = ?, IS_PINNED = ?
+		    SUMMARY = ?, THUMBNAIL_URL = ?, IS_PINNED = ?,
+		    FEED_CATEGORY_SEQ = IFNULL(?, FEED_CATEGORY_SEQ)
 		WHERE SEQ = ? AND GATE = 'NOTICE'
-	`, n.Subject, n.Contents, n.ContentsMD, n.Summary, n.ThumbnailURL, n.IsPinned, seq)
+	`, n.Subject, n.Contents, n.ContentsMD, n.Summary, n.ThumbnailURL, n.IsPinned, n.FeedCategorySeq, seq)
+	return err
+}
+
+// UpdateNoticeCategory changes only a post's category, so legacy (HTML) posts
+// can be reclassified without touching their content.
+func (r *AdminNoticeRepository) UpdateNoticeCategory(seq, categorySeq int) error {
+	_, err := r.DB.Exec(`
+		UPDATE WEO_BOARDBBS SET FEED_CATEGORY_SEQ = ? WHERE SEQ = ? AND GATE = 'NOTICE'
+	`, categorySeq, seq)
 	return err
 }
 

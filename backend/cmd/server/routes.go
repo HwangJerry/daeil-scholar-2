@@ -275,6 +275,7 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Put("/feed/{seq}", h.adminNotice.Update)
 		r.Delete("/feed/{seq}", h.adminNotice.Delete)
 		r.Put("/feed/{seq}/pin", h.adminNotice.TogglePin)
+		r.Put("/feed/{seq}/category", h.adminNotice.SetCategory)
 		r.Get("/feed-categories", h.adminFeedCategory.List)
 		r.Post("/feed-categories", h.adminFeedCategory.Create)
 		r.Put("/feed-categories/order", h.adminFeedCategory.Reorder)

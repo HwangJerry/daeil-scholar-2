@@ -1,0 +1,18 @@
+{
+  "category": "notice",
+  "categoryName": "공지",
+  "commentCnt": 0,
+  "contentFormat": "MARKDOWN",
+  "contentHtml": "<p>본문</p>\n",
+  "contentMd": "본문",
+  "hit": 0,
+  "isPinned": "N",
+  "likeCnt": 0,
+  "regDate": "<timestamp>",
+  "regName": "합성 동문",
+  "seq": 1,
+  "subject": "합성 기본 공지",
+  "summary": "본문",
+  "thumbnailUrl": "",
+  "userLiked": false
+}
