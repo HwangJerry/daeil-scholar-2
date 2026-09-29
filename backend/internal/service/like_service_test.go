@@ -66,6 +66,9 @@ func (m *mockFeedRepoForLike) GetFilesByPost(seq int) ([]model.FileRecord, error
 	return nil, nil
 }
 func (m *mockFeedRepoForLike) GetPostOwnerSeq(seq int) (int, error) { return 0, nil }
+func (m *mockFeedRepoForLike) GetOpenFeedCategories() ([]model.FeedCategory, error) {
+	return nil, nil
+}
 
 func TestToggleLike_FirstLike(t *testing.T) {
 	likeRepo := &mockLikeRepo{hasUserLiked: false, hasAnyLikeRow: false}

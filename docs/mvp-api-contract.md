@@ -1115,6 +1115,10 @@ validation 실패 HTTP `422`:
 
 차단된 발신자에게는 `BLOCKED` 계열 오류를 반환하지 않는다.
 
+### 피드 카테고리
+
+`INVALID_NAME`, `DUPLICATE_NAME`, `CATEGORY_LIMIT`, `DEFAULT_CATEGORY_DELETE`, `DEFAULT_CATEGORY_HIDE`, `INVALID_OPEN_YN`, `INVALID_ORDER`, `INVALID_MOVE_TARGET`, `UNKNOWN_CATEGORY`, `CATEGORY_HAS_POSTS`
+
 ### 기부·Excel
 
 `DONATION_NOT_FOUND`, `INVALID_DONATION_STATUS`, `INVALID_AMOUNT`, `INVALID_REFUND_AMOUNT`, `SOURCE_CONFLICT`, `IMPORT_FILE_REQUIRED`, `IMPORT_FILE_TOO_LARGE`, `IMPORT_INVALID_FORMAT`, `IMPORT_INVALID_HEADER`, `IMPORT_VALIDATION_FAILED`, `IMPORT_ROLLED_BACK`, `INVALID_PHONE`, `DUPLICATE_TRANSACTION`, `COMPOSITE_KEY_INCOMPLETE`
@@ -1174,3 +1178,82 @@ canonical fixture는 `docs/contracts/fixtures/`에 둔다.
 - 마이페이지 별도 차단 회원 관리 화면
 - 변경 전후 감사 이력
 - 원본 Excel 영구 저장
+
+## 19. 피드 카테고리 계약
+
+관리자가 공지(`WEO_BOARDBBS` `GATE='NOTICE'`)를 분류하는 카테고리다. 앱은 카테고리마다 피드 탭을 만든다(`전체` + 카테고리). migration `079`가 `ALUMNI_FEED_CATEGORY`와 `WEO_BOARDBBS.FEED_CATEGORY_SEQ`(NULL 허용)를 추가하고 `notice`(공지, 기본, 순서 1)·`etc`(기타, 순서 2)를 seed한다.
+
+- **code**: 앱에 `category`로 보내는 안정 키. seed는 `notice`·`etc`, 새로 만든 카테고리는 `c<seq>`. 이름을 바꿔도 변하지 않는다.
+- **기본 카테고리**: 정확히 하나(`notice`). 이름 변경은 되지만 삭제·숨김은 `400`. `FEED_CATEGORY_SEQ`가 NULL이거나 없는 카테고리를 가리키는 글(기존 글 전부)은 기본 카테고리로 읽는다.
+- **이름**: 앞뒤 공백 제거 후 1~8자(Unicode code point), 대소문자 무시 중복 금지. 이름은 읽을 때 join하므로 변경이 즉시 모든 응답에 반영된다.
+- **개수**: 최대 6개.
+- **순서**: `sortOrder` 오름차순. 앱 탭 순서도 같다.
+- **앱 탭 노출(`openYn`)**: `N`이면 `/api/feed` `categories`에서 빠진다. 그 카테고리의 글은 계속 피드에 나오며 `category`·`categoryName`도 그대로다(앱은 `전체` 탭에만 표시).
+- 서버 쪽 카테고리 필터는 없다. 앱이 받은 글을 로컬에서 거른다.
+
+### 19.1 공개 피드 (additive)
+
+`GET /api/feed` 응답에 `categories`가 추가되고, 모든 item(`/api/feed` items, `/api/feed/hero`)과 `GET /api/feed/{seq}` 상세에 `category`(code)·`categoryName`이 추가된다. 구 client는 새 필드를 무시한다.
+
+```json
+{
+  "items": [
+    {
+      "type": "notice", "seq": 3, "subject": "장학금 안내", "summary": "…", "thumbnailUrl": "",
+      "regDate": "2026-09-29T10:00:00+09:00", "regName": "관리자", "hit": 0,
+      "likeCnt": 0, "commentCnt": 0, "isPinned": "N", "userLiked": false,
+      "category": "c3", "categoryName": "장학"
+    }
+  ],
+  "nextCursor": "seq_3",
+  "hasMore": false,
+  "categories": [{ "code": "c3", "name": "장학" }, { "code": "notice", "name": "공지" }]
+}
+```
+
+`categories`는 `openYn='Y'`인 카테고리만 순서대로 담는다. 숨긴 카테고리의 글은 items에 남으므로 item의 `category`가 `categories`에 없을 수 있다.
+
+### 19.2 관리자 카테고리 API
+
+모두 `/api/admin` 관리자 인증 아래에 있다. 오류는 표준 envelope `{code, message}`이며 `message`는 관리자 UI가 그대로 보여 주는 한국어 문구다.
+
+| Method | Endpoint | 요청 | 성공 |
+|---|---|---|---|
+| GET | `/api/admin/feed-categories` | — | `200` 카테고리 배열(숨김 포함, 순서대로) |
+| POST | `/api/admin/feed-categories` | `{name, openYn}` (`openYn` 생략 시 `Y`) | `201` 만든 카테고리 |
+| PUT | `/api/admin/feed-categories/{seq}` | `{name, openYn}` (`openYn` 생략 시 유지) | `200` 바뀐 카테고리 |
+| PUT | `/api/admin/feed-categories/order` | `{seqs: [모든 seq를 새 순서로]}` | `204` |
+| DELETE | `/api/admin/feed-categories/{seq}` | body 없음 또는 `{moveToSeq}` | `204` |
+
+카테고리 row:
+
+```json
+{ "seq": 3, "code": "c3", "name": "장학", "sortOrder": 1, "openYn": "Y", "isDefault": "N", "postCount": 1 }
+```
+
+`postCount`는 공지 관리 목록과 같은 범위(삭제된 글 포함)의 NOTICE 글 수이며, 기본 카테고리는 카테고리 없는 글도 센다.
+
+| 조건 | HTTP | code | message |
+|---|---|---|---|
+| 이름이 비었거나 8자 초과 | 400 | `INVALID_NAME` | 카테고리 이름은 1~8자로 입력하세요. |
+| 이름 중복 | 400 | `DUPLICATE_NAME` | 이미 있는 카테고리 이름입니다. |
+| 7번째 생성 | 400 | `CATEGORY_LIMIT` | 카테고리는 최대 6개까지 만들 수 있습니다. |
+| 기본 카테고리 삭제 | 400 | `DEFAULT_CATEGORY_DELETE` | 기본 카테고리는 삭제할 수 없습니다. |
+| 기본 카테고리 숨김 | 400 | `DEFAULT_CATEGORY_HIDE` | 기본 카테고리는 숨길 수 없습니다. |
+| `openYn`이 Y/N 아님 | 400 | `INVALID_OPEN_YN` | 앱 탭 노출 값이 올바르지 않습니다. |
+| `seqs`가 모든 카테고리를 한 번씩 담지 않음 | 400 | `INVALID_ORDER` | 모든 카테고리를 한 번씩 포함한 순서를 보내 주세요. |
+| `moveToSeq`가 자기 자신이거나 없는 카테고리 | 400 | `INVALID_MOVE_TARGET` | 옮길 카테고리를 다시 선택하세요. |
+| 없는 카테고리 | 404 | `NOT_FOUND` | 카테고리를 찾을 수 없습니다. |
+| 글이 있는데 `moveToSeq` 없음 | 409 | `CATEGORY_HAS_POSTS` | 게시글이 있는 카테고리는 옮길 카테고리를 선택해야 삭제할 수 있습니다. |
+
+`409`는 envelope에 `postCount`를 더한다: `{"code":"CATEGORY_HAS_POSTS","message":"…","postCount":4}`. `moveToSeq`가 있으면 글을 옮기고 카테고리를 지우는 일이 한 transaction으로 처리된다.
+
+### 19.3 관리자 공지 API 변경
+
+- `POST /api/admin/feed`: `categorySeq`(선택). 생략하면 기본 카테고리(NULL 저장). 없는 seq는 `400 UNKNOWN_CATEGORY`(존재하지 않는 카테고리입니다.). 숨긴 카테고리도 지정할 수 있다.
+- `PUT /api/admin/feed/{seq}`: `categorySeq`(선택). 생략하면 **현재 카테고리를 유지**한다(카테고리를 모르는 이전 관리자 화면이 분류를 지우지 않도록).
+- `PUT /api/admin/feed/{seq}/category` `{categorySeq}` → `204`: 내용은 건드리지 않고 카테고리만 바꾼다. Markdown 에디터로 저장할 수 없는 기존(LEGACY HTML) 글 재분류용이다.
+- `GET /api/admin/feed?category=<seq>`: 카테고리 필터. 기본 카테고리로 거르면 카테고리 없는 글도 포함한다. 목록 item에 `categorySeq`·`categoryName`이 추가된다.
+- `GET /api/admin/feed/{seq}`: `categorySeq`·`category`·`categoryName`이 추가된다(`categorySeq`는 관리자 응답에만 있다).
+
+Tier 1 golden: `backend/cmd/server/testdata/golden/feed_with_categories.json`, `feed_detail_default_category.json`, `admin_feed_categories.json`, `admin_feed_category_created.json`, `admin_feed_list_by_category.json`, `admin_feed_category_duplicate_400.json`, `admin_feed_category_has_posts_409.json`.

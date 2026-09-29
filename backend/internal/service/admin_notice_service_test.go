@@ -33,7 +33,7 @@ func newAdminNoticeServiceTest(t *testing.T) (*AdminNoticeService, sqlmock.Sqlmo
 	mock.ExpectQuery(`SELECT MAX\(SEQ\) FROM WEO_BOARDBBS`).
 		WillReturnRows(sqlmock.NewRows([]string{"MAX(SEQ)"}).AddRow(500))
 	mock.ExpectExec(`(?s)INSERT INTO WEO_BOARDBBS`).WillReturnResult(sqlmock.NewResult(1, 1))
-	service := NewAdminNoticeService(repository.NewAdminNoticeRepository(wrapped), repository.NewFileRepository(wrapped))
+	service := NewAdminNoticeService(repository.NewAdminNoticeRepository(wrapped), repository.NewFileRepository(wrapped), repository.NewAdminFeedCategoryRepository(wrapped))
 	return service, mock, func() { _ = db.Close() }
 }
 
@@ -43,7 +43,7 @@ func TestAdminNoticeServiceBroadcastsANewlyPublishedNotice(t *testing.T) {
 	spy := &noticePublishedNotifierSpy{}
 	service.SetNoticePublishedNotifier(spy)
 
-	seq, err := service.Create("장학금 안내", "본문", "관리자", 7, "N", nil)
+	seq, err := service.Create("장학금 안내", "본문", "관리자", 7, "N", nil, nil)
 	if err != nil {
 		t.Fatalf("Create error = %v", err)
 	}
@@ -68,7 +68,7 @@ func TestAdminNoticeServiceBroadcastsEvenWhenAttachmentLinkingFails(t *testing.T
 	service.SetNoticePublishedNotifier(spy)
 	mock.ExpectExec(`(?s)UPDATE WEO_FILES`).WillReturnError(errors.New("attach failed"))
 
-	seq, err := service.Create("장학금 안내", "본문", "관리자", 7, "N", []int{31})
+	seq, err := service.Create("장학금 안내", "본문", "관리자", 7, "N", []int{31}, nil)
 	if err == nil {
 		t.Fatal("the attachment error must still reach the caller")
 	}
@@ -89,7 +89,7 @@ func TestAdminNoticeServiceCreateIsSafeWithoutANotifier(t *testing.T) {
 	service, mock, cleanup := newAdminNoticeServiceTest(t)
 	defer cleanup()
 
-	if _, err := service.Create("장학금 안내", "본문", "관리자", 7, "N", nil); err != nil {
+	if _, err := service.Create("장학금 안내", "본문", "관리자", 7, "N", nil, nil); err != nil {
 		t.Fatalf("Create error = %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -105,13 +105,13 @@ func TestAdminNoticeServiceDoesNotBroadcastOnUpdateOrPin(t *testing.T) {
 	}
 	defer db.Close()
 	wrapped := sqlx.NewDb(db, "sqlmock")
-	service := NewAdminNoticeService(repository.NewAdminNoticeRepository(wrapped), repository.NewFileRepository(wrapped))
+	service := NewAdminNoticeService(repository.NewAdminNoticeRepository(wrapped), repository.NewFileRepository(wrapped), repository.NewAdminFeedCategoryRepository(wrapped))
 	spy := &noticePublishedNotifierSpy{}
 	service.SetNoticePublishedNotifier(spy)
 
 	mock.ExpectExec(`(?s)UPDATE WEO_BOARDBBS`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`(?s)UPDATE WEO_FILES`).WillReturnResult(sqlmock.NewResult(0, 0))
-	if err := service.Update(501, "수정된 제목", "본문", "N", nil); err != nil {
+	if err := service.Update(501, "수정된 제목", "본문", "N", nil, nil); err != nil {
 		t.Fatalf("Update error = %v", err)
 	}
 	if spy.calls != 0 {

@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "categoryName": "장학",
+      "categorySeq": 3,
+      "contentFormat": "MARKDOWN",
+      "hit": 0,
+      "isPinned": "N",
+      "openYn": "Y",
+      "regDate": "<timestamp>",
+      "regName": "합성 동문",
+      "seq": 2,
+      "subject": "합성 장학 공지"
+    }
+  ],
+  "total": 1
+}

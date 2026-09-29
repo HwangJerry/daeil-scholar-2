@@ -5,11 +5,10 @@ import type { NoticeItem } from '../../types/api';
 import { FeedCard } from './FeedCard';
 import { NoticeCardLink } from './NoticeCardLink';
 import { NoticeCardSummary } from './NoticeCardSummary';
-import { NOTICE_CATEGORY_LABELS } from './noticeCard.constants';
+import { noticeCategoryLabel } from './noticeCategoryLabel';
 
 export function NoticeCard({ item }: { item: NoticeItem }) {
-  const category = item.category ?? 'notice';
-  const categoryLabel = NOTICE_CATEGORY_LABELS[category] ?? '공지';
+  const categoryLabel = noticeCategoryLabel(item);
 
   return (
     <FeedCard>

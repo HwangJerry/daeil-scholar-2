@@ -27,6 +27,17 @@ type FeedQuerier interface {
 	GetNextPost(seq int) (*model.PostSibling, error)
 	GetFilesByPost(seq int) ([]model.FileRecord, error)
 	GetPostOwnerSeq(seq int) (int, error)
+	GetOpenFeedCategories() ([]model.FeedCategory, error)
+}
+
+// AdminFeedCategoryStore defines the methods used by AdminFeedCategoryService.
+type AdminFeedCategoryStore interface {
+	GetAll() ([]model.AdminFeedCategory, error)
+	GetBySeq(seq int) (*model.AdminFeedCategory, error)
+	Insert(name, openYN string) (int, error)
+	Update(seq int, name, openYN string) error
+	Reorder(seqs []int) error
+	Delete(seq int, moveToSeq *int) (int, error)
 }
 
 // MessageQuerier defines the methods used by MessageService for messaging operations.

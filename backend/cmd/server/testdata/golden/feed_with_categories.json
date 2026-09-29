@@ -1,0 +1,64 @@
+{
+  "categories": [
+    {
+      "code": "c3",
+      "name": "장학"
+    },
+    {
+      "code": "notice",
+      "name": "공지"
+    }
+  ],
+  "hasMore": false,
+  "items": [
+    {
+      "category": "etc",
+      "categoryName": "기타",
+      "commentCnt": 0,
+      "hit": 0,
+      "isPinned": "N",
+      "likeCnt": 0,
+      "regDate": "<timestamp>",
+      "regName": "합성 동문",
+      "seq": 3,
+      "subject": "합성 기타 공지",
+      "summary": "본문",
+      "thumbnailUrl": "",
+      "type": "notice",
+      "userLiked": false
+    },
+    {
+      "category": "c3",
+      "categoryName": "장학",
+      "commentCnt": 0,
+      "hit": 0,
+      "isPinned": "N",
+      "likeCnt": 0,
+      "regDate": "<timestamp>",
+      "regName": "합성 동문",
+      "seq": 2,
+      "subject": "합성 장학 공지",
+      "summary": "본문",
+      "thumbnailUrl": "",
+      "type": "notice",
+      "userLiked": false
+    },
+    {
+      "category": "notice",
+      "categoryName": "공지",
+      "commentCnt": 0,
+      "hit": 0,
+      "isPinned": "N",
+      "likeCnt": 0,
+      "regDate": "<timestamp>",
+      "regName": "합성 동문",
+      "seq": 1,
+      "subject": "합성 기본 공지",
+      "summary": "본문",
+      "thumbnailUrl": "",
+      "type": "notice",
+      "userLiked": false
+    }
+  ],
+  "nextCursor": "seq_1"
+}

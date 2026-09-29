@@ -1,0 +1,29 @@
+[
+  {
+    "code": "c3",
+    "isDefault": "N",
+    "name": "장학",
+    "openYn": "Y",
+    "postCount": 1,
+    "seq": 3,
+    "sortOrder": 1
+  },
+  {
+    "code": "notice",
+    "isDefault": "Y",
+    "name": "공지",
+    "openYn": "Y",
+    "postCount": 1,
+    "seq": 1,
+    "sortOrder": 2
+  },
+  {
+    "code": "etc",
+    "isDefault": "N",
+    "name": "기타",
+    "openYn": "N",
+    "postCount": 1,
+    "seq": 2,
+    "sortOrder": 3
+  }
+]

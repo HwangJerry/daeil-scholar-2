@@ -84,6 +84,8 @@ transaction으로 완료됩니다.
 | GET | `/api/feed/hero` | Hero 섹션용 최신 공지 1건 |
 | GET | `/api/feed/{seq}` | 공지 상세 |
 
+> **피드 카테고리:** 모든 item·hero·상세에 `category`(안정 code)·`categoryName`이 있고, `GET /api/feed`는 앱 탭용 `categories`(노출 중인 카테고리, 순서대로)를 함께 반환한다. 카테고리 없는 글은 기본 카테고리(`notice`)로 읽는다. 상세 계약은 `docs/mvp-api-contract.md` §19.
+
 **GET /api/feed/{seq} 응답 구조 (상세):**
 ```json
 {
@@ -374,6 +376,14 @@ EasyPay에서 사용자 결제 완료 후 리다이렉트합니다 (`sp_return_u
 | PUT | `/api/admin/feed/{seq}` | 공지 수정 |
 | DELETE | `/api/admin/feed/{seq}` | 공지 삭제 (soft delete) |
 | PUT | `/api/admin/feed/{seq}/pin` | 상단 고정 토글 |
+| PUT | `/api/admin/feed/{seq}/category` | 카테고리만 변경 (LEGACY 글 재분류) |
+| GET | `/api/admin/feed-categories` | 피드 카테고리 목록 (숨김 포함, 게시글 수) |
+| POST | `/api/admin/feed-categories` | 피드 카테고리 추가 (최대 6개) |
+| PUT | `/api/admin/feed-categories/{seq}` | 이름·앱 탭 노출 변경 |
+| PUT | `/api/admin/feed-categories/order` | 순서 변경 (`{seqs}`) |
+| DELETE | `/api/admin/feed-categories/{seq}` | 삭제 (글이 있으면 `{moveToSeq}` 필요) |
+
+> 공지 등록·수정은 `categorySeq`(선택)를 받고, 목록은 `?category=<seq>` 필터와 `categorySeq`·`categoryName`을 지원한다. 규칙과 오류는 `docs/mvp-api-contract.md` §19.
 
 **POST/PUT /api/admin/feed 요청:**
 ```json

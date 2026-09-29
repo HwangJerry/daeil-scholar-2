@@ -1,5 +1,5 @@
 // navItems — shared navigation item definitions for sidebar and mobile drawer
-import { Activity, LayoutDashboard, FileText, ScrollText, Images, Users, UserCheck, Briefcase, Heart, Clock, Settings2, Smartphone, MessageSquareText, ShieldCheck } from 'lucide-react';
+import { Activity, LayoutDashboard, FileText, ScrollText, Images, Users, UserCheck, Briefcase, Heart, Clock, Settings2, Smartphone, MessageSquareText, ShieldCheck, Tags } from 'lucide-react';
 
 export const NAV_ITEMS = [
   { to: '/comment-reports', icon: FileText, label: '댓글 신고', end: true },
@@ -7,6 +7,7 @@ export const NAV_ITEMS = [
   { to: '/account-deletions', icon: FileText, label: '계정 삭제 요청', end: true },
   { to: '/', icon: LayoutDashboard, label: '대시보드', end: true },
   { to: '/notice', icon: FileText, label: '공지 관리', end: false },
+  { to: '/feed-categories', icon: Tags, label: '피드 카테고리', end: true },
   { to: '/disclosure', icon: ScrollText, label: '의무공시', end: false },
   { to: '/banner-ad', icon: Images, label: '배너광고 관리', end: false },
   { to: '/donation-archives', icon: FileText, label: '탈퇴 회원 기부 증빙', end: true },

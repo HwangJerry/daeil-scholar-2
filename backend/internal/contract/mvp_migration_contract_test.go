@@ -253,6 +253,17 @@ func mvpMigrationContracts() []migrationContract {
 				"ENGINE=InnoDB", "utf8mb4",
 			},
 		},
+		{
+			name: "079_create_feed_categories.sql",
+			required: []string{
+				"CREATE TABLE IF NOT EXISTS ALUMNI_FEED_CATEGORY",
+				"AUTO_INCREMENT", "PRIMARY KEY (FC_SEQ)", "UNIQUE KEY UQ_FC_CODE (FC_CODE)",
+				"SORT_ORDER INT NOT NULL", "IS_DEFAULT ENUM('Y','N') NOT NULL DEFAULT 'N'",
+				"INSERT IGNORE INTO ALUMNI_FEED_CATEGORY", "('notice', '공지', 1, 'Y', 'Y'", "('etc', '기타', 2, 'Y', 'N'",
+				"ADD COLUMN IF NOT EXISTS FEED_CATEGORY_SEQ INT NULL", "CREATE INDEX IF NOT EXISTS", "IDX_BBS_FEED_CATEGORY",
+				"ENGINE=InnoDB", "utf8mb4",
+			},
+		},
 	}
 }
 

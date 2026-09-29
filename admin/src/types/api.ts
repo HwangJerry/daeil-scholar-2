@@ -36,6 +36,8 @@ export interface AdminNoticeListItem {
   openYn: string;
   isPinned: string;
   contentFormat: 'LEGACY' | 'MARKDOWN';
+  categorySeq: number;
+  categoryName: string;
 }
 
 export interface AdminNoticeListResponse {
@@ -57,6 +59,8 @@ export interface NoticeDetail {
   likeCnt: number;
   commentCnt: number;
   isPinned: string;
+  categorySeq: number;
+  categoryName: string;
   files: FileAttachment[];
 }
 
@@ -77,6 +81,7 @@ export interface CreateNoticeRequest {
   contentMd: string;
   isPinned?: string;
   attachedFileSeqs?: number[];
+  categorySeq?: number;
 }
 
 export interface UpdateNoticeRequest {
@@ -84,6 +89,29 @@ export interface UpdateNoticeRequest {
   contentMd: string;
   isPinned?: string;
   attachedFileSeqs?: number[];
+  categorySeq?: number;
+}
+
+// --- Feed Category ---
+
+export interface AdminFeedCategory {
+  seq: number;
+  code: string;
+  name: string;
+  sortOrder: number;
+  openYn: 'Y' | 'N';
+  isDefault: 'Y' | 'N';
+  postCount: number;
+}
+
+export interface AdminFeedCategoryUpsert {
+  name: string;
+  openYn: 'Y' | 'N';
+}
+
+/** 409 body of DELETE /api/admin/feed-categories/{seq} when posts need a target. */
+export interface FeedCategoryHasPostsError extends APIError {
+  postCount: number;
 }
 
 // --- Disclosure (공익법인 의무공시) ---

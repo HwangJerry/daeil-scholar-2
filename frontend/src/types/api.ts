@@ -35,6 +35,8 @@ export interface NoticeItem {
   isPinned: string;
   userLiked: boolean;
   category?: string;
+  /** Admin-managed category name; absent on older servers. */
+  categoryName?: string;
 }
 
 export interface AdItem {
