@@ -146,6 +146,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	alumniService := service.NewAlumniService(alumniRepo, cacheStore)
 	profileService := service.NewProfileService(profileRepo)
 	bannerAdSvc := service.NewBannerAdService(bannerAdRepo)
+	adminFeedCategoryRepo := repository.NewAdminFeedCategoryRepository(db)
+	adminFeedCategorySvc := service.NewAdminFeedCategoryService(adminFeedCategoryRepo, cacheStore)
 	adminNoticeSvc := service.NewAdminNoticeService(adminNoticeRepo, fileRepo)
 	adminDisclosureSvc := service.NewAdminDisclosureService(adminDisclosureRepo, fileRepo)
 	disclosureSvc := service.NewDisclosureService(disclosureRepo)
@@ -277,6 +279,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		badge:               handler.NewBadgeHandler(messageService, notificationInboxService, logger),
 		notificationInbox:   handler.NewNotificationInboxHandler(notificationInboxService),
 		adminJobCat:         handler.NewAdminJobCategoryHandler(adminJobCatSvc),
+		adminFeedCategory:   handler.NewAdminFeedCategoryHandler(adminFeedCategorySvc),
 		history:             handler.NewHistoryHandler(historySvc),
 		adminSubscription:   handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
 		realtime:            handler.NewRealtimeHandler(realtimeHub, logger),

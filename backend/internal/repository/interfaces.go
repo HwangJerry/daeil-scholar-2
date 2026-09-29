@@ -30,6 +30,16 @@ type FeedQuerier interface {
 	GetOpenFeedCategories() ([]model.FeedCategory, error)
 }
 
+// AdminFeedCategoryStore defines the methods used by AdminFeedCategoryService.
+type AdminFeedCategoryStore interface {
+	GetAll() ([]model.AdminFeedCategory, error)
+	GetBySeq(seq int) (*model.AdminFeedCategory, error)
+	Insert(name, openYN string) (int, error)
+	Update(seq int, name, openYN string) error
+	Reorder(seqs []int) error
+	Delete(seq int, moveToSeq *int) (int, error)
+}
+
 // MessageQuerier defines the methods used by MessageService for messaging operations.
 type MessageQuerier interface {
 	FindAcceptedMessage(senderSeq int, clientMessageID string) (*model.SendMessageResponse, error)

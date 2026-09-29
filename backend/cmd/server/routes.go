@@ -58,6 +58,7 @@ type handlers struct {
 	badge               *handler.BadgeHandler
 	notificationInbox   *handler.NotificationInboxHandler
 	adminJobCat         *handler.AdminJobCategoryHandler
+	adminFeedCategory   *handler.AdminFeedCategoryHandler
 	history             *handler.HistoryHandler
 	realtime            *handler.RealtimeHandler
 	adminSubscription   *handler.AdminSubscriptionHandler
@@ -274,6 +275,11 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Put("/feed/{seq}", h.adminNotice.Update)
 		r.Delete("/feed/{seq}", h.adminNotice.Delete)
 		r.Put("/feed/{seq}/pin", h.adminNotice.TogglePin)
+		r.Get("/feed-categories", h.adminFeedCategory.List)
+		r.Post("/feed-categories", h.adminFeedCategory.Create)
+		r.Put("/feed-categories/order", h.adminFeedCategory.Reorder)
+		r.Put("/feed-categories/{seq}", h.adminFeedCategory.Update)
+		r.Delete("/feed-categories/{seq}", h.adminFeedCategory.Delete)
 		r.Get("/disclosure", h.adminDisclosure.List)
 		r.Get("/disclosure/{seq}", h.adminDisclosure.Detail)
 		r.Post("/disclosure", h.adminDisclosure.Create)
