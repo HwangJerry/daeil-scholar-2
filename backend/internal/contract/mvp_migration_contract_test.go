@@ -245,6 +245,14 @@ func mvpMigrationContracts() []migrationContract {
 				"PRIMARY KEY (PLATFORM, BUILD)", "IDX_ACB_PLATFORM_LAST_SEEN", "ENGINE=InnoDB",
 			},
 		},
+		{
+			name: "078_create_notification_inbox_state.sql",
+			required: []string{
+				"CREATE TABLE IF NOT EXISTS ALUMNI_NOTIFICATION_INBOX_STATE",
+				"USR_SEQ", "LAST_SEEN_POST_SEQ INT NOT NULL DEFAULT 0", "UPD_DATE", "PRIMARY KEY (USR_SEQ)",
+				"ENGINE=InnoDB", "utf8mb4",
+			},
+		},
 	}
 }
 

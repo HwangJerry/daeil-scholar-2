@@ -1,0 +1,16 @@
+{
+  "hasMore": false,
+  "items": [
+    {
+      "body": "합성 새 소식",
+      "createdAt": "<timestamp>",
+      "deepLink": "/feed/1",
+      "id": "notice-1",
+      "isUnread": true,
+      "postSeq": 1,
+      "title": "새 소식",
+      "type": "admin.notice"
+    }
+  ],
+  "nextCursor": null
+}

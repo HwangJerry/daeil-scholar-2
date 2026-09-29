@@ -109,6 +109,36 @@ func (h *Hub) Publish(userSeq int, ev Event) {
 	h.mu.Unlock()
 }
 
+// PublishToConnected delivers an event to every user with an open stream right
+// now, as one Publish per user. Each user gets a shallow copy of a map payload
+// so each copy carries that user's own eventId. Users who are offline get
+// nothing and nothing is kept for them: the REST endpoint is their catch-up.
+// It returns how many users were published to.
+func (h *Hub) PublishToConnected(ev Event) int {
+	h.mu.RLock()
+	userSeqs := make([]int, 0, len(h.subscribers))
+	for userSeq := range h.subscribers {
+		userSeqs = append(userSeqs, userSeq)
+	}
+	h.mu.RUnlock()
+	for _, userSeq := range userSeqs {
+		h.Publish(userSeq, Event{Type: ev.Type, Payload: copyPayload(ev.Payload)})
+	}
+	return len(userSeqs)
+}
+
+func copyPayload(payload interface{}) interface{} {
+	original, ok := payload.(map[string]any)
+	if !ok {
+		return payload
+	}
+	copied := make(map[string]any, len(original)+1)
+	for key, value := range original {
+		copied[key] = value
+	}
+	return copied
+}
+
 func eventID(event Event) int64 {
 	payload, ok := event.Payload.(map[string]any)
 	if !ok {

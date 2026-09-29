@@ -6,22 +6,31 @@ import (
 
 	"github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/model"
-	"github.com/dflh-saf/backend/internal/service"
 	"github.com/rs/zerolog"
 )
 
+type unreadMessageCounter interface {
+	GetUnreadCount(usrSeq int) (int, error)
+}
+
+type unreadNotificationCounter interface {
+	CountUnread(userSeq int) (int, error)
+}
+
 // BadgeHandler aggregates unread counts from multiple services into a single response.
 type BadgeHandler struct {
-	msgService *service.MessageService
-	logger     zerolog.Logger
+	msgService          unreadMessageCounter
+	notificationService unreadNotificationCounter
+	logger              zerolog.Logger
 }
 
 // NewBadgeHandler creates a new BadgeHandler.
-func NewBadgeHandler(msgSvc *service.MessageService, logger zerolog.Logger) *BadgeHandler {
-	return &BadgeHandler{msgService: msgSvc, logger: logger}
+func NewBadgeHandler(msgSvc unreadMessageCounter, notificationSvc unreadNotificationCounter, logger zerolog.Logger) *BadgeHandler {
+	return &BadgeHandler{msgService: msgSvc, notificationService: notificationSvc, logger: logger}
 }
 
-// GetBadges handles GET /api/badges — unified unread counts for polling.
+// GetBadges handles GET /api/badges — unified unread counts for polling. A
+// failing count degrades to 0 so one source can never hide the other.
 func (h *BadgeHandler) GetBadges(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetAuthUser(r.Context())
 	if user == nil {
@@ -34,8 +43,14 @@ func (h *BadgeHandler) GetBadges(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error().Err(err).Msg("badges: unread messages count failed")
 		unreadMessages = 0
 	}
+	unreadNotifications, err := h.notificationService.CountUnread(user.USRSeq)
+	if err != nil {
+		h.logger.Error().Err(err).Msg("badges: unread notifications count failed")
+		unreadNotifications = 0
+	}
 
 	respondJSON(w, http.StatusOK, model.BadgeResponse{
-		UnreadMessages: unreadMessages,
+		UnreadMessages:      unreadMessages,
+		UnreadNotifications: unreadNotifications,
 	})
 }

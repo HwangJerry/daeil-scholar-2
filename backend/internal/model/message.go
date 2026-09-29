@@ -99,5 +99,6 @@ type ConversationListResponse struct {
 
 // BadgeResponse is the API response for GET /api/badges.
 type BadgeResponse struct {
-	UnreadMessages int `json:"unreadMessages"`
+	UnreadMessages      int `json:"unreadMessages"`
+	UnreadNotifications int `json:"unreadNotifications"`
 }

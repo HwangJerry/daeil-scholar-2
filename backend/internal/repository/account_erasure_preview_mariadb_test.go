@@ -52,6 +52,12 @@ INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
+	inbox, err := os.ReadFile("../../migrations/078_create_notification_inbox_state.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.MustExec(string(inbox))
+	db.MustExec(`INSERT INTO ALUMNI_NOTIFICATION_INBOX_STATE (USR_SEQ,LAST_SEEN_POST_SEQ,UPD_DATE) VALUES (42,10,NOW()),(43,11,NOW())`)
 	links, err := os.ReadFile("../../migrations/039_create_social_link_continuation.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +118,7 @@ INSERT INTO WEO_PG_DATA VALUES (1,'fake-card'),(2,'other-card');`)
 	}
 	wantCounts := map[string]int64{"WEO_FILES": 1, "WEO_PG_DATA": 1, "WEO_ORDER": 1, "ALUMNI_DONATION_RETENTION": 1, "WEO_BOARDBBS": 1,
 		"ALUMNI_PUSH_OUTBOX": 1, "ALUMNI_NOTIFICATION": 2, "WEO_BOARDCOMAND": 1, "ALUMNI_MESSAGE": 2, "WEO_VISIT_DAILY": 1,
-		"WEO_MEMBER_SOCIAL": 1, "ALUMNI_SOCIAL_LINK_CONTINUATION": 2, "ALUMNI_SOCIAL_LINK_REAUTH_GUARD": 1, "ALUMNI_UPLOAD_OWNER": 1, "ALUMNI_PROFILE_FILE_HISTORY": 1, "WEO_MEMBER": 1}
+		"ALUMNI_NOTIFICATION_INBOX_STATE": 1, "WEO_MEMBER_SOCIAL": 1, "ALUMNI_SOCIAL_LINK_CONTINUATION": 2, "ALUMNI_SOCIAL_LINK_REAUTH_GUARD": 1, "ALUMNI_UPLOAD_OWNER": 1, "ALUMNI_PROFILE_FILE_HISTORY": 1, "WEO_MEMBER": 1}
 	if !reflect.DeepEqual(counts, wantCounts) {
 		t.Fatalf("counts = %v, want %v", counts, wantCounts)
 	}

@@ -155,10 +155,14 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	adminDonationOrchestrator := service.NewDonationConfigOrchestrator(adminDonationSvc, donationService, donationJob)
 	donationImportSvc := service.NewDonationImportService(donationImportRepo, adminDonationSvc, cfg.JWT.Secret, adminDonationOrchestrator)
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
+	// The realtime inbox event is wired unconditionally: the inbox lists every
+	// notice whether or not push delivery is enabled.
+	noticeNotifiers := []service.NoticePublishedNotifier{service.NewRealtimeNoticeNotifier(realtimeHub)}
 	if pushDelivery != nil {
 		adminMemberSvc.SetVerificationReviewNotifier(pushDelivery)
-		adminNoticeSvc.SetNoticePublishedNotifier(pushDelivery)
+		noticeNotifiers = append(noticeNotifiers, pushDelivery)
 	}
+	adminNoticeSvc.SetNoticePublishedNotifier(service.NewCompositeNoticeNotifier(noticeNotifiers...))
 	visitService := service.NewVisitService(visitRepo, cacheStore, cfg.VisitIPSalt, logger)
 	mobileAppEventService := service.NewMobileAppEventService(mobileAppEventRepo)
 	sentryClient := service.NewSentryClient(cfg.Sentry, cacheStore)
@@ -186,6 +190,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	messageService.ConfigureContentFilter(cfg.MessageBlockedPhrases)
 	memberBlockService := service.NewMemberBlockService(memberBlockRepo)
 	pushService := service.NewPushService(pushRepo)
+	notificationInboxService := service.NewNotificationInboxService(repository.NewNotificationInboxRepository(db))
 	blockedMessageCleanup := job.NewBlockedMessageCleanupJob(memberBlockRepo, logger)
 	phoneVerificationService := service.NewPhoneVerificationService(
 		phoneVerificationRepo, service.NewSMSSender(cfg.SMS, logger), notificationTemplateService, logger,
@@ -269,7 +274,8 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		passwordReset:       handler.NewPasswordResetHandler(passwordResetService, logger),
 		phoneVerification:   handler.NewPhoneVerificationHandler(phoneVerificationService, logger),
 		passwordChange:      handler.NewPasswordChangeHandler(passwordChangeSvc),
-		badge:               handler.NewBadgeHandler(messageService, logger),
+		badge:               handler.NewBadgeHandler(messageService, notificationInboxService, logger),
+		notificationInbox:   handler.NewNotificationInboxHandler(notificationInboxService),
 		adminJobCat:         handler.NewAdminJobCategoryHandler(adminJobCatSvc),
 		history:             handler.NewHistoryHandler(historySvc),
 		adminSubscription:   handler.NewAdminSubscriptionHandler(subscriptionBillingJob, logger),
