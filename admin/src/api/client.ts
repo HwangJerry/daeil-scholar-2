@@ -67,8 +67,11 @@ export const api = {
       body: body ? JSON.stringify(body) : undefined,
     });
   },
-  del<T>(url: string): Promise<T> {
-    return request<T>(url, { method: 'DELETE' });
+  del<T>(url: string, body?: unknown): Promise<T> {
+    return request<T>(url, {
+      method: 'DELETE',
+      body: body ? JSON.stringify(body) : undefined,
+    });
   },
   async upload<T>(url: string, formData: FormData): Promise<T> {
     const res = await fetch(url, {

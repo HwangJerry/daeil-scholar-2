@@ -14,6 +14,7 @@ import { MemberDetailPage } from './pages/MemberDetailPage.tsx';
 import { PendingMembersPage } from './pages/PendingMembersPage.tsx';
 import { AdminLoginPage } from './pages/AdminLoginPage.tsx';
 import { JobCategoryPage } from './pages/JobCategoryPage.tsx';
+import { FeedCategoryPage } from './pages/FeedCategoryPage.tsx';
 import { DonationMonitorPage } from './pages/DonationMonitorPage.tsx';
 import { HistoryManagePage } from './pages/HistoryManagePage.tsx';
 import { AppMonitoringPage } from './pages/AppMonitoringPage.tsx';
@@ -42,6 +43,7 @@ export function AppRoutes() {
         <Route path="notice" element={<NoticeListPage />} />
         <Route path="notice/new" element={<NoticeEditPage />} />
         <Route path="notice/:seq/edit" element={<NoticeEditPage />} />
+        <Route path="feed-categories" element={<FeedCategoryPage />} />
         <Route path="disclosure" element={<DisclosureListPage />} />
         <Route path="disclosure/new" element={<DisclosureEditPage />} />
         <Route path="disclosure/:seq/edit" element={<DisclosureEditPage />} />

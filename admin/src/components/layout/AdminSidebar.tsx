@@ -33,7 +33,7 @@ const NAVIGATION_GROUPS = [
   {
     id: 'content',
     label: '콘텐츠',
-    routes: ['/', '/notice', '/disclosure', '/banner-ad', '/history'],
+    routes: ['/', '/notice', '/feed-categories', '/disclosure', '/banner-ad', '/history'],
   },
   {
     id: 'donation',
