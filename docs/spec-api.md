@@ -86,6 +86,8 @@ transaction으로 완료됩니다.
 
 > **피드 카테고리:** 모든 item·hero·상세에 `category`(안정 code)·`categoryName`이 있고, `GET /api/feed`는 앱 탭용 `categories`(노출 중인 카테고리, 순서대로)를 함께 반환한다. 카테고리 없는 글은 기본 카테고리(`notice`)로 읽는다. 상세 계약은 `docs/mvp-api-contract.md` §19.
 
+> **공식 프로필:** 모든 item·hero·상세에 `officialProfile`(boolean)이 있다. `true`면 `regName`은 `대일외고장학회`이고 client는 재단 엠블럼을 아바타로 쓴다. 상세 계약은 `docs/mvp-api-contract.md` §20.
+
 **GET /api/feed/{seq} 응답 구조 (상세):**
 ```json
 {
@@ -385,13 +387,16 @@ EasyPay에서 사용자 결제 완료 후 리다이렉트합니다 (`sp_return_u
 
 > 공지 등록·수정은 `categorySeq`(선택)를 받고, 목록은 `?category=<seq>` 필터와 `categorySeq`·`categoryName`을 지원한다. 규칙과 오류는 `docs/mvp-api-contract.md` §19.
 
+> 공지 등록·수정은 `officialProfile`(boolean, 선택)을 받는다. 등록에서 생략하면 `true`(공식 프로필 `대일외고장학회`), 수정에서 생략하면 저장된 값 유지. 목록·상세는 `officialProfile`을 반환한다. 규칙은 `docs/mvp-api-contract.md` §20.
+
 **POST/PUT /api/admin/feed 요청:**
 ```json
 {
   "subject": "2026년 정기총회 안내",
   "contentMd": "# 정기총회\n\n일시: 2026년 3월 15일\n\n![포스터](/uploads/notice/abc.jpg)\n\n참석 신청...",
   "boardId": "NOTICE",
-  "isPinned": "N"
+  "isPinned": "N",
+  "officialProfile": true
 }
 ```
 
