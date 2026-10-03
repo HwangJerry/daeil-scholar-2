@@ -57,6 +57,9 @@ type createNoticeRequest struct {
 	// CategorySeq is optional: missing files a new post under the default
 	// category and leaves an edited post's category unchanged.
 	CategorySeq *int `json:"categorySeq"`
+	// OfficialProfile is optional: missing publishes a new post under the
+	// official profile and leaves an edited post's byline unchanged.
+	OfficialProfile *bool `json:"officialProfile"`
 }
 
 type setNoticeCategoryRequest struct {
@@ -85,7 +88,7 @@ func (h *AdminNoticeHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
 		return
 	}
-	seq, err := h.service.Create(req.Subject, req.ContentMd, user.USRName, user.USRSeq, req.IsPinned, req.AttachedFileSeqs, req.CategorySeq)
+	seq, err := h.service.Create(req.Subject, req.ContentMd, user.USRName, user.USRSeq, req.IsPinned, req.AttachedFileSeqs, req.CategorySeq, req.OfficialProfile)
 	if err != nil {
 		if respondCategoryRuleError(w, err) {
 			return
@@ -107,7 +110,12 @@ func (h *AdminNoticeHandler) Update(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
-	if err := h.service.Update(seq, req.Subject, req.ContentMd, req.IsPinned, req.AttachedFileSeqs, req.CategorySeq); err != nil {
+	user := middleware.GetAuthUser(r.Context())
+	if user == nil {
+		respondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "로그인이 필요합니다")
+		return
+	}
+	if err := h.service.Update(seq, req.Subject, req.ContentMd, req.IsPinned, req.AttachedFileSeqs, req.CategorySeq, req.OfficialProfile, user.USRName); err != nil {
 		if respondCategoryRuleError(w, err) {
 			return
 		}

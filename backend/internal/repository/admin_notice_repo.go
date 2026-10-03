@@ -40,6 +40,7 @@ func (r *AdminNoticeRepository) GetNotices(page, size int, keyword string, categ
 
 	offset := (page - 1) * size
 	query := `SELECT b.SEQ, b.SUBJECT, b.REG_DATE, b.REG_NAME, b.HIT, b.OPEN_YN, b.IS_PINNED, b.CONTENT_FORMAT,
+		` + officialProfileColumn + `,
 		` + feedCategorySeqExpr + ` AS category_seq, IFNULL(fc.FC_NAME, IFNULL(fd.FC_NAME, '공지')) AS category_name
 		` + from + where + ` ORDER BY b.SEQ DESC LIMIT ? OFFSET ?`
 	args = append(args, size, offset)
@@ -55,7 +56,7 @@ func (r *AdminNoticeRepository) GetNoticeForEdit(seq int) (*model.NoticeDetail, 
 	var detail model.NoticeDetail
 	err := r.DB.Get(&detail, `
 		SELECT b.SEQ, b.SUBJECT, b.CONTENTS, b.CONTENTS_MD, b.CONTENT_FORMAT, b.SUMMARY, b.THUMBNAIL_URL,
-		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED,`+feedCategoryColumns+`,
+		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED, `+officialProfileColumn+`,`+feedCategoryColumns+`,
 		       `+feedCategorySeqExpr+` AS category_seq
 		FROM WEO_BOARDBBS b`+feedCategoryJoin+`
 		WHERE b.SEQ = ? AND b.GATE = 'NOTICE' LIMIT 1
@@ -83,29 +84,63 @@ func (r *AdminNoticeRepository) InsertNotice(n *model.AdminNoticeInsert) (int, e
 			(SEQ, GATE, P_ID, B_NO, R_NO,
 			 SUBJECT, CONTENTS, CONTENTS_MD, CONTENT_FORMAT, CONTENTS_TYPE,
 			 SUMMARY, THUMBNAIL_URL, IS_PINNED, OPEN_YN, OPEN_TYPE, REPLY_MAIL,
-			 STEP, USR_SEQ, REG_NAME, REG_DATE, HIT, LIKE_CNT, FEED_CATEGORY_SEQ)
+			 STEP, USR_SEQ, REG_NAME, REG_DATE, HIT, LIKE_CNT, FEED_CATEGORY_SEQ, OFFICIAL_PROFILE_YN)
 		VALUES (?, 'NOTICE', 0, 0, 0,
 		        ?, ?, ?, 'MARKDOWN', 'H',
 		        ?, ?, ?, 'Y', 'Y', 'N',
-		        'U', ?, ?, NOW(), 0, 0, ?)
+		        'U', ?, ?, NOW(), 0, 0, ?, ?)
 	`, nextSeq, n.Subject, n.Contents, n.ContentsMD,
 		n.Summary, n.ThumbnailURL, n.IsPinned,
-		n.USRSeq, n.RegName, n.FeedCategorySeq)
+		n.USRSeq, n.RegName, n.FeedCategorySeq, insertOfficialProfileYN(n.OfficialProfileYN))
 	if err != nil {
 		return 0, err
 	}
 	return nextSeq, nil
 }
 
+// insertOfficialProfileYN stores only 'Y' or 'N'; anything else is 'N'.
+func insertOfficialProfileYN(yn string) string {
+	if yn == "Y" {
+		return "Y"
+	}
+	return "N"
+}
+
+// UpdateNotice rewrites a post. An empty OfficialProfileYN or RegName keeps
+// the stored value, so a request without the official-profile choice leaves
+// the byline untouched.
 func (r *AdminNoticeRepository) UpdateNotice(seq int, n *model.AdminNoticeInsert) error {
 	_, err := r.DB.Exec(`
 		UPDATE WEO_BOARDBBS
 		SET SUBJECT = ?, CONTENTS = ?, CONTENTS_MD = ?, CONTENT_FORMAT = 'MARKDOWN',
 		    SUMMARY = ?, THUMBNAIL_URL = ?, IS_PINNED = ?,
-		    FEED_CATEGORY_SEQ = IFNULL(?, FEED_CATEGORY_SEQ)
+		    FEED_CATEGORY_SEQ = IFNULL(?, FEED_CATEGORY_SEQ),
+		    OFFICIAL_PROFILE_YN = IFNULL(NULLIF(?, ''), OFFICIAL_PROFILE_YN),
+		    REG_NAME = IFNULL(NULLIF(?, ''), REG_NAME)
 		WHERE SEQ = ? AND GATE = 'NOTICE'
-	`, n.Subject, n.Contents, n.ContentsMD, n.Summary, n.ThumbnailURL, n.IsPinned, n.FeedCategorySeq, seq)
+	`, n.Subject, n.Contents, n.ContentsMD, n.Summary, n.ThumbnailURL, n.IsPinned, n.FeedCategorySeq,
+		n.OfficialProfileYN, n.RegName, seq)
 	return err
+}
+
+// GetNoticeAuthorProfile reads a post's official-profile flag and its author's
+// real member name (empty when the member row is gone). It returns nil when
+// the post does not exist.
+func (r *AdminNoticeRepository) GetNoticeAuthorProfile(seq int) (*model.NoticeAuthorProfile, error) {
+	var profile model.NoticeAuthorProfile
+	err := r.DB.Get(&profile, `
+		SELECT b.OFFICIAL_PROFILE_YN, IFNULL(m.USR_NAME, '') AS author_name
+		FROM WEO_BOARDBBS b
+		LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = b.USR_SEQ
+		WHERE b.SEQ = ? AND b.GATE = 'NOTICE' LIMIT 1
+	`, seq)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &profile, nil
 }
 
 // UpdateNoticeCategory changes only a post's category, so legacy (HTML) posts
