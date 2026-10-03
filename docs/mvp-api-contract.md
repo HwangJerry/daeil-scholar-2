@@ -1257,3 +1257,37 @@ canonical fixture는 `docs/contracts/fixtures/`에 둔다.
 - `GET /api/admin/feed/{seq}`: `categorySeq`·`category`·`categoryName`이 추가된다(`categorySeq`는 관리자 응답에만 있다).
 
 Tier 1 golden: `backend/cmd/server/testdata/golden/feed_with_categories.json`, `feed_detail_default_category.json`, `admin_feed_categories.json`, `admin_feed_category_created.json`, `admin_feed_list_by_category.json`, `admin_feed_category_duplicate_400.json`, `admin_feed_category_has_posts_409.json`.
+
+## 20. 피드 공식 프로필 계약
+
+관리자가 공지(`WEO_BOARDBBS` `GATE='NOTICE'`)를 쓸 때 작성자 대신 재단 공식 프로필(이름 `대일외고장학회`, 공백 없음 + 재단 엠블럼)로 게시할 수 있다. migration `080`이 `WEO_BOARDBBS.OFFICIAL_PROFILE_YN CHAR(1) NOT NULL DEFAULT 'N'`을 추가한다. 기존 글은 모두 `N`이며 데이터는 다시 쓰지 않는다.
+
+### 20.1 저장 규칙
+
+| `officialProfile` | `OFFICIAL_PROFILE_YN` | `REG_NAME` |
+|---|---|---|
+| `true` | `Y` | `대일외고장학회` |
+| `false` (등록) | `N` | 로그인한 관리자 이름 |
+| `false` (수정, 기존 `Y` → 끔) | `N` | 글 `USR_SEQ` 회원의 실제 이름. 회원 이름이 없으면 수정하는 관리자 이름 |
+| `false` (수정, 기존 `N` 유지) | `N` | 저장된 `REG_NAME` 유지 |
+
+`USR_SEQ`는 언제나 실제로 작성한 관리자로 남는다(내부 감사용). 공식 프로필은 표시용이다.
+
+### 20.2 관리자 공지 API
+
+- `POST /api/admin/feed`: `officialProfile`(boolean, 선택). **생략하면 `true`**(새 글은 공식 프로필이 기본).
+- `PUT /api/admin/feed/{seq}`: `officialProfile`(boolean, 선택). 생략하면 저장된 값과 `REG_NAME`을 **유지**한다.
+- `GET /api/admin/feed` 목록 item과 `GET /api/admin/feed/{seq}` 상세에 `officialProfile`이 추가된다.
+
+### 20.3 공개 피드 (additive)
+
+모든 피드 글 응답(`GET /api/feed` items, `GET /api/feed/hero`, `GET /api/feed/{seq}`)에 `officialProfile`(boolean, `OFFICIAL_PROFILE_YN='Y'`일 때만 `true`)이 추가된다. `true`인 글의 `regName`은 `대일외고장학회`이다. client는 `true`일 때 작성자 이니셜 대신 재단 엠블럼을 아바타로 보여 준다. 필드가 없으면(구 서버) `false`로 취급한다. 댓글 응답은 바뀌지 않는다.
+
+```json
+{
+  "type": "notice", "seq": 12, "subject": "장학금 안내", "regName": "대일외고장학회",
+  "officialProfile": true, "category": "notice", "categoryName": "공지"
+}
+```
+
+Tier 1 golden: `backend/cmd/server/testdata/golden/feed_detail_official_profile.json` (기존 §19 golden도 `officialProfile` 포함으로 갱신).

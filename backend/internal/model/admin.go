@@ -14,6 +14,9 @@ type AdminNoticeRow struct {
 	ContentFormat string `db:"CONTENT_FORMAT" json:"contentFormat"`
 	CategorySeq   int    `db:"category_seq" json:"categorySeq"`
 	CategoryName  string `db:"category_name" json:"categoryName"`
+	// OfficialProfile is true when the post shows the foundation's official
+	// profile (WEO_BOARDBBS.OFFICIAL_PROFILE_YN = 'Y').
+	OfficialProfile bool `db:"official_profile" json:"officialProfile"`
 }
 
 type AdminNoticeInsert struct {
@@ -28,6 +31,17 @@ type AdminNoticeInsert struct {
 	// FeedCategorySeq is the post's category; nil stores NULL (the default) on
 	// insert and keeps the current category on update.
 	FeedCategorySeq *int
+	// OfficialProfileYN is 'Y' for a post published under the official
+	// profile, 'N' otherwise. On update, empty keeps the stored flag, and an
+	// empty RegName keeps the stored byline.
+	OfficialProfileYN string
+}
+
+// NoticeAuthorProfile is a post's stored official-profile flag and the real
+// member name of its USR_SEQ author.
+type NoticeAuthorProfile struct {
+	OfficialProfileYN string `db:"OFFICIAL_PROFILE_YN"`
+	AuthorName        string `db:"author_name"`
 }
 
 // --- Disclosure (공익법인 의무공시) ---

@@ -39,6 +39,9 @@ type NoticeItem struct {
 	UserLiked    bool   `db:"user_liked" json:"userLiked"`
 	Category     string `db:"category" json:"category"`
 	CategoryName string `db:"category_name" json:"categoryName"`
+	// OfficialProfile is true when the post shows the foundation's official
+	// profile; RegName then holds the official name.
+	OfficialProfile bool `db:"official_profile" json:"officialProfile"`
 }
 
 // NoticeDetail is the full detail of a notice post (DB scan target).
@@ -52,18 +55,20 @@ type NoticeDetail struct {
 	ThumbnailURL  string `db:"THUMBNAIL_URL" json:"thumbnailUrl"`
 	RegDate       string `db:"REG_DATE" json:"regDate"`
 	RegName       string `db:"REG_NAME" json:"regName"`
-	Hit           int    `db:"HIT" json:"hit"`
-	IsPinned      string `db:"IS_PINNED" json:"isPinned"`
-	Category      string `db:"category" json:"category"`
-	CategoryName  string `db:"category_name" json:"categoryName"`
+	// OfficialProfile is true when the post shows the foundation's official profile.
+	OfficialProfile bool   `db:"official_profile" json:"officialProfile"`
+	Hit             int    `db:"HIT" json:"hit"`
+	IsPinned        string `db:"IS_PINNED" json:"isPinned"`
+	Category        string `db:"category" json:"category"`
+	CategoryName    string `db:"category_name" json:"categoryName"`
 	// CategorySeq is selected only by the admin read, so public details omit it.
-	CategorySeq   int    `db:"category_seq" json:"categorySeq,omitempty"`
-	LikeCnt       int    `json:"likeCnt"`
-	CommentCnt    int    `json:"commentCnt"`
-	UserLiked     bool   `json:"userLiked"`
-	Files         []FileRecord   `json:"files,omitempty"`
-	ContentHtml   string `json:"contentHtml"`
-	ContentMd     string `json:"contentMd,omitempty"`
+	CategorySeq int          `db:"category_seq" json:"categorySeq,omitempty"`
+	LikeCnt     int          `json:"likeCnt"`
+	CommentCnt  int          `json:"commentCnt"`
+	UserLiked   bool         `json:"userLiked"`
+	Files       []FileRecord `json:"files,omitempty"`
+	ContentHtml string       `json:"contentHtml"`
+	ContentMd   string       `json:"contentMd,omitempty"`
 }
 
 // DisclosureItem represents a public-disclosure list row from WEO_BOARDBBS (GATE='DISCLOSURE').

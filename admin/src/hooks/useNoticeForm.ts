@@ -14,6 +14,9 @@ interface NoticeFormState {
   setSubject: (v: string) => void;
   setContentMd: (v: string) => void;
   setIsPinned: (v: boolean) => void;
+  /** Publish under the official profile; on by default for new posts, the stored value on edit. */
+  officialProfile: boolean;
+  setOfficialProfile: (v: boolean) => void;
   isValid: boolean;
 }
 
@@ -21,11 +24,15 @@ export function useNoticeForm(notice: NoticeDetail | undefined): NoticeFormState
   const [subject, setSubject] = useState(notice?.subject ?? '');
   const [contentMd, setContentMd] = useState(notice?.contentMd ?? '');
   const [isPinned, setIsPinned] = useState(notice?.isPinned === 'Y');
+  const [officialProfile, setOfficialProfile] = useState(notice ? notice.officialProfile === true : true);
   const [chosenCategorySeq, setCategorySeq] = useState<number | null>(null);
   const { data: categories = [] } = useFeedCategories();
   const categorySeq = chosenCategorySeq ?? notice?.categorySeq ?? defaultCategorySeq(categories);
 
   const isValid = subject.trim().length > 0 && contentMd.trim().length > 0 && categorySeq !== null;
 
-  return { subject, contentMd, isPinned, categorySeq, setCategorySeq, setSubject, setContentMd, setIsPinned, isValid };
+  return {
+    subject, contentMd, isPinned, categorySeq, setCategorySeq, setSubject, setContentMd, setIsPinned,
+    officialProfile, setOfficialProfile, isValid,
+  };
 }

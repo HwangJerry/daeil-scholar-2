@@ -1,10 +1,13 @@
+// PublicNoticeDetail.test — public notice detail composition without engagement, with the official-profile header flag
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PostContent } from '../components/post/PostContent';
 import type { NoticeDetail } from '../types/api';
 
 vi.mock('../components/post/PostHeader', () => ({
-  PostHeader: () => <header>공지 제목</header>,
+  PostHeader: ({ officialProfile }: { officialProfile?: boolean }) => (
+    <header data-official-profile={String(officialProfile)}>공지 제목</header>
+  ),
 }));
 vi.mock('../components/post/PostBody', () => ({
   PostBody: () => <div>공지 본문</div>,
@@ -36,5 +39,13 @@ describe('public notice detail', () => {
     expect(screen.getByText('공지 제목')).toBeInTheDocument();
     expect(screen.getByText('공지 본문')).toBeInTheDocument();
     expect(screen.queryByText('PUBLIC_ENGAGEMENT_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
+  });
+
+  it('passes officialProfile to the header, treating a missing field as false', () => {
+    const { rerender } = render(<PostContent post={{ ...post, officialProfile: true }} />);
+    expect(screen.getByText('공지 제목')).toHaveAttribute('data-official-profile', 'true');
+
+    rerender(<PostContent post={post} />);
+    expect(screen.getByText('공지 제목')).toHaveAttribute('data-official-profile', 'false');
   });
 });

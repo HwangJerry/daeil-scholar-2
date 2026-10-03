@@ -13,6 +13,7 @@ export function PostContent({ post }: PostContentProps) {
       <PostHeader
         subject={post.subject}
         regName={post.regName}
+        officialProfile={post.officialProfile === true}
         regDate={post.regDate}
         hit={post.hit}
       />

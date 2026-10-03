@@ -27,42 +27,9 @@ export interface AuthUser {
 
 // --- Notice ---
 
-export interface AdminNoticeListItem {
-  seq: number;
-  subject: string;
-  regDate: string;
-  regName: string;
-  hit: number;
-  openYn: string;
-  isPinned: string;
-  contentFormat: 'LEGACY' | 'MARKDOWN';
-  categorySeq: number;
-  categoryName: string;
-}
-
-export interface AdminNoticeListResponse {
-  items: AdminNoticeListItem[];
-  total: number;
-}
-
-export interface NoticeDetail {
-  seq: number;
-  subject: string;
-  contentHtml: string;
-  contentFormat: 'LEGACY' | 'MARKDOWN';
-  contentMd?: string;
-  summary: string;
-  thumbnailUrl: string | null;
-  regDate: string;
-  regName: string;
-  hit: number;
-  likeCnt: number;
-  commentCnt: number;
-  isPinned: string;
-  categorySeq: number;
-  categoryName: string;
-  files: FileAttachment[];
-}
+export type {
+  AdminNoticeListItem, AdminNoticeListResponse, CreateNoticeRequest, NoticeDetail, UpdateNoticeRequest,
+} from './notice.ts';
 
 export interface FileAttachment {
   fSeq: number;
@@ -74,22 +41,6 @@ export interface FileAttachment {
   filePath: string;
   fileOrgName: string;
   openYn: string;
-}
-
-export interface CreateNoticeRequest {
-  subject: string;
-  contentMd: string;
-  isPinned?: string;
-  attachedFileSeqs?: number[];
-  categorySeq?: number;
-}
-
-export interface UpdateNoticeRequest {
-  subject: string;
-  contentMd: string;
-  isPinned?: string;
-  attachedFileSeqs?: number[];
-  categorySeq?: number;
 }
 
 // --- Feed Category ---

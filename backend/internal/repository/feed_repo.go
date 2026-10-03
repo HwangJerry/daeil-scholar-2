@@ -21,7 +21,7 @@ func (r *FeedRepository) GetNotices(cursor int, size int, heroSeq int, userSeq i
 	query := strings.Builder{}
 	query.WriteString(`
 		SELECT b.SEQ, b.SUBJECT, IFNULL(b.SUMMARY,'') AS SUMMARY, IFNULL(b.THUMBNAIL_URL,'') AS THUMBNAIL_URL,
-		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED,
+		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED, ` + officialProfileColumn + `,
 		       (SELECT COUNT(*) FROM WEO_BOARDLIKE
 		        WHERE BBS_SEQ = b.SEQ AND OPEN_YN = 'Y') AS like_cnt,
 		       (SELECT COUNT(*) FROM WEO_BOARDCOMAND
@@ -55,7 +55,7 @@ func (r *FeedRepository) GetHeroNotice() (*model.NoticeItem, error) {
 	var notice model.NoticeItem
 	err := r.DB.Get(&notice, `
 		SELECT b.SEQ, b.SUBJECT, IFNULL(b.SUMMARY,'') AS SUMMARY, IFNULL(b.THUMBNAIL_URL,'') AS THUMBNAIL_URL,
-		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED,`+feedCategoryColumns+`
+		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED, `+officialProfileColumn+`,`+feedCategoryColumns+`
 		FROM WEO_BOARDBBS b`+feedCategoryJoin+`
 		WHERE b.GATE = 'NOTICE' AND b.OPEN_YN = 'Y'
 		ORDER BY (b.IS_PINNED = 'Y') DESC, b.SEQ DESC
@@ -77,7 +77,7 @@ func (r *FeedRepository) GetNoticeDetail(seq int) (*model.NoticeDetail, error) {
 		       IFNULL(b.CONTENTS_MD,'') AS CONTENTS_MD,
 		       IFNULL(b.CONTENT_FORMAT,'LEGACY') AS CONTENT_FORMAT,
 		       IFNULL(b.SUMMARY,'') AS SUMMARY, IFNULL(b.THUMBNAIL_URL,'') AS THUMBNAIL_URL,
-		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED,`+feedCategoryColumns+`
+		       b.REG_DATE, b.REG_NAME, b.HIT, b.IS_PINNED, `+officialProfileColumn+`,`+feedCategoryColumns+`
 		FROM WEO_BOARDBBS b`+feedCategoryJoin+`
 		WHERE b.SEQ = ? AND b.GATE = 'NOTICE' AND b.OPEN_YN = 'Y'
 		LIMIT 1

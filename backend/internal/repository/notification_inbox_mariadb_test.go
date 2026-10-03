@@ -9,12 +9,13 @@ import (
 )
 
 // TestNotificationInboxOnMariaDB101 runs the inbox queries against the production
-// baseline plus migrations 078 and 079 (notice inserts write FEED_CATEGORY_SEQ): the 90-day window, the published filter, keyset
+// baseline plus migrations 078 to 080 (notice inserts write FEED_CATEGORY_SEQ and OFFICIAL_PROFILE_YN): the 90-day window, the published filter, keyset
 // paging and the forward-only, clamped last-seen upsert all have to hold on the real 10.1 engine.
 func TestNotificationInboxOnMariaDB101(t *testing.T) {
 	inputs := append(mariadb.ProdBaseline(t),
 		mariadb.File("../../migrations/078_create_notification_inbox_state.sql"),
-		mariadb.File("../../migrations/079_create_feed_categories.sql"))
+		mariadb.File("../../migrations/079_create_feed_categories.sql"),
+		mariadb.File("../../migrations/080_add_board_official_profile.sql"))
 	db := mariadb.Start(t).NewDatabase(t, inputs...).DB
 	notices := NewAdminNoticeRepository(db)
 	insert := func(subject string) int {

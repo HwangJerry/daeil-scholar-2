@@ -1,9 +1,12 @@
 // PostHeader — 게시글 제목 및 메타데이터 표시 (피드 카드 톤앤매너 통일)
 import { Eye } from 'lucide-react';
+import { PostAuthor } from './PostAuthor';
 
 interface PostHeaderProps {
   subject: string;
   regName: string;
+  /** Show the foundation's official profile instead of regName. */
+  officialProfile?: boolean;
   regDate: string;
   hit: number;
 }
@@ -17,12 +20,12 @@ function formatDate(iso: string): string {
   return `${y}.${m}.${day}`;
 }
 
-export function PostHeader({ subject, regName, regDate, hit }: PostHeaderProps) {
+export function PostHeader({ subject, regName, officialProfile = false, regDate, hit }: PostHeaderProps) {
   return (
     <header className="mb-5">
       <h1 className="mb-3 text-xl font-bold font-serif text-text-primary leading-snug">{subject}</h1>
       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-text-tertiary">
-        <span className="text-text-secondary font-medium">{regName}</span>
+        <PostAuthor regName={regName} officialProfile={officialProfile} />
         <span>·</span>
         <span>{formatDate(regDate)}</span>
         <span>·</span>

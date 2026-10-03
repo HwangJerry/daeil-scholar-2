@@ -71,8 +71,10 @@ func (s *AdminNoticeService) GetForEdit(seq int) (*model.NoticeDetail, error) {
 	return detail, nil
 }
 
-// Create publishes a Markdown notice. A nil categorySeq files it under the default category.
-func (s *AdminNoticeService) Create(subject, markdownText, regName string, usrSeq int, isPinned string, attachedFileSeqs []int, categorySeq *int) (int, error) {
+// Create publishes a Markdown notice. A nil categorySeq files it under the
+// default category; a nil officialProfile publishes it under the official
+// profile. usrSeq always records the real operator.
+func (s *AdminNoticeService) Create(subject, markdownText, adminName string, usrSeq int, isPinned string, attachedFileSeqs []int, categorySeq *int, officialProfile *bool) (int, error) {
 	if err := s.checkCategory(categorySeq); err != nil {
 		return 0, err
 	}
@@ -83,16 +85,18 @@ func (s *AdminNoticeService) Create(subject, markdownText, regName string, usrSe
 	if isPinned == "" {
 		isPinned = "N"
 	}
+	byline := newNoticeByline(officialProfile, adminName)
 	seq, err := s.repo.InsertNotice(&model.AdminNoticeInsert{
-		Subject:         subject,
-		Contents:        encoded,
-		ContentsMD:      markdownText,
-		Summary:         summary,
-		ThumbnailURL:    thumbnail,
-		IsPinned:        isPinned,
-		RegName:         regName,
-		USRSeq:          usrSeq,
-		FeedCategorySeq: categorySeq,
+		Subject:           subject,
+		Contents:          encoded,
+		ContentsMD:        markdownText,
+		Summary:           summary,
+		ThumbnailURL:      thumbnail,
+		IsPinned:          isPinned,
+		RegName:           byline.regName,
+		USRSeq:            usrSeq,
+		FeedCategorySeq:   categorySeq,
+		OfficialProfileYN: byline.officialProfileYN,
 	})
 	if err != nil {
 		return 0, err
@@ -108,9 +112,15 @@ func (s *AdminNoticeService) Create(subject, markdownText, regName string, usrSe
 	return seq, attachErr
 }
 
-// Update rewrites a notice as Markdown. A nil categorySeq keeps its current category.
-func (s *AdminNoticeService) Update(seq int, subject, markdownText, isPinned string, attachedFileSeqs []int, categorySeq *int) error {
+// Update rewrites a notice as Markdown. A nil categorySeq keeps its current
+// category and a nil officialProfile keeps its byline; editorName is the
+// fallback byline when turning the official profile off finds no author.
+func (s *AdminNoticeService) Update(seq int, subject, markdownText, isPinned string, attachedFileSeqs []int, categorySeq *int, officialProfile *bool, editorName string) error {
 	if err := s.checkCategory(categorySeq); err != nil {
+		return err
+	}
+	byline, err := s.editedNoticeByline(seq, officialProfile, editorName)
+	if err != nil {
 		return err
 	}
 	encoded, summary, thumbnail, err := ConvertAndEncode(markdownText)
@@ -121,13 +131,15 @@ func (s *AdminNoticeService) Update(seq int, subject, markdownText, isPinned str
 		isPinned = "N"
 	}
 	if err := s.repo.UpdateNotice(seq, &model.AdminNoticeInsert{
-		Subject:         subject,
-		Contents:        encoded,
-		ContentsMD:      markdownText,
-		Summary:         summary,
-		ThumbnailURL:    thumbnail,
-		IsPinned:        isPinned,
-		FeedCategorySeq: categorySeq,
+		Subject:           subject,
+		Contents:          encoded,
+		ContentsMD:        markdownText,
+		Summary:           summary,
+		ThumbnailURL:      thumbnail,
+		IsPinned:          isPinned,
+		FeedCategorySeq:   categorySeq,
+		OfficialProfileYN: byline.officialProfileYN,
+		RegName:           byline.regName,
 	}); err != nil {
 		return err
 	}
