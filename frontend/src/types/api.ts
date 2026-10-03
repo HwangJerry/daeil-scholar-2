@@ -37,6 +37,8 @@ export interface NoticeItem {
   category?: string;
   /** Admin-managed category name; absent on older servers. */
   categoryName?: string;
+  /** Published under the foundation's official profile; absent (older servers) means false. */
+  officialProfile?: boolean;
 }
 
 export interface AdItem {
@@ -84,6 +86,8 @@ export interface HeroNotice {
   likeCnt: number;
   commentCnt: number;
   isPinned: string;
+  /** Published under the foundation's official profile; absent means false. */
+  officialProfile?: boolean;
 }
 
 export interface BannerAdImage {
@@ -126,6 +130,8 @@ export interface NoticeDetail {
   likeCnt: number;
   commentCnt: number;
   userLiked: boolean;
+  /** Published under the foundation's official profile; absent means false. */
+  officialProfile?: boolean;
   files: FileAttachment[];
 }
 
