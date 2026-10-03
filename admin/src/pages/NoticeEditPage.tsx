@@ -14,6 +14,7 @@ import { useNoticeAttachments } from '../hooks/useNoticeAttachments.ts';
 import { AttachmentDropzone } from '../components/editor/AttachmentDropzone.tsx';
 import { AttachmentList } from '../components/editor/AttachmentList.tsx';
 import { NoticeCategorySelect } from '../components/notice/NoticeCategorySelect.tsx';
+import { NoticeOfficialProfileCheckbox } from '../components/notice/NoticeOfficialProfileCheckbox.tsx';
 import type { NoticeDetail } from '../types/api.ts';
 
 export function NoticeEditPage() {
@@ -122,6 +123,12 @@ function NoticeEditForm({
             상단 고정
           </label>
 
+          <NoticeOfficialProfileCheckbox
+            checked={form.officialProfile}
+            onChange={form.setOfficialProfile}
+            disabled={isSaving}
+          />
+
           <div className="flex justify-between gap-3">
             {seq && (
               <Button variant="ghost" className="text-error-text" onClick={() => del.openDialog(Number(seq))}>
@@ -132,7 +139,7 @@ function NoticeEditForm({
             <div className="flex gap-3 ml-auto">
               <Button variant="outline" onClick={() => navigate('/notice')}>취소</Button>
               <Button
-                onClick={() => { if (form.categorySeq !== null) save(form.subject, form.contentMd, form.isPinned, att.fSeqs, form.categorySeq); }}
+                onClick={() => { if (form.categorySeq !== null) save(form.subject, form.contentMd, form.isPinned, att.fSeqs, form.categorySeq, form.officialProfile); }}
                 disabled={isSaving || !form.isValid}
               >
                 {isSaving ? '저장 중...' : '저장'}
