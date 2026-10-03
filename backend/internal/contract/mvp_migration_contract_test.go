@@ -264,6 +264,13 @@ func mvpMigrationContracts() []migrationContract {
 				"ENGINE=InnoDB", "utf8mb4",
 			},
 		},
+		{
+			name: "080_add_board_official_profile.sql",
+			required: []string{
+				"ALTER TABLE WEO_BOARDBBS ADD COLUMN IF NOT EXISTS OFFICIAL_PROFILE_YN CHAR(1) NOT NULL DEFAULT 'N'",
+				"-- ALTER TABLE WEO_BOARDBBS DROP COLUMN OFFICIAL_PROFILE_YN",
+			},
+		},
 	}
 }
 

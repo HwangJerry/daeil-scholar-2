@@ -9,14 +9,15 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// newFeedCategoryDB is the production baseline plus migrations 078 and 079 on
+// newFeedCategoryDB is the production baseline plus migrations 078 to 080 on
 // the real MariaDB 10.1 engine, so the category joins and transactions run as
 // they will in production.
 func newFeedCategoryDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 	inputs := append(mariadb.ProdBaseline(t),
 		mariadb.File("../../migrations/078_create_notification_inbox_state.sql"),
-		mariadb.File("../../migrations/079_create_feed_categories.sql"))
+		mariadb.File("../../migrations/079_create_feed_categories.sql"),
+		mariadb.File("../../migrations/080_add_board_official_profile.sql"))
 	return mariadb.Start(t).NewDatabase(t, inputs...).DB
 }
 

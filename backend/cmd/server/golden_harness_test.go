@@ -77,6 +77,7 @@ func postBaselineMigrations() []mariadb.SQL {
 	return []mariadb.SQL{
 		mariadb.File(filepath.Join("..", "..", "migrations", "078_create_notification_inbox_state.sql")),
 		mariadb.File(filepath.Join("..", "..", "migrations", "079_create_feed_categories.sql")),
+		mariadb.File(filepath.Join("..", "..", "migrations", "080_add_board_official_profile.sql")),
 	}
 }
 
