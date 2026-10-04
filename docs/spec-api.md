@@ -83,6 +83,9 @@ transaction으로 완료됩니다.
 | GET | `/api/feed` | 피드 목록 (무한스크롤, cursor-based pagination) |
 | GET | `/api/feed/hero` | Hero 섹션용 최신 공지 1건 |
 | GET | `/api/feed/{seq}` | 공지 상세 |
+| POST | `/api/feed/{seq}/view` | 조회수 1 증가 (앱이 글을 처음 펼칠 때) → `{"hit": n}` |
+
+> **인라인 상세 (`include=detail`):** `GET /api/feed`·`GET /api/feed/hero`에 `include=detail`을 붙이면 각 item에 `contentHtml`·`contentFormat`·`files`(항상 배열)·`comments`(댓글 endpoint와 같은 목록)·`commentsHasMore`(항상 `false`)가 추가된다. 조회수는 올리지 않으며, 없으면 응답은 기존과 같다. 상세 계약은 `docs/mvp-api-contract.md` §21.
 
 > **피드 카테고리:** 모든 item·hero·상세에 `category`(안정 code)·`categoryName`이 있고, `GET /api/feed`는 앱 탭용 `categories`(노출 중인 카테고리, 순서대로)를 함께 반환한다. 카테고리 없는 글은 기본 카테고리(`notice`)로 읽는다. 상세 계약은 `docs/mvp-api-contract.md` §19.
 
@@ -117,6 +120,7 @@ transaction으로 완료됩니다.
 |----------|------|------|
 | `cursor` | string | 마지막으로 본 게시글 SEQ (없으면 최신부터) |
 | `size` | int | 한 페이지 크기 (기본 10, 최대 20) |
+| `include` | string | `detail`이면 item마다 본문·첨부·댓글 포함 (§21, 앱 전용) |
 | `exclude_ads` | string | 이미 노출된 광고 MA_SEQ 목록 (콤마 구분) |
 
 **GET /api/feed 응답 구조:**
