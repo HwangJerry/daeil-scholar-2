@@ -240,7 +240,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	h := handlers{
 		health:              handler.NewHealthHandler(db),
 		auth:                handler.NewAuthHandler(authService, memberService, registrationService, cacheStore, socialLinkTokens, cfg, logger),
-		feed:                handler.NewFeedHandler(feedService, likeService, feedPresenter),
+		feed:                handler.NewFeedHandler(feedService, likeService, service.NewFeedInlineDetailService(feedRepo), feedPresenter),
 		like:                handler.NewLikeHandler(likeService),
 		comment:             handler.NewCommentHandler(commentService),
 		donation:            handler.NewDonationHandler(donationService),

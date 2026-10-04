@@ -42,6 +42,8 @@ type NoticeItem struct {
 	// OfficialProfile is true when the post shows the foundation's official
 	// profile; RegName then holds the official name.
 	OfficialProfile bool `db:"official_profile" json:"officialProfile"`
+	// NoticeInlineDetail is set only for include=detail (never scanned from SQL).
+	*NoticeInlineDetail `db:"-"`
 }
 
 // NoticeDetail is the full detail of a notice post (DB scan target).
