@@ -39,6 +39,10 @@ type ConversationMessageListResponse struct {
 	Items      []ConversationMessage `json:"items"`
 	NextCursor *string               `json:"nextCursor"`
 	HasMore    bool                  `json:"hasMore"`
+	// RecipientAvailable is false when the peer is self, missing, withdrawn,
+	// deletion-pending or not an approved alumnus; sends would be refused with
+	// RECIPIENT_UNAVAILABLE.
+	RecipientAvailable bool `json:"recipientAvailable"`
 }
 
 type MarkConversationReadRequest struct {
@@ -86,6 +90,7 @@ type ConversationSummary struct {
 	LastMessageAt       string    `db:"LAST_MESSAGE_AT" json:"lastMessageAt"`
 	UnreadCount         int       `db:"UNREAD_COUNT" json:"unreadCount"`
 	BlockedByMe         bool      `db:"BLOCKED_BY_ME" json:"blockedByMe"`
+	RecipientAvailable  bool      `db:"RECIPIENT_AVAILABLE" json:"recipientAvailable"`
 	CursorCreatedAt     time.Time `db:"CURSOR_CREATED_AT" json:"-"`
 	CursorLastMessageID int64     `db:"CURSOR_MESSAGE_ID" json:"-"`
 }

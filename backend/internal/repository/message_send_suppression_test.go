@@ -149,20 +149,20 @@ func TestGetConversations_ReturnsCanonicalStableSummaries(t *testing.T) {
 	}
 	defer db.Close()
 
-	query := `(?s)SELECT\s+sub\.other_seq AS USER_SEQ,\s+COALESCE\(NULLIF\(CONVERT\(w\.USR_NAME USING utf8mb4\), _utf8mb4''\), _utf8mb4'탈퇴한 회원'\) AS NAME,.*AS LAST_MESSAGE,.*AS LAST_MESSAGE_AT,.*AS UNREAD_COUNT,.*ALUMNI_MEMBER_BLOCK.*BLOCKER_USR_SEQ.*BLOCKED_USR_SEQ.*AS BLOCKED_BY_ME,.*AS CURSOR_CREATED_AT,.*AS CURSOR_MESSAGE_ID.*SELECT latest\.AM_SEQ.*ORDER BY latest\.REG_DATE DESC, latest\.AM_SEQ DESC\s+LIMIT 1.*LEFT JOIN WEO_MEMBER.*ORDER BY m\.REG_DATE DESC, m\.AM_SEQ DESC\s+LIMIT \?`
+	query := `(?s)SELECT\s+sub\.other_seq AS USER_SEQ,\s+COALESCE\(NULLIF\(CONVERT\(w\.USR_NAME USING utf8mb4\), _utf8mb4''\), _utf8mb4'탈퇴한 회원'\) AS NAME,.*AS LAST_MESSAGE,.*AS LAST_MESSAGE_AT,.*AS UNREAD_COUNT,.*ALUMNI_MEMBER_BLOCK.*BLOCKER_USR_SEQ.*BLOCKED_USR_SEQ.*AS BLOCKED_BY_ME,.*ALUMNI_VERIFICATION.*STATUS = 'approved'.*USR_STATUS IN \('CCC','ZZZ'\).*AS RECIPIENT_AVAILABLE,.*AS CURSOR_CREATED_AT,.*AS CURSOR_MESSAGE_ID.*SELECT latest\.AM_SEQ.*ORDER BY latest\.REG_DATE DESC, latest\.AM_SEQ DESC\s+LIMIT 1.*LEFT JOIN WEO_MEMBER.*ORDER BY m\.REG_DATE DESC, m\.AM_SEQ DESC\s+LIMIT \?`
 	createdAt := time.Date(2026, 7, 28, 1, 0, 0, 0, time.UTC)
 	mock.ExpectQuery(query).
-		WithArgs(101, 101, 101, 101, 101, 101, 101, 21).
+		WithArgs(101, 101, 101, 101, 101, 101, 101, 101, 21).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"USER_SEQ", "NAME", "LAST_MESSAGE", "LAST_MESSAGE_AT", "UNREAD_COUNT", "BLOCKED_BY_ME", "CURSOR_CREATED_AT", "CURSOR_MESSAGE_ID",
-		}).AddRow(202, "탈퇴한 회원", "hello", "2026-07-28T01:00:00Z", 0, false, createdAt, int64(9001)))
+			"USER_SEQ", "NAME", "LAST_MESSAGE", "LAST_MESSAGE_AT", "UNREAD_COUNT", "BLOCKED_BY_ME", "RECIPIENT_AVAILABLE", "CURSOR_CREATED_AT", "CURSOR_MESSAGE_ID",
+		}).AddRow(202, "탈퇴한 회원", "hello", "2026-07-28T01:00:00Z", 0, false, false, createdAt, int64(9001)))
 
 	repo := NewMessageRepository(sqlx.NewDb(db, "sqlmock"))
 	items, err := repo.GetConversations(101, nil, 0, 21)
 	if err != nil {
 		t.Fatalf("GetConversations: %v", err)
 	}
-	if len(items) != 1 || items[0].UserSeq != 202 || items[0].Name != "탈퇴한 회원" || items[0].CursorLastMessageID != 9001 {
+	if len(items) != 1 || items[0].UserSeq != 202 || items[0].Name != "탈퇴한 회원" || items[0].CursorLastMessageID != 9001 || items[0].RecipientAvailable {
 		t.Fatalf("items = %+v", items)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -272,17 +272,17 @@ func TestGetConversations_ContinuesBeforeStableCursor(t *testing.T) {
 	query := `(?s)LEFT JOIN WEO_MEMBER w ON w\.USR_SEQ = sub\.other_seq\s+WHERE \(m\.REG_DATE < \? OR \(m\.REG_DATE = \? AND m\.AM_SEQ < \?\)\)\s+ORDER BY m\.REG_DATE DESC, m\.AM_SEQ DESC\s+LIMIT \?`
 	before := time.Date(2026, 7, 28, 1, 0, 0, 0, time.UTC)
 	mock.ExpectQuery(query).
-		WithArgs(101, 101, 101, 101, 101, 101, 101, before, before, int64(9002), 2).
+		WithArgs(101, 101, 101, 101, 101, 101, 101, 101, before, before, int64(9002), 2).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"USER_SEQ", "NAME", "LAST_MESSAGE", "LAST_MESSAGE_AT", "UNREAD_COUNT", "BLOCKED_BY_ME", "CURSOR_CREATED_AT", "CURSOR_MESSAGE_ID",
-		}).AddRow(303, "다음 동문", "이전 대화", "2026-07-28T00:00:00Z", 0, false, before.Add(-time.Hour), int64(9001)))
+			"USER_SEQ", "NAME", "LAST_MESSAGE", "LAST_MESSAGE_AT", "UNREAD_COUNT", "BLOCKED_BY_ME", "RECIPIENT_AVAILABLE", "CURSOR_CREATED_AT", "CURSOR_MESSAGE_ID",
+		}).AddRow(303, "다음 동문", "이전 대화", "2026-07-28T00:00:00Z", 0, false, true, before.Add(-time.Hour), int64(9001)))
 
 	repo := NewMessageRepository(sqlx.NewDb(db, "sqlmock"))
 	items, err := repo.GetConversations(101, &before, 9002, 2)
 	if err != nil {
 		t.Fatalf("GetConversations: %v", err)
 	}
-	if len(items) != 1 || items[0].CursorLastMessageID != 9001 {
+	if len(items) != 1 || items[0].CursorLastMessageID != 9001 || !items[0].RecipientAvailable {
 		t.Fatalf("items = %+v, want cursor message 9001", items)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

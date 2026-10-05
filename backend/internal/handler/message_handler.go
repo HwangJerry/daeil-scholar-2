@@ -10,6 +10,7 @@ import (
 	"github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/go-chi/chi/v5"
+	"github.com/rs/zerolog/log"
 )
 
 // MessageServicer defines the messaging operations used by MessageHandler.
@@ -45,20 +46,38 @@ func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
 	}
 	var req model.SendMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logMessageSendRejection(user.USRSeq, 0, "INVALID_BODY")
 		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 	accepted, err := h.service.SendMessage(user.USRSeq, user.USRName, req)
 	if err != nil {
-		var ve *model.ValidationError
-		if errors.As(err, &ve) {
-			respondError(w, http.StatusBadRequest, "SEND_FAILED", ve.Error())
+		var rejection *model.MessageSendRejection
+		if errors.As(err, &rejection) {
+			logMessageSendRejection(user.USRSeq, req.RecipientUserSeq(), rejection.Code)
+			respondError(w, messageSendRejectionStatus(rejection.Code), rejection.Code, rejection.Message)
 		} else {
 			respondError(w, http.StatusInternalServerError, "SEND_FAILED", "메시지 전송에 실패했습니다")
 		}
 		return
 	}
 	respondJSON(w, http.StatusOK, accepted)
+}
+
+// messageSendRejectionStatus maps a send rejection code to its HTTP status:
+// request problems are 400, recipient-side refusals are 403.
+func messageSendRejectionStatus(code string) int {
+	switch code {
+	case model.MessageSendRecipientGone, model.MessageSendBlockedByMe:
+		return http.StatusForbidden
+	default:
+		return http.StatusBadRequest
+	}
+}
+
+// logMessageSendRejection records a refused send without the message content.
+func logMessageSendRejection(usrSeq, recipientSeq int, code string) {
+	log.Warn().Str("code", code).Int("usr_seq", usrSeq).Int("recipient_seq", recipientSeq).Msg("message send rejected")
 }
 
 // GetInbox handles GET /api/messages/inbox.

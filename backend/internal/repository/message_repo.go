@@ -230,6 +230,14 @@ func (r *MessageRepository) GetConversations(usrSeq int, beforeCreatedAt *time.T
 				SELECT 1 FROM ALUMNI_MEMBER_BLOCK b
 				WHERE b.BLOCKER_USR_SEQ = ? AND b.BLOCKED_USR_SEQ = sub.other_seq
 			) AS BLOCKED_BY_ME,
+			(sub.other_seq <> ? AND EXISTS(
+				SELECT 1
+				FROM ALUMNI_VERIFICATION av
+				JOIN WEO_MEMBER am ON am.USR_SEQ = av.USR_SEQ
+				WHERE av.USR_SEQ = sub.other_seq
+				  AND av.STATUS = 'approved'
+				  AND am.USR_STATUS IN ('CCC','ZZZ')
+			)) AS RECIPIENT_AVAILABLE,
 			m.REG_DATE AS CURSOR_CREATED_AT,
 			m.AM_SEQ AS CURSOR_MESSAGE_ID
 		FROM (
@@ -250,7 +258,7 @@ func (r *MessageRepository) GetConversations(usrSeq int, beforeCreatedAt *time.T
 		)
 		LEFT JOIN WEO_MEMBER w ON w.USR_SEQ = sub.other_seq
 	`
-	args := []interface{}{usrSeq, usrSeq, usrSeq, usrSeq, usrSeq, usrSeq, usrSeq}
+	args := []interface{}{usrSeq, usrSeq, usrSeq, usrSeq, usrSeq, usrSeq, usrSeq, usrSeq}
 	if beforeCreatedAt != nil {
 		beforeUTC := beforeCreatedAt.UTC()
 		query += `

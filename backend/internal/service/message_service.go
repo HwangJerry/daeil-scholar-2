@@ -10,35 +10,42 @@ import (
 	"github.com/dflh-saf/backend/internal/repository"
 )
 
-const maxMessageLength = 1000
+const (
+	maxMessageLength         = 1000
+	maxClientMessageIDLength = 64
+)
+
+// MessageBlockStateReader reports whether a member has blocked another; it is
+// the subset of the member-block repository the send path needs.
+type MessageBlockStateReader interface {
+	Get(blockerSeq, blockedSeq int) (*model.MemberBlockState, error)
+}
 
 // MessageService handles direct messaging business logic.
 type MessageService struct {
 	repo          repository.MessageQuerier
 	profileRepo   repository.ProfileQuerier
+	blocks        MessageBlockStateReader
 	notifier      MessageNotifier
 	contentFilter MessageContentFilter
 }
 
 // NewMessageService creates a new MessageService.
-func NewMessageService(repo repository.MessageQuerier, profileRepo repository.ProfileQuerier, notifier MessageNotifier) *MessageService {
+func NewMessageService(repo repository.MessageQuerier, profileRepo repository.ProfileQuerier, blocks MessageBlockStateReader, notifier MessageNotifier) *MessageService {
 	if notifier == nil {
 		notifier = nopMessageNotifier{}
 	}
-	return &MessageService{repo: repo, profileRepo: profileRepo, notifier: notifier, contentFilter: NewMessageContentFilter(nil)}
+	return &MessageService{repo: repo, profileRepo: profileRepo, blocks: blocks, notifier: notifier, contentFilter: NewMessageContentFilter(nil)}
 }
 
 // SendMessage validates and accepts a message idempotently, then triggers a
-// notification only for the first acceptance.
+// notification only for the first acceptance. Refusals are returned as
+// *model.MessageSendRejection. A replay of an already accepted clientMessageId
+// returns the original acceptance before any recipient or block check, so a
+// retried send that succeeded earlier is never turned into a rejection.
 func (s *MessageService) SendMessage(senderSeq int, senderName string, req model.SendMessageRequest) (*model.SendMessageResponse, error) {
-	if req.Content == "" {
-		return nil, &model.ValidationError{Msg: "메시지 내용을 입력해주세요"}
-	}
-	if len([]rune(req.Content)) > maxMessageLength {
-		return nil, &model.ValidationError{Msg: "메시지는 1000자 이하로 입력해주세요"}
-	}
-	if req.ClientMessageID == "" || len(req.ClientMessageID) > 64 {
-		return nil, &model.ValidationError{Msg: "clientMessageId가 올바르지 않습니다"}
+	if rejection := validateSendMessageRequest(req); rejection != nil {
+		return nil, rejection
 	}
 	existing, err := s.repo.FindAcceptedMessage(senderSeq, req.ClientMessageID)
 	if err != nil {
@@ -48,22 +55,22 @@ func (s *MessageService) SendMessage(senderSeq int, senderName string, req model
 		return existing, nil
 	}
 	if !s.contentFilter.Allows(req.Content) {
-		return nil, &model.ValidationError{Msg: "욕설·위협 등 부적절한 표현이 포함되어 전송할 수 없습니다. 내용을 수정해주세요."}
+		return nil, model.NewMessageContentRejected()
 	}
 	recipientSeq := req.RecipientUserSeq()
-	if recipientSeq <= 0 {
-		return nil, &model.ValidationError{Msg: "수신자를 지정해주세요"}
-	}
-	if senderSeq == recipientSeq {
-		return nil, &model.ValidationError{Msg: "자기 자신에게는 쪽지를 보낼 수 없습니다"}
-	}
-
-	exists, err := s.repo.IsApprovedAlumni(recipientSeq)
+	available, err := s.isRecipientAvailable(senderSeq, recipientSeq)
 	if err != nil {
 		return nil, err
 	}
-	if !exists {
-		return nil, &model.ValidationError{Msg: "승인된 동문이 아닙니다"}
+	if !available {
+		return nil, model.NewMessageRecipientUnavailable()
+	}
+	blockState, err := s.blocks.Get(senderSeq, recipientSeq)
+	if err != nil {
+		return nil, err
+	}
+	if blockState.BlockedByMe {
+		return nil, model.NewMessageRecipientBlockedByMe()
 	}
 
 	accepted, err := s.repo.AcceptMessage(senderSeq, recipientSeq, req.ClientMessageID, req.Content)
@@ -77,6 +84,29 @@ func (s *MessageService) SendMessage(senderSeq int, senderName string, req model
 	}
 
 	return accepted, nil
+}
+
+func validateSendMessageRequest(req model.SendMessageRequest) *model.MessageSendRejection {
+	if req.Content == "" {
+		return model.NewMessageInvalid("메시지 내용을 입력해주세요")
+	}
+	if len([]rune(req.Content)) > maxMessageLength {
+		return model.NewMessageInvalid("메시지는 1000자 이하로 입력해주세요")
+	}
+	if req.ClientMessageID == "" || len(req.ClientMessageID) > maxClientMessageIDLength {
+		return model.NewMessageInvalid("clientMessageId가 올바르지 않습니다")
+	}
+	return nil
+}
+
+// isRecipientAvailable reports whether viewerSeq can still message otherSeq:
+// the peer exists, is not the viewer, and is an approved alumnus (withdrawn,
+// deletion-pending and unapproved members are not).
+func (s *MessageService) isRecipientAvailable(viewerSeq, otherSeq int) (bool, error) {
+	if otherSeq <= 0 || otherSeq == viewerSeq {
+		return false, nil
+	}
+	return s.repo.IsApprovedAlumni(otherSeq)
 }
 
 // GetInbox returns paginated inbox messages.
@@ -272,6 +302,10 @@ func (s *MessageService) GetConversationMessages(usrSeq, otherSeq int, before st
 	if err != nil {
 		return nil, err
 	}
+	recipientAvailable, err := s.isRecipientAvailable(usrSeq, otherSeq)
+	if err != nil {
+		return nil, err
+	}
 	if cursorPoint != nil {
 		filtered := make([]model.Message, 0, len(messages))
 		for _, message := range messages {
@@ -309,7 +343,7 @@ func (s *MessageService) GetConversationMessages(usrSeq, otherSeq int, before st
 			ReadAt:           readAt,
 		})
 	}
-	response := &model.ConversationMessageListResponse{Items: items, HasMore: hasMore}
+	response := &model.ConversationMessageListResponse{Items: items, HasMore: hasMore, RecipientAvailable: recipientAvailable}
 	if hasMore {
 		last := messages[len(messages)-1]
 		createdAt, err := time.Parse(time.RFC3339, last.RegDate)

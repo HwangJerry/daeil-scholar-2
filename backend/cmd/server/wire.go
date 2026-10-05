@@ -188,7 +188,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	likeService := service.NewLikeService(likeRepo, feedRepo)
 	commentService := service.NewCommentService(commentRepo)
 	personalDonationService := service.NewPersonalDonationService(personalDonationRepo)
-	messageService := service.NewMessageService(messageRepo, profileRepo, messageNotifier)
+	messageService := service.NewMessageService(messageRepo, profileRepo, memberBlockRepo, messageNotifier)
 	messageService.ConfigureContentFilter(cfg.MessageBlockedPhrases)
 	memberBlockService := service.NewMemberBlockService(memberBlockRepo)
 	pushService := service.NewPushService(pushRepo)

@@ -156,22 +156,50 @@ func TestMessageSend_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestMessageSend_ValidationError(t *testing.T) {
-	// Service returns ValidationError → handler must respond 400.
-	h := newTestHandler(&stubMsgService{
-		sendErr: &model.ValidationError{Msg: "메시지 내용을 입력해주세요"},
-	})
-	body, _ := json.Marshal(model.SendMessageRequest{RecvrSeq: 2, Content: ""})
-	rr := httptest.NewRecorder()
-	h.Send(rr, authRequest(http.MethodPost, "/api/messages", body))
-
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", rr.Code)
+func TestMessageSend_RejectionsMapToStableCodesAndStatuses(t *testing.T) {
+	cases := []struct {
+		rejection  *model.MessageSendRejection
+		wantStatus int
+	}{
+		{model.NewMessageInvalid("메시지 내용을 입력해주세요"), http.StatusBadRequest},
+		{model.NewMessageContentRejected(), http.StatusBadRequest},
+		{model.NewMessageRecipientUnavailable(), http.StatusForbidden},
+		{model.NewMessageRecipientBlockedByMe(), http.StatusForbidden},
 	}
-	var apiErr model.APIError
-	decodeJSON(t, rr, &apiErr)
-	if apiErr.Code != "SEND_FAILED" {
-		t.Errorf("expected SEND_FAILED, got %s", apiErr.Code)
+	for _, tc := range cases {
+		t.Run(tc.rejection.Code, func(t *testing.T) {
+			h := newTestHandler(&stubMsgService{sendErr: tc.rejection})
+			body, _ := json.Marshal(model.SendMessageRequest{UserSeq: 2, ClientMessageID: "c-1", Content: "Hello"})
+			rr := httptest.NewRecorder()
+			h.Send(rr, authRequest(http.MethodPost, "/api/messages", body))
+
+			if rr.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", rr.Code, tc.wantStatus)
+			}
+			var raw map[string]any
+			if err := json.Unmarshal(rr.Body.Bytes(), &raw); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			want := map[string]any{"code": tc.rejection.Code, "message": tc.rejection.Message}
+			if len(raw) != len(want) || raw["code"] != want["code"] || raw["message"] != want["message"] {
+				t.Fatalf("body = %v, want %v", raw, want)
+			}
+		})
+	}
+}
+
+func TestMessageSend_RejectionCopyIsFixedContract(t *testing.T) {
+	want := map[string]string{
+		model.MessageSendContentRejected: "보낼 수 없는 내용이 포함되어 있어요.",
+		model.MessageSendRecipientGone:   "더 이상 쪽지를 보낼 수 없는 상대예요.",
+		model.MessageSendBlockedByMe:     "차단을 해제하면 메시지를 보낼 수 있습니다.",
+	}
+	for _, rejection := range []*model.MessageSendRejection{
+		model.NewMessageContentRejected(), model.NewMessageRecipientUnavailable(), model.NewMessageRecipientBlockedByMe(),
+	} {
+		if rejection.Message != want[rejection.Code] {
+			t.Errorf("%s message = %q, want %q", rejection.Code, rejection.Message, want[rejection.Code])
+		}
 	}
 }
 
