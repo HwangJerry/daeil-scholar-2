@@ -1291,3 +1291,61 @@ Tier 1 golden: `backend/cmd/server/testdata/golden/feed_with_categories.json`, `
 ```
 
 Tier 1 golden: `backend/cmd/server/testdata/golden/feed_detail_official_profile.json` (기존 §19 golden도 `officialProfile` 포함으로 갱신).
+
+## 21. 피드 인라인 상세 계약 (`include=detail`)
+
+앱은 피드 글을 화면 이동 없이 그 자리에서 펼치고 접는다(전부 client 처리). 그래서 피드 한 페이지가 펼친 글에 필요한 본문·첨부·댓글을 이미 담고 있어야 한다. 웹 SPA는 `include`를 보내지 않으므로 기존 응답은 **바이트 단위로 그대로**다.
+
+### 21.1 `GET /api/feed?include=detail`, `GET /api/feed/hero?include=detail`
+
+- `include`는 쉼표 구분 목록이며 `detail`이 들어 있으면 켜진다(`include=detail`, `include=foo,detail`). 없거나 다른 값이면 응답은 기존과 같다.
+- 페이지 크기(`size` 기본 10, 최대 20)·`cursor`·`exclude_seq`·`nextCursor`·`hasMore`·`categories`는 바뀌지 않는다.
+- 모든 notice item(`/api/feed` items, `/api/feed/hero`)에 다음 필드가 **추가**된다. 기존 필드(`seq`·`subject`·`summary`·`likeCnt`·`commentCnt`·`userLiked`·`officialProfile`·`category`…)는 그대로다.
+
+| 필드 | 타입 | 의미 |
+|---|---|---|
+| `contentHtml` | string | `GET /api/feed/{seq}`의 `contentHtml`과 같다(같은 presenter: `MARKDOWN`은 base64 decode한 sanitized HTML, `LEGACY`는 저장된 HTML 그대로). |
+| `contentFormat` | string | `MARKDOWN` \| `LEGACY` (상세와 같음, NULL은 `LEGACY`). |
+| `files` | array | 상세의 `files`와 같은 row(`fSeq`·`fileName`·`filePath`…). **항상 배열**이며 첨부가 없으면 `[]`. |
+| `comments` | array | `GET /api/feed/{seq}/comments`가 그 사용자에게 주는 목록과 같다(같은 필드 `bcSeq`·`joinSeq`·`usrSeq`·`regName`·`contents`·`regDate`, 같은 순서: 최신순, 같은 공개 조건 `OPEN_YN='Y'`). 없으면 `[]`. |
+| `commentsHasMore` | boolean | 댓글 endpoint가 페이지네이션하지 않으므로 항상 `false`(모든 댓글 포함). |
+
+- 일관성: `commentCnt`는 응답에 담긴 `comments` 개수와 같다. `likeCnt`·`userLiked`는 응답 시점 값이며 요청자 기준이다(비로그인은 `userLiked=false`). hero는 cache된 plain hero를 복사해 like 수를 새로 읽으므로 plain hero(cache)는 바뀌지 않는다.
+- `/api/feed/hero`는 이제 optional auth를 받는다(유효한 Bearer/cookie가 있으면 `include=detail`의 `userLiked`에만 쓰인다. 잘못된 token은 비로그인으로 취급, plain 응답은 요청자와 무관).
+- **조회수(HIT)를 올리지 않는다.** 조회는 21.2로 따로 센다.
+- 비용: 페이지당 추가 query 3개(본문 `SEQ IN (…)`, 댓글 `JOIN_SEQ IN (…)`, 첨부 `F_JOIN_SEQ IN (…)`) — 글 수와 무관(N+1 없음). 피드 전체는 목록 1 + 카테고리 1 + 3 = 5 query. hero는 hero 1(cache hit이면 0) + like 집계 1 + 3.
+
+```json
+{
+  "type": "notice", "seq": 2, "subject": "합성 펼침 공지", "summary": "굵게 본문…", "thumbnailUrl": "",
+  "regDate": "2026-10-04T10:00:00+09:00", "regName": "대일외고장학회", "hit": 0,
+  "likeCnt": 1, "commentCnt": 2, "isPinned": "N", "userLiked": true,
+  "category": "notice", "categoryName": "공지", "officialProfile": true,
+  "contentHtml": "<p><strong>굵게</strong> 본문</p>\n<ul>\n<li>하나</li>\n<li>둘</li>\n</ul>\n",
+  "contentFormat": "MARKDOWN",
+  "files": [
+    { "fSeq": 1, "fGate": "BB", "fJoinSeq": 2, "typeName": "application/pdf", "fileName": "synthetic.pdf",
+      "fileSize": "1024", "filePath": "/files/notice", "fileOrgName": "안내문.pdf", "openYn": "Y" }
+  ],
+  "comments": [
+    { "bcSeq": 3, "joinSeq": 2, "usrSeq": 100, "regName": "합성 동문", "contents": "셋째 댓글", "regDate": "2026-10-04 10:05" },
+    { "bcSeq": 1, "joinSeq": 2, "usrSeq": 100, "regName": "합성 동문", "contents": "첫 댓글", "regDate": "2026-10-04 10:01" }
+  ],
+  "commentsHasMore": false
+}
+```
+
+(실제 JSON에서 `<`·`>`·`&`는 기존 상세 응답과 마찬가지로 `<` 등으로 escape된다.)
+
+### 21.2 `POST /api/feed/{seq}/view`
+
+- `GET /api/feed/{seq}`와 같은 optional-auth 그룹. body 없음.
+- 공개 공지(`GATE='NOTICE' AND OPEN_YN='Y'`)만: 없거나 비공개(삭제)면 `404 NOT_FOUND`, seq가 숫자가 아니거나 0 이하면 `400 INVALID_SEQ`.
+- 상세 GET과 똑같이 `HIT = HIT + 1`(같은 `IncrementHit`)을 하고 `200 {"hit": <증가 후 값>}`을 반환한다.
+- 상세 GET에 rate limit·중복 제거가 없으므로 이 endpoint도 없다. 앱은 한 session에서 글을 **처음 펼칠 때 한 번만** 호출한다.
+
+### 21.3 바뀌지 않는 것
+
+`GET /api/feed/{seq}`(조회 시 HIT 증가 포함)와 `GET /api/feed/{seq}/comments`는 그대로다. `include` 없는 `/api/feed`·`/api/feed/hero`의 기존 golden(§19·§20)도 그대로다.
+
+Tier 1 golden: `backend/cmd/server/testdata/golden/feed_inline_detail.json`, `feed_hero_inline_detail.json`, `feed_view.json` (`TestGoldenFeedInlineDetail`: 본문·댓글이 상세·댓글 endpoint와 같은지, HIT가 오르지 않는지, cache된 hero가 변하지 않는지 검증).

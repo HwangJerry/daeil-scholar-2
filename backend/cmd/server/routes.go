@@ -139,7 +139,9 @@ func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthS
 // registerPublicRoutes registers unauthenticated public endpoints.
 func registerPublicRoutes(r chi.Router, h handlers, authService *service.AuthService, cacheStore *cache.Cache) {
 	r.Get("/api/health", h.health.Check)
-	r.Get("/api/feed/hero", h.feed.GetHero)
+	// Optional auth only personalises include=detail (userLiked); the plain
+	// hero response does not depend on the caller.
+	r.With(mw.OptionalAuthMiddleware(authService)).Get("/api/feed/hero", h.feed.GetHero)
 	r.Get("/api/donation/summary", h.donation.GetSummary)
 	r.Get("/api/settings/public", h.appSetting.Public)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/account-deletion/receipt", h.accountDeletion.Receipt)
@@ -240,6 +242,7 @@ func registerOptionalAuthRoutes(r chi.Router, h handlers, authService *service.A
 		r.Use(mw.AppClientBuildRecorder(buildObserver))
 		r.Get("/api/feed", h.feed.GetFeed)
 		r.Get("/api/feed/{seq}", h.feed.GetDetail)
+		r.Post("/api/feed/{seq}/view", h.feed.RecordView)
 		r.Get("/api/feed/{seq}/siblings", h.feed.GetSiblings)
 		r.Get("/api/feed/{seq}/comments", h.comment.ListComments)
 		r.Get("/api/disclosure", h.disclosure.GetList)

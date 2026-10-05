@@ -11,13 +11,14 @@ import (
 )
 
 type FeedHandler struct {
-	service     *service.FeedService
-	likeService *service.LikeService
-	presenter   *presenter.FeedPresenter
+	service       *service.FeedService
+	likeService   *service.LikeService
+	inlineService *service.FeedInlineDetailService
+	presenter     *presenter.FeedPresenter
 }
 
-func NewFeedHandler(svc *service.FeedService, likeSvc *service.LikeService, pres *presenter.FeedPresenter) *FeedHandler {
-	return &FeedHandler{service: svc, likeService: likeSvc, presenter: pres}
+func NewFeedHandler(svc *service.FeedService, likeSvc *service.LikeService, inlineSvc *service.FeedInlineDetailService, pres *presenter.FeedPresenter) *FeedHandler {
+	return &FeedHandler{service: svc, likeService: likeSvc, inlineService: inlineSvc, presenter: pres}
 }
 
 func (h *FeedHandler) GetFeed(w http.ResponseWriter, r *http.Request) {
@@ -32,6 +33,14 @@ func (h *FeedHandler) GetFeed(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "FEED_FAILED", "Failed to load feed")
 		return
 	}
+	if wantsInlineDetail(r) {
+		if err := h.inlineService.AttachToFeed(feed); err != nil {
+			log.Error().Err(err).Msg("feed inline detail failed")
+			respondError(w, http.StatusInternalServerError, "FEED_FAILED", "Failed to load feed")
+			return
+		}
+		feed = h.presenter.FormatFeedInlineDetail(feed)
+	}
 	respondJSON(w, http.StatusOK, feed)
 }
 
@@ -45,6 +54,19 @@ func (h *FeedHandler) GetHero(w http.ResponseWriter, r *http.Request) {
 	if hero == nil {
 		respondError(w, http.StatusNotFound, "NO_HERO", "No hero notice found")
 		return
+	}
+	if wantsInlineDetail(r) {
+		userSeq := 0
+		if user := middleware.GetAuthUser(r.Context()); user != nil {
+			userSeq = user.USRSeq
+		}
+		hero, err = h.inlineService.HeroWithDetail(hero, userSeq)
+		if err != nil {
+			log.Error().Err(err).Msg("feed hero inline detail failed")
+			respondError(w, http.StatusInternalServerError, "HERO_FAILED", "Failed to load hero")
+			return
+		}
+		hero = h.presenter.FormatNoticeInlineDetail(hero)
 	}
 	respondJSON(w, http.StatusOK, hero)
 }

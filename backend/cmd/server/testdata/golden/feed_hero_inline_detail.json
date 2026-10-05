@@ -1,0 +1,50 @@
+{
+  "category": "notice",
+  "categoryName": "공지",
+  "commentCnt": 2,
+  "comments": [
+    {
+      "bcSeq": 3,
+      "contents": "셋째 댓글",
+      "joinSeq": 2,
+      "regDate": "<volatile>",
+      "regName": "합성 동문",
+      "usrSeq": 100
+    },
+    {
+      "bcSeq": 1,
+      "contents": "첫 댓글",
+      "joinSeq": 2,
+      "regDate": "<volatile>",
+      "regName": "합성 동문",
+      "usrSeq": 100
+    }
+  ],
+  "commentsHasMore": false,
+  "contentFormat": "MARKDOWN",
+  "contentHtml": "<p><strong>굵게</strong> 본문</p>\n<ul>\n<li>하나</li>\n<li>둘</li>\n</ul>\n",
+  "files": [
+    {
+      "fGate": "BB",
+      "fJoinSeq": 2,
+      "fSeq": 1,
+      "fileName": "synthetic.pdf",
+      "fileOrgName": "안내문.pdf",
+      "filePath": "/files/notice",
+      "fileSize": "1024",
+      "openYn": "Y",
+      "typeName": "application/pdf"
+    }
+  ],
+  "hit": 0,
+  "isPinned": "N",
+  "likeCnt": 1,
+  "officialProfile": true,
+  "regDate": "<volatile>",
+  "regName": "대일외고장학회",
+  "seq": 2,
+  "subject": "합성 펼침 공지",
+  "summary": "굵게 본문\n\n하나\n\n둘",
+  "thumbnailUrl": "",
+  "userLiked": true
+}

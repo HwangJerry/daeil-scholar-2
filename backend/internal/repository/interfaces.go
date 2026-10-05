@@ -30,6 +30,17 @@ type FeedQuerier interface {
 	GetOpenFeedCategories() ([]model.FeedCategory, error)
 }
 
+// FeedInlineDetailQuerier defines the batched reads behind include=detail and
+// the view counter used by FeedInlineDetailService.
+type FeedInlineDetailQuerier interface {
+	GetNoticeBodies(seqs []int) ([]model.NoticeBody, error)
+	GetCommentsByPosts(seqs []int) ([]model.Comment, error)
+	GetFilesByPosts(seqs []int) ([]model.FileRecord, error)
+	GetLikeStats(seqs []int, userSeq int) ([]model.NoticeLikeStats, error)
+	GetPublishedNoticeHit(seq int) (hit int, found bool, err error)
+	IncrementHit(seq int) error
+}
+
 // AdminFeedCategoryStore defines the methods used by AdminFeedCategoryService.
 type AdminFeedCategoryStore interface {
 	GetAll() ([]model.AdminFeedCategory, error)

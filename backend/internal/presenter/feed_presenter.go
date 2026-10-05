@@ -29,3 +29,22 @@ func (p *FeedPresenter) FormatNoticeDetailForAdmin(detail *model.NoticeDetail) *
 	}
 	return detail
 }
+
+// FormatFeedInlineDetail decodes the body of every feed item that carries
+// inline detail, through the same pipeline as FormatNoticeDetail.
+func (p *FeedPresenter) FormatFeedInlineDetail(feed *model.FeedResponse) *model.FeedResponse {
+	for _, item := range feed.Items {
+		if item.NoticeItem != nil {
+			p.FormatNoticeInlineDetail(item.NoticeItem)
+		}
+	}
+	return feed
+}
+
+// FormatNoticeInlineDetail decodes one item's inline body into ContentHtml.
+func (p *FeedPresenter) FormatNoticeInlineDetail(item *model.NoticeItem) *model.NoticeItem {
+	if item.NoticeInlineDetail != nil {
+		item.ContentHtml = service.DecodeContent(item.Contents, item.ContentFormat)
+	}
+	return item
+}
