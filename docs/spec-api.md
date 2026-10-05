@@ -513,6 +513,23 @@ func (h *AdminNoticeHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
+### 6.7.1 쪽지(메시지)
+
+정식 계약은 `docs/mvp-api-contract.md` §8이다. 전송 거부 코드 요약:
+
+| HTTP | code | 조건 |
+|---:|---|---|
+| 400 | `INVALID_BODY` | JSON 파싱 실패 |
+| 400 | `MESSAGE_INVALID` | 내용 빈 값·1,000자 초과, `clientMessageId` 빈 값·64byte 초과 |
+| 400 | `MESSAGE_CONTENT_REJECTED` | 내용 필터 거부 |
+| 403 | `RECIPIENT_UNAVAILABLE` | 수신자 없음·자기 자신·승인 동문 아님(탈퇴/탈퇴 대기/미승인) |
+| 403 | `RECIPIENT_BLOCKED_BY_ME` | 내가 수신자를 차단 중 |
+| 403 | `ALUMNI_APPROVAL_REQUIRED` | 발신자 미승인 |
+| 500 | `SEND_FAILED` | 내부 실패 |
+
+이미 수락된 `clientMessageId` 재전송은 위 검사 전에 원래 `200`을 반환한다. 상대가 나를 차단한 경우는 `200` shadow accept다.
+`GET /api/messages/conversations/{userSeq}`와 `GET /api/messages/conversations` item은 `recipientAvailable: bool`을 포함한다.
+
 ### 6.8 헬스체크 / 모니터링
 
 | Method | Endpoint | 설명 |
