@@ -540,6 +540,40 @@ Auth + AlumniApproved middleware를 적용하며 body 없는 `GET` 요청에 다
 - `clientMessageId`는 발신자별 idempotency key다.
 - 차단 여부를 암시하는 status·오류·지연 차이를 만들지 않는다.
 - 차단 메시지는 발신자 관점 기록만 유지하고 수신 조회·SSE·push 대상에서 제외한다.
+- 상대가 나를 차단한 경우의 위 `200` shadow accept는 아래 거부 규칙과 무관하게 유지한다.
+
+#### 8.2.1 전송 거부 코드
+
+오류 body는 §2.3 envelope(`code`, `message`, `details` 생략)를 그대로 쓴다. 앱은 `code`로만 분기한다.
+
+| HTTP | `code` | 조건 | `message` |
+|---:|---|---|---|
+| `400` | `INVALID_BODY` | JSON 파싱 실패(기존 코드 유지) | `Invalid request body` |
+| `400` | `MESSAGE_INVALID` | `content` 빈 값 또는 1,000자 초과, `clientMessageId` 빈 값 또는 64byte 초과 | 사유별 한국어 문구(분기 기준 아님) |
+| `400` | `MESSAGE_CONTENT_REJECTED` | 서버 내용 필터가 거부 | `보낼 수 없는 내용이 포함되어 있어요.` |
+| `403` | `RECIPIENT_UNAVAILABLE` | 수신자 미지정, 자기 자신, 수신자가 승인 동문이 아님(탈퇴 `AAA`·탈퇴 신청 대기·미승인·없음) | `더 이상 쪽지를 보낼 수 없는 상대예요.` |
+| `403` | `RECIPIENT_BLOCKED_BY_ME` | 발신자가 수신자를 차단 중(`ALUMNI_MEMBER_BLOCK`) | `차단을 해제하면 메시지를 보낼 수 있습니다.` |
+| `403` | `ALUMNI_APPROVAL_REQUIRED` | 발신자 미승인(§6 middleware, 변경 없음) | `동문 인증 승인 후 이용할 수 있습니다.` |
+| `500` | `SEND_FAILED` | 내부 실패(변경 없음) | `메시지 전송에 실패했습니다` |
+
+```json
+{ "code": "MESSAGE_INVALID", "message": "메시지 내용을 입력해주세요" }
+{ "code": "MESSAGE_CONTENT_REJECTED", "message": "보낼 수 없는 내용이 포함되어 있어요." }
+{ "code": "RECIPIENT_UNAVAILABLE", "message": "더 이상 쪽지를 보낼 수 없는 상대예요." }
+{ "code": "RECIPIENT_BLOCKED_BY_ME", "message": "차단을 해제하면 메시지를 보낼 수 있습니다." }
+```
+
+검사 순서:
+
+1. 요청 형식(`INVALID_BODY`, `MESSAGE_INVALID`)
+2. idempotent replay: 같은 발신자·`clientMessageId`가 이미 수락됐으면 원래 `200` response를 그대로 반환한다. 이후 상대가 탈퇴했거나 내가 차단했어도 재시도는 거부로 바뀌지 않는다.
+3. `MESSAGE_CONTENT_REJECTED`
+4. `RECIPIENT_UNAVAILABLE` (차단보다 우선: 차단을 풀어도 보낼 수 없는 상대)
+5. `RECIPIENT_BLOCKED_BY_ME`
+6. 수락(상대가 나를 차단했으면 shadow accept)
+
+- 모든 4xx 거부는 서버에서 `warn` level로 `code`, `usr_seq`, `recipient_seq`만 기록한다. 메시지 내용은 기록하지 않는다.
+- 앱은 `RECIPIENT_UNAVAILABLE`·`RECIPIENT_BLOCKED_BY_ME`를 재시도 대상에서 제외한다.
 
 ### 8.3 대화 목록
 
@@ -554,13 +588,16 @@ Auth + AlumniApproved middleware를 적용하며 body 없는 `GET` 요청에 다
       "lastMessage": "안녕하세요.",
       "lastMessageAt": "2026-07-28T01:00:00Z",
       "unreadCount": 0,
-      "blockedByMe": false
+      "blockedByMe": false,
+      "recipientAvailable": true
     }
   ],
   "nextCursor": null,
   "hasMore": false
 }
 ```
+
+- `recipientAvailable`은 §8.4와 같은 규칙으로 peer별로 계산한다. `blockedByMe`와 독립이다(차단 중인 승인 동문은 `blockedByMe:true, recipientAvailable:true`).
 
 ### 8.4 대화 메시지
 
@@ -581,9 +618,13 @@ Auth + AlumniApproved middleware를 적용하며 body 없는 `GET` 요청에 다
     }
   ],
   "nextCursor": null,
-  "hasMore": false
+  "hasMore": false,
+  "recipientAvailable": true
 }
 ```
+
+- `recipientAvailable`: 상대가 존재하고 자기 자신이 아니며 승인 동문(`ALUMNI_VERIFICATION.STATUS='approved'` 및 `USR_STATUS` `CCC`/`ZZZ`)이면 `true`. 탈퇴·탈퇴 신청 대기·미승인·자기 자신이면 `false`이며, 이때 전송은 `403 RECIPIENT_UNAVAILABLE`이다. 모든 page(`before` 포함)에 같은 값을 담는다.
+- 이 response에는 `blockedByMe`가 없다. 대화 화면의 차단 상태는 §8.3 목록 item 또는 `GET /api/blocks/{userSeq}`로 확인한다.
 
 최신 page를 먼저 반환하고 `before`로 과거를 읽는다. 안정 cursor는 `(createdAt, messageId)`를 encode한다.
 

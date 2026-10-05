@@ -163,6 +163,7 @@ func TestSendMessage_EmptyContent(t *testing.T) {
 	svc := &MessageService{
 		repo:        &mockMessageRepo{},
 		profileRepo: &mockProfileRepo{exists: true},
+		blocks:      &mockBlockReader{},
 	}
 	_, err := svc.SendMessage(1, "Sender", model.SendMessageRequest{RecvrSeq: 2, Content: ""})
 	requireErrContains(t, err, "내용")
@@ -172,6 +173,7 @@ func TestSendMessage_ContentTooLong(t *testing.T) {
 	svc := &MessageService{
 		repo:        &mockMessageRepo{},
 		profileRepo: &mockProfileRepo{exists: true},
+		blocks:      &mockBlockReader{},
 	}
 	_, err := svc.SendMessage(1, "Sender", model.SendMessageRequest{
 		RecvrSeq: 2,
@@ -184,24 +186,27 @@ func TestSendMessage_SendToSelf(t *testing.T) {
 	svc := &MessageService{
 		repo:        &mockMessageRepo{},
 		profileRepo: &mockProfileRepo{exists: true},
+		blocks:      &mockBlockReader{},
 	}
 	_, err := svc.SendMessage(5, "Sender", model.SendMessageRequest{RecvrSeq: 5, ClientMessageID: "self", Content: "Hello"})
-	requireErrContains(t, err, "자기 자신")
+	requireRejection(t, err, model.MessageSendRecipientGone)
 }
 
 func TestSendMessage_RecipientNotFound(t *testing.T) {
 	svc := &MessageService{
 		repo:        &mockMessageRepo{approvedSet: true, approved: false},
 		profileRepo: &mockProfileRepo{exists: false},
+		blocks:      &mockBlockReader{},
 	}
 	_, err := svc.SendMessage(1, "Sender", model.SendMessageRequest{RecvrSeq: 999, ClientMessageID: "missing", Content: "Hello"})
-	requireErrContains(t, err, "승인된 동문")
+	requireRejection(t, err, model.MessageSendRecipientGone)
 }
 
 func TestSendMessage_RecipientCheckError(t *testing.T) {
 	svc := &MessageService{
 		repo:        &mockMessageRepo{approvedErr: errors.New("db error")},
 		profileRepo: &mockProfileRepo{existsErr: errors.New("db error")},
+		blocks:      &mockBlockReader{},
 	}
 	_, err := svc.SendMessage(1, "Sender", model.SendMessageRequest{RecvrSeq: 2, ClientMessageID: "check-error", Content: "Hello"})
 	requireErrContains(t, err, "db error")
@@ -212,6 +217,7 @@ func TestSendMessage_Success(t *testing.T) {
 	svc := &MessageService{
 		repo:        msgRepo,
 		profileRepo: &mockProfileRepo{exists: true},
+		blocks:      &mockBlockReader{},
 		notifier:    nopMessageNotifier{},
 	}
 
@@ -232,6 +238,7 @@ func TestSendMessage_InsertError(t *testing.T) {
 	svc := &MessageService{
 		repo:        &mockMessageRepo{insertErr: errors.New("insert failed")},
 		profileRepo: &mockProfileRepo{exists: true},
+		blocks:      &mockBlockReader{},
 	}
 
 	_, err := svc.SendMessage(1, "Sender", model.SendMessageRequest{
@@ -259,6 +266,7 @@ func TestSendMessage_IdempotentReplayReturnsOriginalAfterRecipientStateChanges(t
 			approved:    false,
 		},
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 		notifier:    nopMessageNotifier{},
 	}
 
@@ -287,6 +295,7 @@ func TestSendMessage_RecipientBlockedAcceptsWithoutDeliveryNotification(t *testi
 			VisibleToRecipient: "N",
 		}},
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 		notifier:    notifier,
 	}
 
@@ -318,6 +327,7 @@ func TestSendMessage_DeliverableFirstAcceptanceNotifiesOnce(t *testing.T) {
 			VisibleToRecipient: "Y",
 		}},
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 		notifier:    notifier,
 	}
 
@@ -360,6 +370,7 @@ func TestGetInbox_PaginationClamping(t *testing.T) {
 					inboxTotal: tc.total,
 				},
 				profileRepo: &mockProfileRepo{},
+				blocks:      &mockBlockReader{},
 			}
 			resp, err := svc.GetInbox(1, tc.page, tc.size)
 			if err != nil {
@@ -382,6 +393,7 @@ func TestGetInbox_NilMessagesBecomesEmptySlice(t *testing.T) {
 	svc := &MessageService{
 		repo:        &mockMessageRepo{inbox: nil, inboxTotal: 0},
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 	}
 	resp, err := svc.GetInbox(1, 1, 20)
 	if err != nil {
@@ -396,6 +408,7 @@ func TestGetInbox_RepoError(t *testing.T) {
 	svc := &MessageService{
 		repo:        &mockMessageRepo{inboxErr: errors.New("db down")},
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 	}
 	_, err := svc.GetInbox(1, 1, 20)
 	if err == nil {
@@ -410,6 +423,7 @@ func TestGetOutbox_PaginationClamping(t *testing.T) {
 			outboxTotal: 30,
 		},
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 	}
 	// size=0 should clamp to 20, producing 2 total pages for 30 items
 	resp, err := svc.GetOutbox(1, 1, 0)
@@ -449,6 +463,7 @@ func TestGetConversations_NilBecomesEmptySlice(t *testing.T) {
 	svc := &MessageService{
 		repo:        &mockMessageRepo{},
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 	}
 	resp, err := svc.GetConversations(1, "", 20)
 	if err != nil {
@@ -468,6 +483,7 @@ func TestGetConversations_ReturnsOpaqueNextCursorFromSizePlusOne(t *testing.T) {
 	svc := &MessageService{
 		repo:        repo,
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 	}
 
 	resp, err := svc.GetConversations(1, "", 1)
@@ -509,6 +525,7 @@ func TestGetConversations_ContinuesStrictlyBeforeStableCursor(t *testing.T) {
 	svc := &MessageService{
 		repo:        repo,
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 	}
 
 	resp, err := svc.GetConversations(1, cursor, 1)
@@ -629,6 +646,7 @@ func TestMarkAsRead_NotifiesSenderWhenChanged(t *testing.T) {
 	svc := &MessageService{
 		repo:        &mockMessageRepo{markSenderSeq: 7, markChanged: true},
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 		notifier:    notifier,
 	}
 
@@ -654,6 +672,7 @@ func TestMarkAsRead_SkipsNotificationWhenUnchanged(t *testing.T) {
 	svc := &MessageService{
 		repo:        &mockMessageRepo{markSenderSeq: 7, markChanged: false},
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 		notifier:    notifier,
 	}
 
@@ -671,6 +690,7 @@ func TestMarkConversationRead_NotifiesSenderWhenChanged(t *testing.T) {
 	svc := &MessageService{
 		repo:        repo,
 		profileRepo: &mockProfileRepo{},
+		blocks:      &mockBlockReader{},
 		notifier:    notifier,
 	}
 
