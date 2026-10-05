@@ -710,3 +710,22 @@ func TestParsePagination_InvalidFallsToDefault(t *testing.T) {
 		t.Errorf("expected (1, 20), got (%d, %d)", page, size)
 	}
 }
+
+func TestGetConversationMessages_ExposesRecipientAvailable(t *testing.T) {
+	for _, available := range []bool{true, false} {
+		h := newTestHandler(&stubMsgService{convMsgsResult: &model.ConversationMessageListResponse{
+			Items: []model.ConversationMessage{}, RecipientAvailable: available,
+		}})
+		req := withChiParam(authRequest(http.MethodGet, "/api/messages/conversations/2", nil), "userSeq", "2")
+		rr := httptest.NewRecorder()
+		h.GetConversationMessages(rr, req)
+
+		var raw map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if raw["recipientAvailable"] != available {
+			t.Fatalf("recipientAvailable = %v, want %v (body %s)", raw["recipientAvailable"], available, rr.Body.String())
+		}
+	}
+}
