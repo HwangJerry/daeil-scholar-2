@@ -78,6 +78,10 @@ func postBaselineMigrations() []mariadb.SQL {
 		mariadb.File(filepath.Join("..", "..", "migrations", "078_create_notification_inbox_state.sql")),
 		mariadb.File(filepath.Join("..", "..", "migrations", "079_create_feed_categories.sql")),
 		mariadb.File(filepath.Join("..", "..", "migrations", "080_add_board_official_profile.sql")),
+		mariadb.File(filepath.Join("..", "..", "migrations", "081_add_member_message_allowed.sql")),
+		mariadb.File(filepath.Join("..", "..", "migrations", "082_create_login_security_events.sql")),
+		mariadb.File(filepath.Join("..", "..", "migrations", "083_add_phone_grant_ownership.sql")),
+		mariadb.File(filepath.Join("..", "..", "migrations", "084_create_erasure_subscription_review.sql")),
 	}
 }
 

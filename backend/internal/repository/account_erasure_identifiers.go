@@ -24,6 +24,18 @@ var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 // the given identifiers. It only reads. Values shorter than five characters
 // are ignored because they would match unrelated data.
 func (r *AccountDeletionRequestRepository) IdentifierMatches(values []string) ([]model.AccountDeletionFootprint, error) {
+	return r.IdentifierMatchesForSubject(model.ErasureExternalSubject{}, values)
+}
+func (r *AccountDeletionRequestRepository) IdentifierMatchesForSubject(subject model.ErasureExternalSubject, values []string) ([]model.AccountDeletionFootprint, error) {
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	schema, err := readErasureSchema(tx)
+	if err != nil {
+		return nil, err
+	}
 	needles := []string{}
 	seen := map[string]bool{}
 	for _, value := range values {
@@ -41,7 +53,7 @@ func (r *AccountDeletionRequestRepository) IdentifierMatches(values []string) ([
 		Table  string `db:"TABLE_NAME"`
 		Column string `db:"COLUMN_NAME"`
 	}
-	err := r.DB.Select(&columns, `SELECT c.TABLE_NAME, c.COLUMN_NAME FROM information_schema.COLUMNS c
+	err = tx.Select(&columns, `SELECT c.TABLE_NAME, c.COLUMN_NAME FROM information_schema.COLUMNS c
         JOIN information_schema.TABLES t ON t.TABLE_SCHEMA=c.TABLE_SCHEMA AND t.TABLE_NAME=c.TABLE_NAME
         WHERE c.TABLE_SCHEMA=DATABASE() AND t.TABLE_TYPE='BASE TABLE'
         AND c.DATA_TYPE IN ('char','varchar','tinytext','text','mediumtext','longtext')
@@ -56,13 +68,18 @@ func (r *AccountDeletionRequestRepository) IdentifierMatches(values []string) ([
 		conditions := make([]string, len(needles))
 		args := make([]interface{}, len(needles))
 		for i, needle := range needles {
-			conditions[i] = fmt.Sprintf("`%s` LIKE ?", col.Column)
+			conditions[i] = fmt.Sprintf("owned.`%s` LIKE ?", col.Column)
 			args[i] = "%" + likeEscaper.Replace(needle) + "%"
 		}
 		var count int64
 		// Tables and columns come from information_schema and are validated above.
-		query := fmt.Sprintf("SELECT COUNT(*) FROM `%s` WHERE %s", col.Table, strings.Join(conditions, " OR "))
-		if err := r.DB.Get(&count, query, args...); err != nil {
+		query := fmt.Sprintf("SELECT COUNT(*) FROM `%s` owned WHERE (%s)", col.Table, strings.Join(conditions, " OR "))
+		exclusion, ownerArgs := identifierOwnerExclusion(schema, col.Table, col.Column, subject.UserSeq)
+		if exclusion != "" {
+			query += " AND " + exclusion
+			args = append(args, ownerArgs...)
+		}
+		if err := tx.Get(&count, query, args...); err != nil {
 			return nil, err
 		}
 		if count > 0 {

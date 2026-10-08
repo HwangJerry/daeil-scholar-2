@@ -12,14 +12,16 @@ const (
 // change for one request and how each is changed. PlanDigest binds an operator
 // approval to exactly this set of records; any later change requires re-review.
 type ErasurePreview struct {
-	RequestID   int64                      `json:"requestId"`
-	GeneratedAt time.Time                  `json:"generatedAt"`
-	PlanDigest  string                     `json:"planDigest"`
-	Blockers    []string                   `json:"blockers"`
-	Tables      []ErasurePreviewTable      `json:"tables"`
-	Files       []string                   `json:"files"`
-	Social      []ErasureSocialUnlink      `json:"socialUnlinks"`
-	Unhandled   []AccountDeletionFootprint `json:"unhandled"`
+	CompletionWaits []ErasureCompletionWait     `json:"completionWaits"`
+	Subscriptions   []ErasureSubscriptionReview `json:"subscriptions"`
+	RequestID       int64                       `json:"requestId"`
+	GeneratedAt     time.Time                   `json:"generatedAt"`
+	PlanDigest      string                      `json:"planDigest"`
+	Blockers        []string                    `json:"blockers"`
+	Tables          []ErasurePreviewTable       `json:"tables"`
+	Files           []string                    `json:"files"`
+	Social          []ErasureSocialUnlink       `json:"socialUnlinks"`
+	Unhandled       []AccountDeletionFootprint  `json:"unhandled"`
 }
 
 // ErasurePreviewTable is one table's affected rows. Rows is a bounded sample;
@@ -49,3 +51,24 @@ type ErasureSocialUnlink struct {
 	Provider string `json:"provider"`
 	Status   string `json:"status"`
 }
+
+// Completion waits describe policy delays, not permission to delete unknown rows.
+type ErasureCompletionWait struct {
+	Code       string    `json:"code"`
+	Count      int64     `json:"count"`
+	ExpectedAt time.Time `json:"expectedAt"`
+}
+type ErasureSubscriptionReview struct {
+	SubscriptionID    int    `json:"subscriptionId"`
+	Status            string `json:"status"`
+	HasBillingKey     bool   `json:"hasBillingKey"`
+	CanReview         bool   `json:"canReview"`
+	Reviewed          bool   `json:"reviewed"`
+	SourceFingerprint string `json:"sourceFingerprint"`
+}
+
+const PhoneVerificationRetention = 24 * time.Hour
+const PhoneVerificationCleanupInterval = time.Hour
+const ErasureRecheckInterval = 5 * time.Minute
+const ErasurePollInterval = time.Minute
+const PhoneVerificationWaitCode = "PHONE_VERIFICATION_RETENTION_PENDING"

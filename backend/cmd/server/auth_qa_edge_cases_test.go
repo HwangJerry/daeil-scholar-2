@@ -126,6 +126,7 @@ func TestAuthQAAPIRecoveryBoundaries(t *testing.T) {
 		}
 		goldenCount(t, s.db, 0, `SELECT COUNT(*) FROM ALUMNI_MOBILE_REFRESH_TOKEN WHERE USR_SEQ=?`, seq)
 		goldenCount(t, s.db, 1, `SELECT COUNT(*) FROM ALUMNI_PHONE_VERIFICATION WHERE APV_ID=? AND CONSUMED_YN='Y'`, verificationID)
+		goldenCount(t, s.db, 1, `SELECT COUNT(*) FROM ALUMNI_PHONE_VERIFICATION WHERE APV_ID=? AND CONSUMED_USR_SEQ=? AND CONSUMED_AT IS NOT NULL`, verificationID, seq)
 		if _, err := linkStore.Begin(linkToken); !errors.Is(err, service.ErrSocialLinkTokenConsumed) {
 			t.Fatalf("committed account must consume its continuation: %v", err)
 		}

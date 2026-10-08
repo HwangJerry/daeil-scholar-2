@@ -3,6 +3,7 @@ package job
 
 import (
 	"context"
+	"github.com/dflh-saf/backend/internal/model"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/repository"
@@ -17,7 +18,7 @@ const mobileRefreshTokenRevokedRetention = 7 * 24 * time.Hour
 // phoneVerificationRetention is how long an SMS verification row is kept after it
 // was issued. Codes and grant tokens are short-lived credentials tied to a phone
 // number, so rows are purged shortly after they can no longer be used.
-const phoneVerificationRetention = 24 * time.Hour
+const phoneVerificationRetention = model.PhoneVerificationRetention
 
 // SessionCleanupJob periodically removes expired sessions and tokens.
 type SessionCleanupJob struct {
@@ -53,7 +54,7 @@ func NewSessionCleanupJob(
 func (j *SessionCleanupJob) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	j.cancel = cancel
-	ticker := time.NewTicker(time.Hour)
+	ticker := time.NewTicker(model.PhoneVerificationCleanupInterval)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {

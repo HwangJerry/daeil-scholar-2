@@ -225,6 +225,21 @@ func (s *PhoneVerificationService) ConsumeGrantForPhone(grantToken, phone string
 	return err
 }
 
+// ConsumeGrantForMember attaches consumption to the created member. Missing
+// ownership support fails closed; it never silently consumes an unowned grant.
+func (s *PhoneVerificationService) ConsumeGrantForMember(grantToken, phone string, user int) error {
+	store, ok := s.store.(interface {
+		ConsumeGrantForMember(string, string, int) (string, error)
+	})
+	if !ok || user <= 0 {
+		return ErrPhoneNotVerified
+	}
+	_, err := s.grantSubject(grantToken, phone, func(hash string) (string, error) {
+		return store.ConsumeGrantForMember(hash, model.NormalizePhoneNumber(phone).String(), user)
+	})
+	return err
+}
+
 // grantSubject resolves a grant token through the given lookup and confirms it was
 // issued for the supplied phone number.
 func (s *PhoneVerificationService) grantSubject(grantToken, phone string, lookup func(string) (string, error)) (string, error) {

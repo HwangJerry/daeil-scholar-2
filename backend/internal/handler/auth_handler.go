@@ -101,11 +101,11 @@ func (h *AuthHandler) requirePhoneVerification(w http.ResponseWriter, token, pho
 
 // spendPhoneVerification marks the grant used after the account exists. A failure here
 // leaves an already-created account intact, so it is logged rather than surfaced.
-func (h *AuthHandler) spendPhoneVerification(token, phone string) {
+func (h *AuthHandler) spendPhoneVerification(token, phone string, user int) {
 	if h.phoneVerifier == nil {
 		return
 	}
-	if err := h.phoneVerifier.ConsumeGrantForPhone(token, phone); err != nil {
+	if err := h.phoneVerifier.ConsumeGrantForMember(token, phone, user); err != nil {
 		h.logger.Error().Err(err).Msg("register: failed to consume phone verification grant")
 	}
 }
@@ -279,7 +279,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	h.spendPhoneVerification(req.PhoneVerificationToken, req.Phone)
+	h.spendPhoneVerification(req.PhoneVerificationToken, req.Phone, user.USRSeq)
 	h.recordPrivacyConsent(user.USRSeq, req.PrivacyConsent)
 	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
 	respondJSON(w, http.StatusCreated, authUser)

@@ -3,6 +3,7 @@ package job
 
 import (
 	"context"
+	"github.com/dflh-saf/backend/internal/model"
 	"github.com/rs/zerolog"
 	"time"
 )
@@ -24,7 +25,7 @@ func (j *AccountErasureJob) Start() {
 	j.done = make(chan struct{})
 	go func() {
 		defer close(j.done)
-		ticker := time.NewTicker(time.Minute)
+		ticker := time.NewTicker(model.ErasurePollInterval)
 		defer ticker.Stop()
 		for {
 			if err := j.runner.RunOnce(ctx); err != nil && ctx.Err() == nil {

@@ -48,6 +48,12 @@ func boardAnonymizedColumns(s erasureSchema) []anonymizedColumn {
 // source rows that later steps delete.
 func accountReferenceSteps(s erasureSchema, user int, email string) []erasureStep {
 	steps := []erasureStep{}
+	if s.has("ALUMNI_PHONE_VERIFICATION", "CONSUMED_USR_SEQ") {
+		steps = append(steps, erasureStep{"ALUMNI_PHONE_VERIFICATION", "CONSUMED_USR_SEQ=? AND CONSUMED_YN='Y' AND CONSUMED_AT IS NOT NULL", []interface{}{user}})
+	}
+	if s["SUBSCRIPTION"] != nil {
+		steps = append(steps, erasureStep{"SUBSCRIPTION", "USR_SEQ=?", []interface{}{user}})
+	}
 	if s["ALUMNI_MESSAGE"] != nil {
 		steps = append(steps,
 			erasureStep{"ALUMNI_PUSH_OUTBOX", "EVENT_TYPE='message' AND EVENT_ID IN (SELECT AM_SEQ FROM ALUMNI_MESSAGE WHERE AM_SENDER_SEQ=? OR AM_RECVR_SEQ=?)", []interface{}{user, user}},

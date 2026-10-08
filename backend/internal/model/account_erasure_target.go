@@ -6,6 +6,8 @@ import "time"
 var ErasureTargetNames = []string{"backups", "historical_files", "external_data", "other_identifiers"}
 
 type ErasureTarget struct {
+	WaitCount     int64      `json:"waitCount,omitempty" db:"WAIT_COUNT"`
+	WaitUntil     *time.Time `json:"waitUntil,omitempty" db:"WAIT_UNTIL"`
 	Name          string     `json:"target" db:"TARGET"`
 	Status        string     `json:"status" db:"STATUS"`
 	Evidence      string     `json:"evidenceReference" db:"EVIDENCE_REFERENCE"`

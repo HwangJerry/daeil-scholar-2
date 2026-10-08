@@ -25,16 +25,12 @@ func previewBlockers(tx *sqlx.Tx, s erasureSchema, id int64, user int) ([]string
 			blockers = append(blockers, "MEMBER_NOT_WITHDRAWN")
 		}
 	}
-	for _, table := range []string{"SUBSCRIPTION", "WEO_ORDER_PROFILE"} {
-		if s[table] != nil {
-			var n int
-			if err := tx.Get(&n, "SELECT COUNT(*) FROM `"+table+"` WHERE USR_SEQ=?", user); err != nil {
-				return nil, err
-			}
-			if n > 0 {
-				blockers = append(blockers, "BILLING_REVOCATION_REVIEW_REQUIRED")
-			}
-		}
+	blocked, err := billingErasureBlocked(tx, s, id, user)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		blockers = append(blockers, "BILLING_REVOCATION_REVIEW_REQUIRED")
 	}
 	if s.has("WEO_BOARDBBS", "RE_CONTENTS") {
 		var replies int

@@ -194,7 +194,7 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isNew {
-		h.spendPhoneVerification(req.PhoneVerificationToken, req.Phone)
+		h.spendPhoneVerification(req.PhoneVerificationToken, req.Phone, user.USRSeq)
 		h.recordPrivacyConsent(user.USRSeq, req.PrivacyConsent)
 	}
 
