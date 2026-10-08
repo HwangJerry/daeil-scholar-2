@@ -3,10 +3,11 @@ package model
 
 // Stable error codes the mobile apps branch on for a refused message send.
 const (
-	MessageSendInvalid         = "MESSAGE_INVALID"
-	MessageSendContentRejected = "MESSAGE_CONTENT_REJECTED"
-	MessageSendRecipientGone   = "RECIPIENT_UNAVAILABLE"
-	MessageSendBlockedByMe     = "RECIPIENT_BLOCKED_BY_ME"
+	MessageSendInvalid           = "MESSAGE_INVALID"
+	MessageSendContentRejected   = "MESSAGE_CONTENT_REJECTED"
+	MessageSendRecipientGone     = "RECIPIENT_UNAVAILABLE"
+	MessageSendBlockedByMe       = "RECIPIENT_BLOCKED_BY_ME"
+	MessageSendReceivingDisabled = "RECIPIENT_RECEIVING_DISABLED"
 )
 
 // MessageSendRejection is a client-facing refusal of a message send. Code is
@@ -32,4 +33,8 @@ func NewMessageRecipientUnavailable() *MessageSendRejection {
 
 func NewMessageRecipientBlockedByMe() *MessageSendRejection {
 	return &MessageSendRejection{Code: MessageSendBlockedByMe, Message: "차단을 해제하면 메시지를 보낼 수 있습니다."}
+}
+
+func NewMessageReceivingDisabled() *MessageSendRejection {
+	return &MessageSendRejection{Code: MessageSendReceivingDisabled, Message: "상대방이 쪽지 수신을 꺼두었어요."}
 }

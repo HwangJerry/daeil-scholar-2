@@ -65,6 +65,13 @@ func (s *MessageService) SendMessage(senderSeq int, senderName string, req model
 	if !available {
 		return nil, model.NewMessageRecipientUnavailable()
 	}
+	allowed, err := s.repo.CanReceiveMessages(recipientSeq)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, model.NewMessageReceivingDisabled()
+	}
 	blockState, err := s.blocks.Get(senderSeq, recipientSeq)
 	if err != nil {
 		return nil, err
@@ -343,7 +350,14 @@ func (s *MessageService) GetConversationMessages(usrSeq, otherSeq int, before st
 			ReadAt:           readAt,
 		})
 	}
-	response := &model.ConversationMessageListResponse{Items: items, HasMore: hasMore, RecipientAvailable: recipientAvailable}
+	messageAllowed := false
+	if recipientAvailable {
+		messageAllowed, err = s.repo.CanReceiveMessages(otherSeq)
+		if err != nil {
+			return nil, err
+		}
+	}
+	response := &model.ConversationMessageListResponse{Items: items, HasMore: hasMore, RecipientAvailable: recipientAvailable, RecipientMessageAllowed: messageAllowed}
 	if hasMore {
 		last := messages[len(messages)-1]
 		createdAt, err := time.Parse(time.RFC3339, last.RegDate)

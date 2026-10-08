@@ -85,7 +85,7 @@ export function AlumniCard({ item, currentUsrSeq, isLast }: AlumniCardProps) {
 
         {/* Col 5 — 쪽지 */}
         <div className="flex justify-end">
-          {!isSelf && item.usrSeq > 0 && (
+          {!isSelf && item.usrSeq > 0 && item.messageAllowed !== false && (
             <Button
               variant="default"
               size="sm"

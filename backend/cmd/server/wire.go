@@ -238,6 +238,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	feedPresenter := presenter.NewFeedPresenter()
 
 	h := handlers{
+		messagePreferences:  &handler.MessagePreferencesHandler{Service: &service.MessagePreferencesService{Store: &repository.MessagePreferencesRepository{DB: db}}},
 		health:              handler.NewHealthHandler(db),
 		auth:                handler.NewAuthHandler(authService, memberService, registrationService, cacheStore, socialLinkTokens, cfg, logger),
 		feed:                handler.NewFeedHandler(feedService, likeService, service.NewFeedInlineDetailService(feedRepo), feedPresenter),

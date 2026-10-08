@@ -17,6 +17,7 @@ const defaultMaxBodySizeBytes int64 = 2 << 20
 
 // handlers holds all HTTP handler instances for route registration.
 type handlers struct {
+	messagePreferences  *handler.MessagePreferencesHandler
 	health              *handler.HealthHandler
 	auth                *handler.AuthHandler
 	feed                *handler.FeedHandler
@@ -193,6 +194,8 @@ func registerAuthRoutes(r chi.Router, h handlers, authService *service.AuthServi
 		r.With(mw.ApprovedAlumniMiddleware).Get("/api/alumni/{userSeq}", h.alumni.GetDetail)
 		r.With(mw.ApprovedAlumniMiddleware).Get("/api/alumni/widget", h.alumni.GetWidgetPreview)
 		r.Get("/api/profile", h.profile.GetProfile)
+		r.Get("/api/profile/message-preferences", h.messagePreferences.Get)
+		r.Put("/api/profile/message-preferences", h.messagePreferences.Put)
 		r.Put("/api/profile", h.profile.UpdateProfile)
 		r.Post("/api/profile/photo", h.profileUpload.UploadPhoto)
 		r.Post("/api/profile/bizcard", h.profileUpload.UploadBizCard)

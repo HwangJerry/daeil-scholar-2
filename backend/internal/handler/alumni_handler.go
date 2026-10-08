@@ -37,6 +37,7 @@ func (h *AlumniHandler) Search(w http.ResponseWriter, r *http.Request) {
 	if jobCategory, err := strconv.Atoi(r.URL.Query().Get("jobCategory")); err == nil {
 		params.JobCategory = jobCategory
 	}
+	params.MessageRecipientsOnly = r.URL.Query().Get("messageRecipientsOnly") == "true"
 	result, err := h.service.Search(params)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "INVALID_REQUEST", "Failed to search alumni")

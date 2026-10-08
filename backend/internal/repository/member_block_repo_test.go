@@ -22,17 +22,17 @@ func newMemberBlockRepoMock(t *testing.T) (*MemberBlockRepository, sqlmock.Sqlmo
 func TestMemberBlockRepositoryListUsesDirectionalStableOrdering(t *testing.T) {
 	repo, mock, closeDB := newMemberBlockRepoMock(t)
 	defer closeDB()
-	mock.ExpectQuery(`SELECT BLOCKED_USR_SEQ,[\s\S]*FROM ALUMNI_MEMBER_BLOCK[\s\S]*WHERE BLOCKER_USR_SEQ = \?[\s\S]*ORDER BY UPDATED_AT DESC, BLOCKED_USR_SEQ DESC`).
+	mock.ExpectQuery(`SELECT b.BLOCKED_USR_SEQ,[\s\S]*FROM ALUMNI_MEMBER_BLOCK[\s\S]*WHERE b.BLOCKER_USR_SEQ = \?[\s\S]*ORDER BY b.UPDATED_AT DESC, b.BLOCKED_USR_SEQ DESC`).
 		WithArgs(101).
-		WillReturnRows(sqlmock.NewRows([]string{"BLOCKED_USR_SEQ", "UPDATED_AT"}).
-			AddRow(203, "2026-07-29T02:00:00Z").
-			AddRow(202, "2026-07-29T01:00:00Z"))
+		WillReturnRows(sqlmock.NewRows([]string{"BLOCKED_USR_SEQ", "UPDATED_AT", "NAME", "PHOTO_URL", "COHORT", "DEPARTMENT"}).
+			AddRow(203, "2026-07-29T02:00:00Z", "탈퇴한 회원", nil, nil, nil).
+			AddRow(202, "2026-07-29T01:00:00Z", "예시 동문", "/photo.jpg", "18", "영어"))
 
 	states, err := repo.List(101)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(states) != 2 || states[0].UserSeq != 203 || !states[0].BlockedByMe || states[0].UpdatedAt == nil {
+	if len(states) != 2 || states[0].UserSeq != 203 || !states[0].BlockedByMe || states[0].UpdatedAt == nil || states[0].Name != "탈퇴한 회원" || states[1].Name != "예시 동문" {
 		t.Fatalf("states = %#v", states)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

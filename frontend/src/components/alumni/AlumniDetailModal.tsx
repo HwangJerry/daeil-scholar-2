@@ -156,7 +156,7 @@ export function AlumniDetailModal({ item, currentUsrSeq, onClose }: AlumniDetail
       )}
 
       {/* Action */}
-      {!isSelf && item.usrSeq > 0 && (
+      {!isSelf && item.usrSeq > 0 && item.messageAllowed !== false && (
         <>
           <div className="border-t border-border-subtle mx-5" />
           <div className="px-5 py-4 flex justify-center">
