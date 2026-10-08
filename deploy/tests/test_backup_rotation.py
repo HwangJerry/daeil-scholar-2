@@ -76,6 +76,11 @@ class PruneTest(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in rotation.HTTPD_LOGS.iterdir()), ['access_log', 'access_log-20260910'])
         self.assertFalse((rotation.LEGACY_DUMPS / 'old.sql').exists())
 
+    def test_security_dataset_does_not_survive_in_unrelated_backups(self):
+        args = rotation.mysqldump_args({'DB_USER': 'app', 'DB_PASSWORD': 'not-used-in-args', 'DB_NAME': 'appdb'})
+        self.assertIn('--ignore-table=appdb.LOGIN_SECURITY_EVENTS', args)
+        self.assertNotIn('not-used-in-args', ' '.join(args))
+
     def test_status_reports_ages_and_log_settings_without_paths(self):
         self.backup(2)
         status = rotation.write_status(NOW, [])

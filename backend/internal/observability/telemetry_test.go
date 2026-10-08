@@ -3,12 +3,16 @@ package observability
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -103,6 +107,69 @@ func TestExportPseudonymizesByDefault(t *testing.T) {
 	}
 	if w.Header().Get("X-Next-Cursor") != "1" {
 		t.Fatal("cursor missing")
+	}
+	if e := mock.ExpectationsWereMet(); e != nil {
+		t.Fatal(e)
+	}
+}
+
+func TestMobileLimiterBoundsDistinctClients(t *testing.T) {
+	mobileMu.Lock()
+	mobileLimits = map[string]struct {
+		minute int64
+		count  int
+	}{}
+	mobileMu.Unlock()
+	for i := 0; i < 10000; i++ {
+		if !consumeMobile(strconv.Itoa(i), 100) {
+			t.Fatal("premature limit")
+		}
+	}
+	if consumeMobile("overflow", 100) || len(mobileLimits) != 10000 {
+		t.Fatal("IP map exceeded its bound")
+	}
+	if !consumeMobile("new-minute", 101) {
+		t.Fatal("expired clients not evicted")
+	}
+}
+
+func TestLoginOutboxPersistsAndReplaysWithoutCredentialPayload(t *testing.T) {
+	db, mock, e := sqlmock.New()
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.Close()
+	tel := testTelemetry(t)
+	tel.db = sqlx.NewDb(db, "mysql")
+	mock.ExpectExec("INSERT IGNORE INTO LOGIN_SECURITY_EVENTS").WillReturnError(errors.New("database unavailable"))
+	req := httptest.NewRequest("POST", "/api/auth/mobile/login", strings.NewReader(`{"password":"never-persist-this"}`))
+	req.RemoteAddr = "127.0.0.1:8080"
+	req.Header.Set("X-Forwarded-For", "192.0.2.1")
+	req.Header.Set("X-Dflh-Install-ID", "abcdef00-1234-1234-1234-abcdef123456")
+	req.Header.Set("X-Client-Platform", "ios")
+	req.Header.Set("X-Client-Version", "1.3.2")
+	tel.recordLogin(req, "password", 200, .01, ID(16))
+	files, _ := filepath.Glob(filepath.Join(tel.spool, "*.json"))
+	if len(files) != 1 {
+		t.Fatal("audit outbox missing")
+	}
+	b, _ := os.ReadFile(files[0])
+	if bytes.Contains(b, []byte("never-persist-this")) {
+		t.Fatal("credential payload leaked")
+	}
+	var event LoginEvent
+	if json.Unmarshal(b, &event) != nil || event.Outcome != "success" || event.IP != "192.0.2.1" || event.Version != "1.3.2" {
+		t.Fatal("event metadata lost")
+	}
+	info, _ := os.Stat(files[0])
+	if info.Mode().Perm() != 0600 {
+		t.Fatal("outbox permissions")
+	}
+	mock.ExpectExec("INSERT IGNORE INTO LOGIN_SECURITY_EVENTS").WillReturnResult(sqlmock.NewResult(1, 1))
+	tel.replayAudit()
+	files, _ = filepath.Glob(filepath.Join(tel.spool, "*.json"))
+	if len(files) != 0 {
+		t.Fatal("replayed event retained")
 	}
 	if e := mock.ExpectationsWereMet(); e != nil {
 		t.Fatal(e)

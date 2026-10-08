@@ -55,7 +55,7 @@ def mysqldump_args(env):
     # Consistent InnoDB snapshot without blocking writes on the live site.
     return ['mysqldump', '--single-transaction', '--quick', '--routines', '--events', '--triggers', '--hex-blob',
             '--host=' + env.get('DB_HOST', '127.0.0.1'), '--port=' + env.get('DB_PORT', '3306'),
-            '--user=' + env['DB_USER'], env['DB_NAME']]
+            '--user=' + env['DB_USER'], '--ignore-table=' + env['DB_NAME'] + '.LOGIN_SECURITY_EVENTS', env['DB_NAME']]
 
 
 def sha256(path):

@@ -204,9 +204,16 @@ func (t *Telemetry) purgeAudit() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, e := t.db.ExecContext(ctx, "DELETE FROM LOGIN_SECURITY_EVENTS WHERE occurred_at < ? LIMIT 10000", time.Now().UTC().AddDate(0, 0, -loginRetentionDays))
-	if e != nil {
-		t.logger.Warn().Msg("security login retention failed")
+	for batch := 0; batch < 20; batch++ {
+		result, e := t.db.ExecContext(ctx, "DELETE FROM LOGIN_SECURITY_EVENTS WHERE occurred_at < ? LIMIT 10000", time.Now().UTC().AddDate(0, 0, -loginRetentionDays))
+		if e != nil {
+			t.logger.Warn().Msg("security login retention failed")
+			return
+		}
+		count, _ := result.RowsAffected()
+		if count < 10000 {
+			return
+		}
 	}
 }
 func (t *Telemetry) pseudonym(kind, value string) string {

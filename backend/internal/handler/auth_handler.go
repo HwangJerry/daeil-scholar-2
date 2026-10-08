@@ -213,7 +213,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusForbidden, service.LoginErrorCode(err), "이 계정은 현재 로그인할 수 없습니다.")
 			return
 		}
-		h.logger.Error().Err(err).Str("usrId", req.USRID).Msg("login: password verification failed")
+		h.logger.Error().Err(err).Msg("login: password verification failed")
 		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 처리 중 오류가 발생했습니다")
 		return
 	}

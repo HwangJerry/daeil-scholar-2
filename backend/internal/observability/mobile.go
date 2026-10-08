@@ -36,26 +36,35 @@ type MobileEvent struct {
 func validateMobile(e MobileEvent, now int64) bool {
 	return hex32.MatchString(e.Trace) && hex16.MatchString(e.Span) && (e.Parent == "" || hex16.MatchString(e.Parent)) && e.Trace != "00000000000000000000000000000000" && e.Span != "0000000000000000" && allowedScreens[e.Screen] && (e.Action == "screen.view" || e.Action == "http.request") && (e.Action != "http.request" || (allowedRoutes[e.Route] && (e.Method == "GET" || e.Method == "POST" || e.Method == "PUT" || e.Method == "DELETE" || e.Method == "PATCH"))) && e.Status >= 0 && e.Status <= 599 && e.Duration >= 0 && e.Duration <= 120000 && e.Start >= now-300000 && e.Start <= now+60000 && e.Start+e.Duration <= now+60000
 }
-func (t *Telemetry) CollectMobile(w http.ResponseWriter, r *http.Request) {
-	ip, _ := ClientIP(r)
-	minute := time.Now().Unix() / 60
+
+// The IP map itself is bounded; a burst of distinct clients cannot grow it.
+func consumeMobile(ip string, minute int64) bool {
 	mobileMu.Lock()
-	entry := mobileLimits[ip]
+	defer mobileMu.Unlock()
+	entry, exists := mobileLimits[ip]
+	if !exists && len(mobileLimits) >= 10000 {
+		for key, value := range mobileLimits {
+			if value.minute < minute {
+				delete(mobileLimits, key)
+			}
+		}
+		if len(mobileLimits) >= 10000 {
+			return false
+		}
+	}
 	if entry.minute != minute {
 		entry.minute = minute
 		entry.count = 0
 	}
 	entry.count++
 	mobileLimits[ip] = entry
-	if len(mobileLimits) > 10000 {
-		for k, v := range mobileLimits {
-			if v.minute < minute {
-				delete(mobileLimits, k)
-			}
-		}
-	}
-	limited := entry.count > 20 || len(mobileLimits) > 10000
-	mobileMu.Unlock()
+	return entry.count <= 20
+}
+
+func (t *Telemetry) CollectMobile(w http.ResponseWriter, r *http.Request) {
+	ip, _ := ClientIP(r)
+	minute := time.Now().Unix() / 60
+	limited := !consumeMobile(ip, minute)
 	if limited {
 		http.Error(w, "Rate limited", 429)
 		return

@@ -50,9 +50,10 @@ The DB write has a 300 ms deadline. Failed writes fall back to mode-0600 files
 in the persistent outbox, max 10,000 events, replayed in bounded batches.
 `daeil_login_audit_write_failures_total` detects DB audit failures; outbox-full
 and filesystem failures are also recorded without personal data in journal.
-Events older than 90 days are deleted hourly (max 10,000 per pass) and discarded
-from the outbox. Operational backup retention is independent; exported training
-files also require a 90-day deletion schedule controlled by their recipient.
+Events older than 90 days are deleted hourly (up to 20 batches of 10,000 within a five-second deadline) and discarded
+from the outbox. The security table is excluded from ordinary deployment/weekly DB dumps so
+older copies cannot extend this retention. Exported training files also require
+a 90-day deletion schedule controlled by their recipient.
 
 Root-authenticated export:
 `GET /api/admin/security/login-events/export?from=<RFC3339>&to=<RFC3339>&after_id=0&limit=1000`

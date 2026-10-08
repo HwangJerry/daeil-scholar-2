@@ -246,7 +246,7 @@ def database_backup(env, backup):
     # its tables without requiring the server-wide RELOAD privilege.
     destination = backup / 'database.sql.gz'
     with gzip.open(str(destination), 'wb') as stream:
-        proc = subprocess.Popen(mysql_args(env, 'mysqldump') + ['--routines', '--events', '--triggers', '--hex-blob', '--lock-tables'], env=db_env(env), stdout=subprocess.PIPE)
+        proc = subprocess.Popen(mysql_args(env, 'mysqldump') + ['--routines', '--events', '--triggers', '--hex-blob', '--lock-tables', '--ignore-table=' + env['DB_NAME'] + '.LOGIN_SECURITY_EVENTS'], env=db_env(env), stdout=subprocess.PIPE)
         shutil.copyfileobj(proc.stdout, stream)
         proc.stdout.close()
         if proc.wait() != 0:
