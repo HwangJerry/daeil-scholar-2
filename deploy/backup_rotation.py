@@ -92,6 +92,16 @@ def weekly(now):
         proc.stdout.close()
         if proc.wait() != 0:
             raise RuntimeError('database dump failed')
+        # Preserve its schema but no raw login records in ordinary backups.
+        mysql = ['mysql', '--host=' + env.get('DB_HOST', '127.0.0.1'), '--port=' + env.get('DB_PORT', '3306'), '--user=' + env['DB_USER'], env['DB_NAME']]
+        exists = subprocess.check_output(mysql + ['--batch', '--skip-column-names', '-e', "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='LOGIN_SECURITY_EVENTS'"], env=dict(os.environ, MYSQL_PWD=env['DB_PASSWORD'])).decode().strip()
+        if exists == '1':
+            schema_args = [a for a in mysqldump_args(env) if not a.startswith('--ignore-table=') and a not in ('--routines', '--events', '--triggers')] 
+            schema = subprocess.Popen(schema_args + ['--no-data', 'LOGIN_SECURITY_EVENTS'], env=dict(os.environ, MYSQL_PWD=env['DB_PASSWORD']), stdout=subprocess.PIPE)
+            shutil.copyfileobj(schema.stdout, stream)
+            schema.stdout.close()
+            if schema.wait() != 0:
+                raise RuntimeError('security audit schema dump failed')
     with gzip.open(str(dump), 'rb') as stream:
         if not stream.read(1024):
             raise RuntimeError('empty database dump')

@@ -51,7 +51,7 @@ in the persistent outbox, max 10,000 events, replayed in bounded batches.
 `daeil_login_audit_write_failures_total` detects DB audit failures; outbox-full
 and filesystem failures are also recorded without personal data in journal.
 Events older than 90 days are deleted hourly (up to 20 batches of 10,000 within a five-second deadline) and discarded
-from the outbox. The security table is excluded from ordinary deployment/weekly DB dumps so
+from the outbox. Only the empty security table schema is included in deployment/weekly DB dumps so
 older copies cannot extend this retention. Exported training files also require
 a 90-day deletion schedule controlled by their recipient.
 

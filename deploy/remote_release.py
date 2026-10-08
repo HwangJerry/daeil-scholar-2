@@ -251,6 +251,15 @@ def database_backup(env, backup):
         proc.stdout.close()
         if proc.wait() != 0:
             raise RuntimeError('database backup failed')
+        # Retain the empty schema so migration metadata remains consistent
+        # after disaster recovery, without retaining expired security records.
+        exists = subprocess.check_output(mysql_args(env) + ['--batch', '--skip-column-names', '-e', "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='LOGIN_SECURITY_EVENTS'"], env=db_env(env)).decode().strip()
+        if exists == '1':
+            schema = subprocess.Popen(mysql_args(env, 'mysqldump') + ['--no-data', 'LOGIN_SECURITY_EVENTS'], env=db_env(env), stdout=subprocess.PIPE)
+            shutil.copyfileobj(schema.stdout, stream)
+            schema.stdout.close()
+            if schema.wait() != 0:
+                raise RuntimeError('security audit schema backup failed')
     with gzip.open(str(destination), 'rb') as stream:
         total = 0
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):

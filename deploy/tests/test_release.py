@@ -86,7 +86,7 @@ class ReleaseTests(unittest.TestCase):
             stdout = io.BytesIO(b'CREATE TABLE example (id INT);')
             def wait(self):
                 return 0
-        with patch.object(remote.subprocess, 'Popen', return_value=Dump()) as command:
+        with patch.object(remote.subprocess, 'Popen', return_value=Dump()) as command, patch.object(remote.subprocess, 'check_output', return_value=b'0\n'):
             remote.database_backup(env, backup)
         args = command.call_args[0][0]
         self.assertIn('--lock-tables', args)
@@ -96,6 +96,27 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn(b'CREATE TABLE example', stream.read())
         with tarfile.open(backup / 'uploads-0.tar.gz') as archive:
             self.assertEqual(archive.extractfile('uploads/example.txt').read(), b'synthetic upload')
+
+    def test_security_backup_keeps_schema_without_retaining_login_records(self):
+        uploads = self.root / 'schema-uploads'
+        uploads.mkdir()
+        backup = self.root / 'schema-backup'
+        backup.mkdir()
+        env = {'DB_USER': 'test', 'DB_PASSWORD': 'test', 'DB_NAME': 'test',
+               'UPLOAD_BASE_PATH': str(uploads), 'ACCOUNT_ERASURE_LEGACY_ROOT': str(uploads)}
+        class Dump:
+            def __init__(self, body):
+                self.stdout = io.BytesIO(body)
+            def wait(self):
+                return 0
+        with patch.object(remote.subprocess, 'Popen', side_effect=[Dump(b'CREATE TABLE example(id INT);'), Dump(b'CREATE TABLE LOGIN_SECURITY_EVENTS(id BIGINT);')]) as command, patch.object(remote.subprocess, 'check_output', return_value=b'1\n'):
+            remote.database_backup(env, backup)
+        self.assertIn('--ignore-table=test.LOGIN_SECURITY_EVENTS', command.call_args_list[0][0][0])
+        self.assertIn('--no-data', command.call_args_list[1][0][0])
+        with gzip.open(backup / 'database.sql.gz', 'rb') as stream:
+            content = stream.read()
+        self.assertIn(b'CREATE TABLE LOGIN_SECURITY_EVENTS', content)
+        self.assertNotIn(b'INSERT INTO LOGIN_SECURITY_EVENTS', content)
 
     def test_verified_inventory_rejects_modified_extra_and_symlink_files(self):
         self.candidate()
