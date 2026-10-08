@@ -2,9 +2,8 @@
 package middleware
 
 import (
-	"net"
+	"github.com/dflh-saf/backend/internal/observability"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/patrickmn/go-cache"
@@ -36,16 +35,5 @@ func LoginRateLimiter(c *cache.Cache) func(http.Handler) http.Handler {
 	}
 }
 
-// clientIP extracts the real client IP, preferring X-Forwarded-For for Nginx proxy.
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if ip := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0]); ip != "" {
-			return ip
-		}
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
-}
+// Use only forwarding headers from the local, trusted Apache proxy.
+func clientIP(r *http.Request) string { ip, _ := observability.ClientIP(r); return ip }

@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -16,7 +18,9 @@ func NewHealthHandler(db *sqlx.DB) *HealthHandler {
 
 func (h *HealthHandler) Check(w http.ResponseWriter, r *http.Request) {
 	status := map[string]string{"status": "ok"}
-	if err := h.db.PingContext(r.Context()); err != nil {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := h.db.PingContext(ctx); err != nil {
 		status["status"] = "degraded"
 		status["db"] = "unreachable"
 		respondJSON(w, http.StatusServiceUnavailable, status)

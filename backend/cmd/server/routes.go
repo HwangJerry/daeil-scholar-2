@@ -7,6 +7,7 @@ import (
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/handler"
 	mw "github.com/dflh-saf/backend/internal/middleware"
+	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/patrickmn/go-cache"
@@ -82,6 +83,9 @@ type appVersionGate struct {
 // registerRoutes creates a chi.Router with all middleware and API routes.
 func registerRoutes(h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, logger zerolog.Logger, gate appVersionGate) chi.Router {
 	router := chi.NewRouter()
+	if observability.Default != nil {
+		router.Use(observability.Default.Middleware)
+	}
 	router.Use(mw.Recoverer(logger))
 	router.Use(mw.RequestLogger(logger))
 	router.Use(mw.CORSMiddleware(allowedOrigins))
@@ -140,6 +144,9 @@ func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthS
 // registerPublicRoutes registers unauthenticated public endpoints.
 func registerPublicRoutes(r chi.Router, h handlers, authService *service.AuthService, cacheStore *cache.Cache) {
 	r.Get("/api/health", h.health.Check)
+	if observability.Default != nil {
+		r.Post("/api/mobile/telemetry", observability.Default.CollectMobile)
+	}
 	// Optional auth only personalises include=detail (userLiked); the plain
 	// hero response does not depend on the caller.
 	r.With(mw.OptionalAuthMiddleware(authService)).Get("/api/feed/hero", h.feed.GetHero)
@@ -263,6 +270,9 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Use(mw.AuthMiddleware(authService))
 		r.Use(mw.AdminAuthMiddleware)
 		r.Get("/dashboard", h.adminDashboard.Dashboard)
+		if observability.Default != nil {
+			r.With(mw.RootOnlyMiddleware).Get("/security/login-events/export", observability.Default.ExportLogins)
+		}
 		r.Get("/comment-reports", h.commentReport.List)
 		r.Put("/comment-reports/{id}", h.commentReport.Resolve)
 		r.Get("/message-reports", h.messageReport.List)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/job"
+	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/rs/zerolog"
 )
@@ -31,6 +32,14 @@ func main() {
 		logger.Fatal().Err(err).Msg("failed to connect db")
 	}
 	defer db.Close()
+	if os.Getenv("TELEMETRY_ENABLED") == "true" {
+		telemetry, err := observability.New(db, logger)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("invalid observability configuration")
+		}
+		observability.Default = telemetry
+		defer telemetry.Close()
+	}
 
 	d, err := wireDeps(db, cfg, logger)
 	if err != nil {
