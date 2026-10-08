@@ -12,10 +12,11 @@ import (
 // policy payload itself (otherwise a forced client could not learn it was
 // released), and sign-out.
 var appVersionGateExemptPaths = map[string]struct{}{
-	"/api/health":          {},
-	"/api/settings/public": {},
-	"/api/auth/logout":     {},
-	"/api/auth/logout/all": {},
+	"/api/mobile/telemetry": {},
+	"/api/health":           {},
+	"/api/settings/public":  {},
+	"/api/auth/logout":      {},
+	"/api/auth/logout/all":  {},
 }
 
 type AppUpdatePolicyProvider interface {

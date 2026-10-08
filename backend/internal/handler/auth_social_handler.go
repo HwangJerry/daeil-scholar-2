@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/observability"
 	"github.com/dflh-saf/backend/internal/service"
 )
 
@@ -34,12 +35,14 @@ func (h *AuthHandler) handleSocialCallback(w http.ResponseWriter, r *http.Reques
 		respondError(w, http.StatusInternalServerError, "LINK_TOKEN_FAILED", "Failed to start account linking")
 		return
 	}
+	observability.MarkLoginOutcome(r.Context(), "link_required")
 	http.Redirect(w, r, h.cfg.Server.AllowedOrigin+"/login/link?token="+linkToken, http.StatusFound)
 }
 
 // completeSocialLogin applies the shared eligibility policy before issuing a web session.
 func (h *AuthHandler) completeSocialLogin(w http.ResponseWriter, r *http.Request, gate string, user *model.User, accessToken string) {
 	if err := (service.LoginEligibilityPolicy{}).EnsureLoginAllowed(user); err != nil {
+		observability.MarkLoginOutcome(r.Context(), "rejected")
 		http.Redirect(w, r, h.cfg.Server.AllowedOrigin+"/login?error="+service.LoginErrorCode(err), http.StatusFound)
 		return
 	}
@@ -57,5 +60,6 @@ func (h *AuthHandler) completeSocialLogin(w http.ResponseWriter, r *http.Request
 	if gate == "KT" {
 		h.service.CacheKakaoToken(user.USRSeq, accessToken)
 	}
+	observability.MarkLoginOutcome(r.Context(), "success")
 	http.Redirect(w, r, h.cfg.Server.AllowedOrigin+"/", http.StatusFound)
 }
