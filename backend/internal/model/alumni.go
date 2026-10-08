@@ -49,6 +49,9 @@ type AlumniSearchParams struct {
 	Cohort                string
 	Department            string
 	JobCategory           int
+	Cohorts               []string
+	Departments           []string
+	JobCategories         []int
 	JobRole               string
 	Page                  int
 	Size                  int

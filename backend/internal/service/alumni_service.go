@@ -24,6 +24,17 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 	params.Cohort = strings.TrimSpace(params.Cohort)
 	params.Department = strings.TrimSpace(params.Department)
 	params.JobRole = strings.TrimSpace(params.JobRole)
+	params.Cohorts = uniqueAlumniValues(params.Cohorts)
+	params.Departments = uniqueAlumniValues(params.Departments)
+	seenJobs := make(map[int]bool)
+	jobs := make([]int, 0, len(params.JobCategories))
+	for _, seq := range params.JobCategories {
+		if seq > 0 && !seenJobs[seq] {
+			jobs = append(jobs, seq)
+			seenJobs[seq] = true
+		}
+	}
+	params.JobCategories = jobs
 	if params.Page <= 0 {
 		params.Page = 1
 	}
@@ -63,6 +74,19 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 		TotalCount: total,
 		TotalPages: totalPages,
 	}, nil
+}
+
+func uniqueAlumniValues(values []string) []string {
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" && !seen[value] {
+			result = append(result, value)
+			seen[value] = true
+		}
+	}
+	return result
 }
 
 func (s *AlumniService) GetDetail(viewerSeq, userSeq int) (*model.AlumniDetail, error) {

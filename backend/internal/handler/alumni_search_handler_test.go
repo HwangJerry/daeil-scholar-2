@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/jmoiron/sqlx"
@@ -82,6 +84,57 @@ func TestSearchAlumniReturnsBusinessFieldsWithCanonicalContract(t *testing.T) {
 			// Compare the entire response so missing null fields and extra profile fields fail.
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("response = %#v, want %#v", got, want)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestSearchAlumniMultiSelectionAndLegacyRequests(t *testing.T) {
+	cases := []struct {
+		name, query, where string
+		args               []driver.Value
+	}{
+		{"plural", "cohorts=30,31,30&departments=%20영어%20,스페인어&jobCategories=2,3,2,0&name=김&page=2&size=2",
+			`m.USR_NAME LIKE \?[\s\S]*v.COHORT IN \(\?,\?\)[\s\S]*v.DEPARTMENT IN \(\?,\?\)[\s\S]*m.USR_JOB_CAT IN \(\?,\?\)`,
+			[]driver.Value{"%김%", "30", "31", "영어", "스페인어", 2, 3}},
+		{"repeated legacy", "cohort=30&cohort=31&department=영어&department=스페인어&jobCategory=2&jobCategory=3&name=김&page=2&size=2",
+			`m.USR_NAME LIKE \?[\s\S]*v.COHORT IN \(\?,\?\)[\s\S]*v.DEPARTMENT IN \(\?,\?\)[\s\S]*m.USR_JOB_CAT IN \(\?,\?\)`,
+			[]driver.Value{"%김%", "30", "31", "영어", "스페인어", 2, 3}},
+		{"single legacy", "cohort=30&department=영어&jobCategory=2&name=김&page=2&size=2",
+			`m.USR_NAME LIKE \?[\s\S]*v.COHORT = \?[\s\S]*v.DEPARTMENT = \?[\s\S]*m.USR_JOB_CAT = \?`,
+			[]driver.Value{"%김%", "30", "영어", 2}},
+		{"all departments", "cohorts=30,31&departments=&jobCategories=2,3&name=김&page=2&size=2",
+			`m.USR_NAME LIKE \?[\s\S]*v.COHORT IN \(\?,\?\)[\s\S]*m.USR_JOB_CAT IN \(\?,\?\)`,
+			[]driver.Value{"%김%", "30", "31", 2, 3}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			mock.ExpectQuery(`SELECT COUNT\(\*\)[\s\S]*` + tc.where).WithArgs(tc.args...).
+				WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(5))
+			pageArgs := append(append([]driver.Value{}, tc.args...), 2, 2)
+			mock.ExpectQuery(`SELECT m.USR_SEQ[\s\S]*` + tc.where + `[\s\S]*LIMIT \? OFFSET \?`).WithArgs(pageArgs...).
+				WillReturnRows(sqlmock.NewRows([]string{"USR_SEQ", "USR_NAME", "COHORT", "DEPARTMENT", "AJC_NAME"}).
+					AddRow(101, "김동문", "31", "스페인어", "교육"))
+			h := NewAlumniHandler(service.NewAlumniService(repository.NewAlumniRepository(sqlx.NewDb(db, "sqlmock")), nil))
+			recorder := httptest.NewRecorder()
+			h.Search(recorder, httptest.NewRequest(http.MethodGet, "/api/alumni?"+tc.query, nil))
+			if recorder.Code != 200 {
+				t.Fatalf("%d %s", recorder.Code, recorder.Body.String())
+			}
+			var response model.AlumniSearchResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.TotalCount != 5 || response.TotalPages != 3 || response.Page != 2 || len(response.Items) != 1 {
+				t.Fatalf("unexpected paginated response: %#v", response)
 			}
 			if err := mock.ExpectationsWereMet(); err != nil {
 				t.Fatal(err)

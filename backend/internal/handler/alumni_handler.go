@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/model"
@@ -38,12 +39,41 @@ func (h *AlumniHandler) Search(w http.ResponseWriter, r *http.Request) {
 		params.JobCategory = jobCategory
 	}
 	params.MessageRecipientsOnly = r.URL.Query().Get("messageRecipientsOnly") == "true"
+	query := r.URL.Query()
+	// Plural keys are comma-separated; repeated legacy keys are also accepted.
+	params.Cohorts = alumniQueryValues(query["cohorts"], query["cohort"])
+	params.Departments = alumniQueryValues(query["departments"], query["department"])
+	if query.Has("cohorts") {
+		params.Cohort = ""
+	}
+	if query.Has("departments") {
+		params.Department = ""
+	}
+	if query.Has("jobCategories") {
+		params.JobCategory = 0
+	}
+	for _, value := range alumniQueryValues(query["jobCategories"], query["jobCategory"]) {
+		if seq, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && seq > 0 {
+			params.JobCategories = append(params.JobCategories, seq)
+		}
+	}
 	result, err := h.service.Search(params)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "INVALID_REQUEST", "Failed to search alumni")
 		return
 	}
 	respondJSON(w, http.StatusOK, result)
+}
+
+func alumniQueryValues(plural, legacy []string) []string {
+	if plural == nil {
+		return legacy
+	}
+	var values []string
+	for _, value := range plural {
+		values = append(values, strings.Split(value, ",")...)
+	}
+	return values
 }
 
 func (h *AlumniHandler) GetDetail(w http.ResponseWriter, r *http.Request) {

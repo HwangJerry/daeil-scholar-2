@@ -238,15 +238,27 @@ func buildAlumniFilters(params model.AlumniSearchParams) (string, []interface{})
 		clauses = append(clauses, "AND v.GRADUATION_YEAR = ?")
 		args = append(args, params.GraduationYear)
 	}
-	if params.Cohort != "" {
+	if len(params.Cohorts) > 0 {
+		clause, values := alumniSelectionClause("v.COHORT", params.Cohorts)
+		clauses = append(clauses, clause)
+		args = append(args, values...)
+	} else if params.Cohort != "" {
 		clauses = append(clauses, "AND v.COHORT = ?")
 		args = append(args, params.Cohort)
 	}
-	if params.Department != "" {
+	if len(params.Departments) > 0 {
+		clause, values := alumniSelectionClause("v.DEPARTMENT", params.Departments)
+		clauses = append(clauses, clause)
+		args = append(args, values...)
+	} else if params.Department != "" {
 		clauses = append(clauses, "AND v.DEPARTMENT = ?")
 		args = append(args, params.Department)
 	}
-	if params.JobCategory > 0 {
+	if len(params.JobCategories) > 0 {
+		clause, values := alumniSelectionClause("m.USR_JOB_CAT", params.JobCategories)
+		clauses = append(clauses, clause)
+		args = append(args, values...)
+	} else if params.JobCategory > 0 {
 		clauses = append(clauses, "AND m.USR_JOB_CAT = ?")
 		args = append(args, params.JobCategory)
 	}
@@ -256,4 +268,17 @@ func buildAlumniFilters(params model.AlumniSearchParams) (string, []interface{})
 	}
 
 	return strings.Join(clauses, " "), args
+}
+
+// Column names are fixed by callers; all selected values remain bound parameters.
+func alumniSelectionClause[T string | int](column string, values []T) (string, []interface{}) {
+	args := make([]interface{}, len(values))
+	for i, value := range values {
+		args[i] = value
+	}
+	if len(values) == 1 {
+		return "AND " + column + " = ?", args
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(values)), ",")
+	return "AND " + column + " IN (" + placeholders + ")", args
 }
