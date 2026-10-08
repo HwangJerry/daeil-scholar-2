@@ -169,7 +169,7 @@ func (t *Telemetry) Middleware(next http.Handler) http.Handler {
 		if provider := loginProvider(route); provider != "" {
 			t.recordLogin(r, provider, status, elapsed, trace)
 		}
-		// All errors and auth attempts; 10% of other requests, plus sampled mobile journeys.
+		// All errors and auth attempts; 1/16 of other requests, plus sampled mobile journeys.
 		if !sampled && status < 500 && loginProvider(route) == "" && trace[0] != '0' {
 			return
 		}
