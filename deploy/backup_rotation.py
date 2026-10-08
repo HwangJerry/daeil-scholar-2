@@ -96,7 +96,7 @@ def weekly(now):
         mysql = ['mysql', '--host=' + env.get('DB_HOST', '127.0.0.1'), '--port=' + env.get('DB_PORT', '3306'), '--user=' + env['DB_USER'], env['DB_NAME']]
         exists = subprocess.check_output(mysql + ['--batch', '--skip-column-names', '-e', "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='LOGIN_SECURITY_EVENTS'"], env=dict(os.environ, MYSQL_PWD=env['DB_PASSWORD'])).decode().strip()
         if exists == '1':
-            schema_args = [a for a in mysqldump_args(env) if not a.startswith('--ignore-table=') and a not in ('--routines', '--events', '--triggers')] 
+            schema_args = [a for a in mysqldump_args(env) if not a.startswith('--ignore-table=') and a not in ('--routines', '--events', '--triggers')]
             schema = subprocess.Popen(schema_args + ['--no-data', 'LOGIN_SECURITY_EVENTS'], env=dict(os.environ, MYSQL_PWD=env['DB_PASSWORD']), stdout=subprocess.PIPE)
             shutil.copyfileobj(schema.stdout, stream)
             schema.stdout.close()
