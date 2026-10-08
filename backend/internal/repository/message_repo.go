@@ -1,6 +1,9 @@
 // message_repo.go — Database access layer for alumni direct messaging
 package repository
 
+// Approval is canonical in ALUMNI_VERIFICATION; new approved members retain BBB.
+// The active login statuses BBB/CCC/ZZZ exclude withdrawn and inactive accounts.
+
 import (
 	"database/sql"
 	"time"
@@ -91,7 +94,7 @@ func (r *MessageRepository) IsApprovedAlumni(usrSeq int) (bool, error) {
 			JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
 			WHERE v.USR_SEQ = ?
 			  AND v.STATUS = 'approved'
-			  AND m.USR_STATUS IN ('CCC','ZZZ')
+			  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		)
 	`, usrSeq); err != nil {
 		return false, err
@@ -236,7 +239,7 @@ func (r *MessageRepository) GetConversations(usrSeq int, beforeCreatedAt *time.T
 				JOIN WEO_MEMBER am ON am.USR_SEQ = av.USR_SEQ
 				WHERE av.USR_SEQ = sub.other_seq
 				  AND av.STATUS = 'approved'
-				  AND am.USR_STATUS IN ('CCC','ZZZ')
+				  AND am.USR_STATUS IN ('BBB','CCC','ZZZ')
 			)) AS RECIPIENT_AVAILABLE,
 			m.REG_DATE AS CURSOR_CREATED_AT,
 			m.AM_SEQ AS CURSOR_MESSAGE_ID

@@ -1,6 +1,9 @@
 // alumni_repo.go — Approved-alumni search repository.
 package repository
 
+// Approval is canonical in ALUMNI_VERIFICATION; new approved members retain BBB.
+// The active login statuses BBB/CCC/ZZZ exclude withdrawn and inactive accounts.
+
 import (
 	"database/sql"
 	"strings"
@@ -25,7 +28,7 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
 		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('CCC','ZZZ')
+		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		  AND m.USR_SEQ > 0
 	` + where
 
@@ -53,7 +56,7 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
 		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('CCC','ZZZ')
+		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		  AND m.USR_SEQ > 0
 	` + where + `
 		ORDER BY m.USR_NAME ASC, m.USR_SEQ ASC
@@ -87,7 +90,7 @@ func (r *AlumniRepository) GetDetail(viewerSeq, userSeq int) (*model.AlumniRecor
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
 		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('CCC','ZZZ')
+		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		  AND m.USR_SEQ = ?
 		LIMIT 1
 	`, viewerSeq, userSeq)
@@ -114,7 +117,7 @@ func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
 		FROM ALUMNI_VERIFICATION v
 		JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
 		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('CCC','ZZZ')
+		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		  AND v.GRADUATION_YEAR IS NOT NULL
 		ORDER BY v.GRADUATION_YEAR DESC
 	`); err != nil {
@@ -127,7 +130,7 @@ func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
 		FROM ALUMNI_VERIFICATION v
 		JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
 		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('CCC','ZZZ')
+		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		  AND v.COHORT IS NOT NULL AND v.COHORT != ''
 		ORDER BY
 		  CASE WHEN v.COHORT REGEXP '^[0-9]+$' THEN 0 ELSE 1 END,
@@ -143,7 +146,7 @@ func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
 		FROM ALUMNI_VERIFICATION v
 		JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
 		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('CCC','ZZZ')
+		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		  AND v.DEPARTMENT IS NOT NULL AND v.DEPARTMENT != ''
 		ORDER BY v.DEPARTMENT ASC
 	`); err != nil {
@@ -161,7 +164,7 @@ func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
 		FROM WEO_MEMBER m
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('CCC','ZZZ')
+		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		  AND m.USR_POSITION IS NOT NULL AND m.USR_POSITION != ''
 		ORDER BY m.USR_POSITION ASC
 	`); err != nil {
@@ -199,7 +202,7 @@ func (r *AlumniRepository) GetWidgetPreview() ([]string, int, error) {
 		FROM WEO_MEMBER m
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('CCC','ZZZ')`); err != nil {
+		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')`); err != nil {
 		return nil, 0, err
 	}
 	var names []string
@@ -208,7 +211,7 @@ func (r *AlumniRepository) GetWidgetPreview() ([]string, int, error) {
 		FROM WEO_MEMBER m
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('CCC','ZZZ')
+		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		ORDER BY m.USR_NAME ASC, m.USR_SEQ ASC
 		LIMIT 5`); err != nil {
 		return nil, 0, err

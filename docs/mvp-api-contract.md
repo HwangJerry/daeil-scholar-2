@@ -436,7 +436,7 @@ query:
 
 - `bizName`은 항상 포함하는 string이며, `WEO_MEMBER.USR_BIZ_NAME`이 NULL이거나 빈 값이면 `""`이다.
 - `bizCardUrl`은 항상 포함하는 nullable string이며, `WEO_MEMBER.USR_BIZ_CARD`가 NULL이거나 빈 값이면 `null`이다. 값이 있으면 상세 API와 동일하게 저장된 URL/경로를 변환 없이 반환한다.
-- 검색과 상세 모두 인증 및 동문 승인 middleware를 적용하고, 승인된 `CCC`/`ZZZ` 회원만 조회한다. 회사명·명함에는 별도 공개 설정이 없으며, 상세 API와 동일하게 차단 여부나 전화·이메일 공개 설정으로 숨기지 않는다.
+- 검색과 상세 모두 인증 및 동문 승인 middleware를 적용하고, 승인된 활성 `BBB`/`CCC`/`ZZZ` 회원만 조회한다. 회사명·명함에는 별도 공개 설정이 없으며, 상세 API와 동일하게 차단 여부나 전화·이메일 공개 설정으로 숨기지 않는다.
 - 두 필드는 기존 페이지 조회 SELECT에 포함한다. 페이지 수를 위한 COUNT 외에 회원별 추가 조회는 없다.
 
 ### 7.2 상세
@@ -623,7 +623,7 @@ Auth + AlumniApproved middleware를 적용하며 body 없는 `GET` 요청에 다
 }
 ```
 
-- `recipientAvailable`: 상대가 존재하고 자기 자신이 아니며 승인 동문(`ALUMNI_VERIFICATION.STATUS='approved'` 및 `USR_STATUS` `CCC`/`ZZZ`)이면 `true`. 탈퇴·탈퇴 신청 대기·미승인·자기 자신이면 `false`이며, 이때 전송은 `403 RECIPIENT_UNAVAILABLE`이다. 모든 page(`before` 포함)에 같은 값을 담는다.
+- `recipientAvailable`: 상대가 존재하고 자기 자신이 아니며 승인 동문(`ALUMNI_VERIFICATION.STATUS='approved'` 및 `USR_STATUS` `BBB`/`CCC`/`ZZZ`)이면 `true`. 탈퇴·탈퇴 신청 대기·미승인·자기 자신이면 `false`이며, 이때 전송은 `403 RECIPIENT_UNAVAILABLE`이다. 모든 page(`before` 포함)에 같은 값을 담는다.
 - 이 response에는 `blockedByMe`가 없다. 대화 화면의 차단 상태는 §8.3 목록 item 또는 `GET /api/blocks/{userSeq}`로 확인한다.
 
 최신 page를 먼저 반환하고 `before`로 과거를 읽는다. 안정 cursor는 `(createdAt, messageId)`를 encode한다.
@@ -697,7 +697,7 @@ data: {"eventId":12001,"messageId":9001,"conversationUserSeq":202,"sender":{"use
 - 목록에는 이름·사진·연락처·상대가 나를 차단했는지 여부를 포함하지 않으며 pagination query나 page metadata를 추가하지 않는다.
 - `GET /api/blocks/{userSeq}`, `PUT /api/blocks/{userSeq}`, `DELETE /api/blocks/{userSeq}`는 모두 위 단건 상태 response를 사용한다.
 - 모든 단건 method에서 숫자가 아니거나 `0` 이하이거나 자기 자신인 `userSeq`는 `400 INVALID_USER_SEQ`다.
-- PUT만 target의 `ALUMNI_VERIFICATION.STATUS='approved'`를 확인한다. 존재하지 않거나 미승인인 target은 동문 상세와 같은 `404 INVALID_USER_SEQ`이며 block row를 만들지 않는다.
+- PUT만 target의 `ALUMNI_VERIFICATION.STATUS='approved'` 및 활성 회원 상태(`USR_STATUS` `BBB`/`CCC`/`ZZZ`)를 확인한다. 신규 회원은 승인 후에도 `BBB`를 유지하므로 legacy 회원 상태로 승인 여부를 추론하지 않는다. 존재하지 않거나 미승인인 target은 동문 상세와 같은 `404 INVALID_USER_SEQ`이며 block row를 만들지 않는다.
 - GET과 DELETE는 자기 자신이 아닌 양수 target의 존재·승인 여부를 조회하지 않는다. active directional row가 없으면 둘 다 `{ "userSeq": target, "blockedByMe": false, "updatedAt": null }`을 반환하므로 탈퇴한 상대도 존재 여부를 노출하지 않고 멱등 해제할 수 있다.
 
 - 상대가 나를 차단했는지는 어떤 API에도 노출하지 않는다.

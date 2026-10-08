@@ -357,7 +357,7 @@ EasyPay에서 사용자 결제 완료 후 리다이렉트합니다 (`sp_return_u
 - `bizCardUrl` (string | null): 명함 이미지. `WEO_MEMBER.USR_BIZ_CARD`의 URL/경로를 상세 API와 동일하게 변환 없이 반환하며 NULL/빈 값은 `null`로 반환한다. 두 property는 항상 포함한다.
 - 회사명·명함에는 별도 공개 설정이 없으며 상세 API처럼 차단 여부나 전화·이메일 공개 설정으로 숨기지 않는다. 목록에는 연락처·이메일·회사 주소·회사 소개·태그를 포함하지 않는다.
 
-**조회 방식:** `ALUMNI_VERIFICATION.STATUS = 'approved'`이고 `WEO_MEMBER.USR_STATUS IN ('CCC','ZZZ')`인 회원 중 `USR_SEQ > 0`만 이름·회원번호 오름차순으로 조회한다. 회사명·명함은 기존 페이지 SELECT에서 함께 읽는다. 페이지 수를 위한 COUNT와 페이지 SELECT만 실행하며 회원별 추가 조회는 없다. 기존 필터 동작은 유지한다.
+**조회 방식:** `ALUMNI_VERIFICATION.STATUS = 'approved'`이고 `WEO_MEMBER.USR_STATUS IN ('BBB','CCC','ZZZ')`인 회원 중 `USR_SEQ > 0`만 이름·회원번호 오름차순으로 조회한다. 회사명·명함은 기존 페이지 SELECT에서 함께 읽는다. 페이지 수를 위한 COUNT와 페이지 SELECT만 실행하며 회원별 추가 조회는 없다. 기존 필터 동작은 유지한다.
 
 정식 계약과 fixture는 [MVP API 계약 §7](mvp-api-contract.md#7-동문-검색상세-계약) 및 [alumni-search.json](contracts/fixtures/alumni-search.json)을 따른다.
 
