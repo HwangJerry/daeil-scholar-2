@@ -23,32 +23,35 @@ type AlumniRecord struct {
 	USREmail       sql.NullString `db:"USR_EMAIL"`
 	USRPhonePublic sql.NullString `db:"USR_PHONE_PUBLIC"`
 	USREmailPublic sql.NullString `db:"USR_EMAIL_PUBLIC"`
+	MessageAllowed bool           `db:"MESSAGE_ALLOWED"`
 	BlockedByMe    bool           `db:"BLOCKED_BY_ME"`
 }
 
 // AlumniCard is the API response for a single alumni in the search results.
 type AlumniCard struct {
-	UserSeq     int     `json:"userSeq"`
-	Name        string  `json:"name"`
-	PhotoURL    *string `json:"photoUrl"`
-	Cohort      string  `json:"cohort"`
-	Department  string  `json:"department"`
-	JobCategory string  `json:"jobCategory"`
-	JobRole     string  `json:"jobRole"`
-	BizName     string  `json:"bizName"`
-	BizCardURL  *string `json:"bizCardUrl"`
+	MessageAllowed bool    `json:"messageAllowed"`
+	UserSeq        int     `json:"userSeq"`
+	Name           string  `json:"name"`
+	PhotoURL       *string `json:"photoUrl"`
+	Cohort         string  `json:"cohort"`
+	Department     string  `json:"department"`
+	JobCategory    string  `json:"jobCategory"`
+	JobRole        string  `json:"jobRole"`
+	BizName        string  `json:"bizName"`
+	BizCardURL     *string `json:"bizCardUrl"`
 }
 
 // AlumniSearchParams holds the query parameters for alumni search.
 type AlumniSearchParams struct {
-	Name           string
-	GraduationYear int
-	Cohort         string
-	Department     string
-	JobCategory    int
-	JobRole        string
-	Page           int
-	Size           int
+	MessageRecipientsOnly bool
+	Name                  string
+	GraduationYear        int
+	Cohort                string
+	Department            string
+	JobCategory           int
+	JobRole               string
+	Page                  int
+	Size                  int
 }
 
 // AlumniSearchResponse is the API response for GET /api/alumni.
@@ -61,6 +64,7 @@ type AlumniSearchResponse struct {
 }
 
 type AlumniDetail struct {
+	MessageAllowed bool             `json:"messageAllowed"`
 	GraduationYear *int64           `json:"graduationYear"`
 	BizName        string           `json:"bizName"`
 	BizAddr        string           `json:"bizAddr"`

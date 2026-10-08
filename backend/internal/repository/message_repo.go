@@ -60,8 +60,9 @@ func (r *MessageRepository) AcceptMessage(senderSeq, recvrSeq int, clientMessage
 				WHERE BLOCKER_USR_SEQ = ? AND BLOCKED_USR_SEQ = ?
 			) AS blocked
 		) AS block_state
+ WHERE EXISTS (SELECT 1 FROM WEO_MEMBER recipient WHERE recipient.USR_SEQ = ? AND recipient.USR_MESSAGE_ALLOWED = 'Y')
 		ON DUPLICATE KEY UPDATE AM_SEQ = LAST_INSERT_ID(AM_SEQ)
-	`, senderSeq, recvrSeq, clientMessageID, content, recvrSeq, senderSeq)
+	`, senderSeq, recvrSeq, clientMessageID, content, recvrSeq, senderSeq, recvrSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +79,9 @@ func (r *MessageRepository) AcceptMessage(senderSeq, recvrSeq int, clientMessage
 		WHERE AM_SENDER_SEQ = ? AND AM_CLIENT_MESSAGE_ID = ?
 		LIMIT 1
 	`, senderSeq, clientMessageID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, model.NewMessageReceivingDisabled()
+		}
 		return nil, err
 	}
 	accepted.Status = "accepted"

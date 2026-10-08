@@ -56,6 +56,7 @@ type MessageQuerier interface {
 	FindAcceptedMessage(senderSeq int, clientMessageID string) (*model.SendMessageResponse, error)
 	AcceptMessage(senderSeq, recvrSeq int, clientMessageID, content string) (*model.SendMessageResponse, error)
 	IsApprovedAlumni(usrSeq int) (bool, error)
+	CanReceiveMessages(usrSeq int) (bool, error)
 	GetInbox(usrSeq int, page int, size int) ([]model.Message, int, error)
 	GetOutbox(usrSeq int, page int, size int) ([]model.Message, int, error)
 	MarkAsRead(amSeq int, usrSeq int) (int, bool, error)

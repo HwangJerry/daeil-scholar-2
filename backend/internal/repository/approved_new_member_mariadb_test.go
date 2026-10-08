@@ -9,7 +9,7 @@ import (
 )
 
 func TestApprovedNewMemberCanBeFoundMessagedAndBlocked(t *testing.T) {
-	db := mariadb.Start(t).NewDatabase(t, mariadb.ProdBaseline(t)...).DB
+	db := mariadb.Start(t).NewDatabase(t, append(mariadb.ProdBaseline(t), mariadb.File("../../migrations/081_add_member_message_allowed.sql"))...).DB
 	db.MustExec(`INSERT INTO WEO_MEMBER (USR_SEQ, USR_ID, USR_NAME, USR_PWD, USR_STATUS) VALUES
 		(101, 'viewer', 'Viewer', 'x', 'CCC'), (202, 'new-member', 'New Member', 'x', 'BBB')`)
 	db.MustExec(`INSERT INTO ALUMNI_VERIFICATION (USR_SEQ, STATUS, GRADUATION_YEAR, COHORT, DEPARTMENT, CREATED_AT, UPDATED_AT) VALUES

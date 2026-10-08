@@ -40,15 +40,16 @@ func (s *AlumniService) Search(params model.AlumniSearchParams) (*model.AlumniSe
 	items := make([]model.AlumniCard, 0, len(records))
 	for _, record := range records {
 		items = append(items, model.AlumniCard{
-			UserSeq:     record.USRSeq,
-			Name:        record.USRName,
-			PhotoURL:    nullableString(record.USRPhoto),
-			Cohort:      nullString(record.Cohort),
-			Department:  nullString(record.Department),
-			JobCategory: nullString(record.AJCName),
-			JobRole:     nullString(record.USRPosition),
-			BizName:     nullString(record.USRBizName),
-			BizCardURL:  nullableString(record.USRBizCard),
+			MessageAllowed: record.MessageAllowed,
+			UserSeq:        record.USRSeq,
+			Name:           record.USRName,
+			PhotoURL:       nullableString(record.USRPhoto),
+			Cohort:         nullString(record.Cohort),
+			Department:     nullString(record.Department),
+			JobCategory:    nullString(record.AJCName),
+			JobRole:        nullString(record.USRPosition),
+			BizName:        nullString(record.USRBizName),
+			BizCardURL:     nullableString(record.USRBizCard),
 		})
 	}
 	totalPages := 0
@@ -74,6 +75,7 @@ func (s *AlumniService) GetDetail(viewerSeq, userSeq int) (*model.AlumniDetail, 
 		graduationYear = &record.GraduationYear.Int64
 	}
 	return &model.AlumniDetail{
+		MessageAllowed: record.MessageAllowed,
 		GraduationYear: graduationYear,
 		BizName:        nullString(record.USRBizName),
 		BizAddr:        nullString(record.USRBizAddr),

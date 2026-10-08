@@ -49,6 +49,7 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 	query := `
 		SELECT
 			m.USR_SEQ, m.USR_NAME, m.USR_PHOTO,
+ m.USR_MESSAGE_ALLOWED = 'Y' AS MESSAGE_ALLOWED,
 			v.GRADUATION_YEAR, v.COHORT, v.DEPARTMENT,
 			jc.AJC_NAME, m.USR_POSITION,
 			m.USR_BIZ_NAME, m.USR_BIZ_CARD
@@ -76,6 +77,7 @@ func (r *AlumniRepository) GetDetail(viewerSeq, userSeq int) (*model.AlumniRecor
 	err := r.DB.Get(&record, `
 		SELECT
 			m.USR_SEQ, m.USR_NAME, m.USR_PHOTO,
+ m.USR_MESSAGE_ALLOWED = 'Y' AS MESSAGE_ALLOWED,
 			v.GRADUATION_YEAR, v.COHORT, v.DEPARTMENT,
 			jc.AJC_NAME, m.USR_POSITION,
 			m.USR_BIZ_NAME, m.USR_BIZ_ADDR, m.USR_BIZ_DESC, m.USR_BIZ_CARD,
@@ -224,6 +226,9 @@ func (r *AlumniRepository) GetWidgetPreview() ([]string, int, error) {
 func buildAlumniFilters(params model.AlumniSearchParams) (string, []interface{}) {
 	var clauses []string
 	var args []interface{}
+	if params.MessageRecipientsOnly {
+		clauses = append(clauses, "AND m.USR_MESSAGE_ALLOWED = 'Y'")
+	}
 
 	if params.Name != "" {
 		clauses = append(clauses, "AND m.USR_NAME LIKE ?")

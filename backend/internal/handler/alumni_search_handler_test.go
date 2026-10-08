@@ -50,9 +50,9 @@ func TestSearchAlumniReturnsBusinessFieldsWithCanonicalContract(t *testing.T) {
 			mock.ExpectQuery(`m.USR_BIZ_NAME, m.USR_BIZ_CARD[\s\S]*LIMIT \? OFFSET \?`).
 				WithArgs(20, 0).
 				WillReturnRows(sqlmock.NewRows([]string{
-					"USR_SEQ", "USR_NAME", "USR_PHOTO", "GRADUATION_YEAR", "COHORT", "DEPARTMENT",
+					"USR_SEQ", "USR_NAME", "USR_PHOTO", "MESSAGE_ALLOWED", "GRADUATION_YEAR", "COHORT", "DEPARTMENT",
 					"AJC_NAME", "USR_POSITION", "USR_BIZ_NAME", "USR_BIZ_CARD",
-				}).AddRow(202, "예시 동문", "/files/profile/example.jpg", 2004, "18", "영어", "교육", "교사", tt.bizName, tt.bizCard))
+				}).AddRow(202, "예시 동문", "/files/profile/example.jpg", true, 2004, "18", "영어", "교육", "교사", tt.bizName, tt.bizCard))
 			alumniService := service.NewAlumniService(repository.NewAlumniRepository(sqlx.NewDb(db, "sqlmock")), nil)
 			recorder := httptest.NewRecorder()
 			NewAlumniHandler(alumniService).Search(recorder, httptest.NewRequest(http.MethodGet, "/api/alumni", nil))

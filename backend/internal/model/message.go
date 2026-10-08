@@ -42,7 +42,8 @@ type ConversationMessageListResponse struct {
 	// RecipientAvailable is false when the peer is self, missing, withdrawn,
 	// deletion-pending or not an approved alumnus; sends would be refused with
 	// RECIPIENT_UNAVAILABLE.
-	RecipientAvailable bool `json:"recipientAvailable"`
+	RecipientAvailable      bool `json:"recipientAvailable"`
+	RecipientMessageAllowed bool `json:"recipientMessageAllowed"`
 }
 
 type MarkConversationReadRequest struct {

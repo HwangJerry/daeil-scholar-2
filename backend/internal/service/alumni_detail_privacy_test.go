@@ -81,7 +81,7 @@ func TestGetAlumniDetailAppliesIndependentContactDisclosure(t *testing.T) {
 			}
 
 			baseKeys := map[string]bool{
-				"userSeq": true, "name": true, "photoUrl": true, "cohort": true,
+				"messageAllowed": true, "userSeq": true, "name": true, "photoUrl": true, "cohort": true,
 				"department": true, "jobCategory": true, "jobRole": true, "blockState": true,
 				"graduationYear": true, "bizName": true, "bizAddr": true, "bizDesc": true,
 				"bizCardUrl": true, "tags": true, "phonePublic": true, "emailPublic": true,

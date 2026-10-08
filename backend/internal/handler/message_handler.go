@@ -68,7 +68,7 @@ func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
 // request problems are 400, recipient-side refusals are 403.
 func messageSendRejectionStatus(code string) int {
 	switch code {
-	case model.MessageSendRecipientGone, model.MessageSendBlockedByMe:
+	case model.MessageSendRecipientGone, model.MessageSendBlockedByMe, model.MessageSendReceivingDisabled:
 		return http.StatusForbidden
 	default:
 		return http.StatusBadRequest

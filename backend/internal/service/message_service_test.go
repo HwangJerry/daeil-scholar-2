@@ -12,6 +12,8 @@ import (
 
 // mockMessageRepo implements repository.MessageQuerier for testing.
 type mockMessageRepo struct {
+	receiveDisabled      bool
+	receiveErr           error
 	insertErr            error
 	insertCalled         bool
 	findResult           *model.SendMessageResponse
@@ -64,6 +66,10 @@ func (m *mockMessageRepo) AcceptMessage(senderSeq, recvrSeq int, clientMessageID
 		}
 	}
 	return m.acceptResult, m.insertErr
+}
+
+func (m *mockMessageRepo) CanReceiveMessages(int) (bool, error) {
+	return !m.receiveDisabled, m.receiveErr
 }
 
 func (m *mockMessageRepo) IsApprovedAlumni(int) (bool, error) {

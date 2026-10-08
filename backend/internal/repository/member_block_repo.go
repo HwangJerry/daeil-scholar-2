@@ -40,15 +40,25 @@ func (r *MemberBlockRepository) IsApprovedAlumni(userSeq int) (bool, error) {
 
 func (r *MemberBlockRepository) List(blockerSeq int) ([]model.MemberBlockState, error) {
 	var rows []struct {
-		UserSeq   int    `db:"BLOCKED_USR_SEQ"`
-		UpdatedAt string `db:"UPDATED_AT"`
+		Name       string         `db:"NAME"`
+		PhotoURL   sql.NullString `db:"PHOTO_URL"`
+		Cohort     sql.NullString `db:"COHORT"`
+		Department sql.NullString `db:"DEPARTMENT"`
+		UserSeq    int            `db:"BLOCKED_USR_SEQ"`
+		UpdatedAt  string         `db:"UPDATED_AT"`
 	}
 	if err := r.DB.Select(&rows, `
-		SELECT BLOCKED_USR_SEQ,
-			DATE_FORMAT(UPDATED_AT, '%Y-%m-%dT%H:%i:%sZ') AS UPDATED_AT
-		FROM ALUMNI_MEMBER_BLOCK
-		WHERE BLOCKER_USR_SEQ = ?
-		ORDER BY UPDATED_AT DESC, BLOCKED_USR_SEQ DESC
+		SELECT b.BLOCKED_USR_SEQ,
+ DATE_FORMAT(b.UPDATED_AT, '%Y-%m-%dT%H:%i:%sZ') AS UPDATED_AT,
+ CASE WHEN m.USR_STATUS IN ('BBB','CCC','ZZZ') THEN COALESCE(NULLIF(m.USR_NAME,''),'이름 없음') ELSE '탈퇴한 회원' END AS NAME,
+ CASE WHEN m.USR_STATUS IN ('BBB','CCC','ZZZ') THEN m.USR_PHOTO ELSE NULL END AS PHOTO_URL,
+ CASE WHEN m.USR_STATUS IN ('BBB','CCC','ZZZ') THEN v.COHORT ELSE NULL END AS COHORT,
+ CASE WHEN m.USR_STATUS IN ('BBB','CCC','ZZZ') THEN v.DEPARTMENT ELSE NULL END AS DEPARTMENT
+ FROM ALUMNI_MEMBER_BLOCK b
+ LEFT JOIN WEO_MEMBER m ON m.USR_SEQ = b.BLOCKED_USR_SEQ
+ LEFT JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = b.BLOCKED_USR_SEQ
+ WHERE b.BLOCKER_USR_SEQ = ?
+ ORDER BY b.UPDATED_AT DESC, b.BLOCKED_USR_SEQ DESC
 	`, blockerSeq); err != nil {
 		return nil, err
 	}
@@ -56,6 +66,10 @@ func (r *MemberBlockRepository) List(blockerSeq int) ([]model.MemberBlockState, 
 	for _, row := range rows {
 		updatedAt := row.UpdatedAt
 		states = append(states, model.MemberBlockState{
+			Name:        row.Name,
+			PhotoURL:    blockNullableString(row.PhotoURL),
+			Cohort:      row.Cohort.String,
+			Department:  row.Department.String,
 			UserSeq:     row.UserSeq,
 			BlockedByMe: true,
 			UpdatedAt:   &updatedAt,
@@ -152,4 +166,11 @@ func (r *MemberBlockRepository) DeleteExpiredSuppressedMessages(limit int) (int6
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+func blockNullableString(value sql.NullString) *string {
+	if !value.Valid || value.String == "" {
+		return nil
+	}
+	return &value.String
 }

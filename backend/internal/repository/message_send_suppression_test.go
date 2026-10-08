@@ -35,10 +35,11 @@ func TestAcceptMessage_AtomicallyPersistsRecipientBlockSuppression(t *testing.T)
 				WHERE BLOCKER_USR_SEQ = ? AND BLOCKED_USR_SEQ = ?
 			) AS blocked
 		) AS block_state
+ WHERE EXISTS (SELECT 1 FROM WEO_MEMBER recipient WHERE recipient.USR_SEQ = ? AND recipient.USR_MESSAGE_ALLOWED = 'Y')
 		ON DUPLICATE KEY UPDATE AM_SEQ = LAST_INSERT_ID(AM_SEQ)
 	`)
 	mock.ExpectExec(insert).
-		WithArgs(101, 202, "client-1", "안녕하세요.", 202, 101).
+		WithArgs(101, 202, "client-1", "안녕하세요.", 202, 101, 202).
 		WillReturnResult(sqlmock.NewResult(9001, 1))
 
 	selectAccepted := regexp.QuoteMeta(`

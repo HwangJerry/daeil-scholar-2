@@ -41,11 +41,11 @@ func TestAlumniSearchReadsBusinessFieldsInPageQuery(t *testing.T) {
 		},
 	}
 	rows := sqlmock.NewRows([]string{
-		"USR_SEQ", "USR_NAME", "USR_PHOTO", "GRADUATION_YEAR", "COHORT", "DEPARTMENT",
+		"USR_SEQ", "USR_NAME", "USR_PHOTO", "MESSAGE_ALLOWED", "GRADUATION_YEAR", "COHORT", "DEPARTMENT",
 		"AJC_NAME", "USR_POSITION", "USR_BIZ_NAME", "USR_BIZ_CARD",
 	})
 	for i, tt := range tests {
-		rows.AddRow(202+i, "예시 동문", nil, 2004, "18", "영어", "교육", "교사", tt.bizName, tt.bizCard)
+		rows.AddRow(202+i, "예시 동문", nil, true, 2004, "18", "영어", "교육", "교사", tt.bizName, tt.bizCard)
 	}
 
 	// Only the existing count and one page query are expected, regardless of row count.
@@ -59,6 +59,7 @@ func TestAlumniSearchReadsBusinessFieldsInPageQuery(t *testing.T) {
 	`).WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(len(tests)))
 	mock.ExpectQuery(`
 		SELECT m.USR_SEQ, m.USR_NAME, m.USR_PHOTO,
+ m.USR_MESSAGE_ALLOWED = 'Y' AS MESSAGE_ALLOWED,
 			v.GRADUATION_YEAR, v.COHORT, v.DEPARTMENT,
 			jc.AJC_NAME, m.USR_POSITION, m.USR_BIZ_NAME, m.USR_BIZ_CARD
 		FROM WEO_MEMBER m

@@ -184,6 +184,7 @@ export interface DonationSummary {
 }
 
 export interface AlumniItem {
+  messageAllowed?: boolean;
   fmSeq: number;
   fmName: string;
   fmFn: string;
