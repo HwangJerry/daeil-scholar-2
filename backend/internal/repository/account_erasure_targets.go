@@ -111,7 +111,9 @@ func (r *AccountDeletionRequestRepository) RecordErasureTargets(id int64, target
 		}
 		if target.Code == model.PhoneVerificationWaitCode {
 			code = target.Code
-			if _, err = tx.Exec(`UPDATE ALUMNI_ERASURE_TARGET SET WAIT_COUNT=?,WAIT_UNTIL=? WHERE REQUEST_ID=? AND TARGET=? AND STATUS NOT IN ('complete','not_applicable')`, target.WaitCount, target.WaitUntil.UTC(), id, target.Name); err != nil {
+			// Deletion DATETIME columns store UTC wall-clock values. A time.Time
+			// argument is converted to the driver's Seoul location before storage.
+			if _, err = tx.Exec(`UPDATE ALUMNI_ERASURE_TARGET SET WAIT_COUNT=?,WAIT_UNTIL=? WHERE REQUEST_ID=? AND TARGET=? AND STATUS NOT IN ('complete','not_applicable')`, target.WaitCount, target.WaitUntil.UTC().Format(time.DateTime), id, target.Name); err != nil {
 				return err
 			}
 		}
