@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/rs/zerolog"
 )
 
@@ -27,6 +28,7 @@ type fakeSocialRevocationRepo struct {
 	finalizeDisconnectErr error
 	completeDeleteCalls   []int
 	completeDeleteErr     error
+	expiredClaim          bool
 }
 
 type failedCall struct {
@@ -46,14 +48,46 @@ func (f *fakeSocialRevocationRepo) MarkSocialRevocationRevoked(outboxID int64) e
 	return f.revokedErr
 }
 
-func (f *fakeSocialRevocationRepo) MarkSocialRevocationSucceeded(outboxID int64) error {
+func (f *fakeSocialRevocationRepo) MarkSocialRevocationSucceeded(outboxID int64, _ ...string) error {
 	f.succeededCalls = append(f.succeededCalls, outboxID)
 	return f.succeededErr
 }
 
-func (f *fakeSocialRevocationRepo) MarkSocialRevocationFailed(outboxID int64, errMsg string, attemptCount int, maxAttempts int, _ time.Time, retryStatus string) error {
+func (f *fakeSocialRevocationRepo) MarkSocialRevocationFailed(outboxID int64, errMsg string, attemptCount int, maxAttempts int, _ time.Time, retryStatus string, _ ...string) error {
 	f.failedCalls = append(f.failedCalls, failedCall{outboxID, errMsg, attemptCount, maxAttempts, retryStatus})
 	return f.failedErr
+}
+
+func (f *fakeSocialRevocationRepo) RevokeClaimedSocialDisconnect(_ context.Context, entry model.SocialRevocationOutboxEntry, _ string, revoke func(string) error) (bool, error) {
+	if f.expiredClaim {
+		return false, repository.ErrSocialRevocationClaimExpired
+	}
+	if entry.Status == "REVOKED" {
+		return true, nil
+	}
+	if f.credentialErr != nil {
+		return false, f.credentialErr
+	}
+	if err := revoke(f.credential); err != nil {
+		return false, err
+	}
+	return true, f.MarkSocialRevocationRevoked(entry.OutboxID)
+}
+
+func TestExpiredDisconnectClaimCannotRevokeOrFinalizeNewConnection(t *testing.T) {
+	repo := &fakeSocialRevocationRepo{credential: "replacement", expiredClaim: true}
+	kakao := &fakeKakao{}
+	w := newTestWorker(repo, kakao)
+	w.processEntry(context.Background(), model.SocialRevocationOutboxEntry{
+		OutboxID: 1, USRSeq: 42, Provider: "KT", Action: socialRevocationActionDisconnect, Status: "PENDING",
+	})
+	if kakao.calls != 0 || len(repo.revokedCalls) != 0 || len(repo.finalizeDisconnect) != 0 || len(repo.failedCalls) != 0 || len(repo.succeededCalls) != 0 {
+		t.Fatal("an expired claim must not call the provider or change outbox/connection state")
+	}
+}
+
+func (f *fakeSocialRevocationRepo) FinalizeClaimedSocialDisconnect(entry model.SocialRevocationOutboxEntry, _ string) error {
+	return f.FinalizeSocialDisconnect(entry.USRSeq, entry.Provider)
 }
 
 func (f *fakeSocialRevocationRepo) FinalizeSocialDisconnect(usrSeq int, _ string) error {

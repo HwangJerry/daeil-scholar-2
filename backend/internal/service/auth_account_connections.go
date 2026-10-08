@@ -14,6 +14,7 @@ var (
 	ErrLastLoginMethod            = errors.New("cannot disconnect the last login method")
 	ErrSocialIdentityVerification = errors.New("social identity verification failed")
 	ErrSocialCredentialStorage    = errors.New("social credential storage unavailable")
+	ErrSocialDisconnectPending    = errors.New("social disconnect is still being finalized")
 	ErrSocialConnectionConflict   = errors.New("social identity collision without an active connection")
 )
 
@@ -66,6 +67,9 @@ func (s *SocialAuthService) LinkIdentity(
 		Email:               account.Identity.Email,
 		EncryptedCredential: encryptedCredential,
 	})
+	if errors.Is(err, repository.ErrSocialDisconnectPending) {
+		return model.AccountConnections{}, ErrSocialDisconnectPending
+	}
 	if errors.Is(err, repository.ErrSocialIdentityAlreadyLinked) {
 		// A concurrent request may have inserted the same identity after the
 		// lookup above. Preserve idempotency when that winner linked it here.

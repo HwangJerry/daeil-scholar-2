@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/rs/zerolog"
 )
 
@@ -28,11 +29,11 @@ const (
 	socialRevocationMaxBackoff = time.Hour
 	// socialRevocationClaimStaleAfter bounds how long a claimed row is
 	// considered "owned" by the worker that claimed it before another worker
-	// (or this same worker, after a restart) is allowed to re-claim it. Must
-	// comfortably exceed the time to process a full batch (network calls to
-	// Kakao/Apple included), so a slow-but-alive worker never has a row
-	// stolen out from under it mid-processing.
+	// (or this same worker, after a restart) is allowed to re-claim it.
+	// Disconnect attempts recheck ownership under row locks; a queued entry
+	// whose lease was stolen is skipped before any provider or database change.
 	socialRevocationClaimStaleAfter = 5 * time.Minute
+	socialRevocationProviderTimeout = 30 * time.Second
 
 	socialRevocationActionDisconnect    = "DISCONNECT"
 	socialRevocationActionAccountDelete = "ACCOUNT_DELETE"
@@ -43,9 +44,10 @@ const (
 type socialRevocationRepository interface {
 	ClaimDueSocialRevocations(claimToken string, staleAfter time.Duration, limit int) ([]model.SocialRevocationOutboxEntry, error)
 	MarkSocialRevocationRevoked(outboxID int64) error
-	MarkSocialRevocationSucceeded(outboxID int64) error
-	MarkSocialRevocationFailed(outboxID int64, errMsg string, newAttemptCount int, maxAttempts int, nextAttempt time.Time, retryStatus string) error
-	FinalizeSocialDisconnect(usrSeq int, provider string) error
+	MarkSocialRevocationSucceeded(outboxID int64, claimToken ...string) error
+	MarkSocialRevocationFailed(outboxID int64, errMsg string, newAttemptCount int, maxAttempts int, nextAttempt time.Time, retryStatus string, claimToken ...string) error
+	RevokeClaimedSocialDisconnect(context.Context, model.SocialRevocationOutboxEntry, string, func(string) error) (bool, error)
+	FinalizeClaimedSocialDisconnect(model.SocialRevocationOutboxEntry, string) error
 	CompleteAccountDeletionRevocation(usrSeq int, provider string) error
 	GetSocialCredential(usrSeq int, provider string) (string, error)
 }
@@ -184,6 +186,35 @@ func (w *SocialRevocationWorker) processEntry(ctx context.Context, entry model.S
 	// would permanently strand the row if we retried the full flow from
 	// scratch. Only retry local finalization in that case.
 	alreadyRevoked := entry.Status == "REVOKED"
+	if entry.Action == socialRevocationActionDisconnect {
+		providerContext, cancel := context.WithTimeout(ctx, socialRevocationProviderTimeout)
+		defer cancel()
+		revoked, err := w.repo.RevokeClaimedSocialDisconnect(providerContext, entry, w.claimToken, func(encrypted string) error {
+			if w.vaultErr != nil {
+				return w.vaultErr
+			}
+			if encrypted == "" {
+				return errors.New("no stored credential to revoke")
+			}
+			credential, err := w.vault.Decrypt(encrypted)
+			if err != nil {
+				return err
+			}
+			return w.revokeCredential(providerContext, model.SocialProvider(entry.Provider), credential)
+		})
+		if errors.Is(err, repository.ErrSocialRevocationClaimExpired) {
+			return
+		}
+		if err != nil {
+			retryStatus := "PENDING"
+			if revoked {
+				retryStatus = "REVOKED"
+			}
+			w.recordFailure(entry, err, retryStatus)
+			return
+		}
+		alreadyRevoked = true
+	}
 
 	if !alreadyRevoked {
 		if err := w.revoke(ctx, entry); err != nil {
@@ -202,10 +233,13 @@ func (w *SocialRevocationWorker) processEntry(ctx context.Context, entry model.S
 	}
 
 	if err := w.finalize(entry); err != nil {
+		if errors.Is(err, repository.ErrSocialRevocationClaimExpired) {
+			return
+		}
 		w.recordFailure(entry, err, "REVOKED")
 		return
 	}
-	if err := w.repo.MarkSocialRevocationSucceeded(entry.OutboxID); err != nil {
+	if err := w.repo.MarkSocialRevocationSucceeded(entry.OutboxID, w.claimToken); err != nil {
 		w.logger.Error().Err(err).Int64("outboxId", entry.OutboxID).Msg("failed to release social revocation claim")
 		return
 	}
@@ -223,7 +257,7 @@ func (w *SocialRevocationWorker) processEntry(ctx context.Context, entry model.S
 func (w *SocialRevocationWorker) finalize(entry model.SocialRevocationOutboxEntry) error {
 	switch entry.Action {
 	case socialRevocationActionDisconnect:
-		return w.repo.FinalizeSocialDisconnect(entry.USRSeq, entry.Provider)
+		return w.repo.FinalizeClaimedSocialDisconnect(entry, w.claimToken)
 	case socialRevocationActionAccountDelete:
 		return w.repo.CompleteAccountDeletionRevocation(entry.USRSeq, entry.Provider)
 	default:
@@ -239,7 +273,7 @@ func (w *SocialRevocationWorker) finalize(entry model.SocialRevocationOutboxEntr
 func (w *SocialRevocationWorker) recordFailure(entry model.SocialRevocationOutboxEntry, err error, retryStatus string) {
 	attemptCount := entry.AttemptCount + 1
 	nextAttempt := time.Now().Add(backoffDuration(attemptCount))
-	if markErr := w.repo.MarkSocialRevocationFailed(entry.OutboxID, err.Error(), attemptCount, socialRevocationMaxAttempt, nextAttempt, retryStatus); markErr != nil {
+	if markErr := w.repo.MarkSocialRevocationFailed(entry.OutboxID, err.Error(), attemptCount, socialRevocationMaxAttempt, nextAttempt, retryStatus, w.claimToken); markErr != nil {
 		w.logger.Error().Err(markErr).Int64("outboxId", entry.OutboxID).Msg("failed to record social revocation failure")
 		return
 	}
@@ -285,6 +319,10 @@ func (w *SocialRevocationWorker) revoke(ctx context.Context, entry model.SocialR
 		return errors.New("no stored credential to revoke")
 	}
 
+	return w.revokeCredential(ctx, provider, credential)
+}
+
+func (w *SocialRevocationWorker) revokeCredential(ctx context.Context, provider model.SocialProvider, credential string) error {
 	switch provider {
 	case model.SocialProviderKakao:
 		return w.kakao.UnlinkKakaoToken(ctx, credential)

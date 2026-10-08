@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -45,7 +46,10 @@ func TestLinkSocialIdentityWritesLegacyAndCanonicalConnections(t *testing.T) {
 			mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
 				WithArgs(42, string(test.provider), fields.SocialID, fields.SocialEmail).
 				WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectQuery(`SELECT STATUS, .*CLAIMED`).WithArgs(42, string(test.provider)).
+				WillReturnRows(sqlmock.NewRows([]string{"STATUS", "CLAIMED"}))
 			if test.canonicalEnabled {
+				mock.ExpectQuery(`SELECT IDENTITY_ID, ACCOUNT_ID, STATUS`).WithArgs(string(test.canonical), fields.SocialID).WillReturnError(sql.ErrNoRows)
 				mock.ExpectExec(`INSERT INTO AUTH_IDENTITY`).
 					WithArgs(42, string(test.canonical), fields.SocialID, nil).
 					WillReturnResult(sqlmock.NewResult(1, 1))
@@ -114,6 +118,8 @@ func TestLinkSocialIdentityRollsBackLegacyInsertWhenCanonicalIdentityIsDuplicate
 	mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
 		WithArgs(42, string(model.SocialProviderKakao), fields.SocialID, fields.SocialEmail).
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery(`SELECT STATUS, .*CLAIMED`).WithArgs(42, string(model.SocialProviderKakao)).WillReturnRows(sqlmock.NewRows([]string{"STATUS", "CLAIMED"}))
+	mock.ExpectQuery(`SELECT IDENTITY_ID, ACCOUNT_ID, STATUS`).WithArgs(string(model.IdentityProviderKakao), fields.SocialID).WillReturnError(sql.ErrNoRows)
 	mock.ExpectExec(`INSERT INTO AUTH_IDENTITY`).
 		WithArgs(42, string(model.IdentityProviderKakao), fields.SocialID, nil).
 		WillReturnError(duplicateErr)

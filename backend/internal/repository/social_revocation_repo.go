@@ -6,13 +6,99 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/jmoiron/sqlx"
 )
+
+var ErrSocialRevocationClaimExpired = errors.New("social revocation claim is no longer current")
+
+// Lock the connection before the outbox, matching linking's lock order. A
+// slow worker cannot read a replacement credential or revoke while relinking
+// commits. Provider calls use a bounded context supplied by the worker.
+func lockClaimedDisconnect(tx *sqlx.Tx, entry model.SocialRevocationOutboxEntry, claimToken string) (string, string, error) {
+	var connectionStatus string
+	err := tx.Get(&connectionStatus, `SELECT NMS_STATUS FROM WEO_MEMBER_SOCIAL
+        WHERE USR_SEQ=? AND NMS_GATE=? FOR UPDATE`, entry.USRSeq, entry.Provider)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", "", err
+	}
+	var outbox struct {
+		Status string `db:"STATUS"`
+		Claim  string `db:"CLAIM_TOKEN"`
+	}
+	err = tx.Get(&outbox, `SELECT STATUS, COALESCE(CLAIM_TOKEN, '') AS CLAIM_TOKEN
+        FROM ALUMNI_SOCIAL_REVOCATION_OUTBOX
+        WHERE OUTBOX_ID=? AND USR_SEQ=? AND PROVIDER=? AND ACTION='DISCONNECT' FOR UPDATE`, entry.OutboxID, entry.USRSeq, entry.Provider)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", ErrSocialRevocationClaimExpired
+	}
+	if err != nil {
+		return "", "", err
+	}
+	if claimToken == "" || outbox.Claim != claimToken || (outbox.Status != "PENDING" && outbox.Status != "REVOKED") ||
+		(connectionStatus != "" && connectionStatus != "DISCONNECTING" && connectionStatus != "FINALIZE_PENDING") {
+		return "", "", ErrSocialRevocationClaimExpired
+	}
+	return connectionStatus, outbox.Status, nil
+}
+
+// The provider checkpoint commits before local finalization. If the provider
+// succeeded but the checkpoint write failed, the caller retries only finalization.
+func (r *AuthRepository) RevokeClaimedSocialDisconnect(ctx context.Context, entry model.SocialRevocationOutboxEntry, claimToken string, revoke func(string) error) (bool, error) {
+	tx, err := r.DB.BeginTxx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	connection, status, err := lockClaimedDisconnect(tx, entry, claimToken)
+	if err != nil {
+		return false, err
+	}
+	if status == "REVOKED" {
+		return true, tx.Commit()
+	}
+	if connection != "DISCONNECTING" {
+		return false, ErrSocialRevocationClaimExpired
+	}
+	var encrypted string
+	if err := tx.Get(&encrypted, `SELECT ENCRYPTED_CREDENTIAL FROM ALUMNI_SOCIAL_CREDENTIAL
+        WHERE USR_SEQ=? AND PROVIDER=?`, entry.USRSeq, entry.Provider); err != nil {
+		return false, err
+	}
+	if err := revoke(encrypted); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(`UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX SET STATUS='REVOKED', UPDATED_AT=NOW()
+        WHERE OUTBOX_ID=? AND CLAIM_TOKEN=?`, entry.OutboxID, claimToken); err != nil {
+		return true, err
+	}
+	return true, tx.Commit()
+}
+
+func (r *AuthRepository) FinalizeClaimedSocialDisconnect(entry model.SocialRevocationOutboxEntry, claimToken string) error {
+	tx, err := r.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, status, err := lockClaimedDisconnect(tx, entry, claimToken)
+	if err != nil {
+		return err
+	}
+	if status != "REVOKED" {
+		return ErrSocialRevocationClaimExpired
+	}
+	if err := r.deleteSocialConnectionTx(tx, entry.USRSeq, entry.Provider, true, true); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
 // ClaimDueSocialRevocations atomically checks out up to limit due outbox rows
 // (STATUS IN PENDING/REVOKED, NEXT_ATTEMPT_AT <= NOW()) by writing claimToken
@@ -151,7 +237,7 @@ func (r *AuthRepository) FinalizeSocialDisconnect(usrSeq int, provider string) e
 			return errors.New("social disconnect finalization found an unexpected link state: " + currentStatus)
 		}
 	}
-	return r.DeleteSocialConnection(usrSeq, provider)
+	return r.deleteSocialConnection(usrSeq, provider, true, true)
 }
 
 // MarkSocialRevocationSucceeded releases the claim on a row that the
@@ -160,12 +246,14 @@ func (r *AuthRepository) FinalizeSocialDisconnect(usrSeq int, provider string) e
 // set to STATUS='DELIVERED'. Those methods own the DELIVERED transition
 // themselves (matching the synchronous disconnect path's behavior); this only
 // clears CLAIM_TOKEN so the row is no longer considered claimed.
-func (r *AuthRepository) MarkSocialRevocationSucceeded(outboxID int64) error {
+func (r *AuthRepository) MarkSocialRevocationSucceeded(outboxID int64, claimToken ...string) error {
+	claimCondition, args := socialRevocationClaimCondition(claimToken)
+	args = append([]any{outboxID}, args...)
 	_, err := r.DB.Exec(`
 		UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX
 		SET CLAIM_TOKEN = NULL, UPDATED_AT = NOW()
 		WHERE OUTBOX_ID = ?
-	`, outboxID)
+	`+claimCondition, args...)
 	return err
 }
 
@@ -183,10 +271,10 @@ func (r *AuthRepository) MarkSocialRevocationSucceeded(outboxID int64) error {
 // already-revoked credential, which providers reject, permanently stranding
 // the row.
 //
-// Always clears CLAIM_TOKEN: whether the retry stays PENDING/REVOKED (due at
-// nextAttempt) or becomes terminal FAILED, re-selection is already gated by
-// NEXT_ATTEMPT_AT/STATUS, so nothing depends on the claim staying held.
-func (r *AuthRepository) MarkSocialRevocationFailed(outboxID int64, errMsg string, newAttemptCount int, maxAttempts int, nextAttempt time.Time, retryStatus string) error {
+// Clears only the matching claim when supplied, and never resets a DELIVERED
+// row. Whether the retry stays PENDING/REVOKED or becomes terminal FAILED,
+// re-selection is gated by NEXT_ATTEMPT_AT/STATUS.
+func (r *AuthRepository) MarkSocialRevocationFailed(outboxID int64, errMsg string, newAttemptCount int, maxAttempts int, nextAttempt time.Time, retryStatus string, claimToken ...string) error {
 	if len(errMsg) > 500 {
 		errMsg = errMsg[:500]
 	}
@@ -197,11 +285,20 @@ func (r *AuthRepository) MarkSocialRevocationFailed(outboxID int64, errMsg strin
 			status = "FINALIZE_FAILED"
 		}
 	}
+	claimCondition, args := socialRevocationClaimCondition(claimToken)
+	args = append([]any{status, newAttemptCount, errMsg, nextAttempt, outboxID}, args...)
 	_, err := r.DB.Exec(`
 		UPDATE ALUMNI_SOCIAL_REVOCATION_OUTBOX
 		SET STATUS = ?, CLAIM_TOKEN = NULL, ATTEMPT_COUNT = ?, LAST_ERROR = ?,
 		    NEXT_ATTEMPT_AT = ?, UPDATED_AT = NOW()
-		WHERE OUTBOX_ID = ?
-	`, status, newAttemptCount, errMsg, nextAttempt, outboxID)
+		WHERE OUTBOX_ID = ? AND STATUS <> 'DELIVERED'
+	`+claimCondition, args...)
 	return err
+}
+
+func socialRevocationClaimCondition(claimToken []string) (string, []any) {
+	if len(claimToken) == 0 {
+		return "", nil
+	}
+	return " AND CLAIM_TOKEN = ?", []any{claimToken[0]}
 }

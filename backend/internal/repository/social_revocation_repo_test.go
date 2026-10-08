@@ -341,3 +341,26 @@ func TestClaimDueSocialRevocationsSkipsUnreadableRow(t *testing.T) {
 		t.Fatalf("readable rows = %+v, want outbox 2", entries)
 	}
 }
+
+// A relink can commit between the optimistic status read and the deletion transaction.
+// The second check must prevent the old worker from deleting that newly active link.
+func TestFinalizeSocialDisconnectRechecksActiveLinkInsideDeletionTransaction(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
+	mock.ExpectExec(`UPDATE WEO_MEMBER_SOCIAL`).WithArgs(42, "KT").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(`SELECT NMS_STATUS FROM WEO_MEMBER_SOCIAL`).WithArgs(42, "KT").WillReturnRows(sqlmock.NewRows([]string{"NMS_STATUS"}).AddRow("FINALIZE_PENDING"))
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT NMS_GATE`).WithArgs(42).WillReturnRows(sqlmock.NewRows([]string{"NMS_GATE"}).AddRow("KT"))
+	mock.ExpectQuery(`COALESCE\(TRIM\(USR_PWD\), ''\) <> ''`).WithArgs(42).WillReturnRows(sqlmock.NewRows([]string{"has_password"}).AddRow(1))
+	mock.ExpectRollback()
+	if err := repo.FinalizeSocialDisconnect(42, "KT"); err == nil {
+		t.Fatal("stale worker must not delete the active replacement")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

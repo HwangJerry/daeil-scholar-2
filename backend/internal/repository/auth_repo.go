@@ -384,19 +384,26 @@ func (r *AuthRepository) ListSocialProviders(usrSeq int) ([]string, error) {
 }
 
 func (r *AuthRepository) DeleteSocialConnection(usrSeq int, provider string) error {
-	return r.deleteSocialConnection(usrSeq, provider, true)
+	return r.deleteSocialConnection(usrSeq, provider, true, false)
 }
 
 func (r *AuthRepository) ForceDeleteSocialConnection(usrSeq int, provider string) error {
-	return r.deleteSocialConnection(usrSeq, provider, false)
+	return r.deleteSocialConnection(usrSeq, provider, false, false)
 }
 
-func (r *AuthRepository) deleteSocialConnection(usrSeq int, provider string, enforceLastLoginMethod bool) error {
+func (r *AuthRepository) deleteSocialConnection(usrSeq int, provider string, enforceLastLoginMethod bool, pendingOnly bool) error {
 	tx, err := r.DB.Beginx()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err := r.deleteSocialConnectionTx(tx, usrSeq, provider, enforceLastLoginMethod, pendingOnly); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *AuthRepository) deleteSocialConnectionTx(tx *sqlx.Tx, usrSeq int, provider string, enforceLastLoginMethod bool, pendingOnly bool) error {
 
 	var activeProviders []string
 	if err := tx.Select(&activeProviders, `
@@ -428,6 +435,10 @@ func (r *AuthRepository) deleteSocialConnection(usrSeq int, provider string, enf
 			break
 		}
 	}
+	if pendingOnly && targetIsActive {
+		return errors.New("social disconnect finalization cannot delete an active connection")
+	}
+
 	if enforceLastLoginMethod && targetIsActive && !hasPassword && len(activeProviders) == 1 {
 		return ErrLastLoginMethod
 	}
@@ -465,7 +476,7 @@ func (r *AuthRepository) deleteSocialConnection(usrSeq int, provider string, enf
 	`, usrSeq, provider); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (r *AuthRepository) UpdateSocialProviderEmailEnabled(usrSeq int, gate string, emailEnabled bool) error {
