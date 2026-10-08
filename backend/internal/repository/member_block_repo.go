@@ -1,5 +1,8 @@
 package repository
 
+// Approval is canonical in ALUMNI_VERIFICATION; new approved members retain BBB.
+// The active login statuses BBB/CCC/ZZZ exclude withdrawn and inactive accounts.
+
 import (
 	"database/sql"
 	"errors"
@@ -27,7 +30,7 @@ func (r *MemberBlockRepository) IsApprovedAlumni(userSeq int) (bool, error) {
 			FROM ALUMNI_VERIFICATION v
 			JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
 			WHERE v.USR_SEQ = ? AND v.STATUS = 'approved'
-			  AND m.USR_STATUS IN ('CCC','ZZZ')
+			  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		)
 	`, userSeq); err != nil {
 		return false, err
@@ -90,7 +93,7 @@ func (r *MemberBlockRepository) Block(blockerSeq, blockedSeq int) (*model.Member
 		FROM ALUMNI_VERIFICATION v
 		JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
 		WHERE v.USR_SEQ = ?
-		  AND m.USR_STATUS IN ('CCC','ZZZ')
+		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		FOR UPDATE
 	`, blockedSeq); err != nil {
 		if err == sql.ErrNoRows {

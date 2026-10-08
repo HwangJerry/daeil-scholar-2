@@ -17,7 +17,7 @@ func TestIsApprovedAlumniRequiresLoginEligibleMember(t *testing.T) {
 	defer db.Close()
 	repo := NewMessageRepository(sqlx.NewDb(db, "sqlmock"))
 
-	mock.ExpectQuery(`FROM ALUMNI_VERIFICATION v[\s\S]*JOIN WEO_MEMBER m[\s\S]*v.STATUS = 'approved'[\s\S]*m.USR_STATUS IN \('CCC','ZZZ'\)`).
+	mock.ExpectQuery(`FROM ALUMNI_VERIFICATION v[\s\S]*JOIN WEO_MEMBER m[\s\S]*v.STATUS = 'approved'[\s\S]*m.USR_STATUS IN \('BBB','CCC','ZZZ'\)`).
 		WithArgs(42).
 		WillReturnRows(sqlmock.NewRows([]string{"EXISTS"}).AddRow(false))
 
