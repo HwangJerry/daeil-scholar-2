@@ -284,3 +284,6 @@ func randomNumericCode(digits int) (string, error) {
 	}
 	return string(code), nil
 }
+
+// SignupGrantHash returns only the one-way proof used by the signup transaction.
+func (s *PhoneVerificationService) SignupGrantHash(token string) string { return hashSecret(token) }

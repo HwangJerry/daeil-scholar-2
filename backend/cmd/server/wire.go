@@ -225,7 +225,10 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	if cfg.PrivacyConsent.Version == "" {
 		logger.Warn().Msg("PRIVACY_CONSENT_VERSION empty; consent version check disabled")
 	}
-	consentService := service.NewConsentService(consentStore, cfg.PrivacyConsent, logger)
+	consentService := service.NewConsentService(nil, cfg.PrivacyConsent, logger)
+	if consentTableReady {
+		consentService = service.NewConsentService(consentStore, cfg.PrivacyConsent, logger)
+	}
 
 	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
 	passwordChangeSvc := service.NewPasswordChangeService(profileRepo)

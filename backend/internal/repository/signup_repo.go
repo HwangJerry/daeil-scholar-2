@@ -52,6 +52,9 @@ func (r *SignupRepository) CreatePasswordAccount(request model.RegisterRequest, 
 	if err := insertSignupTagsTx(tx, accountSeq, request.Tags); err != nil {
 		return 0, err
 	}
+	if err := persistSignupEvidenceTx(tx, accountSeq, request.Phone, request.SignupEvidence); err != nil {
+		return 0, err
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}

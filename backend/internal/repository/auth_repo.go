@@ -39,6 +39,7 @@ type AuthRepository struct {
 }
 
 type SocialAccountFields struct {
+	SignupEvidence      *model.SignupEvidence
 	Provider            string
 	SocialID            string
 	SocialEmail         string
@@ -254,6 +255,9 @@ func (r *AuthRepository) CreateSocialAccount(fields SocialAccountFields) (*model
 		}
 	}
 
+	if err := persistSignupEvidenceTx(tx, fields.USRSeq, fields.Phone, fields.SignupEvidence); err != nil {
+		return nil, err
+	}
 	user, err := getMemberBySequenceTx(tx, fields.USRSeq)
 	if err != nil {
 		return nil, err
@@ -1008,6 +1012,9 @@ func (r *AuthRepository) InsertMemberWithPwd(req model.RegisterRequest, hashedPw
 		}
 	}
 	if err := insertAlumniVerificationCompanionTx(tx, usrSeq); err != nil {
+		return 0, err
+	}
+	if err := persistSignupEvidenceTx(tx, usrSeq, req.Phone, req.SignupEvidence); err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(); err != nil {

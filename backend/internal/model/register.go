@@ -21,8 +21,9 @@ type RegisterRequest struct {
 	USRPhonePublic string   `json:"usrPhonePublic"` // 'Y' | 'N'
 	USREmailPublic string   `json:"usrEmailPublic"` // 'Y' | 'N'
 	// PhoneVerificationToken proves the applicant controls Phone. Transport-only:
-	// it is spent by the verification service and never persisted on the member row.
-	PhoneVerificationToken string `json:"phoneVerificationToken"`
+	// its hash is spent in the account transaction and never persisted on the member row.
+	PhoneVerificationToken string          `json:"phoneVerificationToken"`
+	SignupEvidence         *SignupEvidence `json:"-"`
 	// PrivacyConsent records acceptance of the signup data-collection notice. Nil
 	// means an older client that has no consent UI; see service.ConsentService.
 	PrivacyConsent *PrivacyConsent `json:"privacyConsent"`

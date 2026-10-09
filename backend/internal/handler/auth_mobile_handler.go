@@ -20,7 +20,11 @@ func (h *AuthHandler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 	email := strings.TrimSpace(request.Email)
 	usrID := strings.TrimSpace(request.USRID)
 	if (email == "" && usrID == "") || request.Password == "" {
-		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "이메일과 비밀번호를 입력하세요")
+		message := "아이디와 비밀번호를 입력해주세요"
+		if email != "" {
+			message = "이메일과 비밀번호를 입력해주세요"
+		}
+		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", message)
 		return
 	}
 	var user *model.User
@@ -40,7 +44,11 @@ func (h *AuthHandler) MobileLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if user == nil {
-		respondError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다")
+		message := "아이디 또는 비밀번호가 올바르지 않습니다"
+		if email != "" {
+			message = "이메일 또는 비밀번호가 올바르지 않습니다"
+		}
+		respondError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", message)
 		return
 	}
 	session, err := h.mobileIssuer.Issue(user)

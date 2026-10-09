@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/rs/zerolog/log"
 )
@@ -144,6 +145,7 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, isNew, err := h.service.LinkSocialAccount(service.SocialLinkParams{
+		SignupEvidence:      h.signupEvidence(req.PhoneVerificationToken, req.PrivacyConsent),
 		Mode:                mode,
 		Provider:            linkData.Provider,
 		SocialID:            linkData.SocialID,
@@ -166,6 +168,8 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Error().Err(err).Str("provider", linkData.Provider).Str("mode", string(mode)).Msg("social link failed")
 		switch {
+		case errors.Is(err, repository.ErrSignupPhoneGrantInvalid):
+			respondError(w, http.StatusBadRequest, "PHONE_NOT_VERIFIED", "휴대폰 인증을 다시 완료해주세요")
 		case errors.Is(err, service.ErrInvalidPhone):
 			respondError(w, http.StatusBadRequest, "INVALID_PHONE", "유효한 전화번호를 입력해주세요")
 		case errors.Is(err, service.ErrPhonePendingDeletion):
@@ -186,7 +190,7 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 
 	// The account transaction committed. Never release/revive its credentials.
 	tokenConsumed = true
-	finalizationErr := h.finalizeSocialSignup(lease, profileImageURL, user.USRSeq, isNew, req)
+	finalizationErr := h.finalizeSocialSignup(lease, profileImageURL)
 
 	if req.Tags != nil {
 		if saveErr := h.registerSvc.SaveInitialTags(user.USRSeq, req.Tags); saveErr != nil {
@@ -250,13 +254,7 @@ func (h *AuthHandler) SocialLinkCancel(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Account creation already committed. A continuation finalization fault cannot
-// skip binding its phone proof or recording the accepted privacy notice.
-func (h *AuthHandler) finalizeSocialSignup(lease service.SocialLinkTokenLease, photo string, user int, isNew bool, req socialLinkRequest) error {
-	err := h.socialLinkTokens.ConsumeWithPhoto(lease, photo)
-	if isNew {
-		h.spendPhoneVerification(req.PhoneVerificationToken, req.Phone, user)
-		h.recordPrivacyConsent(user, req.PrivacyConsent)
-	}
-	return err
+// Evidence committed with the member. Finalization only retires the continuation.
+func (h *AuthHandler) finalizeSocialSignup(lease service.SocialLinkTokenLease, photo string) error {
+	return h.socialLinkTokens.ConsumeWithPhoto(lease, photo)
 }

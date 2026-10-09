@@ -38,7 +38,7 @@ func (s *finalizationConsentStore) RecordAccepted(user int, _, _ string, _ bool,
 	return nil
 }
 
-func TestCommittedSignupFinalizationFailureStillBindsGrantAndConsent(t *testing.T) {
+func TestCommittedSignupFinalizationDoesNotRepeatTransactionalEvidenceWrites(t *testing.T) {
 	raw := cache.New(time.Minute, time.Minute)
 	store := service.NewSocialLinkTokenStore(raw)
 	_, _ = store.Put("terminal", model.SocialLinkData{AccessToken: "synthetic", Email: "synthetic@example.test"}, time.Minute)
@@ -49,12 +49,12 @@ func TestCommittedSignupFinalizationFailureStillBindsGrantAndConsent(t *testing.
 	phone := &finalizationPhoneStore{}
 	consent := &finalizationConsentStore{}
 	h := &AuthHandler{socialLinkTokens: failingFinalizationStore{store}, phoneVerifier: service.NewPhoneVerificationService(phone, nil, nil, zerolog.Nop()), consentSvc: service.NewConsentService(consent, config.PrivacyConsentConfig{}, zerolog.Nop()), logger: zerolog.Nop()}
-	err = h.finalizeSocialSignup(lease, "", 42, true, socialLinkRequest{Phone: "01012345678", PhoneVerificationToken: "synthetic-grant", PrivacyConsent: &model.PrivacyConsent{Version: "synthetic", Accepted: true}})
+	err = h.finalizeSocialSignup(lease, "")
 	if err == nil {
 		t.Fatal("fault injection did not fail")
 	}
-	if phone.ConsumedUser != 42 || consent.RecordedUser != 42 {
-		t.Fatalf("committed proof/consent skipped: grant=%d consent=%d", phone.ConsumedUser, consent.RecordedUser)
+	if phone.ConsumedUser != 0 || consent.RecordedUser != 0 {
+		t.Fatalf("transactional proof/consent must not be written again: grant=%d consent=%d", phone.ConsumedUser, consent.RecordedUser)
 	}
 	if _, err := store.Begin("terminal"); !errors.Is(err, service.ErrSocialLinkTokenConsumed) {
 		t.Fatalf("fault revived continuation: %v", err)
