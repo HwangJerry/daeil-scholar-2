@@ -36,6 +36,13 @@ type deferredCommitFaultConn struct {
 	fail *atomic.Bool
 }
 
+// Preserve direct protocol execution for DDL while intercepting only Commit.
+func (c *deferredCommitFaultConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	return c.Conn.(driver.ExecerContext).ExecContext(ctx, query, args)
+}
+func (c *deferredCommitFaultConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	return c.Conn.(driver.QueryerContext).QueryContext(ctx, query, args)
+}
 func (c *deferredCommitFaultConn) Begin() (driver.Tx, error) {
 	tx, err := c.Conn.Begin()
 	if err != nil {

@@ -1,0 +1,46 @@
+# Deferred logout: push ownership and one-shot global scope
+
+This additive change starts at immutable `db7a773b316ef62147710a388008823d22b6924a`, directly descended from deployed `d470410a00429daaf66ad88f5249dc1639c9dbc6`. The d470 atomic signup implementation remains unchanged. No production accounts, configuration, migration application, devices, deployment or other worktrees were changed in this lane.
+
+## Single-session contract
+
+`POST /api/auth/logout/deferred`, public JSON `{ "refreshToken": "original proof", "deviceToken": "optional original device" }`. Device token is optional; when provided it must contain 1–512 printable ASCII bytes (0x21–0x7e), exactly the existing registration policy. The original signed JWT contract and exact retained JTI/account/SID/original-expiry binding are unchanged. No credential is minted or rotated; caller-selected account/SID is never accepted.
+
+A still-valid matching proof atomically marks only its original account/SID family revoked and deletes only its exact account/device with that SID or a legacy NULL SID. An already-revoked retained proof can repeat the exact scoped device deletion after a lost response. A newer SID registration of the same device is preserved, as are other devices/accounts. Missing/expired proof returns empty 204 without any deletion: that status does **not** claim push rows were erased. Delivery independently suppresses expired/revoked families. The client retains the proof/device only to its original refresh expiry and never refreshes just for cleanup.
+
+## One-shot global contract
+
+`POST /api/auth/logout/all/deferred`, public JSON `{ "refreshToken": "original proof" }` only; an extra `deviceToken`, access token or arbitrary account/SID is rejected. A valid, unexpired, unrevoked exact retained original proof (including a consumed ancestor) authorizes one transaction marking all current account mobile refresh rows revoked, deleting that account's legacy `WEO_MEMBER_LOG` sessions and all push registrations. Other accounts remain unchanged. No rows or credentials are issued. A completed global proof is not reusable to end a later new login.
+
+Missing/revoked/expired proof returns **401 INVALID_REFRESH_TOKEN**, rather than claiming global logout succeeded. The client performs this once without refresh/rotation or automatic global replay. Both endpoints enforce closed JSON, a 16 KiB body limit, JSON media type, strict signed refresh metadata and no proof/profile/parameter-bearing error logging. Both are exact app-version-gate exemptions with independent endpoint buckets using the existing **10 attempts per 15 minutes per trusted IP** limiter. Existing 400/413/415/429/500 classifications remain. DB errors and cancellation produce 500, not a false successful cleanup. Global scope preserves the original logout-all semantics; it does not introduce retroactive revocation of unrelated stateless legacy web JWTs.
+
+## Registration and delivery
+
+Migration 085 adds nullable `SESSION_SID` and an account/SID index to `ALUMNI_MOBILE_DEVICE_TOKEN`, with no ownership backfill. Existing Android/iOS request bodies are unchanged: the verified middleware principal supplies the SID, and closed JSON rejects client SID spoofing.
+
+Registration finds a live family candidate without range locks, then locks its exact JTI primary key and rechecks account/SID/consumed/revoked/expiry before the device write. Revocation follows session-before-device ordering. The exact current read closes the auth-inflight revocation race under the existing default REPEATABLE READ; no isolation override is required. A rotation between candidate selection and locking can reject registration without writes; later verified registration can retry. Legacy SID-less registration cannot overwrite/demote a bound device row. Legacy unregister mutates only NULL rows. Mobile unregister and invalid-provider cleanup are scoped to the original account/device/SID, so delayed old work cannot delete a new registration.
+
+Device and notice-recipient queries require bound ownership and an unconsumed, unrevoked, unexpired family. Each provider send attempt rechecks the current account/device/SID and family; cached queued targets and retries are suppressed after expiry/revocation or ownership change. Pushes already accepted by APNs/FCM cannot be recalled; an in-flight provider request that passed the current check before logout is outside the cancellation guarantee.
+
+**Legacy NULL rows are conservatively suppressed from delivery until the next verified mobile registration.** This can temporarily miss background notifications. The new iOS client rebinds on foreground/session resume with a 60-second cooldown and freshly registers on cold launch; previously shipped clients with a cached registration key may require restart. Do not infer a SID from the account's sessions or backfill ownership: that could deliver to an ended account/session. Existing access-only legacy registrations stay NULL and are suppressed.
+
+## Rollout gates
+
+- `backend/migrations/085_bind_push_device_to_mobile_session.sql` must accompany the binary and apply before startup. The existing release builder copies all numbered migrations and includes their hashes; no deployment-tool rewrite is necessary. Migration 085 is additive and idempotent on MariaDB 10.1.38. Applied 001–084 files/hashes are unchanged.
+- `wireDeps` unconditionally validates the required nullable ASCII SID column, even if push sending is disabled, and fails before HTTP serving on the old schema. Schema-independent `--check-release-config` remains usable before applying pending migrations.
+- `deploy/remote_release.py` checks migration-history versus payload hashes and requires the explicit migration-apply deployment gate. Its `validate_activation` / `--check-release-config` do not read the external canonical candidate manifest pin. The web-only minimum 063 remains unchanged because web assets are unaffected.
+- The standalone `migrate.sh` approval gate consumes `CANONICAL_CANDIDATE_MANIFEST_SHA256`. Appending 085 expands the reviewed candidate source set from 45 to 46. New manifest SHA256: `bc4ef262c1b201b73db56984e8e4bbe4f29b5607c6964c0c79bf497d46a48579`. An old 45-file pin will reject that runner. Review the hash-only override/update before using that runner; preserve every credential and erasure/retention flag. This agent did not change production configuration.
+- Additive rollback leaves nullable ownership columns in place. Reverting the binary also reverts delivery suppression; do not claim old binary privacy guarantees. Parent must review the exact rollout/rollback packet before production action.
+
+## RED, GREEN and practical limits
+
+Actual pre-fix HTTP RED: optional device body returned 400 and global endpoint returned 404. An initial actual DB race exposed broad/secondary locking inversion; exact-PK current locking validation replaced it. Existing full tests also caught candidate manifest cardinality, corrected by appending only 085 and the matching hash/count.
+
+GREEN evidence is under `build/auth-ios-device-regression-20261010/push-scope-*`. Suites are reported separately, without summing overlapping groups:
+
+- Full normal suite and focused unit/race suites cover strict proof metadata, wire spoofing, guarded sends/retries, scoped invalid-token cleanup, startup schema readiness and transaction failure handling.
+- Actual disposable MariaDB HTTP covers optional device scope, NULL legacy rows, lost-response repeated cleanup, newer same-account owner preservation, retained revoked/expired row suppression, consumed-ancestor global scope, expired/missing/mismatch/tampered global proof, independent limiter and blocked-build access, commit-boundary rollback, DELETE-trigger failure and cancelled HTTP rollback.
+- Actual DB race covers delayed old registration after committed revocation; concurrent registration versus both single/global HTTP revocation while held on the exact family lock; and newer registration versus old cleanup in three interleavings. No revoked registration is resurrected and new ownership survives old cleanup.
+- MariaDB migration gate verifies preexisting rows survive two applications of 085, NULL is not backfilled, and old-schema readiness fails while migrated readiness succeeds. The d470 signup grant/consent atomicity and social photo/cancellation regressions are rerun.
+
+Commit fault injection rolls back real pending MariaDB writes and returns a synthetic commit failure. It proves failure atomicity when rollback is known, not an unknowable network outcome after commit. Global client behavior deliberately does not replay after uncertainty; single scoped cleanup is idempotent. All DB tests use disposable Docker MariaDB 10.1.38 with synthetic data, never production DSNs/secrets. The preexisting broad-race password-hasher timing limit is unchanged; affected focused races run independently. Exact final counts and test groups are recorded in the coordinating verification summary.

@@ -1,5 +1,7 @@
 # Ended-session refresh-proof revocation
 
+Historical `db7a773` proof-contract report. Current additive push/global implementation and migration 085 are documented in [the augmentation report](deferred-logout-push-scope-20261010.md); the no-migration statement and suite counts below describe the original proof-only commit.
+
 Based exactly on deployed `d470410a00429daaf66ad88f5249dc1639c9dbc6`. This lane did not deploy, restart, change production configuration or accounts, interact with Android or modify other worktrees. No schema migration is included. Existing atomic signup code is unchanged and its MariaDB regression cases are rerun.
 
 ## Contract

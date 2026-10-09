@@ -46,6 +46,9 @@ type deps struct {
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
 func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, error) {
+	if err := repository.PushSessionSchemaReady(db); err != nil {
+		return nil, err
+	}
 	authRepo := repository.NewAuthRepository(db)
 	feedRepo := repository.NewFeedRepository(db)
 	donationRepo := repository.NewDonationRepository(db)

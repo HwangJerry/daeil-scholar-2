@@ -34,6 +34,10 @@ func (s *pushServicerStub) UnregisterDevice(_ int, token string) error {
 	return s.err
 }
 
+func (s *pushServicerStub) UnregisterDeviceForSession(seq int, sid, token string) error {
+	return s.UnregisterDevice(seq, token)
+}
+
 func (s *pushServicerStub) GetPreferences(int) (*model.PushPreferences, error) {
 	s.getCalls++
 	return s.preferences, s.err
@@ -202,4 +206,25 @@ func TestPushHandlerRequiresBothCanonicalPreferenceBooleans(t *testing.T) {
 func authenticatedPushRequest(method, target, body string) *http.Request {
 	request := httptest.NewRequest(method, target, bytes.NewBufferString(body))
 	return request.WithContext(middleware.SetAuthUser(request.Context(), &model.AuthUser{USRSeq: 42}))
+}
+
+func TestPushHandlerBindsServerSessionAndRejectsClientSID(t *testing.T) {
+	sid := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	stub := &pushServicerStub{}
+	h := &PushHandler{service: stub}
+	for _, body := range []string{`{"platform":"android","deviceToken":"synthetic","locale":"ko-KR"}`, `{"platform":"android","deviceToken":"synthetic","locale":"ko-KR","sessionId":"spoof"}`} {
+		req := authenticatedPushRequest(http.MethodPost, "/api/push/device/register", body)
+		req = req.WithContext(middleware.SetAuthUser(req.Context(), &model.AuthUser{USRSeq: 42, SessionID: sid}))
+		recorder := httptest.NewRecorder()
+		h.RegisterDevice(recorder, req)
+		if stub.registration.SessionID != sid {
+			t.Fatal("verified SID was not stamped")
+		}
+		if recorder.Code != http.StatusOK && recorder.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d", recorder.Code)
+		}
+	}
+	if stub.registerCalls != 1 {
+		t.Fatal("client SID spoof reached service")
+	}
 }

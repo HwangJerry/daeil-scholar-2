@@ -27,8 +27,8 @@ func TestPushRepositoryRegistersDeviceWithAccountReassignmentUpsert(t *testing.T
 		Platform: "ios", DeviceToken: "token-123", Locale: "ko_KR",
 		APNSEnvironment: &environment, BundleID: &bundleID,
 	}
-	mock.ExpectExec(`(?s)INSERT INTO ALUMNI_MOBILE_DEVICE_TOKEN.*STATUS.*INVALID_COUNT.*LAST_SEEN_AT.*CREATED_AT.*UPDATED_AT.*VALUES.*'ACTIVE'.*0.*UTC_TIMESTAMP\(\).*ON DUPLICATE KEY UPDATE.*PLATFORM = VALUES\(PLATFORM\).*STATUS = 'ACTIVE'.*INVALID_COUNT = 0.*LAST_SEEN_AT = UTC_TIMESTAMP\(\).*UPDATED_AT = UTC_TIMESTAMP\(\)`).
-		WithArgs(42, "ios", "token-123", "ko_KR", "production", "com.daeil.dflhsafv2").
+	mock.ExpectExec(regexp.QuoteMeta(pushRegistrationSQL)).
+		WithArgs(42, "ios", "token-123", "ko_KR", "production", "com.daeil.dflhsafv2", nil).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	if err := repo.RegisterDevice(42, request); err != nil {
@@ -42,8 +42,8 @@ func TestPushRepositoryRegistersDeviceWithAccountReassignmentUpsert(t *testing.T
 func TestPushRepositoryRegistersAndroidWithNullAPNSFields(t *testing.T) {
 	repo, mock, cleanup := newPushRepositoryTest(t)
 	defer cleanup()
-	mock.ExpectExec(`(?s)INSERT INTO ALUMNI_MOBILE_DEVICE_TOKEN.*STATUS.*INVALID_COUNT.*LAST_SEEN_AT.*CREATED_AT.*UPDATED_AT.*VALUES.*'ACTIVE'.*0.*UTC_TIMESTAMP\(\).*ON DUPLICATE KEY UPDATE.*PLATFORM = VALUES\(PLATFORM\).*STATUS = 'ACTIVE'.*INVALID_COUNT = 0.*LAST_SEEN_AT = UTC_TIMESTAMP\(\).*UPDATED_AT = UTC_TIMESTAMP\(\)`).
-		WithArgs(42, "android", "token-123", "ko-KR", nil, nil).
+	mock.ExpectExec(regexp.QuoteMeta(pushRegistrationSQL)).
+		WithArgs(42, "android", "token-123", "ko-KR", nil, nil, nil).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	if err := repo.RegisterDevice(42, model.PushDeviceRegistration{
@@ -148,9 +148,9 @@ func TestPushRepositoryListsEveryDeviceForRecipient(t *testing.T) {
 	defer cleanup()
 	mock.ExpectQuery(`(?s)SELECT PLATFORM, DEVICE_TOKEN, APNS_ENVIRONMENT, BUNDLE_ID.*FROM ALUMNI_MOBILE_DEVICE_TOKEN.*WHERE USR_SEQ = \? AND STATUS = 'ACTIVE'.*ORDER BY MDT_SEQ ASC`).
 		WithArgs(42).
-		WillReturnRows(sqlmock.NewRows([]string{"PLATFORM", "DEVICE_TOKEN", "APNS_ENVIRONMENT", "BUNDLE_ID"}).
-			AddRow("android", "android-token", nil, nil).
-			AddRow("ios", "ios-token", "sandbox", "com.daeil.dflhsafv2"))
+		WillReturnRows(sqlmock.NewRows([]string{"PLATFORM", "DEVICE_TOKEN", "APNS_ENVIRONMENT", "BUNDLE_ID", "SESSION_SID"}).
+			AddRow("android", "android-token", nil, nil, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").
+			AddRow("ios", "ios-token", "sandbox", "com.daeil.dflhsafv2", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
 
 	targets, err := repo.ListDevices(42)
 	if err != nil {

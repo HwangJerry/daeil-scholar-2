@@ -91,6 +91,7 @@ func postBaselineMigrations() []mariadb.SQL {
 		mariadb.File(filepath.Join("..", "..", "migrations", "082_create_login_security_events.sql")),
 		mariadb.File(filepath.Join("..", "..", "migrations", "083_add_phone_grant_ownership.sql")),
 		mariadb.File(filepath.Join("..", "..", "migrations", "084_create_erasure_subscription_review.sql")),
+		mariadb.File(filepath.Join("..", "..", "migrations", "085_bind_push_device_to_mobile_session.sql")),
 	}
 }
 

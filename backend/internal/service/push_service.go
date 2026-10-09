@@ -21,6 +21,7 @@ const (
 type PushStore interface {
 	RegisterDevice(usrSeq int, registration model.PushDeviceRegistration) error
 	UnregisterDevice(usrSeq int, deviceToken string) error
+	UnregisterDeviceForSession(usrSeq int, sessionID, deviceToken string) error
 	GetPreferences(usrSeq int) (*model.PushPreferences, error)
 	UpsertPreferences(usrSeq int, update model.PushPreferencesUpdate) error
 }
@@ -46,6 +47,16 @@ func (s *PushService) UnregisterDevice(usrSeq int, deviceToken string) error {
 	}
 	return s.store.UnregisterDevice(usrSeq, deviceToken)
 }
+
+func (s *PushService) UnregisterDeviceForSession(account int, sid, device string) error {
+	if account <= 0 || !originalMobileIdentifier(sid) || !validPushDeviceToken(device) {
+		return ErrInvalidPushRequest
+	}
+	return s.store.UnregisterDeviceForSession(account, sid, device)
+}
+
+// ValidPushDeviceToken keeps deferred cleanup identical to existing registration.
+func ValidPushDeviceToken(token string) bool { return validPushDeviceToken(token) }
 
 func (s *PushService) GetPreferences(usrSeq int) (*model.PushPreferences, error) {
 	if usrSeq <= 0 {
@@ -83,7 +94,7 @@ func defaultPushPreferences() *model.PushPreferences {
 }
 
 func validPushDeviceRegistration(registration model.PushDeviceRegistration) bool {
-	if !validPushDeviceToken(registration.DeviceToken) || !validPushLocale(registration.Locale) {
+	if (registration.SessionID != "" && !originalMobileIdentifier(registration.SessionID)) || !validPushDeviceToken(registration.DeviceToken) || !validPushLocale(registration.Locale) {
 		return false
 	}
 	switch registration.Platform {

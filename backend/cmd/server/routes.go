@@ -163,6 +163,7 @@ func registerPublicRoutes(r chi.Router, h handlers, authService *service.AuthSer
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/mobile/login", h.auth.MobileLogin)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/refresh", h.auth.Refresh)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/logout/deferred", h.auth.DeferredLogout)
+	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/logout/all/deferred", h.auth.DeferredLogoutAll)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/login", h.auth.Login)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/phone/verification/request", h.phoneVerification.RequestCode)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/phone/verification/confirm", h.phoneVerification.ConfirmCode)
