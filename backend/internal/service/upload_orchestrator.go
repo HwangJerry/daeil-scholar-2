@@ -1,13 +1,22 @@
 // UploadOrchestrator — coordinates file storage, image resize, and DB record insertion
 package service
 
-import "mime/multipart"
+import (
+	"errors"
+	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/observability"
+	"github.com/rs/zerolog"
+	"mime/multipart"
+	"sync"
+)
 
 type UploadOrchestrator struct {
-	storage    *FileStorageService
-	resizer    *ImageResizeService
-	record     *FileRecordService
-	siteOrigin string
+	storage         *FileStorageService
+	resizer         *ImageResizeService
+	record          *FileRecordService
+	siteOrigin      string
+	signupCleanupMu sync.Mutex
+	logger          zerolog.Logger
 }
 
 func NewUploadOrchestrator(storage *FileStorageService, resizer *ImageResizeService, record *FileRecordService) *UploadOrchestrator {
@@ -53,9 +62,19 @@ func (o *UploadOrchestrator) Discard(result *UploadResult, gate string) error {
 // DiscardUnclaimedProfile is only for actual UploadResults created by social
 // signup, never arbitrary form/provider URLs. Re-check DB ownership on retries.
 func (o *UploadOrchestrator) DiscardUnclaimedProfile(result *UploadResult) error {
-	return o.record.repo.DiscardSignupProfileUpload(result.FSeq, result.URL, o.siteOrigin, func(_ string) error {
+	o.signupCleanupMu.Lock()
+	defer o.signupCleanupMu.Unlock()
+	err := o.record.repo.DiscardSignupProfileUpload(result.FSeq, result.URL, o.siteOrigin, func(_ string) error {
 		return o.storage.DeleteUploadedURL(result.URL, "profile")
 	})
+	var blocked *model.ErasureBlocked
+	if errors.As(err, &blocked) {
+		observability.RecordSignupPhotoCleanupBlocked(blocked.Code)
+		o.logger.Warn().Str("reason", blocked.Code).Int("fSeq", result.FSeq).Msg("social signup photo cleanup blocked")
+		return nil // retained for ownership/review, never silently discarded
+	}
+	return err
 }
+func (o *UploadOrchestrator) SetLogger(logger zerolog.Logger) { o.logger = logger }
 
 func (o *UploadOrchestrator) SetSiteOrigin(origin string) { o.siteOrigin = origin }

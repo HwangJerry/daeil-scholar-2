@@ -200,6 +200,9 @@ func (r *AuthRepository) CreateSocialAccount(fields SocialAccountFields) (*model
 		return nil, err
 	}
 	defer tx.Rollback()
+	if err = lockPrivateSignupPhoto(tx, fields.ProfileImageURL); err != nil {
+		return nil, err
+	}
 	canonicalIdentityEnabled := r.canonicalIdentityReady.Load()
 	phoneClaimsEnabled, err := r.phoneClaimsEnabledTx(tx)
 	if err != nil {

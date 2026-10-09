@@ -46,6 +46,10 @@ func (h *SocialLinkPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	_, err := h.linkTokens.Snapshot(token)
+	if errors.Is(err, service.ErrSocialLinkTokenInProgress) {
+		respondError(w, http.StatusConflict, "TOKEN_IN_PROGRESS", "회원가입 요청이 처리 중입니다. 처리 결과를 확인해주세요.")
+		return
+	}
 	if errors.Is(err, service.ErrSocialLinkTokenConsumed) {
 		respondError(w, http.StatusConflict, "TOKEN_ALREADY_USED", "이미 처리된 소셜 링크 토큰입니다")
 		return

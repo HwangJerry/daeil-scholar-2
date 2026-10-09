@@ -1,16 +1,20 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"github.com/dflh-saf/backend/internal/model"
 )
 
 // DiscardSignupProfileUpload accepts only a tracked UploadResult. The row and
-// surviving reference ranges stay locked through filesystem unlink and commit.
-// Reuse erasure's canonical alias/reference handling; never discard owned files.
+// exact tracked upload stays locked through filesystem unlink and commit.
+// Official claim writers lock this PK before member/owner writes. Reference
+// scans are nonlocking current reads, preserving aliases without stopping unrelated
+// writes. Arbitrary concurrent copied URLs in legacy content are outside that
+// claim protocol; existing references still block deletion.
 func (r *FileRepository) DiscardSignupProfileUpload(id int, url, origin string, erase func(string) error) error {
-	tx, err := r.DB.Beginx()
+	tx, err := r.DB.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return err
 	}
@@ -28,7 +32,7 @@ func (r *FileRepository) DiscardSignupProfileUpload(id int, url, origin string, 
 		return err
 	}
 	if file.Gate != "PR" || file.Join != 0 || file.URL != url {
-		return nil
+		return &model.ErasureBlocked{Code: "UPLOAD_OWNERSHIP_CHANGED"}
 	}
 	local, external, err := model.ErasureFilePath(url, origin)
 	if err != nil {
@@ -41,11 +45,16 @@ func (r *FileRepository) DiscardSignupProfileUpload(id int, url, origin string, 
 	if err != nil {
 		return err
 	}
-	if err = rejectOtherErasureFileReferencesExceptUpload(tx, schema, local, origin, nil, id); err != nil {
-		var blocked *model.ErasureBlocked
-		if errors.As(err, &blocked) {
-			return nil
+	if schema["ALUMNI_UPLOAD_OWNER"] != nil {
+		var owners int
+		if err = tx.Get(&owners, `SELECT COUNT(*) FROM ALUMNI_UPLOAD_OWNER WHERE F_SEQ=?`, id); err != nil {
+			return err
 		}
+		if owners > 0 {
+			return &model.ErasureBlocked{Code: "FILE_STILL_REFERENCED"}
+		}
+	}
+	if err = scanSurvivingFileReferences(tx, schema, local, origin, nil, id, false, signupPhotoReferenceCandidate(local)); err != nil {
 		return err
 	}
 	if err = erase(local); err != nil {

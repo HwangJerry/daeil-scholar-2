@@ -85,3 +85,25 @@ func TestCancelledSocialPhotoRejectedBeforeUpload(t *testing.T) {
 		t.Fatalf("status=%d uploads=%d", w.Code, uploader.Calls)
 	}
 }
+
+func TestProcessingSocialSignupPrefillAndPhotoReturnConflict(t *testing.T) {
+	store := service.NewSocialLinkTokenStore(cache.New(time.Minute, time.Minute))
+	_, _ = store.Put("processing", model.SocialLinkData{}, time.Minute)
+	_, _ = store.Begin("processing")
+	prefill := httptest.NewRecorder()
+	(&AuthHandler{socialLinkTokens: store}).SocialLinkPrefill(prefill, httptest.NewRequest(http.MethodGet, "/api/auth/social/link/prefill?token=processing", nil))
+	if prefill.Code != http.StatusConflict {
+		t.Errorf("prefill=%d, want409", prefill.Code)
+	}
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	_ = form.WriteField("token", "processing")
+	_ = form.Close()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/social/link/photo", &body)
+	req.Header.Set("Content-Type", form.FormDataContentType())
+	w := httptest.NewRecorder()
+	NewSocialLinkPhotoHandler(&racedPhotoUploader{}, store, zerolog.Nop()).Upload(w, req)
+	if w.Code != http.StatusConflict {
+		t.Errorf("photo=%d, want409", w.Code)
+	}
+}

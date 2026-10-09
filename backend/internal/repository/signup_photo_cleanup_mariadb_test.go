@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"errors"
+	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/testsupport/mariadb"
 	"testing"
 	"time"
@@ -25,13 +27,14 @@ func TestSocialSignupPhotoOwnershipMariaDB(t *testing.T) {
 	}{{2, "/uploads/profile/committed.jpg", false}, {3, "/uploads/profile/joined.jpg", false}, {4, "/uploads/profile/owned.jpg", false}, {5, "/uploads/profile/previous.jpg", false}, {1, "https://provider.example/photo", false}, {1, "/uploads/profile/orphan.jpg", true}} {
 		called := false
 		err := repo.DiscardSignupProfileUpload(tc.ID, tc.URL, "https://app.example.test", func(string) error { called = true; return nil })
-		if err != nil || called != tc.Discard {
+		var blocked *model.ErasureBlocked
+		if (err != nil && !errors.As(err, &blocked)) || called != tc.Discard {
 			t.Fatalf("id=%d erased=%v want=%v error=%v", tc.ID, called, tc.Discard, err)
 		}
 	}
 }
 
-func TestSocialPhotoDiscardHoldsReferenceLockThroughUnlink(t *testing.T) {
+func TestSocialPhotoDiscardDoesNotBlockUnrelatedMemberWrite(t *testing.T) {
 	db := mariadb.Start(t).NewDatabase(t, mariadb.Statement(`
  CREATE TABLE WEO_FILES(F_SEQ INT PRIMARY KEY,F_GATE VARCHAR(2),F_JOIN_SEQ INT,FILE_PATH VARCHAR(255),FILE_NAME VARCHAR(255)) ENGINE=InnoDB;
  CREATE TABLE WEO_MEMBER(USR_SEQ INT PRIMARY KEY,USR_PHOTO VARCHAR(500)) ENGINE=InnoDB;
@@ -56,20 +59,100 @@ func TestSocialPhotoDiscardHoldsReferenceLockThroughUnlink(t *testing.T) {
 	}()
 	select {
 	case err := <-updated:
+		if err != nil {
+			close(release)
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
 		close(release)
-		t.Fatalf("member reference write ran during unlink: %v", err)
-	case <-time.After(100 * time.Millisecond):
+		t.Fatal("unrelated member update blocked by signup cleanup")
 	}
+
 	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestSignupPhotoAliasAndReviewBlockScopeMariaDB(t *testing.T) {
+	db := mariadb.Start(t).NewDatabase(t, mariadb.Statement(`
+ CREATE TABLE WEO_FILES(F_SEQ INT PRIMARY KEY,F_GATE VARCHAR(2),F_JOIN_SEQ INT,FILE_PATH VARCHAR(255),FILE_NAME VARCHAR(255)) ENGINE=InnoDB;
+ CREATE TABLE WEO_MEMBER(USR_SEQ INT PRIMARY KEY,USR_PHOTO VARCHAR(500)) ENGINE=InnoDB;
+ CREATE TABLE WEO_BOARDBBS(SEQ INT PRIMARY KEY,USR_SEQ INT,CONTENTS TEXT) ENGINE=InnoDB;
+ INSERT INTO WEO_FILES VALUES(1,'PR',0,'/uploads/profile','aaaaaaaaaaaaaaaaaaaaaaaa.jpg');
+ INSERT INTO WEO_MEMBER VALUES(42,'');
+ `)).DB
+	repo := NewFileRepository(db)
+	for _, raw := range []string{"/uploads/profile/%61aaaaaaaaaaaaaaaaaaaaaaa.jpg", "https://www.app.example.test/uploads/profile/aaaaaaaaaaaaaaaaaaaaaaaa.jpg?version=1#preview", "https:/uploads/profile/%61aaaaaaaaaaaaaaaaaaaaaaa.jpg?bad=%zz"} {
+		db.MustExec(`UPDATE WEO_MEMBER SET USR_PHOTO=? WHERE USR_SEQ=42`, raw)
+		erased := false
+		err := repo.DiscardSignupProfileUpload(1, "/uploads/profile/aaaaaaaaaaaaaaaaaaaaaaaa.jpg", "https://app.example.test", func(string) error { erased = true; return nil })
+		var blocked *model.ErasureBlocked
+		if !errors.As(err, &blocked) || erased {
+			t.Fatalf("existing alias not preserved: erased=%v error=%v", erased, err)
+		}
+	}
+	db.MustExec(`UPDATE WEO_MEMBER SET USR_PHOTO='https:/files/unrelated.jpg' WHERE USR_SEQ=42`)
+	db.MustExec(`INSERT INTO WEO_BOARDBBS VALUES(1,42,TO_BASE64('<img src="/uploads/profile/%61aaaaaaaaaaaaaaaaaaaaaaa.jpg">'))`)
+	erased := false
+	err := repo.DiscardSignupProfileUpload(1, "/uploads/profile/aaaaaaaaaaaaaaaaaaaaaaaa.jpg", "https://app.example.test", func(string) error { erased = true; return nil })
+	var blocked *model.ErasureBlocked
+	if !errors.As(err, &blocked) || erased {
+		t.Fatalf("base64 content reference missed: %v", err)
+	}
+	db.MustExec(`DELETE FROM WEO_BOARDBBS`)
+	err = repo.DiscardSignupProfileUpload(1, "/uploads/profile/aaaaaaaaaaaaaaaaaaaaaaaa.jpg", "https://app.example.test", func(string) error { erased = true; return nil })
+	if err != nil || !erased {
+		t.Fatalf("unrelated malformed URL globally blocked cleanup: %v", err)
+	}
+}
+
+func TestSignupPhotoManagedClaimWaitsAndRejectsRemovedUpload(t *testing.T) {
+	db := mariadb.Start(t).NewDatabase(t, mariadb.Statement(`
+ CREATE TABLE WEO_FILES(F_SEQ INT PRIMARY KEY,F_GATE VARCHAR(2),F_JOIN_SEQ INT,FILE_PATH VARCHAR(255),FILE_NAME VARCHAR(255)) ENGINE=InnoDB;
+ CREATE TABLE WEO_MEMBER(USR_SEQ INT PRIMARY KEY,USR_STATUS CHAR(3),USR_PHOTO VARCHAR(500)) ENGINE=InnoDB;
+ CREATE TABLE ALUMNI_UPLOAD_OWNER(F_SEQ INT PRIMARY KEY,USR_SEQ INT,URL_PATH VARCHAR(500)) ENGINE=InnoDB;
+ INSERT INTO WEO_FILES VALUES(1,'PR',0,'/uploads/profile','aaaaaaaaaaaaaaaaaaaaaaaa.jpg');
+ INSERT INTO WEO_MEMBER VALUES(42,'CCC','');
+ `)).DB
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	discardDone := make(chan error, 1)
+	go func() {
+		discardDone <- NewFileRepository(db).DiscardSignupProfileUpload(1, "/uploads/profile/aaaaaaaaaaaaaaaaaaaaaaaa.jpg", "https://app.example.test", func(string) error { close(entered); <-release; return nil })
+	}()
 	select {
-	case err := <-updated:
-		if err != nil {
-			t.Fatal(err)
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("discard did not reach unlink")
+	}
+	claimDone := make(chan error, 1)
+	go func() {
+		claimDone <- (&ProfileRepository{DB: db}).AssignProfileUpload(42, 1, "/uploads/profile/aaaaaaaaaaaaaaaaaaaaaaaa.jpg", false)
+	}()
+	select {
+	case err := <-claimDone:
+		close(release)
+		t.Fatalf("managed claim did not wait for exact upload lock: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-discardDone; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-claimDone:
+		if !errors.Is(err, ErrManagedUploadUnavailable) {
+			t.Fatalf("claim after deletion=%v", err)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("reference lock not released")
+		t.Fatal("claim did not finish")
+	}
+	var owners int
+	_ = db.Get(&owners, `SELECT COUNT(*) FROM ALUMNI_UPLOAD_OWNER`)
+	var photo string
+	_ = db.Get(&photo, `SELECT USR_PHOTO FROM WEO_MEMBER WHERE USR_SEQ=42`)
+	if owners != 0 || photo != "" {
+		t.Fatal("failed claim wrote dangling ownership/profile")
 	}
 }

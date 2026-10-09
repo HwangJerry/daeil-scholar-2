@@ -221,6 +221,11 @@ func (t *Telemetry) metrics() object {
 		auth = append(auth, point(float64(n), now, t.started, map[string]string{"provider": p[0], "outcome": p[1]}))
 	}
 	metrics = append(metrics, object{"name": "daeil_login_attempts", "sum": object{"aggregationTemporality": 2, "isMonotonic": true, "dataPoints": auth}})
+	photoBlocks := []object{}
+	for reason, count := range signupPhotoCleanupBlockCounts() {
+		photoBlocks = append(photoBlocks, point(float64(count), now, t.started, map[string]string{"reason": reason}))
+	}
+	metrics = append(metrics, object{"name": "daeil_social_signup_photo_cleanup_blocked", "sum": object{"aggregationTemporality": 2, "isMonotonic": true, "dataPoints": photoBlocks}})
 	if t.db != nil {
 		stats := t.db.Stats()
 		for k, v := range map[string]float64{"daeil_db_connections_open": float64(stats.OpenConnections), "daeil_db_connections_in_use": float64(stats.InUse), "daeil_db_connections_idle": float64(stats.Idle)} {

@@ -9,6 +9,9 @@ func (r *ProfileRepository) AssignProfileUpload(user, fileID int, url string, bu
 		return err
 	}
 	defer tx.Rollback()
+	if err = lockManagedUpload(tx, fileID, url); err != nil {
+		return err
+	}
 	var status string
 	if err = tx.Get(&status, `SELECT USR_STATUS FROM WEO_MEMBER WHERE USR_SEQ=? FOR UPDATE`, user); err != nil {
 		return err

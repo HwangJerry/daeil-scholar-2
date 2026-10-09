@@ -176,6 +176,7 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	imageResizer := service.NewImageResizeService(1200)
 	fileRecordSvc := service.NewFileRecordService(fileRepo)
 	uploadOrchestrator := service.NewUploadOrchestrator(fileStorage, imageResizer, fileRecordSvc)
+	uploadOrchestrator.SetLogger(logger)
 	uploadOrchestrator.SetSiteOrigin(cfg.Server.SiteBaseURL)
 	socialLinkTokens.SetUploadDiscarder(func(result *service.UploadResult) error {
 		err := uploadOrchestrator.DiscardUnclaimedProfile(result)

@@ -15,6 +15,14 @@ func rejectOtherErasureFileReferences(tx *sqlx.Tx, s erasureSchema, local, origi
 
 // excludedUpload is an exact, code-owned WEO_FILES row pending discard.
 func rejectOtherErasureFileReferencesExceptUpload(tx *sqlx.Tx, s erasureSchema, local, origin string, excludedUser *int, excludedUpload int) error {
+	return scanSurvivingFileReferences(tx, s, local, origin, excludedUser, excludedUpload, true, nil)
+}
+
+func scanSurvivingFileReferences(tx *sqlx.Tx, s erasureSchema, local, origin string, excludedUser *int, excludedUpload int, lock bool, candidate func(string) bool) error {
+	suffix := ""
+	if lock {
+		suffix = " FOR UPDATE"
+	}
 	type referenceQuery struct {
 		sql     string
 		args    []interface{}
@@ -29,21 +37,21 @@ func rejectOtherErasureFileReferencesExceptUpload(tx *sqlx.Tx, s erasureSchema, 
 	}
 	for _, table := range []string{"ALUMNI_UPLOAD_OWNER", "ALUMNI_PROFILE_FILE_HISTORY"} {
 		if s[table] != nil {
-			queries = append(queries, referenceQuery{"SELECT URL_PATH FROM " + table + predicate + " FOR UPDATE", userArgs, false})
+			queries = append(queries, referenceQuery{"SELECT URL_PATH FROM " + table + predicate + suffix, userArgs, false})
 		}
 	}
 	for _, column := range []string{"USR_PHOTO", "USR_BIZ_CARD", "USR_THUMNAIL"} {
 		if s.has("WEO_MEMBER", column) {
-			queries = append(queries, referenceQuery{"SELECT COALESCE(" + column + ",'') FROM WEO_MEMBER" + predicate + " FOR UPDATE", userArgs, false})
+			queries = append(queries, referenceQuery{"SELECT COALESCE(" + column + ",'') FROM WEO_MEMBER" + predicate + suffix, userArgs, false})
 		}
 	}
 	for _, column := range []string{"CONTENTS", "CONTENTS_MD", "THUMBNAIL_URL", "FILES", "RE_FILES"} {
 		if s.has("WEO_BOARDBBS", column) {
-			queries = append(queries, referenceQuery{"SELECT COALESCE(" + column + ",'') FROM WEO_BOARDBBS" + predicate + " FOR UPDATE", userArgs, column != "THUMBNAIL_URL"})
+			queries = append(queries, referenceQuery{"SELECT COALESCE(" + column + ",'') FROM WEO_BOARDBBS" + predicate + suffix, userArgs, column != "THUMBNAIL_URL"})
 		}
 	}
 	if s.has("MAIN_BANNER_AD_IMAGE", "IMAGE_URL") {
-		queries = append(queries, referenceQuery{"SELECT COALESCE(IMAGE_URL,'') FROM MAIN_BANNER_AD_IMAGE FOR UPDATE", nil, false})
+		queries = append(queries, referenceQuery{"SELECT COALESCE(IMAGE_URL,'') FROM MAIN_BANNER_AD_IMAGE" + suffix, nil, false})
 	}
 	if s["WEO_FILES"] != nil {
 		predicate := "1=1"
@@ -63,7 +71,7 @@ func rejectOtherErasureFileReferencesExceptUpload(tx *sqlx.Tx, s erasureSchema, 
 			predicate += " AND F_SEQ<>?"
 			args = append(args, excludedUpload)
 		}
-		queries = append(queries, referenceQuery{"SELECT CONCAT(FILE_PATH,'/',FILE_NAME) FROM WEO_FILES WHERE " + predicate + " FOR UPDATE", args, false})
+		queries = append(queries, referenceQuery{"SELECT CONCAT(FILE_PATH,'/',FILE_NAME) FROM WEO_FILES WHERE " + predicate + suffix, args, false})
 	}
 	for _, query := range queries {
 		var values []string
@@ -76,11 +84,14 @@ func rejectOtherErasureFileReferencesExceptUpload(tx *sqlx.Tx, s erasureSchema, 
 				urls = survivingContentURLs(value)
 			}
 			for _, raw := range urls {
-				candidate, external, err := model.ErasureFileReferencePath(raw, origin)
+				if candidate != nil && !candidate(raw) {
+					continue
+				}
+				identity, external, err := model.ErasureFileReferencePath(raw, origin)
 				if err != nil {
 					return err
 				}
-				if !external && candidate == local {
+				if !external && identity == local {
 					return &model.ErasureBlocked{Code: "FILE_STILL_REFERENCED"}
 				}
 			}
