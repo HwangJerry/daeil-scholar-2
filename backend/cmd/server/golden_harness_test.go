@@ -41,8 +41,17 @@ type goldenServer struct {
 }
 
 func newGoldenServer(t *testing.T) *goldenServer {
+	return newGoldenServerWithDatabase(t, nil)
+}
+
+// A test-only decorator permits actual MariaDB commit-boundary fault injection.
+func newGoldenServerWithDatabase(t *testing.T, decorate func(*mariadb.Database) *sqlx.DB) *goldenServer {
 	t.Helper()
-	db := mariadb.Start(t).NewDatabase(t, append(mariadb.ProdBaseline(t), postBaselineMigrations()...)...).DB
+	database := mariadb.Start(t).NewDatabase(t, append(mariadb.ProdBaseline(t), postBaselineMigrations()...)...)
+	db := database.DB
+	if decorate != nil {
+		db = decorate(database)
+	}
 	seedGoldenIdentityReadiness(t, db)
 	cfg := goldenConfig(t)
 	if err := validateErasureRuntime(cfg); err != nil {
