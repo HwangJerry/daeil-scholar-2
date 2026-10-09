@@ -107,7 +107,7 @@ func TestSignupPhotoAliasAndReviewBlockScopeMariaDB(t *testing.T) {
 	}
 }
 
-func TestSignupPhotoManagedClaimWaitsAndRejectsRemovedUpload(t *testing.T) {
+func TestSignupPhotoRetiredMetadataRejectsLateClaimBeforeDiskErase(t *testing.T) {
 	db := mariadb.Start(t).NewDatabase(t, mariadb.Statement(`
  CREATE TABLE WEO_FILES(F_SEQ INT PRIMARY KEY,F_GATE VARCHAR(2),F_JOIN_SEQ INT,FILE_PATH VARCHAR(255),FILE_NAME VARCHAR(255)) ENGINE=InnoDB;
  CREATE TABLE WEO_MEMBER(USR_SEQ INT PRIMARY KEY,USR_STATUS CHAR(3),USR_PHOTO VARCHAR(500)) ENGINE=InnoDB;
@@ -132,27 +132,41 @@ func TestSignupPhotoManagedClaimWaitsAndRejectsRemovedUpload(t *testing.T) {
 	}()
 	select {
 	case err := <-claimDone:
+		if !errors.Is(err, ErrManagedUploadUnavailable) {
+			close(release)
+			t.Fatalf("claim after metadata retirement=%v", err)
+		}
+	case <-time.After(3 * time.Second):
 		close(release)
-		t.Fatalf("managed claim did not wait for exact upload lock: %v", err)
-	case <-time.After(100 * time.Millisecond):
+		t.Fatal("late claim blocked on disk deletion instead of rejecting retired metadata")
 	}
 	close(release)
 	if err := <-discardDone; err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case err := <-claimDone:
-		if !errors.Is(err, ErrManagedUploadUnavailable) {
-			t.Fatalf("claim after deletion=%v", err)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("claim did not finish")
-	}
+
 	var owners int
 	_ = db.Get(&owners, `SELECT COUNT(*) FROM ALUMNI_UPLOAD_OWNER`)
 	var photo string
 	_ = db.Get(&photo, `SELECT USR_PHOTO FROM WEO_MEMBER WHERE USR_SEQ=42`)
 	if owners != 0 || photo != "" {
 		t.Fatal("failed claim wrote dangling ownership/profile")
+	}
+}
+
+func TestSignupPhotoDeleteFailureMariaDBLeavesFileAndMetadataIntact(t *testing.T) {
+	db := mariadb.Start(t).NewDatabase(t, mariadb.Statement(`
+ CREATE TABLE WEO_FILES(F_SEQ INT PRIMARY KEY,F_GATE VARCHAR(2),F_JOIN_SEQ INT,FILE_PATH VARCHAR(255),FILE_NAME VARCHAR(255)) ENGINE=InnoDB;
+ INSERT INTO WEO_FILES VALUES(1,'PR',0,'/uploads/profile','aaaaaaaaaaaaaaaaaaaaaaaa.jpg');
+ CREATE TRIGGER synthetic_signup_retire_fail BEFORE DELETE ON WEO_FILES FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='synthetic metadata retirement failure';
+ `)).DB
+	erased := 0
+	err := NewFileRepository(db).DiscardSignupProfileUpload(1, "/uploads/profile/aaaaaaaaaaaaaaaaaaaaaaaa.jpg", "https://app.example.test", func(string) error { erased++; return nil })
+	if err == nil || erased != 0 {
+		t.Fatalf("failed DELETE unlinked disk: erased=%d error=%v", erased, err)
+	}
+	var rows int
+	if err := db.Get(&rows, `SELECT COUNT(*) FROM WEO_FILES WHERE F_SEQ=1`); err != nil || rows != 1 {
+		t.Fatalf("failed DELETE did not preserve metadata: rows=%d error=%v", rows, err)
 	}
 }
