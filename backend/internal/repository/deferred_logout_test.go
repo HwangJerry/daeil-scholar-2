@@ -68,6 +68,8 @@ func TestDeferredLogoutRepositoryBindingAndAtomicFailure(t *testing.T) {
 						mock.ExpectCommit()
 					}
 				}
+			} else if kind == "revoked" {
+				mock.ExpectCommit()
 			} else {
 				mock.ExpectRollback()
 			}
@@ -150,6 +152,52 @@ func TestDeferredGlobalProofRepositoryRejectsReplayAndRollsBack(t *testing.T) {
 			}
 			if kind != "success" && err == nil {
 				t.Fatal("failure suppressed")
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestDeferredLogoutResultRequiresRetainedProofAndCommit(t *testing.T) {
+	for _, kind := range []string{"missing", "expired", "revoked-confirmed", "revoked-commit-failure", "query-failure"} {
+		t.Run(kind, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			repo := NewAuthRepository(sqlx.NewDb(db, "sqlmock"))
+			expiry := time.Now().Add(time.Hour).Truncate(time.Second)
+			if kind == "expired" {
+				expiry = time.Now().Add(-time.Minute).Truncate(time.Second)
+			}
+			mock.ExpectBegin()
+			q := mock.ExpectQuery(`SELECT USR_SEQ,MRT_SID,EXPIRES_AT,REVOKED_AT,MRT_REVOKED_AT.*FOR UPDATE`).WithArgs("proof")
+			if kind == "query-failure" {
+				q.WillReturnError(errors.New("synthetic query"))
+			} else {
+				rows := sqlmock.NewRows([]string{"USR_SEQ", "MRT_SID", "EXPIRES_AT", "REVOKED_AT", "MRT_REVOKED_AT"})
+				if kind != "missing" {
+					rows.AddRow(42, "family", expiry, time.Now(), nil)
+				}
+				q.WillReturnRows(rows)
+			}
+			if kind == "revoked-confirmed" {
+				mock.ExpectCommit()
+			} else if kind == "revoked-commit-failure" {
+				mock.ExpectCommit().WillReturnError(errors.New("synthetic commit"))
+			} else {
+				mock.ExpectRollback()
+			}
+			confirmed, err := repo.RevokeMobileSessionByProofWithDeviceResult(context.Background(), 42, "family", "proof", expiry, "")
+			if confirmed != (kind == "revoked-confirmed") {
+				t.Fatalf("confirmed=%v kind=%s", confirmed, kind)
+			}
+			expectError := kind == "query-failure" || kind == "revoked-commit-failure"
+			if (err != nil) != expectError {
+				t.Fatalf("kind=%s error=%v", kind, err)
 			}
 			if err := mock.ExpectationsWereMet(); err != nil {
 				t.Fatal(err)

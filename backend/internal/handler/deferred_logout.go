@@ -33,7 +33,15 @@ func (h *AuthHandler) DeferredLogout(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	h.writeDeferredLogoutOutcome(w, h.service.RevokeEndedMobileSessionWithDevice(r.Context(), request.RefreshToken, device), false)
+	confirmed, err := h.service.RevokeEndedMobileSessionWithDeviceResult(r.Context(), request.RefreshToken, device)
+	if err == nil {
+		result := "unconfirmed"
+		if confirmed {
+			result = "confirmed"
+		}
+		w.Header().Set("X-Session-Logout-Result", result)
+	}
+	h.writeDeferredLogoutOutcome(w, err, false)
 }
 
 // DeferredLogoutAll is proof-authorized once; never refresh or retry using revoked proof.

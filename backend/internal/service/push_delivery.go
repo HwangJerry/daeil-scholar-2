@@ -365,6 +365,10 @@ func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryIte
 	}
 	for _, target := range targets {
 		for attempt := 0; attempt < 3; attempt++ {
+			if !n.messageStillAvailable(item) {
+				return
+			}
+			// Keep ownership/liveness as the final DB read before provider dispatch.
 			if guard, ok := n.store.(interface {
 				DeliveryTargetStillCurrent(int, model.PushDeliveryTarget) (bool, error)
 			}); ok {
@@ -372,9 +376,6 @@ func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryIte
 				if err != nil || !current {
 					break
 				}
-			}
-			if !n.messageStillAvailable(item) {
-				return
 			}
 			err = n.provider.Send(ctx, target, payload)
 			if err == nil {

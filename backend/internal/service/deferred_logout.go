@@ -16,18 +16,24 @@ func (s *AuthService) RevokeEndedMobileSession(ctx context.Context, proof string
 }
 
 func (s *AuthService) RevokeEndedMobileSessionWithDevice(ctx context.Context, proof, device string) error {
+	_, err := s.RevokeEndedMobileSessionWithDeviceResult(ctx, proof, device)
+	return err
+}
+
+// A signed expired/missing proof is idempotent, but is not revocation confirmation.
+func (s *AuthService) RevokeEndedMobileSessionWithDeviceResult(ctx context.Context, proof, device string) (bool, error) {
 	if device != "" && !validPushDeviceToken(device) {
-		return ErrInvalidPushRequest
+		return false, ErrInvalidPushRequest
 	}
 	claims, err := s.endedSessionProof(proof)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !claims.ExpiresAt.After(time.Now()) {
-		return nil
+		return false, nil
 	}
 	account, _ := strconv.Atoi(claims.Subject)
-	return s.repo.RevokeMobileSessionByProofWithDevice(ctx, account, claims.SessionID, claims.ID, claims.ExpiresAt.Time, device)
+	return s.repo.RevokeMobileSessionByProofWithDeviceResult(ctx, account, claims.SessionID, claims.ID, claims.ExpiresAt.Time, device)
 }
 
 // Global logout is one-shot: absent/revoked/expired original proof is not success.
