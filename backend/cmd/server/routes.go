@@ -170,6 +170,7 @@ func registerPublicRoutes(r chi.Router, h handlers, authService *service.AuthSer
 	r.Get("/api/auth/check-phone", h.auth.CheckPhone)
 	r.Get("/api/auth/check-email", h.auth.CheckEmail)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/social/link", h.auth.SocialLink)
+	r.Post("/api/auth/social/link/cancel", h.auth.SocialLinkCancel)
 	r.Get("/api/auth/social/link/prefill", h.auth.SocialLinkPrefill)
 	r.Post("/api/auth/social/link/photo", h.socialLinkPhoto.Upload)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/auth/kakao/link", h.auth.KakaoLink)

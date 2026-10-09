@@ -176,6 +176,14 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	imageResizer := service.NewImageResizeService(1200)
 	fileRecordSvc := service.NewFileRecordService(fileRepo)
 	uploadOrchestrator := service.NewUploadOrchestrator(fileStorage, imageResizer, fileRecordSvc)
+	uploadOrchestrator.SetSiteOrigin(cfg.Server.SiteBaseURL)
+	socialLinkTokens.SetUploadDiscarder(func(result *service.UploadResult) error {
+		err := uploadOrchestrator.DiscardUnclaimedProfile(result)
+		if err != nil {
+			logger.Error().Err(err).Int("fSeq", result.FSeq).Msg("social signup orphan photo cleanup failed")
+		}
+		return err
+	})
 	attachmentStorage := service.NewAttachmentStorageService(cfg.Upload.BasePath)
 	attachmentUploadOrchestrator := service.NewAttachmentUploadOrchestrator(attachmentStorage, fileRecordSvc)
 	profileUploadService := service.NewProfileUploadService(profileRepo, uploadOrchestrator)

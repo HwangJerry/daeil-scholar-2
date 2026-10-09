@@ -10,6 +10,11 @@ import (
 // A nil excluded user checks every surviving reference, including public authors.
 // Locking reads cover the scanned ranges through unlink and queue acknowledgement.
 func rejectOtherErasureFileReferences(tx *sqlx.Tx, s erasureSchema, local, origin string, excludedUser *int) error {
+	return rejectOtherErasureFileReferencesExceptUpload(tx, s, local, origin, excludedUser, 0)
+}
+
+// excludedUpload is an exact, code-owned WEO_FILES row pending discard.
+func rejectOtherErasureFileReferencesExceptUpload(tx *sqlx.Tx, s erasureSchema, local, origin string, excludedUser *int, excludedUpload int) error {
 	type referenceQuery struct {
 		sql     string
 		args    []interface{}
@@ -53,6 +58,10 @@ func rejectOtherErasureFileReferences(tx *sqlx.Tx, s erasureSchema, local, origi
 		if excludedUser != nil && s["ALUMNI_UPLOAD_OWNER"] != nil {
 			predicate += " AND F_SEQ NOT IN (SELECT F_SEQ FROM ALUMNI_UPLOAD_OWNER WHERE USR_SEQ=? AND F_SEQ IS NOT NULL)"
 			args = append(args, *excludedUser)
+		}
+		if excludedUpload > 0 {
+			predicate += " AND F_SEQ<>?"
+			args = append(args, excludedUpload)
 		}
 		queries = append(queries, referenceQuery{"SELECT CONCAT(FILE_PATH,'/',FILE_NAME) FROM WEO_FILES WHERE " + predicate + " FOR UPDATE", args, false})
 	}

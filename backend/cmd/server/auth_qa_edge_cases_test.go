@@ -78,6 +78,14 @@ func TestAuthQAAPIRecoveryBoundaries(t *testing.T) {
 		verificationID = decodeGolden[model.PhoneVerificationRequestResult](t, body).VerificationID
 		body = s.request(t, http.MethodPost, "/api/auth/phone/verification/confirm", map[string]string{"verificationId": verificationID, "code": goldenCode}, "", "ios", "100", 200)
 		verificationToken = decodeGolden[model.PhoneVerificationConfirmResult](t, body).VerificationToken
+		weakBody := s.request(t, http.MethodPost, "/api/auth/register", map[string]any{
+			"usrId": "synthetic_weak", "password": "x", "name": "Synthetic QA", "phone": goldenPhone,
+			"email": "weak@example.test", "fn": "20", "fmDept": "영어", "phoneVerificationToken": verificationToken,
+			"privacyConsent": map[string]any{"version": goldenConsentVersion, "accepted": true},
+		}, "", "ios", "100", 400)
+		assertGoldenError(t, weakBody, "INVALID_PASSWORD")
+		goldenCount(t, s.db, 0, `SELECT COUNT(*) FROM WEO_MEMBER WHERE USR_ID='synthetic_weak'`)
+		goldenCount(t, s.db, 1, `SELECT COUNT(*) FROM ALUMNI_PHONE_VERIFICATION WHERE APV_ID=? AND CONSUMED_YN='N'`, verificationID)
 		body = s.request(t, http.MethodPost, "/api/auth/register", map[string]any{
 			"usrId": "golden_member", "password": goldenPassword, "name": "Synthetic QA", "phone": goldenPhone,
 			"email": "qa@example.test", "fn": "20", "fmDept": "영어", "phoneVerificationToken": verificationToken,
@@ -119,19 +127,20 @@ func TestAuthQAAPIRecoveryBoundaries(t *testing.T) {
 		goldenExec(t, s.db, `CREATE TRIGGER auth_qa_fail_session_insert BEFORE INSERT ON ALUMNI_MOBILE_REFRESH_TOKEN FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='synthetic session write failure'`)
 		body := s.request(t, http.MethodPost, "/api/auth/social/link", request, "", "ios", "100", 500)
 		goldenExec(t, s.db, `DROP TRIGGER auth_qa_fail_session_insert`)
-		assertGoldenError(t, body, "LOGIN_FAILED")
+		assertGoldenError(t, body, "SIGNUP_COMPLETED_LOGIN_REQUIRED")
 		var seq int
 		if err := s.db.Get(&seq, `SELECT USR_SEQ FROM WEO_MEMBER WHERE USR_PHONE=?`, goldenPhone); err != nil {
 			t.Fatal(err)
 		}
 		goldenCount(t, s.db, 0, `SELECT COUNT(*) FROM ALUMNI_MOBILE_REFRESH_TOKEN WHERE USR_SEQ=?`, seq)
+		goldenCount(t, s.db, 1, `SELECT COUNT(*) FROM AUTH_CONSENT WHERE ACCOUNT_ID=? AND IS_ACCEPTED=1`, seq)
 		goldenCount(t, s.db, 1, `SELECT COUNT(*) FROM ALUMNI_PHONE_VERIFICATION WHERE APV_ID=? AND CONSUMED_YN='Y'`, verificationID)
 		goldenCount(t, s.db, 1, `SELECT COUNT(*) FROM ALUMNI_PHONE_VERIFICATION WHERE APV_ID=? AND CONSUMED_USR_SEQ=? AND CONSUMED_AT IS NOT NULL`, verificationID, seq)
 		if _, err := linkStore.Begin(linkToken); !errors.Is(err, service.ErrSocialLinkTokenConsumed) {
 			t.Fatalf("committed account must consume its continuation: %v", err)
 		}
-		body = s.request(t, http.MethodPost, "/api/auth/social/link", request, "", "ios", "100", 400)
-		assertGoldenError(t, body, "PHONE_NOT_VERIFIED")
+		body = s.request(t, http.MethodPost, "/api/auth/social/link", request, "", "ios", "100", 409)
+		assertGoldenError(t, body, "SIGNUP_ALREADY_COMPLETED")
 		// Provider verification is synthetic; all account lookup/session operations use the real DB.
 		social := service.NewSocialAuthService(s.deps.authService, service.NewMobileSessionIssuer(s.deps.authService), linkStore, nil, authQASocialVerifier{subject: subject})
 		recovered, err := social.Authenticate(context.Background(), model.KakaoAuthorization{AccessToken: "synthetic-provider-token"})

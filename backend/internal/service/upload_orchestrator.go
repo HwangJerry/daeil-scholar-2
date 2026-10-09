@@ -4,9 +4,10 @@ package service
 import "mime/multipart"
 
 type UploadOrchestrator struct {
-	storage *FileStorageService
-	resizer *ImageResizeService
-	record  *FileRecordService
+	storage    *FileStorageService
+	resizer    *ImageResizeService
+	record     *FileRecordService
+	siteOrigin string
 }
 
 func NewUploadOrchestrator(storage *FileStorageService, resizer *ImageResizeService, record *FileRecordService) *UploadOrchestrator {
@@ -48,3 +49,13 @@ func (o *UploadOrchestrator) Discard(result *UploadResult, gate string) error {
 	}
 	return o.record.repo.DeleteUnassignedUpload(result.FSeq)
 }
+
+// DiscardUnclaimedProfile is only for actual UploadResults created by social
+// signup, never arbitrary form/provider URLs. Re-check DB ownership on retries.
+func (o *UploadOrchestrator) DiscardUnclaimedProfile(result *UploadResult) error {
+	return o.record.repo.DiscardSignupProfileUpload(result.FSeq, result.URL, o.siteOrigin, func(_ string) error {
+		return o.storage.DeleteUploadedURL(result.URL, "profile")
+	})
+}
+
+func (o *UploadOrchestrator) SetSiteOrigin(origin string) { o.siteOrigin = origin }

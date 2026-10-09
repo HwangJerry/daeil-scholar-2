@@ -18,6 +18,17 @@ import (
 
 var fnDigitRegex = regexp.MustCompile(`^[0-9]+$`)
 
+// The handler owns the continuation transition; the concrete store supplies
+// atomic lifecycle operations and can be replaced in failure-boundary tests.
+type socialSignupContinuationStore interface {
+	Put(string, model.SocialLinkData, time.Duration) (time.Time, error)
+	Snapshot(string) (service.SocialLinkTokenSnapshot, error)
+	Begin(string) (service.SocialLinkTokenLease, error)
+	Release(service.SocialLinkTokenLease) error
+	ConsumeWithPhoto(service.SocialLinkTokenLease, string) error
+	Cancel(string) error
+}
+
 type AuthHandler struct {
 	service          *service.AuthService
 	mobileIssuer     *service.MobileSessionIssuer
@@ -27,7 +38,7 @@ type AuthHandler struct {
 	memberSvc        *service.MemberService
 	registerSvc      *service.RegistrationService
 	cache            *cache.Cache
-	socialLinkTokens *service.SocialLinkTokenStore
+	socialLinkTokens socialSignupContinuationStore
 	phoneVerifier    *service.PhoneVerificationService
 	consentSvc       *service.ConsentService
 	cfg              *config.Config
@@ -255,12 +266,18 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if !h.requirePrivacyConsent(w, req.PrivacyConsent) {
 		return
 	}
+	if err := service.ValidateNewPassword(req.Password); err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_PASSWORD", "비밀번호는 UTF-8 기준 8바이트 이상이며 영문, 숫자, 특수문자를 포함해야 합니다")
+		return
+	}
 	if !h.requirePhoneVerification(w, req.PhoneVerificationToken, req.Phone) {
 		return
 	}
 	user, err := h.registerSvc.Register(req)
 	if err != nil {
 		switch {
+		case errors.Is(err, service.ErrInvalidNewPassword):
+			respondError(w, http.StatusBadRequest, "INVALID_PASSWORD", "비밀번호는 UTF-8 기준 8바이트 이상이며 영문, 숫자, 특수문자를 포함해야 합니다")
 		case errors.Is(err, service.ErrIDTaken):
 			respondError(w, http.StatusConflict, "ID_TAKEN", "이미 사용 중인 아이디입니다")
 		case errors.Is(err, service.ErrPhonePendingDeletion):

@@ -3,19 +3,10 @@ package service
 
 import (
 	"errors"
-	"regexp"
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/repository"
 )
-
-var (
-	pwChangeHasLetter  = regexp.MustCompile(`[a-zA-Z]`)
-	pwChangeHasNumber  = regexp.MustCompile(`[0-9]`)
-	pwChangeHasSpecial = regexp.MustCompile(`[^a-zA-Z0-9]`)
-)
-
-const minChangePwLength = 8
 
 // PasswordChangeService handles password mutation for logged-in id/pw users.
 // It is distinct from PasswordResetService, which handles the forgotten-password flow.
@@ -50,11 +41,8 @@ func NewAtomicPasswordChangeService(repo atomicPasswordChanger) *PasswordChangeS
 // ChangePassword verifies currentPwd against the stored hash and replaces it with newPwd.
 // Returns errors.New("NO_PASSWORD") for Kakao-only users and "WRONG_PASSWORD" on mismatch.
 func (s *PasswordChangeService) ChangePassword(usrSeq int, currentPwd, newPwd string) error {
-	if len(newPwd) < minChangePwLength {
-		return errors.New("비밀번호는 최소 8자 이상이어야 합니다")
-	}
-	if !pwChangeHasLetter.MatchString(newPwd) || !pwChangeHasNumber.MatchString(newPwd) || !pwChangeHasSpecial.MatchString(newPwd) {
-		return errors.New("비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다")
+	if err := ValidateNewPassword(newPwd); err != nil {
+		return err
 	}
 	if s.atomicRepo != nil {
 		replacement, err := s.hasher.NewCredential(0, model.IdentityProviderLocalUsername, newPwd)

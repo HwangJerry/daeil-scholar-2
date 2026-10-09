@@ -62,7 +62,7 @@ func TestRegisterDistinguishesPendingDeletionFromTakenNumber(t *testing.T) {
 	}
 	for _, tc := range cases {
 		svc := &RegistrationService{memberRepo: &pendingDeletionRegistrationRepo{phoneExists: true, pendingDeletion: tc.pending}}
-		_, err := svc.Register(model.RegisterRequest{UsrID: "member1", Phone: "01012345678"})
+		_, err := svc.Register(model.RegisterRequest{UsrID: "member1", Phone: "01012345678", Password: "Valid123!"})
 		if !errors.Is(err, tc.want) {
 			t.Errorf("%s: got %v, want %v", tc.name, err, tc.want)
 		}
