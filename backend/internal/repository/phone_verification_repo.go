@@ -111,6 +111,17 @@ func (r *PhoneVerificationRepository) FindUsableGrant(grantTokenHash string) (st
 // ConsumeGrant atomically marks a verified, unconsumed, unexpired grant as used and
 // returns the phone number it was issued for. Returns "" when the grant is not usable.
 func (r *PhoneVerificationRepository) ConsumeGrant(grantTokenHash string) (string, error) {
+	return r.consumeGrant(grantTokenHash, "", 0)
+}
+
+// Bind only the account whose canonical phone matches, in the consumption transaction.
+func (r *PhoneVerificationRepository) ConsumeGrantForMember(hash, phone string, user int) (string, error) {
+	if user <= 0 {
+		return "", nil
+	}
+	return r.consumeGrant(hash, phone, user)
+}
+func (r *PhoneVerificationRepository) consumeGrant(grantTokenHash, expectedPhone string, user int) (string, error) {
 	tx, err := r.DB.Beginx()
 	if err != nil {
 		return "", err
@@ -135,7 +146,21 @@ func (r *PhoneVerificationRepository) ConsumeGrant(grantTokenHash string) (strin
 		return "", err
 	}
 
-	if _, err := tx.Exec(`UPDATE ALUMNI_PHONE_VERIFICATION SET CONSUMED_YN = 'Y' WHERE APV_SEQ = ?`, record.Seq); err != nil {
+	if expectedPhone != "" && record.Phone != expectedPhone {
+		return "", nil
+	}
+	if user > 0 {
+		var member int
+		if err = tx.Get(&member, `SELECT USR_SEQ FROM WEO_MEMBER WHERE USR_SEQ=? AND USR_PHONE=? AND USR_STATUS<>'AAA' FOR UPDATE`, user, record.Phone); err == sql.ErrNoRows {
+			return "", nil
+		} else if err != nil {
+			return "", err
+		}
+		_, err = tx.Exec(`UPDATE ALUMNI_PHONE_VERIFICATION SET CONSUMED_YN='Y',CONSUMED_USR_SEQ=?,CONSUMED_AT=NOW() WHERE APV_SEQ=?`, user, record.Seq)
+	} else {
+		_, err = tx.Exec(`UPDATE ALUMNI_PHONE_VERIFICATION SET CONSUMED_YN='Y' WHERE APV_SEQ=?`, record.Seq)
+	}
+	if err != nil {
 		return "", err
 	}
 	if err := tx.Commit(); err != nil {
@@ -147,7 +172,7 @@ func (r *PhoneVerificationRepository) ConsumeGrant(grantTokenHash string) (strin
 // DeleteExpiredBefore removes verification rows older than the cutoff. Codes and
 // grant tokens are transient credentials and must not linger past their usefulness.
 func (r *PhoneVerificationRepository) DeleteExpiredBefore(cutoff time.Time) (int64, error) {
-	result, err := r.DB.Exec(`DELETE FROM ALUMNI_PHONE_VERIFICATION WHERE REG_DATE < ?`, cutoff)
+	result, err := r.DB.Exec(`DELETE FROM ALUMNI_PHONE_VERIFICATION WHERE REG_DATE < ? AND (CONSUMED_YN='Y' OR (EXPIRES_AT<=NOW() AND (GRANT_EXPIRES_AT IS NULL OR GRANT_EXPIRES_AT<=NOW())))`, cutoff)
 	if err != nil {
 		return 0, err
 	}

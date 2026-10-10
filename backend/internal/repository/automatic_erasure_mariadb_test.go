@@ -50,6 +50,7 @@ func TestAutomaticErasureOnMariaDB101(t *testing.T) {
 	}
 
 	// Existing paths without WEO_FILES rows survive replacements until erasure.
+	db.MustExec(`CREATE TABLE WEO_FILES(F_SEQ INT PRIMARY KEY,F_GATE VARCHAR(2),F_JOIN_SEQ INT,FILE_PATH VARCHAR(255),FILE_NAME VARCHAR(255)) ENGINE=InnoDB; INSERT INTO WEO_FILES VALUES(101,'PR',0,'/uploads/profile','new42.jpg')`)
 	profileRepo := &ProfileRepository{DB: db}
 	if err := profileRepo.AssignProfileUpload(42, 101, "/uploads/profile/new42.jpg", false); err != nil {
 		t.Fatal(err)

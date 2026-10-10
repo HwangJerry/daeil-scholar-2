@@ -3,6 +3,8 @@ import { api } from './client';
 
 export type DeletionStatus = 'pending' | 'processing' | 'completed' | 'cancelled';
 export interface ErasureTarget {
+ waitCount?: number;
+ waitUntil?: string;
  target: string;
  status: 'pending' | 'running' | 'complete' | 'not_applicable' | 'manual' | 'failed';
  evidenceReference: string;

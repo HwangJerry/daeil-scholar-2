@@ -81,6 +81,19 @@ func (v *InternalErasureVerifier) EraseTargets(ctx context.Context, s model.Eras
 			}
 		case "other_identifiers":
 			evidence, err = v.identifierEvidence(s)
+			if err == nil && evidence == "" {
+				if store, ok := v.Identifiers.(interface {
+					SMSCompletionWait(model.ErasureExternalSubject) (*model.ErasureCompletionWait, error)
+				}); ok {
+					var wait *model.ErasureCompletionWait
+					wait, err = store.SMSCompletionWait(s)
+					if wait != nil {
+						target.Code = wait.Code
+						target.WaitCount = wait.Count
+						target.WaitUntil = &wait.ExpectedAt
+					}
+				}
+			}
 		case "external_data":
 			evidence = v.externalEvidence(ctx, s, status)
 		}
@@ -170,14 +183,22 @@ func (v *InternalErasureVerifier) identifierEvidence(s model.ErasureExternalSubj
 	if v.Identifiers == nil || len(values) == 0 {
 		return "", nil
 	}
-	matches, err := v.Identifiers.IdentifierMatches(values)
+	var matches []model.AccountDeletionFootprint
+	var err error
+	if store, ok := v.Identifiers.(interface {
+		IdentifierMatchesForSubject(model.ErasureExternalSubject, []string) ([]model.AccountDeletionFootprint, error)
+	}); ok {
+		matches, err = store.IdentifierMatchesForSubject(s, values)
+	} else {
+		matches, err = v.Identifiers.IdentifierMatches(values)
+	}
 	if err != nil {
 		return "", err
 	}
 	if len(matches) > 0 {
 		return "", nil
 	}
-	return "로그인·이메일·전화·소셜 식별값 운영 DB 전체 검색 0건", nil
+	return "소유권이 확인된 다른 회원 기록을 제외한 식별값 잔류 0건", nil
 }
 
 func erasureIdentifierValues(s model.ErasureExternalSubject) []string {

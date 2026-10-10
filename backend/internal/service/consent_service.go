@@ -68,10 +68,18 @@ func (s *ConsentService) Evaluate(consent *model.PrivacyConsent) error {
 
 // Record persists an accepted consent for a newly created account. Nothing is written
 // for nil consent (legacy client) or when the store is unavailable. Failures are
-// returned for logging; the account already exists, so callers must not roll back.
+// returned to the caller. Signup uses SignupConsent with the member transaction.
 func (s *ConsentService) Record(accountID int, consent *model.PrivacyConsent) error {
 	if consent == nil || !consent.Accepted || s.store == nil {
 		return nil
 	}
 	return s.store.RecordAccepted(accountID, model.ConsentTypePrivacy, consent.Version, true, s.now())
+}
+
+// SignupConsent captures accepted notice evidence for the account transaction.
+func (s *ConsentService) SignupConsent(consent *model.PrivacyConsent) *model.SignupConsent {
+	if consent == nil || !consent.Accepted || s.store == nil {
+		return nil
+	}
+	return &model.SignupConsent{Version: consent.Version, AcceptedAt: s.now()}
 }

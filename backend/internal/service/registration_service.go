@@ -92,6 +92,9 @@ func (s *RegistrationService) SaveInitialTags(usrSeq int, tags []string) error {
 // Register validates uniqueness, creates the member, and persists any signup-time tags.
 // Returns the created user or ErrIDTaken / ErrPhoneTaken on conflict.
 func (s *RegistrationService) Register(req model.RegisterRequest) (*model.User, error) {
+	if err := ValidateNewPassword(req.Password); err != nil {
+		return nil, err
+	}
 	canonicalPhone := model.NormalizePhoneNumber(req.Phone)
 	if !canonicalPhone.Valid() {
 		return nil, ErrInvalidPhone

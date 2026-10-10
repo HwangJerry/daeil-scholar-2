@@ -11,12 +11,24 @@ import (
 	"github.com/dflh-saf/backend/internal/config"
 	"github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
 )
 
 var fnDigitRegex = regexp.MustCompile(`^[0-9]+$`)
+
+// The handler owns the continuation transition; the concrete store supplies
+// atomic lifecycle operations and can be replaced in failure-boundary tests.
+type socialSignupContinuationStore interface {
+	Put(string, model.SocialLinkData, time.Duration) (time.Time, error)
+	Snapshot(string) (service.SocialLinkTokenSnapshot, error)
+	Begin(string) (service.SocialLinkTokenLease, error)
+	Release(service.SocialLinkTokenLease) error
+	ConsumeWithPhoto(service.SocialLinkTokenLease, string) error
+	Cancel(string) error
+}
 
 type AuthHandler struct {
 	service          *service.AuthService
@@ -27,7 +39,7 @@ type AuthHandler struct {
 	memberSvc        *service.MemberService
 	registerSvc      *service.RegistrationService
 	cache            *cache.Cache
-	socialLinkTokens *service.SocialLinkTokenStore
+	socialLinkTokens socialSignupContinuationStore
 	phoneVerifier    *service.PhoneVerificationService
 	consentSvc       *service.ConsentService
 	cfg              *config.Config
@@ -67,17 +79,6 @@ func (h *AuthHandler) requirePrivacyConsent(w http.ResponseWriter, consent *mode
 	return false
 }
 
-// recordPrivacyConsent stores the consent after the account exists. Like the phone
-// grant, a failure here must not undo the signup, so it is logged.
-func (h *AuthHandler) recordPrivacyConsent(accountID int, consent *model.PrivacyConsent) {
-	if h.consentSvc == nil {
-		return
-	}
-	if err := h.consentSvc.Record(accountID, consent); err != nil {
-		h.logger.Error().Err(err).Int("usrSeq", accountID).Msg("register: failed to record privacy consent")
-	}
-}
-
 // requirePhoneVerification confirms a grant exists for the phone number without
 // spending it. Returns false after writing the error response.
 func (h *AuthHandler) requirePhoneVerification(w http.ResponseWriter, token, phone string) bool {
@@ -99,15 +100,16 @@ func (h *AuthHandler) requirePhoneVerification(w http.ResponseWriter, token, pho
 	return false
 }
 
-// spendPhoneVerification marks the grant used after the account exists. A failure here
-// leaves an already-created account intact, so it is logged rather than surfaced.
-func (h *AuthHandler) spendPhoneVerification(token, phone string) {
-	if h.phoneVerifier == nil {
-		return
+// Validated evidence is internal-only; repositories store it atomically with the member.
+func (h *AuthHandler) signupEvidence(token string, consent *model.PrivacyConsent) *model.SignupEvidence {
+	evidence := &model.SignupEvidence{}
+	if h.phoneVerifier != nil {
+		evidence.PhoneGrantHash = h.phoneVerifier.SignupGrantHash(token)
 	}
-	if err := h.phoneVerifier.ConsumeGrantForPhone(token, phone); err != nil {
-		h.logger.Error().Err(err).Msg("register: failed to consume phone verification grant")
+	if h.consentSvc != nil {
+		evidence.Consent = h.consentSvc.SignupConsent(consent)
 	}
+	return evidence
 }
 
 func NewAuthHandler(
@@ -255,12 +257,21 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if !h.requirePrivacyConsent(w, req.PrivacyConsent) {
 		return
 	}
+	if err := service.ValidateNewPassword(req.Password); err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_PASSWORD", "비밀번호는 UTF-8 기준 8바이트 이상이며 영문, 숫자, 특수문자를 포함해야 합니다")
+		return
+	}
 	if !h.requirePhoneVerification(w, req.PhoneVerificationToken, req.Phone) {
 		return
 	}
+	req.SignupEvidence = h.signupEvidence(req.PhoneVerificationToken, req.PrivacyConsent)
 	user, err := h.registerSvc.Register(req)
 	if err != nil {
 		switch {
+		case errors.Is(err, repository.ErrSignupPhoneGrantInvalid):
+			respondError(w, http.StatusBadRequest, "PHONE_NOT_VERIFIED", "휴대폰 인증을 다시 완료해주세요")
+		case errors.Is(err, service.ErrInvalidNewPassword):
+			respondError(w, http.StatusBadRequest, "INVALID_PASSWORD", "비밀번호는 UTF-8 기준 8바이트 이상이며 영문, 숫자, 특수문자를 포함해야 합니다")
 		case errors.Is(err, service.ErrIDTaken):
 			respondError(w, http.StatusConflict, "ID_TAKEN", "이미 사용 중인 아이디입니다")
 		case errors.Is(err, service.ErrPhonePendingDeletion):
@@ -279,8 +290,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	h.spendPhoneVerification(req.PhoneVerificationToken, req.Phone)
-	h.recordPrivacyConsent(user.USRSeq, req.PrivacyConsent)
 	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
 	respondJSON(w, http.StatusCreated, authUser)
 }

@@ -20,6 +20,13 @@ func (r *AccountDeletionRequestRepository) PrepareErasure(w model.ErasureWork, v
 	if err != nil {
 		return err
 	}
+	blocked, err := billingErasureBlocked(tx, s, w.RequestID, w.UserSeq)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return &model.ErasureBlocked{Code: "BILLING_REVOCATION_REVIEW_REQUIRED"}
+	}
 	hasDonations := false
 	if s["WEO_ORDER"] != nil {
 		var conflicting int

@@ -126,6 +126,15 @@ func (s *AccountDeletionRequestService) Resolve(id int64, operator int, request 
 		}
 		return store.CancelVerified(id, operator, request.EvidenceReference)
 	}
+	if request.Action == "subscription_review" {
+		store, ok := s.Store.(interface {
+			ReviewErasureSubscription(int64, int, model.AccountDeletionResolution) error
+		})
+		if !ok {
+			return &model.ValidationError{Msg: "구독 종료 검토 기능이 준비되지 않았습니다."}
+		}
+		return store.ReviewErasureSubscription(id, operator, request)
+	}
 	if request.Action == "target" {
 		store, ok := s.Store.(interface {
 			ReviewErasureTarget(int64, int, model.ErasureTarget) error

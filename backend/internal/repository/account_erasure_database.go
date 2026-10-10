@@ -38,17 +38,12 @@ func (r *AccountDeletionRequestRepository) EraseDatabase(w model.ErasureWork, se
 	if err != nil {
 		return err
 	}
-	// Subscription tokens require the existing billing-key revocation SOP.
-	for _, table := range []string{"SUBSCRIPTION", "WEO_ORDER_PROFILE"} {
-		if s[table] != nil {
-			var n int
-			if err = tx.Get(&n, "SELECT COUNT(*) FROM `"+table+"` WHERE USR_SEQ=?", w.UserSeq); err != nil {
-				return err
-			}
-			if n > 0 {
-				return &model.ErasureBlocked{Code: "BILLING_REVOCATION_REVIEW_REQUIRED"}
-			}
-		}
+	blocked, err := billingErasureBlocked(tx, s, w.RequestID, w.UserSeq)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return &model.ErasureBlocked{Code: "BILLING_REVOCATION_REVIEW_REQUIRED"}
 	}
 	if err = queueErasureFiles(tx, s, w, r.SiteOrigin); err != nil {
 		return err

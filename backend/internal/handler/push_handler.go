@@ -8,12 +8,14 @@ import (
 
 	"github.com/dflh-saf/backend/internal/middleware"
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
 )
 
 type PushServicer interface {
 	RegisterDevice(usrSeq int, registration model.PushDeviceRegistration) error
 	UnregisterDevice(usrSeq int, deviceToken string) error
+	UnregisterDeviceForSession(usrSeq int, sessionID, deviceToken string) error
 	GetPreferences(usrSeq int) (*model.PushPreferences, error)
 	UpdatePreferences(usrSeq int, update model.PushPreferencesUpdate) (*model.PushPreferences, error)
 }
@@ -45,6 +47,7 @@ func (h *PushHandler) RegisterDevice(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "요청 본문이 올바르지 않습니다")
 		return
 	}
+	request.SessionID = user.SessionID
 	if err := h.service.RegisterDevice(user.USRSeq, request); err != nil {
 		h.respondMutationError(w, err, "기기를 등록하지 못했습니다")
 		return
@@ -62,7 +65,13 @@ func (h *PushHandler) UnregisterDevice(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "요청 본문이 올바르지 않습니다")
 		return
 	}
-	if err := h.service.UnregisterDevice(user.USRSeq, request.DeviceToken); err != nil {
+	var err error
+	if user.SessionID != "" {
+		err = h.service.UnregisterDeviceForSession(user.USRSeq, user.SessionID, request.DeviceToken)
+	} else {
+		err = h.service.UnregisterDevice(user.USRSeq, request.DeviceToken)
+	}
+	if err != nil {
 		h.respondMutationError(w, err, "기기 연결을 해제하지 못했습니다")
 		return
 	}
@@ -105,6 +114,10 @@ func (h *PushHandler) PutPreferences(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PushHandler) respondMutationError(w http.ResponseWriter, err error, message string) {
+	if errors.Is(err, repository.ErrRefreshTokenInvalid) {
+		respondError(w, http.StatusUnauthorized, "SESSION_ENDED", "종료된 세션입니다.")
+		return
+	}
 	if errors.Is(err, service.ErrInvalidPushRequest) {
 		respondError(w, http.StatusBadRequest, "INVALID_REQUEST", "요청 값이 올바르지 않습니다")
 		return

@@ -17,6 +17,7 @@ const (
 
 // SocialLinkParams holds the inputs for the social account linking flow.
 type SocialLinkParams struct {
+	SignupEvidence      *model.SignupEvidence
 	Mode                SocialLinkMode
 	Provider            string
 	SocialID            string
@@ -80,6 +81,7 @@ func (s *AuthService) createNewSocialAccount(params SocialLinkParams, memberSvc 
 		return nil, false, ErrOwnershipConfirmationRequired
 	}
 	newUser, err := s.repo.CreateSocialAccount(repository.SocialAccountFields{
+		SignupEvidence:      params.SignupEvidence,
 		Provider:            params.Provider,
 		SocialID:            params.SocialID,
 		SocialEmail:         params.Email,

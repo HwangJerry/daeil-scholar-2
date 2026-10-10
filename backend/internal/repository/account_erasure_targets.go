@@ -6,6 +6,7 @@ import (
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
 	"strings"
+	"time"
 )
 
 func seedErasureTargets(tx *sqlx.Tx, id int64) error {
@@ -19,7 +20,24 @@ func seedErasureTargets(tx *sqlx.Tx, id int64) error {
 func (r *AccountDeletionRequestRepository) ErasureTargets(id int64) ([]model.ErasureTarget, error) {
 	targets := []model.ErasureTarget{}
 	err := r.DB.Select(&targets, `SELECT TARGET,STATUS,EVIDENCE_REFERENCE,LAST_CODE,ATTEMPTS,LAST_ATTEMPT_AT,UPDATED_AT FROM ALUMNI_ERASURE_TARGET WHERE REQUEST_ID=? ORDER BY TARGET`, id)
+	if err != nil {
+		return nil, err
+	}
 	for i := range targets {
+		if targets[i].Code == model.PhoneVerificationWaitCode {
+			var wait struct {
+				Count int64      `db:"WAIT_COUNT"`
+				Until *time.Time `db:"WAIT_UNTIL"`
+			}
+			if err = r.DB.Get(&wait, `SELECT WAIT_COUNT,WAIT_UNTIL FROM ALUMNI_ERASURE_TARGET WHERE REQUEST_ID=? AND TARGET=?`, id, targets[i].Name); err != nil {
+				return nil, err
+			}
+			targets[i].WaitCount = wait.Count
+			if wait.Until != nil {
+				until := deletionTimeUTC(*wait.Until)
+				targets[i].WaitUntil = &until
+			}
+		}
 		targets[i].UpdatedAt = deletionTimeUTC(targets[i].UpdatedAt)
 		if targets[i].LastAttemptAt != nil {
 			v := deletionTimeUTC(*targets[i].LastAttemptAt)
@@ -78,6 +96,9 @@ func (r *AccountDeletionRequestRepository) RecordErasureTargets(id int64, target
 		default:
 			return ErrDeletionIncomplete
 		}
+		if target.Code == model.PhoneVerificationWaitCode && (target.Name != "other_identifiers" || target.Status != "pending" || target.WaitCount <= 0 || target.WaitUntil == nil) {
+			return ErrDeletionIncomplete
+		}
 		// Code values are owned by our worker, never raw remote errors.
 		code := ""
 		switch target.Status {
@@ -87,6 +108,14 @@ func (r *AccountDeletionRequestRepository) RecordErasureTargets(id int64, target
 			code = "EXTERNAL_ERASURE_RETRY_REQUIRED"
 		case "manual":
 			code = "EXTERNAL_ERASURE_REVIEW_REQUIRED"
+		}
+		if target.Code == model.PhoneVerificationWaitCode {
+			code = target.Code
+			// Deletion DATETIME columns store UTC wall-clock values. A time.Time
+			// argument is converted to the driver's Seoul location before storage.
+			if _, err = tx.Exec(`UPDATE ALUMNI_ERASURE_TARGET SET WAIT_COUNT=?,WAIT_UNTIL=? WHERE REQUEST_ID=? AND TARGET=? AND STATUS NOT IN ('complete','not_applicable')`, target.WaitCount, target.WaitUntil.UTC().Format(time.DateTime), id, target.Name); err != nil {
+				return err
+			}
 		}
 		if _, err = tx.Exec(`UPDATE ALUMNI_ERASURE_TARGET SET STATUS=?,EVIDENCE_REFERENCE=?,LAST_CODE=?,UPDATED_AT=UTC_TIMESTAMP()
  WHERE REQUEST_ID=? AND TARGET=? AND STATUS NOT IN ('complete','not_applicable')`, target.Status, target.Evidence, code, id, target.Name); err != nil {

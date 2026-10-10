@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/dflh-saf/backend/internal/model"
+	"github.com/dflh-saf/backend/internal/repository"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/rs/zerolog/log"
 )
@@ -85,12 +86,6 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "INVALID_TAG", "태그에 공백을 포함할 수 없습니다")
 		return
 	}
-	if !h.requirePrivacyConsent(w, req.PrivacyConsent) {
-		return
-	}
-	if !h.requirePhoneVerification(w, req.PhoneVerificationToken, req.Phone) {
-		return
-	}
 
 	lease, err := h.socialLinkTokens.Begin(req.Token)
 	switch {
@@ -98,7 +93,7 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusConflict, "TOKEN_IN_PROGRESS", "동일한 계정 연결 요청이 처리 중입니다.")
 		return
 	case errors.Is(err, service.ErrSocialLinkTokenConsumed):
-		respondError(w, http.StatusConflict, "TOKEN_ALREADY_USED", "이미 처리된 소셜 링크 토큰입니다. 다시 소셜 로그인해주세요.")
+		respondError(w, http.StatusConflict, "SIGNUP_ALREADY_COMPLETED", socialSignupCompletedMessage)
 		return
 	case err != nil:
 		respondError(w, http.StatusBadRequest, "INVALID_TOKEN", "Link token expired or invalid")
@@ -110,6 +105,13 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 			_ = h.socialLinkTokens.Release(lease)
 		}
 	}()
+	if !h.requirePrivacyConsent(w, req.PrivacyConsent) {
+		return
+	}
+	if !h.requirePhoneVerification(w, req.PhoneVerificationToken, req.Phone) {
+		return
+	}
+
 	linkData := lease.Data
 	// Provider email is profile metadata only. Keep the verifier-derived value on
 	// the social link; use the form email only when the provider supplied none.
@@ -143,6 +145,7 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, isNew, err := h.service.LinkSocialAccount(service.SocialLinkParams{
+		SignupEvidence:      h.signupEvidence(req.PhoneVerificationToken, req.PrivacyConsent),
 		Mode:                mode,
 		Provider:            linkData.Provider,
 		SocialID:            linkData.SocialID,
@@ -165,6 +168,8 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Error().Err(err).Str("provider", linkData.Provider).Str("mode", string(mode)).Msg("social link failed")
 		switch {
+		case errors.Is(err, repository.ErrSignupPhoneGrantInvalid):
+			respondError(w, http.StatusBadRequest, "PHONE_NOT_VERIFIED", "휴대폰 인증을 다시 완료해주세요")
 		case errors.Is(err, service.ErrInvalidPhone):
 			respondError(w, http.StatusBadRequest, "INVALID_PHONE", "유효한 전화번호를 입력해주세요")
 		case errors.Is(err, service.ErrPhonePendingDeletion):
@@ -183,32 +188,27 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The account transaction committed. Never release/revive its credentials.
+	tokenConsumed = true
+	finalizationErr := h.finalizeSocialSignup(lease, profileImageURL)
+
 	if req.Tags != nil {
 		if saveErr := h.registerSvc.SaveInitialTags(user.USRSeq, req.Tags); saveErr != nil {
-			if errors.Is(saveErr, service.ErrTagContainsWhitespace) {
-				respondError(w, http.StatusBadRequest, "INVALID_TAG", "태그에 공백을 포함할 수 없습니다")
-				return
-			}
 			log.Warn().Err(saveErr).Int("usrSeq", user.USRSeq).Bool("isNew", isNew).Msg("social link: failed to save tags")
 		}
 	}
 
-	if isNew {
-		h.spendPhoneVerification(req.PhoneVerificationToken, req.Phone)
-		h.recordPrivacyConsent(user.USRSeq, req.PrivacyConsent)
-	}
-
-	tokenConsumed = true
-	if err := h.socialLinkTokens.Consume(lease); err != nil {
-		h.logger.Error().Err(err).Int("usrSeq", user.USRSeq).Str("provider", linkData.Provider).Msg("social link token consume failed")
-		respondError(w, http.StatusInternalServerError, "LINK_STATE_FAILED", "계정 연결은 완료되었지만 상태를 확정할 수 없습니다. 다시 소셜 로그인해주세요.")
+	if finalizationErr != nil {
+		h.logger.Error().Err(finalizationErr).Int("usrSeq", user.USRSeq).Msg("social link token finalization failed after commit")
+		respondError(w, http.StatusInternalServerError, "SIGNUP_COMPLETED_LOGIN_REQUIRED", socialSignupCompletedMessage)
 		return
 	}
+
 	authUser := model.AuthUser{USRSeq: user.USRSeq, USRID: user.USRID, USRName: user.USRName, USRStatus: user.USRStatus}
 	if strings.EqualFold(req.Client, "mobile") {
 		result, resultErr := h.socialAuth.CompleteMobileLink(user)
 		if resultErr != nil {
-			respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 토큰 발급에 실패했습니다")
+			respondError(w, http.StatusInternalServerError, "SIGNUP_COMPLETED_LOGIN_REQUIRED", socialSignupCompletedMessage)
 			return
 		}
 		writeMobileAuthResult(w, result)
@@ -221,7 +221,7 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.LoginWithBridge(user, w, r); err != nil {
-		respondError(w, http.StatusInternalServerError, "LOGIN_FAILED", "로그인 처리 중 오류가 발생했습니다")
+		respondError(w, http.StatusInternalServerError, "SIGNUP_COMPLETED_LOGIN_REQUIRED", socialSignupCompletedMessage)
 		return
 	}
 	if linkData.Provider == "KT" {
@@ -229,4 +229,32 @@ func (h *AuthHandler) SocialLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, authUser)
+}
+
+const socialSignupCompletedMessage = "가입은 완료되었습니다. 같은 소셜 계정으로 다시 로그인해주세요."
+
+// SocialLinkCancel invalidates a signup continuation without revoking provider consent.
+func (h *AuthHandler) SocialLinkCancel(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
+		return
+	}
+	switch err := h.socialLinkTokens.Cancel(strings.TrimSpace(req.Token)); {
+	case errors.Is(err, service.ErrSocialLinkTokenInProgress):
+		respondError(w, http.StatusConflict, "TOKEN_IN_PROGRESS", "회원가입 요청이 처리 중입니다. 처리 결과를 확인해주세요.")
+	case errors.Is(err, service.ErrSocialLinkTokenConsumed):
+		respondError(w, http.StatusConflict, "SIGNUP_ALREADY_COMPLETED", socialSignupCompletedMessage)
+	case err != nil:
+		respondError(w, http.StatusInternalServerError, "CANCEL_FAILED", "가입 취소 처리에 실패했습니다.")
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// Evidence committed with the member. Finalization only retires the continuation.
+func (h *AuthHandler) finalizeSocialSignup(lease service.SocialLinkTokenLease, photo string) error {
+	return h.socialLinkTokens.ConsumeWithPhoto(lease, photo)
 }

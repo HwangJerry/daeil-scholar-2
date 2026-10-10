@@ -29,6 +29,7 @@ type AccountDeletionRequestHandler struct {
 
 func deletionRequestError(w http.ResponseWriter, err error) {
 	var invalid *model.ValidationError
+	var blocked *model.ErasureBlocked
 	switch {
 	case errors.As(err, &invalid):
 		respondError(w, 400, "INVALID_DELETION_REQUEST", invalid.Error())
@@ -40,6 +41,8 @@ func deletionRequestError(w http.ResponseWriter, err error) {
 		respondError(w, 409, "ACCOUNT_DELETION_CANCELLATION_CLOSED", "이미 탈퇴 처리가 시작되었거나 계정 상태가 변경되어 취소할 수 없습니다. 처리 현황을 확인해주세요.")
 	case errors.Is(err, repository.ErrDeletionIncomplete):
 		respondError(w, 409, "DELETION_INCOMPLETE", "계정 관련 기록 또는 소셜 권한 철회 확인이 남아 있습니다. 실제 삭제 후 다시 확인해주세요.")
+	case errors.As(err, &blocked) && blocked.Code == "BILLING_REVOCATION_REVIEW_REQUIRED":
+		respondError(w, 409, "BILLING_REVOCATION_REVIEW_REQUIRED", "구독 종료·청구키 철회 또는 결제 완료 확인이 남아 있습니다. 공급자 확인 후 대상 기록을 다시 검토해주세요.")
 	case errors.Is(err, repository.ErrErasurePlanChanged):
 		respondError(w, 409, "ERASURE_PLAN_CHANGED", "검토한 뒤 처리 대상 기록이 바뀌었습니다. 다시 검토한 후 처리해주세요.")
 	default:

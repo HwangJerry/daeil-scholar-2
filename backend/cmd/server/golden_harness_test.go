@@ -41,8 +41,17 @@ type goldenServer struct {
 }
 
 func newGoldenServer(t *testing.T) *goldenServer {
+	return newGoldenServerWithDatabase(t, nil)
+}
+
+// A test-only decorator permits actual MariaDB commit-boundary fault injection.
+func newGoldenServerWithDatabase(t *testing.T, decorate func(*mariadb.Database) *sqlx.DB) *goldenServer {
 	t.Helper()
-	db := mariadb.Start(t).NewDatabase(t, append(mariadb.ProdBaseline(t), postBaselineMigrations()...)...).DB
+	database := mariadb.Start(t).NewDatabase(t, append(mariadb.ProdBaseline(t), postBaselineMigrations()...)...)
+	db := database.DB
+	if decorate != nil {
+		db = decorate(database)
+	}
 	seedGoldenIdentityReadiness(t, db)
 	cfg := goldenConfig(t)
 	if err := validateErasureRuntime(cfg); err != nil {
@@ -78,6 +87,11 @@ func postBaselineMigrations() []mariadb.SQL {
 		mariadb.File(filepath.Join("..", "..", "migrations", "078_create_notification_inbox_state.sql")),
 		mariadb.File(filepath.Join("..", "..", "migrations", "079_create_feed_categories.sql")),
 		mariadb.File(filepath.Join("..", "..", "migrations", "080_add_board_official_profile.sql")),
+		mariadb.File(filepath.Join("..", "..", "migrations", "081_add_member_message_allowed.sql")),
+		mariadb.File(filepath.Join("..", "..", "migrations", "082_create_login_security_events.sql")),
+		mariadb.File(filepath.Join("..", "..", "migrations", "083_add_phone_grant_ownership.sql")),
+		mariadb.File(filepath.Join("..", "..", "migrations", "084_create_erasure_subscription_review.sql")),
+		mariadb.File(filepath.Join("..", "..", "migrations", "085_bind_push_device_to_mobile_session.sql")),
 	}
 }
 

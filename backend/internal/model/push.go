@@ -2,6 +2,8 @@ package model
 
 // PushDeviceRegistration is the canonical device-token registration request.
 type PushDeviceRegistration struct {
+	// SessionID comes only from verified auth context, never JSON.
+	SessionID       string  `json:"-"`
 	Platform        string  `json:"platform"`
 	DeviceToken     string  `json:"deviceToken"`
 	Locale          string  `json:"locale"`
@@ -37,6 +39,7 @@ type PushPreferencesUpdate struct {
 }
 
 type PushDeliveryTarget struct {
+	SessionID       string
 	Platform        string
 	DeviceToken     string
 	APNSEnvironment string

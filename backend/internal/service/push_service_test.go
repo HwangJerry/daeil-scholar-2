@@ -34,6 +34,10 @@ func (s *pushStoreStub) UnregisterDevice(usrSeq int, token string) error {
 	return s.err
 }
 
+func (s *pushStoreStub) UnregisterDeviceForSession(seq int, sid, token string) error {
+	return s.UnregisterDevice(seq, token)
+}
+
 func (s *pushStoreStub) GetPreferences(int) (*model.PushPreferences, error) {
 	s.getCalls++
 	return s.preferences, s.err

@@ -3,22 +3,28 @@ package handler
 
 import (
 	"errors"
+	"mime/multipart"
 	"net/http"
+	"time"
 
-	"github.com/dflh-saf/backend/internal/model"
 	"github.com/dflh-saf/backend/internal/service"
 	"github.com/rs/zerolog"
 )
 
 const socialLinkPhotoMaxBytes = 5 << 20 // 5 MB
 
+type socialSignupPhotoUploader interface {
+	Upload(multipart.File, *multipart.FileHeader, string) (*service.UploadResult, error)
+	DiscardUnclaimedProfile(*service.UploadResult) error
+}
+
 type SocialLinkPhotoHandler struct {
-	uploader   *service.UploadOrchestrator
+	uploader   socialSignupPhotoUploader
 	linkTokens *service.SocialLinkTokenStore
 	logger     zerolog.Logger
 }
 
-func NewSocialLinkPhotoHandler(uploader *service.UploadOrchestrator, linkTokens *service.SocialLinkTokenStore, logger zerolog.Logger) *SocialLinkPhotoHandler {
+func NewSocialLinkPhotoHandler(uploader socialSignupPhotoUploader, linkTokens *service.SocialLinkTokenStore, logger zerolog.Logger) *SocialLinkPhotoHandler {
 	return &SocialLinkPhotoHandler{uploader: uploader, linkTokens: linkTokens, logger: logger}
 }
 
@@ -31,12 +37,19 @@ func (h *SocialLinkPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) 
 		respondError(w, http.StatusBadRequest, "FILE_TOO_LARGE", "File exceeds 5MB limit")
 		return
 	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
 	token := r.FormValue("token")
 	if token == "" {
 		respondError(w, http.StatusBadRequest, "MISSING_TOKEN", "token 파라미터가 필요합니다")
 		return
 	}
 	_, err := h.linkTokens.Snapshot(token)
+	if errors.Is(err, service.ErrSocialLinkTokenInProgress) {
+		respondError(w, http.StatusConflict, "TOKEN_IN_PROGRESS", "회원가입 요청이 처리 중입니다. 처리 결과를 확인해주세요.")
+		return
+	}
 	if errors.Is(err, service.ErrSocialLinkTokenConsumed) {
 		respondError(w, http.StatusConflict, "TOKEN_ALREADY_USED", "이미 처리된 소셜 링크 토큰입니다")
 		return
@@ -59,10 +72,11 @@ func (h *SocialLinkPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	_, err = h.linkTokens.Update(token, func(data model.SocialLinkData) model.SocialLinkData {
-		data.ProfileImageURL = result.URL
-		return data
-	})
+	err = h.linkTokens.AttachUpload(token, result)
+	if err != nil {
+		h.discardUnusedUpload(result)
+	}
+
 	if errors.Is(err, service.ErrSocialLinkTokenInProgress) {
 		respondError(w, http.StatusConflict, "TOKEN_IN_PROGRESS", "계정 연결이 처리 중입니다")
 		return
@@ -73,4 +87,24 @@ func (h *SocialLinkPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"url": result.URL})
+}
+
+// Upload may finish after cancel/expiry/Begin. Discard only this actual result,
+// re-checking persistent ownership on each bounded retry.
+func (h *SocialLinkPhotoHandler) discardUnusedUpload(result *service.UploadResult) {
+	if err := h.uploader.DiscardUnclaimedProfile(result); err == nil {
+		return
+	}
+	h.logger.Error().Int("fSeq", result.FSeq).Msg("social signup photo discard retry scheduled")
+	copyResult := *result
+	go func() {
+		for _, delay := range []time.Duration{time.Second, 5 * time.Second, 30 * time.Second} {
+			time.Sleep(delay)
+			if err := h.uploader.DiscardUnclaimedProfile(&copyResult); err == nil {
+				return
+			} else {
+				h.logger.Error().Err(err).Int("fSeq", copyResult.FSeq).Msg("social signup photo discard failed")
+			}
+		}
+	}()
 }

@@ -368,12 +368,29 @@ func (n *PushDeliveryNotifier) deliver(ctx context.Context, item pushDeliveryIte
 			if !n.messageStillAvailable(item) {
 				return
 			}
+			// Keep ownership/liveness as the final DB read before provider dispatch.
+			if guard, ok := n.store.(interface {
+				DeliveryTargetStillCurrent(int, model.PushDeliveryTarget) (bool, error)
+			}); ok {
+				current, err := guard.DeliveryTargetStillCurrent(item.recvrSeq, target)
+				if err != nil || !current {
+					break
+				}
+			}
 			err = n.provider.Send(ctx, target, payload)
 			if err == nil {
 				break
 			}
 			if errors.Is(err, ErrPushInvalidToken) {
-				if deleteErr := n.store.DeleteDevice(target.Platform, target.DeviceToken); deleteErr != nil {
+				var deleteErr error
+				if scoped, ok := n.store.(interface {
+					DeleteDeliveryTarget(int, model.PushDeliveryTarget) error
+				}); ok {
+					deleteErr = scoped.DeleteDeliveryTarget(item.recvrSeq, target)
+				} else {
+					deleteErr = n.store.DeleteDevice(target.Platform, target.DeviceToken)
+				}
+				if deleteErr != nil {
 					n.logger.Error().Str("platform", target.Platform).Msg("invalid push device cleanup failed")
 				}
 				break

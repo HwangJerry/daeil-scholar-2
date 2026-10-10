@@ -64,6 +64,7 @@ func TestLinkIdentityHandlerConnectsKakaoAndApple(t *testing.T) {
 			mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
 				WithArgs(42, string(test.provider), "provider-subject", "member@example.com").
 				WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectQuery(`SELECT STATUS, .*CLAIMED`).WithArgs(42, string(test.provider)).WillReturnRows(sqlmock.NewRows([]string{"STATUS", "CLAIMED"}))
 			mock.ExpectCommit()
 			expectHandlerAccountConnections(mock, []string{string(test.provider)}, true)
 
@@ -378,5 +379,23 @@ func assertErrorCode(t *testing.T, recorder *httptest.ResponseRecorder, want str
 	}
 	if body.Code != want {
 		t.Fatalf("error code = %q, want %q", body.Code, want)
+	}
+}
+
+func TestLinkIdentityHandlerReportsPendingDisconnectAsConflict(t *testing.T) {
+	handler, mock, cleanup := newIdentityLinkAuthHandlerForTest(t, stubIdentityLinkVerifier{account: service.VerifiedSocialAccount{Identity: model.VerifiedSocialIdentity{Provider: model.SocialProviderKakao, Subject: "provider-subject"}}})
+	defer cleanup()
+	mock.ExpectQuery(`FROM WEO_MEMBER_SOCIAL`).WithArgs("KT", "provider-subject").WillReturnError(sql.ErrNoRows)
+	mock.ExpectBegin()
+	mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).WithArgs(42, "KT", "provider-subject", "").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery(`SELECT STATUS, .*CLAIMED`).WithArgs(42, "KT").WillReturnRows(sqlmock.NewRows([]string{"STATUS", "CLAIMED"}).AddRow("REVOKED", true))
+	mock.ExpectRollback()
+	recorder := serveLinkIdentityRequest(handler, "kakao", `{"accessToken":"synthetic-token"}`)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	assertErrorCode(t, recorder, "SOCIAL_DISCONNECT_PENDING")
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }

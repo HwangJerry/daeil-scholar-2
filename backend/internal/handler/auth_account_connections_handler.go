@@ -53,6 +53,10 @@ func (h *AuthHandler) LinkIdentity(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusBadRequest, "INVALID_PROVIDER", "지원하지 않는 소셜 로그인 수단입니다.")
 		case errors.Is(err, service.ErrSocialAccountAlreadyLinked):
 			respondError(w, http.StatusConflict, "SOCIAL_ACCOUNT_ALREADY_LINKED", "이미 다른 계정에 연결된 소셜 로그인입니다.")
+		case errors.Is(err, service.ErrSocialDisconnectPending):
+			respondError(w, http.StatusConflict, "SOCIAL_DISCONNECT_PENDING", "이전 연결 해제 처리가 끝난 뒤 다시 시도해 주세요.")
+		case errors.Is(err, service.ErrSocialConnectionConflict):
+			respondError(w, http.StatusConflict, "SOCIAL_IDENTITY_UNAVAILABLE", "이 소셜 계정을 연결할 수 없습니다. 기존 연결 정보를 확인해 주세요.")
 		case errors.Is(err, service.ErrSocialIdentityVerification):
 			respondError(w, http.StatusUnauthorized, "SOCIAL_VERIFICATION_FAILED", "소셜 계정을 확인할 수 없습니다.")
 		case errors.Is(err, service.ErrSocialCredentialStorage):

@@ -35,6 +35,7 @@ func TestLinkIdentityConnectsKakaoAndApple(t *testing.T) {
 			mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
 				WithArgs(42, string(test.provider), "provider-subject", "member@example.com").
 				WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectQuery(`SELECT STATUS, .*CLAIMED`).WithArgs(42, string(test.provider)).WillReturnRows(sqlmock.NewRows([]string{"STATUS", "CLAIMED"}))
 			mock.ExpectCommit()
 			expectAccountConnections(mock, []string{string(test.provider)}, true)
 
@@ -190,6 +191,8 @@ func TestLinkIdentityPropagatesCanonicalIdentityInsertFailureAfterRollback(t *te
 	mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
 		WithArgs(42, "KT", "provider-subject", "").
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery(`SELECT STATUS, .*CLAIMED`).WithArgs(42, "KT").WillReturnRows(sqlmock.NewRows([]string{"STATUS", "CLAIMED"}))
+	mock.ExpectQuery(`SELECT IDENTITY_ID, ACCOUNT_ID, STATUS`).WithArgs("KAKAO", "provider-subject").WillReturnError(sql.ErrNoRows)
 	mock.ExpectExec(`INSERT INTO AUTH_IDENTITY`).
 		WithArgs(42, string(model.IdentityProviderKakao), "provider-subject", nil).
 		WillReturnError(canonicalInsertErr)
@@ -234,6 +237,8 @@ func TestLinkIdentityDoesNotClaimAnotherOwnerWhenConflictHasNoActiveConnection(t
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO WEO_MEMBER_SOCIAL`).
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery(`SELECT STATUS, .*CLAIMED`).WithArgs(42, "KT").WillReturnRows(sqlmock.NewRows([]string{"STATUS", "CLAIMED"}))
+	mock.ExpectQuery(`SELECT IDENTITY_ID, ACCOUNT_ID, STATUS`).WithArgs("KAKAO", "provider-subject").WillReturnError(sql.ErrNoRows)
 	mock.ExpectExec(`INSERT INTO AUTH_IDENTITY`).
 		WillReturnError(&mysql.MySQLError{
 			Number: 1062, Message: "Duplicate entry 'KAKAO-subject' for key 'UQ_AUTH_IDENTITY_PROVIDER_SUBJECT'",

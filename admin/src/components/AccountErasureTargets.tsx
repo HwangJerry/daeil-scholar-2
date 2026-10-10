@@ -17,6 +17,7 @@ const STATUS_LABELS: Record<ErasureTarget['status'], string> = {
 };
 
 function nextAction(target: ErasureTarget): string {
+  if (target.code === 'PHONE_VERIFICATION_RETENTION_PENDING' && target.waitCount && target.waitUntil) return `SMS 인증 기록 ${target.waitCount}건 · 정리 예상 ${new Date(target.waitUntil).toLocaleString('ko-KR')}. 시간당 정리와 재검증을 기다립니다. 정리 작업이 실패하면 완료가 늦어질 수 있습니다.`;
   if (target.status === 'complete' || target.status === 'not_applicable') return '확인 근거를 보존하며 이 작업은 반복하지 않습니다.';
   if (target.status === 'manual') return '황제철 담당자가 저장소 설정과 남은 자료를 확인하고 기존 수동 처리 절차로 해결해야 합니다.';
   if (target.status === 'failed') return '서버 담당자가 연동 설정 또는 오류를 확인해야 합니다. 다음 자동 시도에서 다시 확인합니다.';

@@ -4,6 +4,7 @@ package repository
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -66,6 +67,33 @@ func (r *AccountDeletionRequestRepository) collectErasurePreview(tx *sqlx.Tx, id
 	queries := erasurePreviewQueries(s, user, email, plan)
 	covered := map[string]bool{}
 	affected := []previewTable{}
+	preview.CompletionWaits = []model.ErasureCompletionWait{}
+	subject := model.ErasureExternalSubject{UserSeq: user}
+	if s.has("WEO_MEMBER", "USR_PHONE") {
+		if err = tx.Get(&subject.Phone, `SELECT COALESCE(USR_PHONE,'') FROM WEO_MEMBER WHERE USR_SEQ=?`, user); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return preview, nil, err
+		}
+	}
+	wait, waitingTable, err := smsCompletionWait(tx, s, subject, preview.GeneratedAt)
+	if err != nil {
+		return preview, nil, err
+	}
+	if wait != nil {
+		preview.CompletionWaits = append(preview.CompletionWaits, *wait)
+		affected = append(affected, waitingTable)
+	}
+	preview.Subscriptions, err = subscriptionErasureReviews(tx, s, id, user)
+	if err != nil {
+		return preview, nil, err
+	}
+	// Include review decisions as well as source rows in the plan's digest.
+	if s["ALUMNI_ERASURE_SUBSCRIPTION_REVIEW"] != nil {
+		reviewTable, e := readPreviewTable(tx, previewQuery{table: "ALUMNI_ERASURE_SUBSCRIPTION_REVIEW", action: "review", where: "REQUEST_ID=?", args: []interface{}{id}})
+		if e != nil {
+			return preview, nil, e
+		}
+		affected = append(affected, reviewTable)
+	}
 	for _, q := range queries {
 		covered[q.table] = true
 		engineBlocker, err := previewEngineBlocker(tx, q.table)
@@ -98,6 +126,11 @@ func (r *AccountDeletionRequestRepository) collectErasurePreview(tx *sqlx.Tx, id
 		// Pending provider revocations are delivered by the worker before deletion.
 		if !covered[item.Table] && item.Table != "ALUMNI_SOCIAL_REVOCATION_OUTBOX" {
 			preview.Unhandled = append(preview.Unhandled, item)
+			held, err := readPreviewTable(tx, previewQuery{table: item.Table, action: "hold", where: fmt.Sprintf("`%s`=?", item.Column), args: []interface{}{user}})
+			if err != nil {
+				return preview, nil, err
+			}
+			affected = append(affected, held)
 		}
 	}
 	if len(preview.Unhandled) > 0 {

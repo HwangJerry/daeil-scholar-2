@@ -81,3 +81,36 @@ it('requires a fresh review when records changed after the preview', async () =>
   expect(screen.getByLabelText(/직접 확인했으며 영향 범위에 문제가 없습니다/)).not.toBeChecked();
   expect(screen.getByRole('button', { name: '검토 완료 · 지금 탈퇴 처리' })).toBeDisabled();
 });
+
+it('distinguishes database holds from SMS completion waiting without leaking identifiers', async () => {
+  mockGet([{ ...PREVIEW, completionWaits: [{ code: 'PHONE_VERIFICATION_RETENTION_PENDING', count: 2, expectedAt: '2026-09-14T02:05:00Z' }] }]);
+  const user = userEvent.setup(); mount();
+  await user.click(await screen.findByRole('button', { name: '처리 대상 기록 불러오기' }));
+  expect(await screen.findByText(/SMS 인증 기록 2건/)).toBeInTheDocument();
+  expect(screen.getByText(/DB 단계 보류 항목이 없습니다/)).toBeInTheDocument();
+  expect(screen.getByText(/정리 작업이 실패하면 완료가 늦어질 수 있습니다/)).toBeInTheDocument();
+  expect(screen.queryByText('처리를 멈추게 할 보류 항목이 없습니다.')).not.toBeInTheDocument();
+});
+
+it('reviews terminal subscription closure with evidence and the current fingerprint', async () => {
+  mockGet([{ ...PREVIEW, subscriptions: [{ subscriptionId: 12, status: 'failed', hasBillingKey: false, canReview: true, reviewed: false, sourceFingerprint: DIGEST }] }]);
+  const put = vi.spyOn(api, 'put').mockResolvedValue(undefined);
+  const user = userEvent.setup(); mount();
+  await user.click(await screen.findByRole('button', { name: '처리 대상 기록 불러오기' }));
+  const review = await screen.findByRole('button', { name: '구독 12 종료 확인 기록' });
+  expect(review).toBeDisabled();
+  await user.type(screen.getByLabelText('구독 12 종료 확인 근거'), 'synthetic-provider-ref');
+  await user.click(screen.getByLabelText('구독 12 외부 결제·청구 종료 확인'));
+  expect(review).toBeDisabled();
+  await user.selectOptions(screen.getByLabelText('구독 12 공급자 종료 상태'), 'cancelled');
+  await user.click(review);
+  await waitFor(() => expect(put).toHaveBeenCalledWith('/api/admin/account-deletions/7', { action: 'subscription_review', subscriptionId: 12, sourceFingerprint: DIGEST, externalClosureConfirmed: true, providerClosureOutcome: 'cancelled', evidenceReference: 'synthetic-provider-ref' }));
+});
+
+it('does not offer closure approval for a pending subscription with an active key', async () => {
+  mockGet([{ ...PREVIEW, subscriptions: [{ subscriptionId: 13, status: 'pending', hasBillingKey: true, canReview: false, reviewed: false, sourceFingerprint: DIGEST }] }]);
+  const user = userEvent.setup(); mount();
+  await user.click(await screen.findByRole('button', { name: '처리 대상 기록 불러오기' }));
+  expect(await screen.findByText(/구독 13 · pending/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '구독 13 종료 확인 기록' })).not.toBeInTheDocument();
+});

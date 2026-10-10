@@ -76,7 +76,7 @@ func (r *AccountDeletionRequestRepository) ErasureActive(id int64) (bool, error)
 }
 
 func (r *AccountDeletionRequestRepository) ErasureRetry(id int64, code string) error {
-	_, err := r.DB.Exec(`UPDATE ALUMNI_ACCOUNT_ERASURE SET LAST_CODE=?,NEXT_ATTEMPT_AT=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 5 MINUTE),UPDATED_AT=UTC_TIMESTAMP() WHERE REQUEST_ID=?`, code, id)
+	_, err := r.DB.Exec(`UPDATE ALUMNI_ACCOUNT_ERASURE SET LAST_CODE=?,NEXT_ATTEMPT_AT=DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? SECOND),UPDATED_AT=UTC_TIMESTAMP() WHERE REQUEST_ID=?`, code, int(model.ErasureRecheckInterval.Seconds()), id)
 	return err
 }
 

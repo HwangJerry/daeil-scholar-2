@@ -39,6 +39,12 @@ func (s *AuthService) LoginWithBridge(user *model.User, w http.ResponseWriter, r
 	if err != nil {
 		return err
 	}
+	if err := s.repo.InsertLoginLog(user.USRSeq, sessionID, r.RemoteAddr, r.UserAgent()); err != nil {
+		return err
+	}
+	if err := s.repo.UpdateLastLogin(user.USRSeq); err != nil {
+		return err
+	}
 	secure := s.cfg.Server.IsSecure()
 	http.SetCookie(w, &http.Cookie{
 		Name:     "alumni_token",
@@ -67,10 +73,7 @@ func (s *AuthService) LoginWithBridge(user *model.User, w http.ResponseWriter, r
 			MaxAge:   0,
 		})
 	}
-	if err := s.repo.InsertLoginLog(user.USRSeq, sessionID, r.RemoteAddr, r.UserAgent()); err != nil {
-		return err
-	}
-	return s.repo.UpdateLastLogin(user.USRSeq)
+	return nil
 }
 
 // LogoutCurrent revokes only the service session represented by the request.

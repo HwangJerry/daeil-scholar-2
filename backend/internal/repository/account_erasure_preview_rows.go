@@ -23,7 +23,7 @@ const (
 )
 
 // Credentials and secrets are never shown, even to root operators.
-var previewSecretColumn = regexp.MustCompile(`(?i)(PASS|PWD|TOKEN|SECRET|HASH|CREDENTIAL|CIPHER|SALT|NONCE|OTP|SESSION_ID|_KEY$|^KEY$)`)
+var previewSecretColumn = regexp.MustCompile(`(?i)(PASS|PWD|TOKEN|SECRET|HASH|CREDENTIAL|CIPHER|SALT|NONCE|OTP|SESSION_ID|_KEY$|^KEY$|^CARD_NO$)`)
 
 // Private correspondence between members is summarized by length only.
 var previewPrivateContent = map[string]bool{
@@ -37,11 +37,12 @@ var previewPrivateContent = map[string]bool{
 
 // previewQuery is one table's merged erasure predicate and planned action.
 type previewQuery struct {
-	table  string
-	action string
-	where  string
-	args   []interface{}
-	after  []anonymizedColumn
+	lockRows bool
+	table    string
+	action   string
+	where    string
+	args     []interface{}
+	after    []anonymizedColumn
 }
 
 // previewTable carries the displayed sample plus a hash of every affected row.
@@ -58,7 +59,11 @@ func readPreviewTable(tx *sqlx.Tx, q previewQuery) (previewTable, error) {
 		return t, ErrDeletionIncomplete
 	}
 	// Tables and predicates are code-owned constants, never HTTP input.
-	rows, err := tx.Queryx(fmt.Sprintf("SELECT * FROM `%s` WHERE %s", q.table, q.where), q.args...)
+	query := fmt.Sprintf("SELECT * FROM `%s` WHERE %s", q.table, q.where)
+	if q.lockRows {
+		query += " FOR UPDATE"
+	}
+	rows, err := tx.Queryx(query, q.args...)
 	if err != nil {
 		return t, err
 	}

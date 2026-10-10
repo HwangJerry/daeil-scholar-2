@@ -37,22 +37,26 @@ type AccountDeletionQueueItem struct {
 }
 
 type AccountDeletionResolution struct {
-	Target                  string `json:"target"`
-	TargetStatus            string `json:"targetStatus"`
-	ReceiptWorkStatus       string `json:"receiptWorkStatus"`
-	OriginalStorage         string `json:"originalStorage"`
-	ContactSecured          bool   `json:"contactSecured"`
-	ContactErased           bool   `json:"contactErased"`
-	Action                  string `json:"action"`
-	EvidenceReference       string `json:"evidenceReference"`
-	ResultNotified          bool   `json:"resultNotified"`
-	FilesErased             bool   `json:"filesErased"`
-	BackupsErased           bool   `json:"backupsErased"`
-	ExternalDataErased      bool   `json:"externalDataErased"`
-	OtherIdentifiersChecked bool   `json:"otherIdentifiersChecked"`
-	RetainedRecords         string `json:"retainedRecords"`
-	RetentionUntil          string `json:"retentionUntil"`
-	ReviewedPlanDigest      string `json:"reviewedPlanDigest"`
+	SubscriptionID           int    `json:"subscriptionId"`
+	SourceFingerprint        string `json:"sourceFingerprint"`
+	ProviderClosureOutcome   string `json:"providerClosureOutcome"`
+	ExternalClosureConfirmed bool   `json:"externalClosureConfirmed"`
+	Target                   string `json:"target"`
+	TargetStatus             string `json:"targetStatus"`
+	ReceiptWorkStatus        string `json:"receiptWorkStatus"`
+	OriginalStorage          string `json:"originalStorage"`
+	ContactSecured           bool   `json:"contactSecured"`
+	ContactErased            bool   `json:"contactErased"`
+	Action                   string `json:"action"`
+	EvidenceReference        string `json:"evidenceReference"`
+	ResultNotified           bool   `json:"resultNotified"`
+	FilesErased              bool   `json:"filesErased"`
+	BackupsErased            bool   `json:"backupsErased"`
+	ExternalDataErased       bool   `json:"externalDataErased"`
+	OtherIdentifiersChecked  bool   `json:"otherIdentifiersChecked"`
+	RetainedRecords          string `json:"retainedRecords"`
+	RetentionUntil           string `json:"retentionUntil"`
+	ReviewedPlanDigest       string `json:"reviewedPlanDigest"`
 }
 
 type AccountDeletionFootprint struct {

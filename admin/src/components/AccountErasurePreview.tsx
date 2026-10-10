@@ -1,5 +1,6 @@
 // AccountErasurePreview — Operator review of the exact records an erasure changes, then plan-bound approval.
 import { useState } from 'react';
+import { ErasureSubscriptionReviews } from './ErasureSubscriptionReviews';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from './ui/Button';
 import { ErasurePreviewTable } from './ErasurePreviewTable';
@@ -14,7 +15,7 @@ function isPlanChanged(error: unknown): boolean {
 }
 
 function PreviewHolds({ preview }: { preview: ErasurePreview }) {
-  if (preview.blockers.length === 0) return <p className="text-sm text-dark-slate">처리를 멈추게 할 보류 항목이 없습니다.</p>;
+  if (preview.blockers.length === 0) return <p className="text-sm text-dark-slate">DB 단계 보류 항목이 없습니다. 전체 완료까지는 아래 저장소 확인과 대기 항목의 정리가 필요합니다.</p>;
   return (
     <div role="alert" className="space-y-1 rounded-lg border border-border-light p-3 text-sm text-dark-slate">
       <p className="font-semibold">처리 보류 예정 항목 {preview.blockers.length}개 · 승인해도 해당 단계에서 멈춥니다.</p>
@@ -38,6 +39,11 @@ function PreviewRecords({ preview }: { preview: ErasurePreview }) {
         조회 시각 {new Date(preview.generatedAt).toLocaleString('ko-KR')} · 테이블 {preview.tables.length}개 · 기록 {total}건 · 삭제할 파일 {preview.files.length}개
       </p>
       <PreviewHolds preview={preview} />
+      {(preview.completionWaits?.length ?? 0) > 0 && <div role="status" className="space-y-1 rounded-lg border border-border-light p-3 text-sm text-dark-slate">
+        <p className="font-semibold">전체 완료 대기</p>
+        {preview.completionWaits?.map(wait => <p key={wait.code}>SMS 인증 기록 {wait.count}건 · 정리 예상 {new Date(wait.expectedAt).toLocaleString('ko-KR')}</p>)}
+        <p>발급 후 24시간 보관, 시간당 정리와 재검증을 기다립니다. 정리 작업이 실패하면 완료가 늦어질 수 있습니다.</p>
+      </div>}
       {(preview.socialUnlinks?.length ?? 0) > 0 && (
         <div className="space-y-1 rounded-lg border border-border-light p-3 text-sm text-dark-slate">
           <p className="font-semibold">소셜 연결 해제 · {preview.socialUnlinks?.length}건</p>
@@ -89,6 +95,7 @@ export function AccountErasurePreview({ item }: { item: AccountDeletion }) {
       {preview.isError && <p role="alert" className="text-sm text-dark-slate">{preview.error.message}</p>}
       {notice && <p role="status" className="text-sm text-dark-slate">{notice}</p>}
       {data && <PreviewRecords preview={data} />}
+      {data && <ErasureSubscriptionReviews requestId={item.requestId} items={data.subscriptions ?? []} onReviewed={() => { setReviewed(false); void preview.refetch(); void client.invalidateQueries({ queryKey: ['account-deletions'] }); }} />}
       {data && !item.expeditedAt && (
         <div className="space-y-2">
           <label className="flex items-start gap-3 text-sm text-dark-slate">

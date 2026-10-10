@@ -46,6 +46,9 @@ type deps struct {
 
 // wireDeps creates all repositories, services, and handlers from config and DB.
 func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, error) {
+	if err := repository.PushSessionSchemaReady(db); err != nil {
+		return nil, err
+	}
 	authRepo := repository.NewAuthRepository(db)
 	feedRepo := repository.NewFeedRepository(db)
 	donationRepo := repository.NewDonationRepository(db)
@@ -176,6 +179,15 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	imageResizer := service.NewImageResizeService(1200)
 	fileRecordSvc := service.NewFileRecordService(fileRepo)
 	uploadOrchestrator := service.NewUploadOrchestrator(fileStorage, imageResizer, fileRecordSvc)
+	uploadOrchestrator.SetLogger(logger)
+	uploadOrchestrator.SetSiteOrigin(cfg.Server.SiteBaseURL)
+	socialLinkTokens.SetUploadDiscarder(func(result *service.UploadResult) error {
+		err := uploadOrchestrator.DiscardUnclaimedProfile(result)
+		if err != nil {
+			logger.Error().Err(err).Int("fSeq", result.FSeq).Msg("social signup orphan photo cleanup failed")
+		}
+		return err
+	})
 	attachmentStorage := service.NewAttachmentStorageService(cfg.Upload.BasePath)
 	attachmentUploadOrchestrator := service.NewAttachmentUploadOrchestrator(attachmentStorage, fileRecordSvc)
 	profileUploadService := service.NewProfileUploadService(profileRepo, uploadOrchestrator)
@@ -216,7 +228,10 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	if cfg.PrivacyConsent.Version == "" {
 		logger.Warn().Msg("PRIVACY_CONSENT_VERSION empty; consent version check disabled")
 	}
-	consentService := service.NewConsentService(consentStore, cfg.PrivacyConsent, logger)
+	consentService := service.NewConsentService(nil, cfg.PrivacyConsent, logger)
+	if consentTableReady {
+		consentService = service.NewConsentService(consentStore, cfg.PrivacyConsent, logger)
+	}
 
 	passwordResetService := service.NewPasswordResetService(passwordResetRepo, emailQueue, logger, cfg.Server.SiteBaseURL)
 	passwordChangeSvc := service.NewPasswordChangeService(profileRepo)
