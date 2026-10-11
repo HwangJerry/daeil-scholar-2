@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -155,6 +156,16 @@ func TestSocialLinkReturnsConflictForAlreadyLinkedSocialAccount(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), `"code":"SOCIAL_ACCOUNT_ALREADY_LINKED"`) {
 		t.Fatalf("body = %s", response.Body.String())
+	}
+	var rejection model.SocialAuthRejection
+	if err := json.Unmarshal(response.Body.Bytes(), &rejection); err != nil {
+		t.Fatal(err)
+	}
+	if rejection.Message != "이미 연결된 소셜 계정입니다. 기존 로그인 방법으로 로그인한 뒤 계정 설정에서 소셜 계정 연결을 확인해주세요." {
+		t.Fatal("final conflict must explain recovery without asserting a different owner")
+	}
+	if _, err := tokenStore.Snapshot("duplicate-token"); err != nil {
+		t.Fatalf("rolled-back signup did not release its continuation: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

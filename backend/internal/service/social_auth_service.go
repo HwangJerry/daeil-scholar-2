@@ -102,6 +102,23 @@ func (s *SocialAuthService) Authenticate(
 	if err != nil {
 		return model.SocialAuthResult{}, err
 	}
+	ownership, err := s.auth.repo.FindSocialIdentityOwnership(ctx, account.Identity.Provider, account.Identity.Subject)
+	if err != nil {
+		return model.SocialAuthResult{}, err
+	}
+	if ownership != nil {
+		if err := s.policy.EnsureLoginAllowed(&model.User{USRStatus: ownership.MemberStatus}); err != nil {
+			return rejectedSocialResult(LoginErrorCode(err), "로그인할 수 없는 계정입니다."), nil
+		}
+		switch ownership.IdentityStatus {
+		case "REVOKED":
+			return rejectedSocialResult("SOCIAL_ACCOUNT_RELINK_REQUIRED", "기존 로그인 방법으로 로그인한 뒤 계정 설정에서 같은 소셜 계정을 다시 연결해주세요."), nil
+		case "ACTIVE":
+			// The existing linked-member path remains responsible for session issuance.
+		default:
+			return rejectedSocialResult("ACCOUNT_SUSPENDED", "로그인할 수 없는 계정입니다."), nil
+		}
+	}
 	user, err := s.auth.FindMemberBySocialID(string(account.Identity.Provider), account.Identity.Subject)
 	if err != nil {
 		return model.SocialAuthResult{}, err
