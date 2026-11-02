@@ -11,6 +11,7 @@ import (
 
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/xuri/excelize/v2"
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
@@ -25,8 +26,12 @@ const (
 	hallOfFameMaxDeptRunes     = 30
 )
 
-// Nine digits, optionally split by separators, is longer than any name or department.
-var hallOfFamePhoneRunPattern = regexp.MustCompile(`[0-9](?:[ .\-]?[0-9]){8,}`)
+// Nine digits are longer than any name or department. Separators are removed first,
+// so brackets, dashes and spaces of any Unicode form cannot split a number.
+var (
+	hallOfFamePhoneRunPattern   = regexp.MustCompile(`[0-9]{9,}`)
+	hallOfFameSeparatorsPattern = regexp.MustCompile(`[\p{Z}\p{P}\p{S}\p{C}]+`)
+)
 
 type hallOfFameHeaderRule struct {
 	columnIndex int
@@ -225,5 +230,6 @@ func hallOfFameIssue(rowIndex int, field, code, message string) model.HallOfFame
 
 // hallOfFameHoldsPhone catches a phone number typed into a column that gets stored.
 func hallOfFameHoldsPhone(value string) bool {
-	return hallOfFamePhoneRunPattern.MatchString(value)
+	compact := hallOfFameSeparatorsPattern.ReplaceAllString(norm.NFKC.String(value), "")
+	return hallOfFamePhoneRunPattern.MatchString(compact)
 }

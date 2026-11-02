@@ -323,6 +323,9 @@ func TestHallOfFameRestrictedPersonWithNewPhoneImportsHidden(t *testing.T) {
 		{"deleted by operator", func(entry *model.HallOfFameEntry) {
 			entry.Source, entry.DeletedAt = model.HallOfFameSourceManual, &now
 		}},
+		{"consent withdrawn then removed by import", func(entry *model.HallOfFameEntry) {
+			entry.ConsentPublic, entry.DeletedAt = false, &now
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -462,6 +465,22 @@ func TestHallOfFameIssueMessagesNeverEchoPhones(t *testing.T) {
 	}
 	if codes["INVALID_COHORT"] != 1 || codes["INVALID_TIER"] != 1 || codes["PHONE_IN_WRONG_COLUMN"] != 2 || preview.PreviewToken != "" {
 		t.Fatalf("errors: %+v", preview.Errors)
+	}
+}
+
+func TestHallOfFameHoldsPhoneSeesThroughSeparators(t *testing.T) {
+	for _, value := range []string{
+		"01012345678", "010-1234-5678", "010 1234 5678", "(010)1234-5678", "010–1234–5678", "010/1234/5678",
+		"０１０－１２３４－５６７８", "김하나(010)1234-5678", "주식회사 대일(010.1234.5678)",
+	} {
+		if !hallOfFameHoldsPhone(value) {
+			t.Fatalf("%q must be detected", value)
+		}
+	}
+	for _, value := range []string{"김하나", "주식회사 대일상사(김하나)", "2024년 3학년", "불어과"} {
+		if hallOfFameHoldsPhone(value) {
+			t.Fatalf("%q is not a phone", value)
+		}
 	}
 }
 

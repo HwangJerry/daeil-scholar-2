@@ -63,7 +63,7 @@ func diffHallOfFame(rows []model.HallOfFameImportRow, existing []model.HallOfFam
 // alone would publish them again under a fresh row.
 func isHallOfFameRestricted(entry model.HallOfFameEntry) bool {
 	takenDown := entry.DeletedAt != nil && entry.Source == model.HallOfFameSourceManual
-	return takenDown || (entry.DeletedAt == nil && (!entry.ConsentPublic || !entry.Visible))
+	return takenDown || !entry.ConsentPublic || !entry.Visible
 }
 
 func (p *hallOfFamePlan) classifyRow(row model.HallOfFameImportRow, byKey map[string]model.HallOfFameEntry, liveManualByName, restrictedByName map[string]bool) {
