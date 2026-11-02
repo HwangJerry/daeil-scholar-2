@@ -155,8 +155,22 @@ func validateHallOfFameEntry(entry model.HallOfFameEntry) error {
 		return hallOfFameInputError("담당자 이름은 100자 이하여야 합니다.")
 	case entry.RoleLabel != nil && utf8.RuneCountInString(*entry.RoleLabel) > hallOfFameMaxRoleRunes:
 		return hallOfFameInputError("직함은 30자 이하여야 합니다.")
+	case hallOfFameEntryHoldsPhone(entry):
+		return hallOfFameInputError("전화번호는 입력할 수 없습니다.")
 	}
 	return nil
+}
+
+// hallOfFameEntryHoldsPhone covers every free-text column, because operator input
+// skips the spreadsheet check and these values are stored as plain text.
+func hallOfFameEntryHoldsPhone(entry model.HallOfFameEntry) bool {
+	values := []*string{&entry.DisplayName, entry.Department, entry.ContactName, entry.RoleLabel}
+	for _, value := range values {
+		if value != nil && hallOfFameHoldsPhone(*value) {
+			return true
+		}
+	}
+	return false
 }
 
 func hallOfFameInputError(message string) error {

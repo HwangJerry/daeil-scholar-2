@@ -181,3 +181,30 @@ func TestCreateIsManualAndRefusesLiveDuplicates(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestManualEntryRejectsPhoneNumbersInStoredFields(t *testing.T) {
+	phone := "010ㅡ0000ㅡ1111"
+	service := NewHallOfFameService(&fakeHallOfFameCrudRepo{})
+	cases := map[string]model.HallOfFameCreateInput{
+		"displayName": {DisplayName: phone},
+		"department":  {DisplayName: "테스트", Department: &phone},
+		"contactName": {DisplayName: "테스트", ContactName: &phone},
+		"roleLabel":   {DisplayName: "테스트", RoleLabel: &phone},
+	}
+	for field, input := range cases {
+		if _, err := service.Create(input, hallOfFameTestActor); !errors.Is(err, ErrHallOfFameInvalidInput) {
+			t.Fatalf("%s: phone number must be rejected, got %v", field, err)
+		}
+	}
+
+	stored := model.HallOfFameEntry{ID: 7, DisplayName: "테스트", Kind: model.HallOfFameKindAlumni, Source: model.HallOfFameSourceExcel}
+	patchRepo := &fakeHallOfFameCrudRepo{entry: &stored}
+	patch := model.HallOfFamePatchInput{}
+	patch.Department.Set, patch.Department.Value = true, &phone
+	if _, err := NewHallOfFameService(patchRepo).Patch(7, patch, hallOfFameTestActor); !errors.Is(err, ErrHallOfFameInvalidInput) {
+		t.Fatalf("patch: phone number must be rejected, got %v", err)
+	}
+	if patchRepo.saved != nil {
+		t.Fatal("a rejected patch must not be saved")
+	}
+}
