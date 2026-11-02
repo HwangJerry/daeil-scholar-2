@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -23,6 +24,9 @@ const (
 	hallOfFameMaxNameRunes     = 100
 	hallOfFameMaxDeptRunes     = 30
 )
+
+// Nine digits, optionally split by separators, is longer than any name or department.
+var hallOfFamePhoneRunPattern = regexp.MustCompile(`[0-9](?:[ .\-]?[0-9]){8,}`)
 
 type hallOfFameHeaderRule struct {
 	columnIndex int
@@ -116,7 +120,7 @@ func parseHallOfFameRows(dataRows [][]string, identity hallOfFameIdentity) *hall
 	}
 	for index := range result.Rows {
 		row := &result.Rows[index]
-		row.Label = hallOfFameLabel(row.Kind, row.Cohort, row.Department)
+		row.Label = hallOfFameLabel(row.Kind, row.Cohort, row.Department, row.RoleLabel)
 	}
 	result.Warnings = append(result.Warnings, hallOfFameNameCollisionWarnings(result.Rows)...)
 	return result
@@ -128,7 +132,12 @@ func parseHallOfFameRow(rowIndex int, cells []string, identity hallOfFameIdentit
 		failed = true
 		result.Errors = append(result.Errors, hallOfFameIssue(rowIndex, field, code, message))
 	}
-	classified := classifyHallOfFameName(cellAt(cells, hallOfFameNameColumn))
+	rawName := cellAt(cells, hallOfFameNameColumn)
+	rawDepartment := cellAt(cells, hallOfFameDepartmentColumn)
+	classified := classifyHallOfFameName(rawName)
+	if hallOfFameHoldsPhone(rawName) || hallOfFameHoldsPhone(rawDepartment) {
+		fail("row", "PHONE_IN_WRONG_COLUMN", "성함 또는 과 열에 전화번호로 보이는 값이 있습니다. 연락처 열로 옮겨 주세요.")
+	}
 	if classified.DisplayName == "" {
 		fail("displayName", "REQUIRED", "성함 값이 필요합니다.")
 	} else if utf8.RuneCountInString(classified.DisplayName) > hallOfFameMaxNameRunes {
@@ -142,7 +151,7 @@ func parseHallOfFameRow(rowIndex int, cells []string, identity hallOfFameIdentit
 	if err != nil {
 		fail("tierManWon", "INVALID_TIER", err.Error())
 	}
-	department, unconfirmed := expandHallOfFameDepartment(cellAt(cells, hallOfFameDepartmentColumn))
+	department, unconfirmed := expandHallOfFameDepartment(rawDepartment)
 	if department != nil && utf8.RuneCountInString(*department) > hallOfFameMaxDeptRunes {
 		fail("department", "TOO_LONG", "과는 30자 이하여야 합니다.")
 	}
@@ -151,15 +160,11 @@ func parseHallOfFameRow(rowIndex int, cells []string, identity hallOfFameIdentit
 	}
 	if unconfirmed {
 		result.Warnings = append(result.Warnings, hallOfFameIssue(rowIndex, "department", "UNCONFIRMED_DEPARTMENT",
-			fmt.Sprintf("과 표기 %q의 확정 매핑이 없어 원문을 유지합니다. 관리자가 수정해 주세요.", *department)))
+			"과 표기의 확정 매핑이 없어 원문을 유지합니다. 관리자가 수정해 주세요."))
 	}
 	if classified.UnknownMark {
 		result.Warnings = append(result.Warnings, hallOfFameIssue(rowIndex, "displayName", "UNKNOWN_NAME_MARK",
 			"성함의 괄호 표기를 인식하지 못해 원문을 유지합니다. 공개 전 확인해 주세요."))
-	}
-	if classified.IsPrincipal {
-		principal := hallOfFamePrincipalDepartment
-		department = &principal
 	}
 	phoneHash := identity.phoneHash(cellAt(cells, hallOfFamePhoneColumn))
 	return model.HallOfFameImportRow{
@@ -172,6 +177,7 @@ func parseHallOfFameRow(rowIndex int, cells []string, identity hallOfFameIdentit
 		Department:  department,
 		TierManWon:  tier,
 		ContactName: classified.ContactName,
+		RoleLabel:   classified.RoleLabel,
 	}, true
 }
 
@@ -185,6 +191,9 @@ func mergeHallOfFameRow(kept *model.HallOfFameImportRow, duplicate model.HallOfF
 	}
 	if kept.ContactName == nil {
 		kept.ContactName = duplicate.ContactName
+	}
+	if kept.RoleLabel == nil {
+		kept.RoleLabel = duplicate.RoleLabel
 	}
 }
 
@@ -205,6 +214,16 @@ func hallOfFameNameCollisionWarnings(rows []model.HallOfFameImportRow) []model.H
 	return warnings
 }
 
+// hallOfFameIssue treats rowIndex 0 as a file-level issue (JSON null).
 func hallOfFameIssue(rowIndex int, field, code, message string) model.HallOfFameImportIssue {
-	return model.HallOfFameImportIssue{RowIndex: rowIndex, Field: field, Code: code, Message: message}
+	issue := model.HallOfFameImportIssue{Field: field, Code: code, Message: message}
+	if rowIndex > 0 {
+		issue.RowIndex = &rowIndex
+	}
+	return issue
+}
+
+// hallOfFameHoldsPhone catches a phone number typed into a column that gets stored.
+func hallOfFameHoldsPhone(value string) bool {
+	return hallOfFamePhoneRunPattern.MatchString(value)
 }

@@ -160,12 +160,10 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	adminDonationOrchestrator := service.NewDonationConfigOrchestrator(adminDonationSvc, donationService, donationJob)
 	hallOfFameRepo := repository.NewHallOfFameRepository(db)
 	hallOfFameSvc := service.NewHallOfFameService(hallOfFameRepo)
-	hallOfFamePhoneSecret := cfg.HallOfFamePhoneHashSecret
-	if hallOfFamePhoneSecret == "" {
-		logger.Warn().Msg("HALL_OF_FAME_PHONE_HASH_SECRET is empty; falling back to JWT_SECRET")
-		hallOfFamePhoneSecret = cfg.JWT.Secret
+	if cfg.HallOfFamePhoneHashSecret == "" {
+		logger.Warn().Msg("HALL_OF_FAME_PHONE_HASH_SECRET is empty; hall of fame import is disabled")
 	}
-	hallOfFameImportSvc := service.NewHallOfFameImportService(hallOfFameRepo, cfg.JWT.Secret, hallOfFamePhoneSecret)
+	hallOfFameImportSvc := service.NewHallOfFameImportService(hallOfFameRepo, cfg.JWT.Secret, cfg.HallOfFamePhoneHashSecret)
 	donationImportSvc := service.NewDonationImportService(donationImportRepo, adminDonationSvc, cfg.JWT.Secret, adminDonationOrchestrator)
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
 	// The realtime inbox event is wired unconditionally: the inbox lists every

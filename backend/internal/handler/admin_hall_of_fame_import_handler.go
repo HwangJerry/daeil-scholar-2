@@ -21,6 +21,11 @@ func NewAdminHallOfFameImportHandler(importService *service.HallOfFameImportServ
 	return &AdminHallOfFameImportHandler{service: importService, maxSizeMB: maxSizeMB}
 }
 
+func respondHallOfFameImportDisabled(w http.ResponseWriter) {
+	log.Error().Msg("hall of fame import refused: HALL_OF_FAME_PHONE_HASH_SECRET is empty")
+	respondError(w, http.StatusServiceUnavailable, "HALL_OF_FAME_IMPORT_DISABLED", "가져오기가 아직 설정되지 않았습니다. 시스템 관리자에게 문의해 주세요.")
+}
+
 func (h *AdminHallOfFameImportHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	actor, ok := hallOfFameActor(w, r)
 	if !ok {
@@ -44,6 +49,10 @@ func (h *AdminHallOfFameImportHandler) Preview(w http.ResponseWriter, r *http.Re
 	}
 	preview, err := h.service.Preview(file, actor.UsrSeq)
 	if err != nil {
+		if errors.Is(err, service.ErrHallOfFamePhoneSecretMissing) {
+			respondHallOfFameImportDisabled(w)
+			return
+		}
 		if errors.Is(err, service.ErrInvalidHallOfFameFile) {
 			respondError(w, http.StatusBadRequest, "INVALID_HALL_OF_FAME_FILE", err.Error())
 			return
@@ -67,6 +76,10 @@ func (h *AdminHallOfFameImportHandler) Commit(w http.ResponseWriter, r *http.Req
 	}
 	result, err := h.service.Commit(request.PreviewToken, request.RemoveIDs, actor)
 	if err != nil {
+		if errors.Is(err, service.ErrHallOfFamePhoneSecretMissing) {
+			respondHallOfFameImportDisabled(w)
+			return
+		}
 		var rejection *service.HallOfFameImportRejection
 		if errors.As(err, &rejection) {
 			respondError(w, http.StatusConflict, "HALL_OF_FAME_IMPORT_REJECTED", rejection.Message)

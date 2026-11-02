@@ -13,12 +13,11 @@ import (
 )
 
 const (
-	hallOfFameAdminPageSize  = 50
 	mysqlDuplicateEntryError = 1062
 )
 
 const hallOfFameColumns = `id, natural_key, display_name, kind, cohort, department, tier_man_won, contact_name,
-	phone_hash, consent_public, visible, source, source_batch_id, created_at, updated_at, deleted_at`
+	role_label, phone_hash, consent_public, visible, source, source_batch_id, created_at, updated_at, deleted_at`
 
 // ErrHallOfFameEntryNotFound means the row is absent or soft-deleted.
 var ErrHallOfFameEntryNotFound = errors.New("hall of fame entry not found")
@@ -91,15 +90,13 @@ func (r *HallOfFameRepository) ListAdmin(filter model.HallOfFameAdminFilter) ([]
 		WHERE `+where+` GROUP BY tier_man_won ORDER BY tier_man_won DESC`, args...); err != nil {
 		return nil, 0, nil, err
 	}
-	offset := (filter.Page - 1) * hallOfFameAdminPageSize
-	entries := make([]model.HallOfFameEntry, 0, hallOfFameAdminPageSize)
-	pageArgs := append(append([]interface{}{}, args...), hallOfFameAdminPageSize, offset)
+	offset := (filter.Page - 1) * filter.Size
+	entries := make([]model.HallOfFameEntry, 0, filter.Size)
+	pageArgs := append(append([]interface{}{}, args...), filter.Size, offset)
 	err := r.DB.Select(&entries, `SELECT `+hallOfFameColumns+` FROM hall_of_fame_entry WHERE `+where+`
 		ORDER BY tier_man_won IS NULL, tier_man_won DESC, cohort IS NULL, cohort, display_name, id LIMIT ? OFFSET ?`, pageArgs...)
 	return entries, total, counts, err
 }
-
-func (r *HallOfFameRepository) AdminPageSize() int { return hallOfFameAdminPageSize }
 
 func (r *HallOfFameRepository) FindActiveByID(id int64) (*model.HallOfFameEntry, error) {
 	var entry model.HallOfFameEntry
@@ -146,13 +143,13 @@ func (r *HallOfFameRepository) FileAlreadyCommitted(fileSHA256 string) (bool, er
 }
 
 const hallOfFameInsertSQL = `INSERT INTO hall_of_fame_entry
-	(natural_key, display_name, kind, cohort, department, tier_man_won, contact_name, phone_hash,
+	(natural_key, display_name, kind, cohort, department, tier_man_won, contact_name, role_label, phone_hash,
 	 consent_public, visible, source, source_batch_id, created_at, updated_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, NOW(), NOW())`
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`
 
 func (r *HallOfFameRepository) Insert(entry model.HallOfFameEntry) (int64, error) {
 	result, err := r.DB.Exec(hallOfFameInsertSQL, entry.NaturalKey, entry.DisplayName, entry.Kind, entry.Cohort, entry.Department,
-		entry.TierManWon, entry.ContactName, entry.PhoneHash, entry.Source, entry.SourceBatchID)
+		entry.TierManWon, entry.ContactName, entry.RoleLabel, entry.PhoneHash, entry.ConsentPublic, entry.Visible, entry.Source, entry.SourceBatchID)
 	if err != nil {
 		var mysqlErr *mysql.MySQLError
 		if errors.As(err, &mysqlErr) && mysqlErr.Number == mysqlDuplicateEntryError {
@@ -165,24 +162,24 @@ func (r *HallOfFameRepository) Insert(entry model.HallOfFameEntry) (int64, error
 
 func (r *HallOfFameRepository) InsertTx(tx *sqlx.Tx, entry model.HallOfFameEntry) error {
 	_, err := tx.Exec(hallOfFameInsertSQL, entry.NaturalKey, entry.DisplayName, entry.Kind, entry.Cohort, entry.Department,
-		entry.TierManWon, entry.ContactName, entry.PhoneHash, entry.Source, entry.SourceBatchID)
+		entry.TierManWon, entry.ContactName, entry.RoleLabel, entry.PhoneHash, entry.ConsentPublic, entry.Visible, entry.Source, entry.SourceBatchID)
 	return err
 }
 
 const hallOfFameSaveSQL = `UPDATE hall_of_fame_entry SET display_name = ?, kind = ?, cohort = ?, department = ?,
-	tier_man_won = ?, contact_name = ?, phone_hash = ?, consent_public = ?, visible = ?, source = ?, source_batch_id = ?,
+	tier_man_won = ?, contact_name = ?, role_label = ?, phone_hash = ?, consent_public = ?, visible = ?, source = ?, source_batch_id = ?,
 	deleted_at = NULL, updated_at = NOW() WHERE id = ?`
 
 // Save writes every mutable field and clears deleted_at, which also serves restores.
 func (r *HallOfFameRepository) Save(entry model.HallOfFameEntry) error {
 	_, err := r.DB.Exec(hallOfFameSaveSQL, entry.DisplayName, entry.Kind, entry.Cohort, entry.Department, entry.TierManWon,
-		entry.ContactName, entry.PhoneHash, entry.ConsentPublic, entry.Visible, entry.Source, entry.SourceBatchID, entry.ID)
+		entry.ContactName, entry.RoleLabel, entry.PhoneHash, entry.ConsentPublic, entry.Visible, entry.Source, entry.SourceBatchID, entry.ID)
 	return err
 }
 
 func (r *HallOfFameRepository) SaveTx(tx *sqlx.Tx, entry model.HallOfFameEntry) error {
 	_, err := tx.Exec(hallOfFameSaveSQL, entry.DisplayName, entry.Kind, entry.Cohort, entry.Department, entry.TierManWon,
-		entry.ContactName, entry.PhoneHash, entry.ConsentPublic, entry.Visible, entry.Source, entry.SourceBatchID, entry.ID)
+		entry.ContactName, entry.RoleLabel, entry.PhoneHash, entry.ConsentPublic, entry.Visible, entry.Source, entry.SourceBatchID, entry.ID)
 	return err
 }
 

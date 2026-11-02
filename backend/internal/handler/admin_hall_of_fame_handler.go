@@ -36,7 +36,7 @@ func hallOfFameActor(w http.ResponseWriter, r *http.Request) (service.HallOfFame
 
 func parseHallOfFameFilter(r *http.Request) (model.HallOfFameAdminFilter, bool) {
 	values := r.URL.Query()
-	filter := model.HallOfFameAdminFilter{Kind: values.Get("kind"), Query: values.Get("q"), Page: parseIntParam(values.Get("page"))}
+	filter := model.HallOfFameAdminFilter{Kind: values.Get("kind"), Query: values.Get("q"), Page: parseIntParam(values.Get("page")), Size: parseIntParam(values.Get("size"))}
 	if filter.Kind != "" && !model.HallOfFameKind(filter.Kind).Valid() {
 		return filter, false
 	}

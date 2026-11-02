@@ -55,6 +55,7 @@ type HallOfFameEntry struct {
 	Department    *string        `db:"department" json:"department"`
 	TierManWon    *int           `db:"tier_man_won" json:"tierManWon"`
 	ContactName   *string        `db:"contact_name" json:"contactName"`
+	RoleLabel     *string        `db:"role_label" json:"roleLabel"`
 	PhoneHash     *string        `db:"phone_hash" json:"-"`
 	ConsentPublic bool           `db:"consent_public" json:"consentPublic"`
 	Visible       bool           `db:"visible" json:"visible"`
@@ -93,6 +94,7 @@ type HallOfFameAdminFilter struct {
 	Query   string
 	Visible *bool
 	Page    int
+	Size    int
 }
 
 // HallOfFameTierCount is an operator-only summary; the public API has no counts.
@@ -102,21 +104,24 @@ type HallOfFameTierCount struct {
 }
 
 type HallOfFameAdminList struct {
-	Entries    []HallOfFameAdminEntry `json:"entries"`
+	Items      []HallOfFameAdminEntry `json:"items"`
 	Total      int                    `json:"total"`
 	Page       int                    `json:"page"`
-	PageSize   int                    `json:"pageSize"`
+	Size       int                    `json:"size"`
 	TierCounts []HallOfFameTierCount  `json:"tierCounts"`
 }
 
-// HallOfFameCreateInput is a manually added row.
+// HallOfFameCreateInput is a manually added row. Omitted toggles default to true.
 type HallOfFameCreateInput struct {
-	DisplayName string         `json:"displayName"`
-	Kind        HallOfFameKind `json:"kind"`
-	Cohort      *int           `json:"cohort"`
-	Department  *string        `json:"department"`
-	TierManWon  *int           `json:"tierManWon"`
-	ContactName *string        `json:"contactName"`
+	DisplayName   string         `json:"displayName"`
+	Kind          HallOfFameKind `json:"kind"`
+	Cohort        *int           `json:"cohort"`
+	Department    *string        `json:"department"`
+	TierManWon    *int           `json:"tierManWon"`
+	ContactName   *string        `json:"contactName"`
+	RoleLabel     *string        `json:"roleLabel"`
+	ConsentPublic *bool          `json:"consentPublic"`
+	Visible       *bool          `json:"visible"`
 }
 
 // OptionalField distinguishes "absent" from an explicit JSON null in PATCH bodies.
@@ -147,6 +152,7 @@ type HallOfFamePatchInput struct {
 	Department    OptionalField[string]         `json:"department"`
 	TierManWon    OptionalField[int]            `json:"tierManWon"`
 	ContactName   OptionalField[string]         `json:"contactName"`
+	RoleLabel     OptionalField[string]         `json:"roleLabel"`
 	ConsentPublic OptionalField[bool]           `json:"consentPublic"`
 	Visible       OptionalField[bool]           `json:"visible"`
 }
@@ -163,6 +169,7 @@ type HallOfFameImportRow struct {
 	Department  *string        `json:"department"`
 	TierManWon  *int           `json:"tierManWon"`
 	ContactName *string        `json:"contactName"`
+	RoleLabel   *string        `json:"roleLabel"`
 	Label       string         `json:"label"`
 }
 
@@ -188,8 +195,10 @@ type HallOfFameRemovalCandidate struct {
 	TierManWon  *int           `json:"tierManWon"`
 }
 
+// HallOfFameImportIssue messages never echo cell values, so a phone number typed
+// into the wrong column cannot surface here. RowIndex is null for file-level issues.
 type HallOfFameImportIssue struct {
-	RowIndex int    `json:"rowIndex"`
+	RowIndex *int   `json:"rowIndex"`
 	Field    string `json:"field"`
 	Code     string `json:"code"`
 	Message  string `json:"message"`

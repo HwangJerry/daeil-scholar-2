@@ -37,7 +37,7 @@ func TestClassifyHallOfFameName(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.raw, func(t *testing.T) {
 			got := classifyHallOfFameName(test.raw)
-			if got.DisplayName != test.name || got.Kind != test.kind || got.IsPrincipal != test.principal || got.UnknownMark != test.unknown {
+			if got.DisplayName != test.name || got.Kind != test.kind || (got.RoleLabel != nil) != test.principal || got.UnknownMark != test.unknown {
 				t.Fatalf("got %+v", got)
 			}
 			contact := ""
@@ -180,19 +180,20 @@ func TestHallOfFameLabel(t *testing.T) {
 		kind       model.HallOfFameKind
 		cohort     *int
 		department *string
+		role       *string
 		want       string
 	}{
-		{model.HallOfFameKindAlumni, &cohort, &department, "15기 · 불어과"},
-		{model.HallOfFameKindAlumni, &cohort, nil, "15기"},
-		{model.HallOfFameKindAlumni, nil, nil, ""},
-		{model.HallOfFameKindCompanion, &cohort, &department, "15기 · 불어과"},
-		{model.HallOfFameKindTeacher, &cohort, &department, "교사"},
-		{model.HallOfFameKindTeacher, nil, &principal, "교장"},
-		{model.HallOfFameKindGuest, &cohort, &department, ""},
-		{model.HallOfFameKindOrg, nil, nil, ""},
+		{model.HallOfFameKindAlumni, &cohort, &department, nil, "15기 · 불어과"},
+		{model.HallOfFameKindAlumni, &cohort, nil, nil, "15기"},
+		{model.HallOfFameKindAlumni, nil, nil, nil, ""},
+		{model.HallOfFameKindCompanion, &cohort, &department, nil, "15기 · 불어과"},
+		{model.HallOfFameKindTeacher, &cohort, &department, nil, "교사"},
+		{model.HallOfFameKindTeacher, nil, nil, &principal, "교장"},
+		{model.HallOfFameKindGuest, &cohort, &department, nil, ""},
+		{model.HallOfFameKindOrg, nil, nil, nil, ""},
 	}
 	for _, test := range tests {
-		if got := hallOfFameLabel(test.kind, test.cohort, test.department); got != test.want {
+		if got := hallOfFameLabel(test.kind, test.cohort, test.department, test.role); got != test.want {
 			t.Fatalf("%s: got %q, want %q", test.kind, got, test.want)
 		}
 	}

@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS hall_of_fame_entry (
     department VARCHAR(30) NULL,
     tier_man_won INT NULL,
     contact_name VARCHAR(100) NULL,
+    role_label VARCHAR(30) NULL,
     phone_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
     consent_public TINYINT(1) NOT NULL DEFAULT 1,
     visible TINYINT(1) NOT NULL DEFAULT 1,

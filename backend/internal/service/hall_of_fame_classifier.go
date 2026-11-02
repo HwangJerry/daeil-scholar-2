@@ -2,6 +2,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -12,9 +13,11 @@ import (
 )
 
 const (
-	hallOfFamePrincipalDepartment = "교장"
-	hallOfFameMaxCohort           = 32767
-	hallOfFameOrgParenInner       = "주"
+	hallOfFamePrincipalRole  = "교장"
+	hallOfFameDefaultTeacher = "교사"
+	hallOfFameMaxCohort      = 32767
+	hallOfFameOrgParenInner  = "주"
+	hallOfFameMaxRoleRunes   = 30
 )
 
 // hallOfFameDepartmentAlias is the single source of department abbreviations.
@@ -39,6 +42,9 @@ var hallOfFameTierWords = map[string]int{
 }
 
 var (
+	errHallOfFameInvalidCohort = errors.New("기수 값을 해석할 수 없습니다.")
+	errHallOfFameInvalidTier   = errors.New("등급 값이 허용되지 않습니다. (100/300/500/1000만원)")
+
 	hallOfFameParenPattern  = regexp.MustCompile(`\(([^()]*)\)`)
 	hallOfFameParenReplacer = strings.NewReplacer("（", "(", "）", ")")
 )
@@ -47,7 +53,7 @@ type hallOfFameClassification struct {
 	DisplayName string
 	Kind        model.HallOfFameKind
 	ContactName *string
-	IsPrincipal bool
+	RoleLabel   *string
 	UnknownMark bool
 }
 
@@ -73,7 +79,8 @@ func classifyHallOfFameName(raw string) hallOfFameClassification {
 	}
 	switch {
 	case markHas("교장"):
-		return hallOfFameClassification{DisplayName: bare, Kind: model.HallOfFameKindTeacher, IsPrincipal: true}
+		principal := hallOfFamePrincipalRole
+		return hallOfFameClassification{DisplayName: bare, Kind: model.HallOfFameKindTeacher, RoleLabel: &principal}
 	case markHas("교사"):
 		return hallOfFameClassification{DisplayName: bare, Kind: model.HallOfFameKindTeacher}
 	case strings.Contains(name, "지인"), strings.Contains(name, "비동문"):
@@ -115,7 +122,7 @@ func parseHallOfFameCohort(raw string) (*int, error) {
 	}
 	cohort, err := strconv.Atoi(value)
 	if err != nil || cohort < 0 || cohort > hallOfFameMaxCohort {
-		return nil, fmt.Errorf("기수 값 %q을(를) 해석할 수 없습니다", raw)
+		return nil, errHallOfFameInvalidCohort
 	}
 	return &cohort, nil
 }
@@ -150,17 +157,17 @@ func parseHallOfFameTier(raw string) (*int, error) {
 	if tier, err := strconv.Atoi(number); err == nil && model.IsHallOfFameTier(tier) {
 		return &tier, nil
 	}
-	return nil, fmt.Errorf("등급 값 %q은(는) 허용되지 않습니다 (100/300/500/1000만원)", raw)
+	return nil, errHallOfFameInvalidTier
 }
 
 // hallOfFameLabel builds the public subtitle so clients never see the internal kind.
-func hallOfFameLabel(kind model.HallOfFameKind, cohort *int, department *string) string {
+func hallOfFameLabel(kind model.HallOfFameKind, cohort *int, department, roleLabel *string) string {
 	switch kind {
 	case model.HallOfFameKindTeacher:
-		if department != nil && *department == hallOfFamePrincipalDepartment {
-			return "교장"
+		if roleLabel != nil && *roleLabel != "" {
+			return *roleLabel
 		}
-		return "교사"
+		return hallOfFameDefaultTeacher
 	case model.HallOfFameKindGuest, model.HallOfFameKindOrg:
 		return ""
 	}

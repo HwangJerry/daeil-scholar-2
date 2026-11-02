@@ -22,7 +22,6 @@ func (f *fakeHallOfFameCrudRepo) ListPublic() ([]model.HallOfFameEntry, error) {
 func (f *fakeHallOfFameCrudRepo) ListAdmin(model.HallOfFameAdminFilter) ([]model.HallOfFameEntry, int, []model.HallOfFameTierCount, error) {
 	return nil, 0, nil, nil
 }
-func (f *fakeHallOfFameCrudRepo) AdminPageSize() int { return 50 }
 func (f *fakeHallOfFameCrudRepo) FindActiveByID(int64) (*model.HallOfFameEntry, error) {
 	if f.entry == nil {
 		return nil, repository.ErrHallOfFameEntryNotFound
@@ -133,6 +132,35 @@ func TestPatchRejectsInvalidTierAndMissingEntry(t *testing.T) {
 	}
 	if _, err := NewHallOfFameService(&fakeHallOfFameCrudRepo{}).Patch(1, input, hallOfFameTestActor); !errors.Is(err, repository.ErrHallOfFameEntryNotFound) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCreateHonoursTogglesAndRoleLabel(t *testing.T) {
+	repo := &fakeHallOfFameCrudRepo{}
+	consent, role := false, "명예교장"
+	created, err := NewHallOfFameService(repo).Create(model.HallOfFameCreateInput{
+		DisplayName: "김하나", Kind: model.HallOfFameKindTeacher, ConsentPublic: &consent, RoleLabel: &role,
+	}, hallOfFameTestActor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ConsentPublic || !created.Visible || created.Label != role {
+		t.Fatalf("created: %+v", created)
+	}
+}
+
+func TestPatchRoleLabelCountsAsContentEdit(t *testing.T) {
+	tier := 100
+	repo := &fakeHallOfFameCrudRepo{}
+	entry := hallOfFameTestEntry(1, "김하나", nil, &tier)
+	repo.entry = &entry
+	var input model.HallOfFamePatchInput
+	_ = json.Unmarshal([]byte(`{"roleLabel":"교장"}`), &input)
+	if _, err := NewHallOfFameService(repo).Patch(1, input, hallOfFameTestActor); err != nil {
+		t.Fatal(err)
+	}
+	if repo.saved.Source != model.HallOfFameSourceManual || *repo.saved.RoleLabel != "교장" {
+		t.Fatalf("saved: %+v", repo.saved)
 	}
 }
 

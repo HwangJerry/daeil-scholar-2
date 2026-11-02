@@ -30,7 +30,7 @@ type Config struct {
 	MessageBlockedPhrases []string
 
 	// HallOfFamePhoneHashSecret keys phone_hash and must never change after the first
-	// import. Empty falls back to JWT_SECRET, whose rotation would re-key every row.
+	// import. Empty disables the import endpoints; it never borrows another secret.
 	HallOfFamePhoneHashSecret string
 }
 

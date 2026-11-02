@@ -31,10 +31,14 @@ func logHallOfFameAudit(actor HallOfFameActor, action string) *zerolog.Event {
 	return log.Info().Str("audit", "hall_of_fame").Str("action", action).Int("actorSeq", actor.UsrSeq).Str("ip", actor.IP)
 }
 
+const (
+	hallOfFameDefaultPageSize = 50
+	hallOfFameMaxPageSize     = 200
+)
+
 type hallOfFameRepository interface {
 	ListPublic() ([]model.HallOfFameEntry, error)
 	ListAdmin(filter model.HallOfFameAdminFilter) ([]model.HallOfFameEntry, int, []model.HallOfFameTierCount, error)
-	AdminPageSize() int
 	FindActiveByID(id int64) (*model.HallOfFameEntry, error)
 	FindByNaturalKey(naturalKey string) (*model.HallOfFameEntry, error)
 	Insert(entry model.HallOfFameEntry) (int64, error)
@@ -67,7 +71,7 @@ func buildHallOfFamePublicResponse(entries []model.HallOfFameEntry) *model.HallO
 		}
 		byTier[*entry.TierManWon] = append(byTier[*entry.TierManWon], model.HallOfFamePublicEntry{
 			DisplayName: entry.DisplayName,
-			Label:       hallOfFameLabel(entry.Kind, entry.Cohort, entry.Department),
+			Label:       hallOfFameLabel(entry.Kind, entry.Cohort, entry.Department, entry.RoleLabel),
 		})
 	}
 	response := &model.HallOfFamePublicResponse{Tiers: make([]model.HallOfFamePublicTier, 0, len(model.HallOfFameTiersDescending))}
@@ -100,22 +104,26 @@ func (s *HallOfFameService) ListAdmin(filter model.HallOfFameAdminFilter) (*mode
 	if filter.Page < 1 {
 		filter.Page = 1
 	}
+	if filter.Size < 1 {
+		filter.Size = hallOfFameDefaultPageSize
+	}
+	filter.Size = min(filter.Size, hallOfFameMaxPageSize)
 	entries, total, counts, err := s.repo.ListAdmin(filter)
 	if err != nil {
 		return nil, err
 	}
 	list := &model.HallOfFameAdminList{
-		Entries: make([]model.HallOfFameAdminEntry, 0, len(entries)), Total: total, Page: filter.Page,
-		PageSize: s.repo.AdminPageSize(), TierCounts: counts,
+		Items: make([]model.HallOfFameAdminEntry, 0, len(entries)), Total: total, Page: filter.Page,
+		Size: filter.Size, TierCounts: counts,
 	}
 	for _, entry := range entries {
-		list.Entries = append(list.Entries, toHallOfFameAdminEntry(entry))
+		list.Items = append(list.Items, toHallOfFameAdminEntry(entry))
 	}
 	return list, nil
 }
 
 func toHallOfFameAdminEntry(entry model.HallOfFameEntry) model.HallOfFameAdminEntry {
-	return model.HallOfFameAdminEntry{HallOfFameEntry: entry, Label: hallOfFameLabel(entry.Kind, entry.Cohort, entry.Department)}
+	return model.HallOfFameAdminEntry{HallOfFameEntry: entry, Label: hallOfFameLabel(entry.Kind, entry.Cohort, entry.Department, entry.RoleLabel)}
 }
 
 func cleanHallOfFameOptional(value *string) *string {
@@ -145,6 +153,8 @@ func validateHallOfFameEntry(entry model.HallOfFameEntry) error {
 		return hallOfFameInputError("등급은 100/300/500/1000만원 중 하나여야 합니다.")
 	case entry.ContactName != nil && utf8.RuneCountInString(*entry.ContactName) > hallOfFameMaxNameRunes:
 		return hallOfFameInputError("담당자 이름은 100자 이하여야 합니다.")
+	case entry.RoleLabel != nil && utf8.RuneCountInString(*entry.RoleLabel) > hallOfFameMaxRoleRunes:
+		return hallOfFameInputError("직함은 30자 이하여야 합니다.")
 	}
 	return nil
 }
@@ -167,8 +177,10 @@ func (s *HallOfFameService) Create(input model.HallOfFameCreateInput, actor Hall
 	entry := model.HallOfFameEntry{
 		DisplayName: normalizeHallOfFameText(input.DisplayName), Kind: input.Kind, Cohort: input.Cohort,
 		Department: cleanHallOfFameOptional(input.Department), TierManWon: input.TierManWon,
-		ContactName: cleanHallOfFameOptional(input.ContactName), ConsentPublic: true, Visible: true,
-		Source: model.HallOfFameSourceManual,
+		ContactName: cleanHallOfFameOptional(input.ContactName), RoleLabel: cleanHallOfFameOptional(input.RoleLabel),
+		ConsentPublic: input.ConsentPublic == nil || *input.ConsentPublic,
+		Visible:       input.Visible == nil || *input.Visible,
+		Source:        model.HallOfFameSourceManual,
 	}
 	if err := validateHallOfFameEntry(entry); err != nil {
 		return nil, err
@@ -237,6 +249,9 @@ func (s *HallOfFameService) Patch(id int64, input model.HallOfFamePatchInput, ac
 	if input.ContactName.Set {
 		updated.ContactName = cleanHallOfFameOptional(input.ContactName.Value)
 	}
+	if input.RoleLabel.Set {
+		updated.RoleLabel = cleanHallOfFameOptional(input.RoleLabel.Value)
+	}
 	if input.ConsentPublic.Set {
 		if input.ConsentPublic.Value == nil {
 			return nil, hallOfFameInputError("공개 동의 값이 필요합니다.")
@@ -254,7 +269,7 @@ func (s *HallOfFameService) Patch(id int64, input model.HallOfFamePatchInput, ac
 	}
 	contentChanged := len(hallOfFameRowChanges(*entry, model.HallOfFameImportRow{
 		DisplayName: updated.DisplayName, Kind: updated.Kind, Cohort: updated.Cohort,
-		Department: updated.Department, TierManWon: updated.TierManWon, ContactName: updated.ContactName,
+		Department: updated.Department, TierManWon: updated.TierManWon, ContactName: updated.ContactName, RoleLabel: updated.RoleLabel,
 	})) > 0
 	if contentChanged {
 		updated.Source = model.HallOfFameSourceManual

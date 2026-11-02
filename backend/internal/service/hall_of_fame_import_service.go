@@ -27,6 +27,10 @@ const (
 // ErrInvalidHallOfFameFile means the upload is not a readable template spreadsheet.
 var ErrInvalidHallOfFameFile = errors.New("invalid hall of fame import file")
 
+// ErrHallOfFamePhoneSecretMissing means import is disabled: hashing phones with a
+// missing or borrowed key would give every row an identity that cannot be kept stable.
+var ErrHallOfFamePhoneSecretMissing = errors.New("hall of fame phone hash secret is not configured")
+
 // HallOfFameImportRejection is a commit refused for an operator-fixable reason.
 type HallOfFameImportRejection struct{ Message string }
 
@@ -45,6 +49,7 @@ type hallOfFameImportRepository interface {
 
 type HallOfFameImportService struct {
 	repo       hallOfFameImportRepository
+	configured bool
 	identity   hallOfFameIdentity
 	signingKey []byte
 	now        func() time.Time
@@ -53,6 +58,7 @@ type HallOfFameImportService struct {
 func NewHallOfFameImportService(repo hallOfFameImportRepository, signingKey, phoneHashSecret string) *HallOfFameImportService {
 	return &HallOfFameImportService{
 		repo:       repo,
+		configured: phoneHashSecret != "",
 		identity:   newHallOfFameIdentity(phoneHashSecret),
 		signingKey: []byte("hall-of-fame-import-preview:v1:" + signingKey),
 		now:        time.Now,
@@ -61,6 +67,9 @@ func NewHallOfFameImportService(repo hallOfFameImportRepository, signingKey, pho
 
 // Preview parses the file and diffs it against the table without writing anything.
 func (s *HallOfFameImportService) Preview(file io.Reader, adminSeq int) (*model.HallOfFameImportPreview, error) {
+	if !s.configured {
+		return nil, ErrHallOfFamePhoneSecretMissing
+	}
 	content, err := io.ReadAll(file)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidHallOfFameFile, err)
@@ -115,6 +124,9 @@ func (s *HallOfFameImportService) Preview(file io.Reader, adminSeq int) (*model.
 // Commit recomputes the diff under row locks and applies it in one transaction.
 // A commit that would change nothing writes nothing, including no batch row.
 func (s *HallOfFameImportService) Commit(previewToken string, removeIDs []int64, actor HallOfFameActor) (*model.HallOfFameImportCommitResult, error) {
+	if !s.configured {
+		return nil, ErrHallOfFamePhoneSecretMissing
+	}
 	token, err := s.verifyToken(previewToken, actor.UsrSeq)
 	if err != nil {
 		return nil, err
@@ -160,7 +172,8 @@ func (s *HallOfFameImportService) applyPlan(tx *sqlx.Tx, plan *hallOfFamePlan, r
 		return err
 	}
 	for _, row := range plan.Inserts {
-		entry := applyHallOfFameRow(model.HallOfFameEntry{NaturalKey: row.NaturalKey, Source: model.HallOfFameSourceExcel}, row, batchID)
+		public := !plan.HiddenInserts[row.NaturalKey]
+		entry := applyHallOfFameRow(model.HallOfFameEntry{NaturalKey: row.NaturalKey, Source: model.HallOfFameSourceExcel, ConsentPublic: public, Visible: public}, row, batchID)
 		if err := s.repo.InsertTx(tx, entry); err != nil {
 			return err
 		}

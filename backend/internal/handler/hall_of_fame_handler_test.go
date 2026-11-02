@@ -17,7 +17,6 @@ func (s stubHallOfFameRepo) ListPublic() ([]model.HallOfFameEntry, error) { retu
 func (s stubHallOfFameRepo) ListAdmin(model.HallOfFameAdminFilter) ([]model.HallOfFameEntry, int, []model.HallOfFameTierCount, error) {
 	return nil, 0, nil, nil
 }
-func (s stubHallOfFameRepo) AdminPageSize() int { return 50 }
 func (s stubHallOfFameRepo) FindActiveByID(int64) (*model.HallOfFameEntry, error) {
 	return nil, nil
 }

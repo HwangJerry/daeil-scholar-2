@@ -66,7 +66,7 @@ func (f *fakeHallOfFameRepo) FileAlreadyCommitted(fileSHA256 string) (bool, erro
 func (f *fakeHallOfFameRepo) InsertTx(_ *sqlx.Tx, entry model.HallOfFameEntry) error {
 	f.writes++
 	f.nextID++
-	entry.ID, entry.Visible, entry.ConsentPublic = f.nextID, true, true
+	entry.ID = f.nextID
 	f.entries = append(f.entries, entry)
 	return nil
 }
@@ -188,7 +188,7 @@ func TestHallOfFameImportAppliesClassification(t *testing.T) {
 		t.Fatalf("companion: %+v", companion)
 	}
 	principal := repo.find(t, "최네오")
-	if principal.PhoneHash != nil || hallOfFameLabel(principal.Kind, principal.Cohort, principal.Department) != "교장" {
+	if principal.PhoneHash != nil || principal.Department != nil || hallOfFameLabel(principal.Kind, principal.Cohort, principal.Department, principal.RoleLabel) != "교장" {
 		t.Fatalf("principal: %+v", principal)
 	}
 	org := repo.find(t, "주식회사 대일상사")
@@ -312,6 +312,59 @@ func TestHallOfFameOperatorDeletedRowStaysDeleted(t *testing.T) {
 	}
 }
 
+func TestHallOfFameRestrictedPersonWithNewPhoneImportsHidden(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name     string
+		restrict func(*model.HallOfFameEntry)
+	}{
+		{"consent withdrawn", func(entry *model.HallOfFameEntry) { entry.ConsentPublic = false }},
+		{"hidden by operator", func(entry *model.HallOfFameEntry) { entry.Visible = false }},
+		{"deleted by operator", func(entry *model.HallOfFameEntry) {
+			entry.Source, entry.DeletedAt = model.HallOfFameSourceManual, &now
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := &fakeHallOfFameRepo{}
+			service := NewHallOfFameImportService(repo, "signing", "phone")
+			rows := hallOfFameFixtureRows()
+			commitHallOfFameFile(t, service, hallOfFameWorkbook(t, rows...))
+			test.restrict(repo.find(t, "김하나"))
+
+			rows[0][1] = "010-1212-3434"
+			preview, err := service.Preview(hallOfFameWorkbook(t, rows...), 7)
+			if err != nil {
+				t.Fatal(err)
+			}
+			warned := false
+			for _, warning := range preview.Warnings {
+				warned = warned || warning.Code == "RESTRICTED_MATCH"
+			}
+			if !warned {
+				t.Fatalf("warnings: %+v", preview.Warnings)
+			}
+			if _, err := service.Commit(preview.PreviewToken, nil, hallOfFameTestActor); err != nil {
+				t.Fatal(err)
+			}
+			inserted := repo.entries[len(repo.entries)-1]
+			if inserted.DisplayName != "김하나" || inserted.Visible || inserted.ConsentPublic {
+				t.Fatalf("restricted person went public: %+v", inserted)
+			}
+		})
+	}
+}
+
+func TestHallOfFameImportFailsClosedWithoutPhoneSecret(t *testing.T) {
+	service := NewHallOfFameImportService(&fakeHallOfFameRepo{}, "signing", "")
+	if _, err := service.Preview(hallOfFameWorkbook(t, hallOfFameFixtureRows()...), 7); !errors.Is(err, ErrHallOfFamePhoneSecretMissing) {
+		t.Fatalf("preview: %v", err)
+	}
+	if _, err := service.Commit("token", nil, hallOfFameTestActor); !errors.Is(err, ErrHallOfFamePhoneSecretMissing) {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
 func TestHallOfFameRemovalOnlyForSelectedCandidatesAndRestorable(t *testing.T) {
 	repo := &fakeHallOfFameRepo{}
 	service := NewHallOfFameImportService(repo, "signing", "phone")
@@ -381,6 +434,45 @@ func TestHallOfFamePreviewWarningsAndBlockingErrors(t *testing.T) {
 	}
 	if len(preview.Errors) != 1 || preview.Errors[0].Code != "INVALID_TIER" || preview.PreviewToken != "" {
 		t.Fatalf("errors: %+v token %q", preview.Errors, preview.PreviewToken)
+	}
+}
+
+func TestHallOfFameIssueMessagesNeverEchoPhones(t *testing.T) {
+	service := NewHallOfFameImportService(&fakeHallOfFameRepo{}, "signing", "phone")
+	preview, err := service.Preview(hallOfFameWorkbook(t,
+		[]interface{}{"김하나", "010-1234-5678", 3, "독", "-", "백만원이상"},
+		[]interface{}{"김하나", "010-1234-5678", 3, "독", "-", "백만원이상"},
+		[]interface{}{"이두리", "", "010-2222-3333", "독", "-", "백만원이상"},
+		[]interface{}{"박세나", "", 4, "독", "-", "010-4444-5555"},
+		[]interface{}{"최네오", "", 5, "010-6666-7777", "-", "백만원이상"},
+		[]interface{}{"정다섯 010 8888 9999", "", 6, "독", "-", "백만원이상"},
+	), 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(preview)
+	for _, fragment := range []string{"1234", "2222", "4444", "6666", "8888"} {
+		if strings.Contains(string(encoded), fragment) {
+			t.Fatalf("phone fragment %s leaked: %s", fragment, encoded)
+		}
+	}
+	codes := map[string]int{}
+	for _, issue := range preview.Errors {
+		codes[issue.Code]++
+	}
+	if codes["INVALID_COHORT"] != 1 || codes["INVALID_TIER"] != 1 || codes["PHONE_IN_WRONG_COLUMN"] != 2 || preview.PreviewToken != "" {
+		t.Fatalf("errors: %+v", preview.Errors)
+	}
+}
+
+func TestHallOfFameFileLevelIssueHasNullRowIndex(t *testing.T) {
+	preview, err := NewHallOfFameImportService(&fakeHallOfFameRepo{}, "s", "p").Preview(hallOfFameWorkbook(t), 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(preview.Errors)
+	if !strings.Contains(string(encoded), `"rowIndex":null`) {
+		t.Fatalf("errors: %s", encoded)
 	}
 }
 

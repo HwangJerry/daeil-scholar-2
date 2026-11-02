@@ -11,6 +11,7 @@ import (
 // inside the commit transaction, so a stale preview can never overwrite newer data.
 type hallOfFamePlan struct {
 	Inserts       []model.HallOfFameImportRow
+	HiddenInserts map[string]bool
 	Restores      []hallOfFameRowUpdate
 	Updates       []hallOfFameRowUpdate
 	Unchanged     int
@@ -30,19 +31,24 @@ func (p *hallOfFamePlan) changeCount(removals int) int {
 }
 
 func diffHallOfFame(rows []model.HallOfFameImportRow, existing []model.HallOfFameEntry) *hallOfFamePlan {
-	plan := &hallOfFamePlan{}
+	plan := &hallOfFamePlan{HiddenInserts: make(map[string]bool)}
 	byKey := make(map[string]model.HallOfFameEntry, len(existing))
 	liveManualByName := make(map[string]bool)
+	restrictedByName := make(map[string]bool)
 	for _, entry := range existing {
 		byKey[entry.NaturalKey] = entry
+		nameKey := normalizeHallOfFameName(entry.DisplayName) + "|" + hallOfFameCohortKey(entry.Cohort)
 		if entry.Source == model.HallOfFameSourceManual && entry.DeletedAt == nil {
-			liveManualByName[normalizeHallOfFameName(entry.DisplayName)+"|"+hallOfFameCohortKey(entry.Cohort)] = true
+			liveManualByName[nameKey] = true
+		}
+		if isHallOfFameRestricted(entry) {
+			restrictedByName[nameKey] = true
 		}
 	}
 	inFile := make(map[string]bool, len(rows))
 	for _, row := range rows {
 		inFile[row.NaturalKey] = true
-		plan.classifyRow(row, byKey, liveManualByName)
+		plan.classifyRow(row, byKey, liveManualByName, restrictedByName)
 	}
 	for _, entry := range existing {
 		if entry.Source == model.HallOfFameSourceExcel && entry.DeletedAt == nil && !inFile[entry.NaturalKey] {
@@ -52,12 +58,26 @@ func diffHallOfFame(rows []model.HallOfFameImportRow, existing []model.HallOfFam
 	return plan
 }
 
-func (p *hallOfFamePlan) classifyRow(row model.HallOfFameImportRow, byKey map[string]model.HallOfFameEntry, liveManualByName map[string]bool) {
+// isHallOfFameRestricted marks a person an operator took down or who has no public
+// consent. A changed phone gives such a person a new natural_key, so a key lookup
+// alone would publish them again under a fresh row.
+func isHallOfFameRestricted(entry model.HallOfFameEntry) bool {
+	takenDown := entry.DeletedAt != nil && entry.Source == model.HallOfFameSourceManual
+	return takenDown || (entry.DeletedAt == nil && (!entry.ConsentPublic || !entry.Visible))
+}
+
+func (p *hallOfFamePlan) classifyRow(row model.HallOfFameImportRow, byKey map[string]model.HallOfFameEntry, liveManualByName, restrictedByName map[string]bool) {
 	entry, exists := byKey[row.NaturalKey]
 	switch {
 	case !exists:
 		p.Inserts = append(p.Inserts, row)
-		if liveManualByName[normalizeHallOfFameName(row.DisplayName)+"|"+hallOfFameCohortKey(row.Cohort)] {
+		nameKey := normalizeHallOfFameName(row.DisplayName) + "|" + hallOfFameCohortKey(row.Cohort)
+		if restrictedByName[nameKey] {
+			p.HiddenInserts[row.NaturalKey] = true
+			p.Warnings = append(p.Warnings, hallOfFameIssue(row.RowIndex, "displayName", "RESTRICTED_MATCH",
+				"같은 이름·기수의 비공개 또는 삭제된 행이 있어 비공개로 추가합니다. 동명이인이면 공개로 바꿔 주세요."))
+		}
+		if liveManualByName[nameKey] {
 			p.Warnings = append(p.Warnings, hallOfFameIssue(row.RowIndex, "displayName", "MANUAL_OVERLAP",
 				"같은 이름·기수의 수동 등록 행이 있습니다. 중복이면 하나를 삭제해 주세요."))
 		}
@@ -104,6 +124,9 @@ func hallOfFameRowChanges(entry model.HallOfFameEntry, row model.HallOfFameImpor
 	if !equalHallOfFameValue(entry.ContactName, row.ContactName) {
 		add("contactName", entry.ContactName, row.ContactName)
 	}
+	if !equalHallOfFameValue(entry.RoleLabel, row.RoleLabel) {
+		add("roleLabel", entry.RoleLabel, row.RoleLabel)
+	}
 	return changes
 }
 
@@ -118,7 +141,7 @@ func equalHallOfFameValue[T comparable](left, right *T) bool {
 func applyHallOfFameRow(entry model.HallOfFameEntry, row model.HallOfFameImportRow, batchID string) model.HallOfFameEntry {
 	entry.DisplayName, entry.Kind, entry.Cohort = row.DisplayName, row.Kind, row.Cohort
 	entry.Department, entry.TierManWon, entry.ContactName = row.Department, row.TierManWon, row.ContactName
-	entry.PhoneHash = row.PhoneHash
+	entry.RoleLabel, entry.PhoneHash = row.RoleLabel, row.PhoneHash
 	entry.SourceBatchID = &batchID
 	return entry
 }
