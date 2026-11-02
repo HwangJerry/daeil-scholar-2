@@ -45,7 +45,7 @@ const PREVIEW: HallImportPreview = {
   }],
   unchangedCount: 330,
   alreadyCommitted: false,
-  manualSkipped: 0,
+  manualSkippedCount: 0,
   removalCandidates: [
     { id: 8, displayName: '이탈자', kind: 'guest', cohort: null, department: null, tierManWon: 300 },
     { id: 9, displayName: '유지자', kind: 'alumni', cohort: 3, department: null, tierManWon: 100 },
@@ -372,7 +372,7 @@ describe('HallOfFamePage upload', () => {
   });
 
   it('explains an already committed file and protected manual entries', async () => {
-    stubApi(() => ({ ...PREVIEW, alreadyCommitted: true, manualSkipped: 2 }));
+    stubApi(() => ({ ...PREVIEW, alreadyCommitted: true, manualSkippedCount: 2 }));
     const user = userEvent.setup();
     const { container } = renderPage();
 

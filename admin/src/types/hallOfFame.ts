@@ -102,7 +102,7 @@ export interface HallImportPreview {
   updated: HallImportUpdatedRow[];
   unchangedCount: number;
   alreadyCommitted: boolean;
-  manualSkipped: number;
+  manualSkippedCount: number;
   removalCandidates: (HallImportRow & { id: number })[];
   warnings: HallImportIssue[];
   errors: HallImportIssue[];

@@ -50,14 +50,14 @@ export function HallOfFameImportPreview({
         <Badge variant="success">추가 {preview.added.length.toLocaleString()}</Badge>
         <Badge variant="default">수정 {preview.updated.length.toLocaleString()}</Badge>
         <Badge variant="muted">변경 없음 {preview.unchangedCount.toLocaleString()}</Badge>
-        {preview.manualSkipped > 0 && (
-          <Badge variant="muted">수동 수정 보호 {preview.manualSkipped.toLocaleString()}</Badge>
+        {preview.manualSkippedCount > 0 && (
+          <Badge variant="muted">수동 수정 보호 {preview.manualSkippedCount.toLocaleString()}</Badge>
         )}
         <Badge variant="warning">삭제 후보 {preview.removalCandidates.length.toLocaleString()}</Badge>
         <Badge variant="warning">경고 {preview.warnings.length.toLocaleString()}</Badge>
         <Badge variant="danger">오류 {preview.errors.length.toLocaleString()}</Badge>
       </div>
-      {preview.manualSkipped > 0 && (
+      {preview.manualSkippedCount > 0 && (
         <p className="text-sm text-cool-gray">수동 수정한 항목은 덮어쓰거나 삭제하지 않습니다.</p>
       )}
 
