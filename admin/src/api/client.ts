@@ -67,6 +67,12 @@ export const api = {
       body: body ? JSON.stringify(body) : undefined,
     });
   },
+  patch<T>(url: string, body?: unknown): Promise<T> {
+    return request<T>(url, {
+      method: 'PATCH',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  },
   del<T>(url: string, body?: unknown): Promise<T> {
     return request<T>(url, {
       method: 'DELETE',

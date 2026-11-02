@@ -27,6 +27,7 @@ import { AccountDeletionsPage } from './pages/AccountDeletionsPage';
 import { OperatorManagePage } from './pages/OperatorManagePage.tsx';
 
 import { DonationArchivesPage } from './pages/DonationArchivesPage';
+import { HallOfFamePage } from './pages/HallOfFamePage.tsx';
 
 export function AppRoutes() {
   return (
@@ -57,6 +58,7 @@ export function AppRoutes() {
         <Route path="history" element={<HistoryManagePage />} />
         <Route path="donation-archives" element={<DonationArchivesPage />} />
         <Route path="donation" element={<DonationMonitorPage />} />
+        <Route path="hall-of-fame" element={<HallOfFamePage />} />
         <Route path="app-monitoring" element={<AppMonitoringPage />} />
         <Route path="app-settings" element={<AppSettingsPage />} />
         <Route path="app-update" element={<AppUpdatePolicyPage />} />

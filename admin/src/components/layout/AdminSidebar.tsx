@@ -38,7 +38,7 @@ const NAVIGATION_GROUPS = [
   {
     id: 'donation',
     label: '기부·후원',
-    routes: ['/donation', '/donation-archives'],
+    routes: ['/donation', '/hall-of-fame', '/donation-archives'],
   },
   {
     id: 'member',
