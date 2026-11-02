@@ -44,6 +44,8 @@ const PREVIEW: HallImportPreview = {
     ],
   }],
   unchangedCount: 330,
+  alreadyCommitted: false,
+  manualSkipped: 0,
   removalCandidates: [
     { id: 8, displayName: '이탈자', kind: 'guest', cohort: null, department: null, tierManWon: 300 },
     { id: 9, displayName: '유지자', kind: 'alumni', cohort: 3, department: null, tierManWon: 100 },
@@ -367,6 +369,20 @@ describe('HallOfFamePage upload', () => {
 
     expect(await screen.findByText(/등급 값을 알 수 없습니다/)).toHaveTextContent('5행');
     expect(screen.getByRole('button', { name: '반영' })).toBeDisabled();
+  });
+
+  it('explains an already committed file and protected manual entries', async () => {
+    stubApi(() => ({ ...PREVIEW, alreadyCommitted: true, manualSkipped: 2 }));
+    const user = userEvent.setup();
+    const { container } = renderPage();
+
+    await openPreview(user, container);
+
+    expect(await screen.findByText('이미 반영한 파일입니다. 현재 명단과 비교한 결과를 확인해 주세요.')).toBeInTheDocument();
+    expect(screen.getByText('수동 수정 보호 2')).toBeInTheDocument();
+    expect(screen.getByText('수동 수정한 항목은 덮어쓰거나 삭제하지 않습니다.')).toBeInTheDocument();
+    // A repeated file can still have a diff after other imports; the flag is informational.
+    expect(screen.getByRole('button', { name: '반영' })).toBeEnabled();
   });
 
   it('blocks commit when the file changes nothing', async () => {

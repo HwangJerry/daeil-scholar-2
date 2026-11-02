@@ -41,14 +41,25 @@ export function HallOfFameImportPreview({
 }: HallOfFameImportPreviewProps) {
   return (
     <div className="space-y-4">
+      {preview.alreadyCommitted && (
+        <p className="text-sm text-cool-gray">
+          이미 반영한 파일입니다. 현재 명단과 비교한 결과를 확인해 주세요.
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
         <Badge variant="success">추가 {preview.added.length.toLocaleString()}</Badge>
         <Badge variant="default">수정 {preview.updated.length.toLocaleString()}</Badge>
         <Badge variant="muted">변경 없음 {preview.unchangedCount.toLocaleString()}</Badge>
+        {preview.manualSkipped > 0 && (
+          <Badge variant="muted">수동 수정 보호 {preview.manualSkipped.toLocaleString()}</Badge>
+        )}
         <Badge variant="warning">삭제 후보 {preview.removalCandidates.length.toLocaleString()}</Badge>
         <Badge variant="warning">경고 {preview.warnings.length.toLocaleString()}</Badge>
         <Badge variant="danger">오류 {preview.errors.length.toLocaleString()}</Badge>
       </div>
+      {preview.manualSkipped > 0 && (
+        <p className="text-sm text-cool-gray">수동 수정한 항목은 덮어쓰거나 삭제하지 않습니다.</p>
+      )}
 
       <IssueSection title="오류" issues={preview.errors} tone="error" />
       <IssueSection title="경고" issues={preview.warnings} tone="warning" />

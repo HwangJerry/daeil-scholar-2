@@ -101,6 +101,8 @@ export interface HallImportPreview {
   added: HallImportRow[];
   updated: HallImportUpdatedRow[];
   unchangedCount: number;
+  alreadyCommitted: boolean;
+  manualSkipped: number;
   removalCandidates: (HallImportRow & { id: number })[];
   warnings: HallImportIssue[];
   errors: HallImportIssue[];
