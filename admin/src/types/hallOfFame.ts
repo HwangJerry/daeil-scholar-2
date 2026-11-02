@@ -1,6 +1,7 @@
 // hallOfFame — admin API contract types for Hall of Fame entries and the Excel import
 export const HALL_TIERS = [100, 300, 500, 1000] as const;
 export type HallTier = (typeof HALL_TIERS)[number];
+export type HallTierFilter = HallTier | 'none' | '';
 
 export const HALL_KINDS = ['alumni', 'companion', 'teacher', 'guest', 'org'] as const;
 export type HallKind = (typeof HALL_KINDS)[number];
@@ -38,7 +39,7 @@ export interface HallEntryPage {
 }
 
 export interface HallEntryFilters {
-  tier: HallTier | '';
+  tier: HallTierFilter;
   kind: HallKind | '';
   q: string;
 }

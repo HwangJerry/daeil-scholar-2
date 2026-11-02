@@ -132,6 +132,21 @@ describe('HallOfFamePage list', () => {
     });
   });
 
+  it('requests unlisted entries and clears the tier when all tiers are selected', async () => {
+    const fetchMock = stubApi();
+    const user = userEvent.setup();
+    renderPage();
+
+    const tierFilter = screen.getByRole('combobox', { name: '등급 필터' });
+    await user.selectOptions(tierFilter, 'none');
+    await waitFor(() => expect(String(fetchMock.mock.lastCall?.[0])).toContain('tier=none'));
+    expect(tierFilter).toHaveValue('none');
+
+    await user.selectOptions(tierFilter, '');
+    await waitFor(() => expect(String(fetchMock.mock.lastCall?.[0])).not.toContain('tier='));
+    expect(tierFilter).toHaveValue('');
+  });
+
   it('patches only the toggled field', async () => {
     const fetchMock = stubApi(() => ENTRY);
     const user = userEvent.setup();

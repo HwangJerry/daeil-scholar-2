@@ -5,16 +5,17 @@ import {
   HALL_TIERS,
   type HallKind,
   type HallTier,
+  type HallTierFilter,
 } from '../../types/hallOfFame.ts';
 import { Input } from '../ui/Input.tsx';
 import { Select } from '../ui/Select.tsx';
-import { formatTier, HALL_KIND_LABELS } from './hallOfFameLabels.ts';
+import { formatTier, HALL_KIND_LABELS, UNLISTED_TIER_LABEL } from './hallOfFameLabels.ts';
 
 interface HallOfFameFiltersProps {
-  tier: HallTier | '';
+  tier: HallTierFilter;
   kind: HallKind | '';
   search: string;
-  onTierChange: (tier: HallTier | '') => void;
+  onTierChange: (tier: HallTierFilter) => void;
   onKindChange: (kind: HallKind | '') => void;
   onSearchChange: (search: string) => void;
 }
@@ -34,10 +35,16 @@ export function HallOfFameFilters({
         className="md:w-40"
         value={tier}
         onChange={(event) => {
-          onTierChange(event.target.value ? (Number(event.target.value) as HallTier) : '');
+          const value = event.target.value;
+          if (value === '' || value === 'none') {
+            onTierChange(value);
+            return;
+          }
+          onTierChange(Number(value) as HallTier);
         }}
       >
         <option value="">전체 등급</option>
+        <option value="none">{UNLISTED_TIER_LABEL}</option>
         {HALL_TIERS.map((value) => (
           <option key={value} value={value}>{formatTier(value)}</option>
         ))}

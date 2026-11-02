@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog.ts';
 import { useHallOfFameList, useHallOfFameMutations } from '../../hooks/useHallOfFameEntries.ts';
 import { usePagination } from '../../hooks/usePagination.ts';
-import type { HallEntry, HallEntryInput, HallKind, HallTier } from '../../types/hallOfFame.ts';
+import type { HallEntry, HallEntryInput, HallKind, HallTierFilter } from '../../types/hallOfFame.ts';
 import { Button } from '../ui/Button.tsx';
 import { ConfirmDialog } from '../ui/ConfirmDialog.tsx';
 import { ErrorState } from '../ui/ErrorState.tsx';
@@ -21,7 +21,7 @@ type EntryDialogTarget = { mode: 'create' } | { mode: 'edit'; entry: HallEntry }
 
 export function HallOfFameListSection() {
   const { page, pageSize, setPage, resetPage } = usePagination({ initialPageSize: LIST_PAGE_SIZE });
-  const [tier, setTier] = useState<HallTier | ''>('');
+  const [tier, setTier] = useState<HallTierFilter>('');
   const [kind, setKind] = useState<HallKind | ''>('');
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
