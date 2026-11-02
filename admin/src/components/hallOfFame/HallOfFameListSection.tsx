@@ -12,13 +12,15 @@ import { Pagination } from '../ui/Pagination.tsx';
 import { HallOfFameEntryDialog } from './HallOfFameEntryDialog.tsx';
 import { HallOfFameFilters } from './HallOfFameFilters.tsx';
 import { HallOfFameTable } from './HallOfFameTable.tsx';
+import { formatTier } from './hallOfFameLabels.ts';
 
 const SEARCH_DEBOUNCE_MS = 300;
+const LIST_PAGE_SIZE = 50; // Server default; the API caps size at 200.
 
 type EntryDialogTarget = { mode: 'create' } | { mode: 'edit'; entry: HallEntry };
 
 export function HallOfFameListSection() {
-  const { page, pageSize, setPage, resetPage } = usePagination();
+  const { page, pageSize, setPage, resetPage } = usePagination({ initialPageSize: LIST_PAGE_SIZE });
   const [tier, setTier] = useState<HallTier | ''>('');
   const [kind, setKind] = useState<HallKind | ''>('');
   const [search, setSearch] = useState('');
@@ -54,14 +56,18 @@ export function HallOfFameListSection() {
   const entries = list.data?.items ?? [];
   const total = list.data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
+  const tierCountSummary = (list.data?.tierCounts ?? [])
+    .map(({ tierManWon, count }) => `${formatTier(tierManWon)} ${count.toLocaleString()}명`)
+    .join(' · ');
   const dialogEntry = dialogTarget?.mode === 'edit' ? dialogTarget.entry : null;
 
   return (
     <section className="space-y-4 rounded-2xl border border-border-light bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-cool-gray">
-          {list.isLoading ? '불러오는 중...' : `총 ${total.toLocaleString()}명`}
-        </p>
+        <div className="text-sm text-cool-gray">
+          <p>{list.isLoading ? '불러오는 중...' : `총 ${total.toLocaleString()}명`}</p>
+          {tierCountSummary && <p className="mt-0.5 text-xs">{tierCountSummary}</p>}
+        </div>
         <Button size="sm" onClick={() => setDialogTarget({ mode: 'create' })}>
           <Plus className="mr-1 h-4 w-4" />
           추가

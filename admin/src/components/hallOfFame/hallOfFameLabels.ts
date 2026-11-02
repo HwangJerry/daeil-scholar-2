@@ -3,6 +3,7 @@ import type { HallKind, HallSource, HallTier } from '../../types/hallOfFame.ts';
 
 export const EMPTY_VALUE_LABEL = '—';
 export const UNLISTED_TIER_LABEL = '미등재';
+export const ROLE_LABEL_FIELD_LABEL = '직함(공개 라벨)';
 
 export const HALL_KIND_LABELS: Record<HallKind, string> = {
   alumni: '동문',
@@ -29,6 +30,7 @@ const IMPORT_FIELD_LABELS: Record<string, string> = {
   department: '과',
   tierManWon: '등급',
   contactName: '담당자',
+  roleLabel: ROLE_LABEL_FIELD_LABEL,
 };
 
 export function getImportFieldLabel(field: string): string | null {

@@ -15,6 +15,7 @@ export interface HallEntry {
   department: string | null;
   tierManWon: HallTier | null;
   contactName: string | null;
+  roleLabel: string | null;
   consentPublic: boolean;
   visible: boolean;
   source: HallSource;
@@ -22,11 +23,18 @@ export interface HallEntry {
   updatedAt: string;
 }
 
+export interface HallTierCount {
+  tierManWon: HallTier | null;
+  count: number;
+}
+
 export interface HallEntryPage {
   items: HallEntry[];
   total: number;
   page: number;
   size: number;
+  /** Counts for the current filters; tierManWon is null for unlisted rows. */
+  tierCounts: HallTierCount[];
 }
 
 export interface HallEntryFilters {
@@ -43,6 +51,7 @@ export interface HallEntryInput {
   department: string | null;
   tierManWon: HallTier | null;
   contactName: string | null;
+  roleLabel: string | null;
 }
 
 export type HallEntryCreateRequest = HallEntryInput & {
@@ -80,10 +89,13 @@ export interface HallImportUpdatedRow {
 
 export interface HallImportIssue {
   rowIndex: number | null;
+  field?: string;
+  code?: string;
   message: string;
 }
 
 export interface HallImportPreview {
+  /** Empty while the file has blocking errors, so such a file cannot be committed. */
   previewToken: string;
   added: HallImportRow[];
   updated: HallImportUpdatedRow[];

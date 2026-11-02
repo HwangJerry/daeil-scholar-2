@@ -3,6 +3,7 @@ import type { HallEntry, HallEntryInput, HallKind, HallTier } from '../../types/
 
 const NAME_MAX_LENGTH = 100;
 const DEPARTMENT_MAX_LENGTH = 30;
+const ROLE_LABEL_MAX_LENGTH = 30;
 
 export interface HallEntryFormState {
   displayName: string;
@@ -11,6 +12,7 @@ export interface HallEntryFormState {
   department: string;
   tierManWon: string;
   contactName: string;
+  roleLabel: string;
 }
 
 export type HallEntryFormResult =
@@ -25,6 +27,7 @@ export function createHallEntryFormState(entry: HallEntry | null): HallEntryForm
     department: entry?.department ?? '',
     tierManWon: entry?.tierManWon == null ? '' : String(entry.tierManWon),
     contactName: entry?.contactName ?? '',
+    roleLabel: entry?.roleLabel ?? '',
   };
 }
 
@@ -32,6 +35,7 @@ export function parseHallEntryForm(form: HallEntryFormState): HallEntryFormResul
   const displayName = form.displayName.trim();
   const department = form.department.trim();
   const contactName = form.contactName.trim();
+  const roleLabel = form.roleLabel.trim();
   const cohortText = form.cohort.trim();
 
   if (!displayName) return { ok: false, reason: '이름을 입력해 주세요.' };
@@ -47,6 +51,9 @@ export function parseHallEntryForm(form: HallEntryFormState): HallEntryFormResul
   if (contactName.length > NAME_MAX_LENGTH) {
     return { ok: false, reason: `담당자는 ${NAME_MAX_LENGTH}자 이하로 입력해 주세요.` };
   }
+  if (roleLabel.length > ROLE_LABEL_MAX_LENGTH) {
+    return { ok: false, reason: `직함은 ${ROLE_LABEL_MAX_LENGTH}자 이하로 입력해 주세요.` };
+  }
 
   return {
     ok: true,
@@ -57,6 +64,7 @@ export function parseHallEntryForm(form: HallEntryFormState): HallEntryFormResul
       department: department || null,
       tierManWon: form.tierManWon ? (Number(form.tierManWon) as HallTier) : null,
       contactName: form.kind === 'org' && contactName ? contactName : null,
+      roleLabel: form.kind === 'teacher' && roleLabel ? roleLabel : null,
     },
   };
 }

@@ -17,7 +17,12 @@ import {
   parseHallEntryForm,
   type HallEntryFormState,
 } from './hallOfFameEntryForm.ts';
-import { formatTier, HALL_KIND_LABELS, UNLISTED_TIER_LABEL } from './hallOfFameLabels.ts';
+import {
+  formatTier,
+  HALL_KIND_LABELS,
+  ROLE_LABEL_FIELD_LABEL,
+  UNLISTED_TIER_LABEL,
+} from './hallOfFameLabels.ts';
 
 interface HallOfFameEntryDialogProps {
   entry: HallEntry | null;
@@ -120,6 +125,16 @@ export function HallOfFameEntryDialog({
                   id="hall-entry-contact"
                   value={form.contactName}
                   onChange={(event) => setField('contactName', event.target.value)}
+                />
+              </FormField>
+            )}
+
+            {form.kind === 'teacher' && (
+              <FormField id="hall-entry-role-label" label={ROLE_LABEL_FIELD_LABEL}>
+                <Input
+                  id="hall-entry-role-label"
+                  value={form.roleLabel}
+                  onChange={(event) => setField('roleLabel', event.target.value)}
                 />
               </FormField>
             )}

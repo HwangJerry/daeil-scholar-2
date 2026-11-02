@@ -10,6 +10,12 @@ import { Button } from '../ui/Button.tsx';
 import { ConfirmDialog } from '../ui/ConfirmDialog.tsx';
 import { HallOfFameImportPreview } from './HallOfFameImportPreview.tsx';
 
+const IMPORT_DISABLED_CODE = 'HALL_OF_FAME_IMPORT_DISABLED';
+
+function isImportDisabled(error: unknown): error is ApiClientError {
+  return error instanceof ApiClientError && error.code === IMPORT_DISABLED_CODE;
+}
+
 function getErrorMessage(error: unknown) {
   return error instanceof ApiClientError && error.message
     ? error.message
@@ -25,6 +31,7 @@ export function HallOfFameImportSection() {
   const [removeIds, setRemoveIds] = useState<Set<number>>(new Set());
   const [commitResult, setCommitResult] = useState<HallImportCommitResult | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [disabledNotice, setDisabledNotice] = useState<string | null>(null);
 
   const isBusy = previewMutation.isPending || commitMutation.isPending;
 
@@ -39,17 +46,24 @@ export function HallOfFameImportSection() {
     clearReview();
   };
 
+  const reportFailure = (title: string) => (error: unknown) => {
+    if (isImportDisabled(error)) {
+      setDisabledNotice(error.message);
+      return;
+    }
+    addToast({ variant: 'error', title, description: getErrorMessage(error) });
+  };
+
   const handlePreview = () => {
     if (!file) return;
+    setDisabledNotice(null);
     previewMutation.mutate(file, {
       onSuccess: (result) => {
         setPreview(result);
         setRemoveIds(new Set());
         setCommitResult(null);
       },
-      onError: (error) => {
-        addToast({ variant: 'error', title: '미리보기 실패', description: getErrorMessage(error) });
-      },
+      onError: reportFailure('미리보기 실패'),
     });
   };
 
@@ -64,6 +78,7 @@ export function HallOfFameImportSection() {
 
   const handleCommit = () => {
     if (!preview) return;
+    setDisabledNotice(null);
     commitMutation.mutate(
       { previewToken: preview.previewToken, removeIds: [...removeIds] },
       {
@@ -73,16 +88,14 @@ export function HallOfFameImportSection() {
           clearReview();
           addToast({ variant: 'success', title: '명예의 전당에 반영했습니다.' });
         },
-        onError: (error) => {
-          addToast({ variant: 'error', title: '반영 실패', description: getErrorMessage(error) });
-        },
+        onError: reportFailure('반영 실패'),
       },
     );
   };
 
   const hasErrors = (preview?.errors.length ?? 0) > 0;
   const changeCount = (preview?.added.length ?? 0) + (preview?.updated.length ?? 0) + removeIds.size;
-  const canCommit = preview !== null && !hasErrors && changeCount > 0 && !isBusy;
+  const canCommit = Boolean(preview?.previewToken) && !hasErrors && changeCount > 0 && !isBusy;
 
   return (
     <section className="space-y-4 rounded-2xl border border-border-light bg-white p-6 shadow-sm">
@@ -109,6 +122,7 @@ export function HallOfFameImportSection() {
           <><Loader2 className="mr-2 h-4 w-4 animate-spin" />미리보기 생성 중...</>
         ) : '미리보기'}
       </Button>
+      {disabledNotice && <p className="text-sm text-cool-gray">{disabledNotice}</p>}
 
       {preview && (
         <>
