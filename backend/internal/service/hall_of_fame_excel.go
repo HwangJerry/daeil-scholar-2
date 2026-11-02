@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/dflh-saf/backend/internal/model"
@@ -24,13 +24,6 @@ const (
 	hallOfFameMaxImportRows    = 1000
 	hallOfFameMaxNameRunes     = 100
 	hallOfFameMaxDeptRunes     = 30
-)
-
-// Nine digits are longer than any name or department. Separators are removed first,
-// so brackets, dashes and spaces of any Unicode form cannot split a number.
-var (
-	hallOfFamePhoneRunPattern   = regexp.MustCompile(`[0-9]{9,}`)
-	hallOfFameSeparatorsPattern = regexp.MustCompile(`[\p{Z}\p{P}\p{S}\p{C}]+`)
 )
 
 type hallOfFameHeaderRule struct {
@@ -229,7 +222,14 @@ func hallOfFameIssue(rowIndex int, field, code, message string) model.HallOfFame
 }
 
 // hallOfFameHoldsPhone catches a phone number typed into a column that gets stored.
+// It counts digits across the whole cell rather than listing separators, because
+// any character can split a number (e.g. the Hangul vowel in "010ㅡ1234ㅡ5678").
 func hallOfFameHoldsPhone(value string) bool {
-	compact := hallOfFameSeparatorsPattern.ReplaceAllString(norm.NFKC.String(value), "")
-	return hallOfFamePhoneRunPattern.MatchString(compact)
+	digits := 0
+	for _, character := range norm.NFKC.String(value) {
+		if unicode.IsDigit(character) {
+			digits++
+		}
+	}
+	return digits >= hallOfFameMinPhoneDigits
 }

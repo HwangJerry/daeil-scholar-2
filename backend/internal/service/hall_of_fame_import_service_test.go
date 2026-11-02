@@ -472,6 +472,7 @@ func TestHallOfFameHoldsPhoneSeesThroughSeparators(t *testing.T) {
 	for _, value := range []string{
 		"01012345678", "010-1234-5678", "010 1234 5678", "(010)1234-5678", "010–1234–5678", "010/1234/5678",
 		"０１０－１２３４－５６７８", "김하나(010)1234-5678", "주식회사 대일(010.1234.5678)",
+		"010ㅡ1234ㅡ5678", "010ㆍ1234ㆍ5678", "010一1234一5678", "٠١٠١٢٣٤٥٦٧٨",
 	} {
 		if !hallOfFameHoldsPhone(value) {
 			t.Fatalf("%q must be detected", value)
