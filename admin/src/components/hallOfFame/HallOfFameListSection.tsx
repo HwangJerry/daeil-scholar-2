@@ -68,7 +68,7 @@ export function HallOfFameListSection() {
           <p>{list.isLoading ? '불러오는 중...' : `총 ${total.toLocaleString()}명`}</p>
           {tierCountSummary && <p className="mt-0.5 text-xs">{tierCountSummary}</p>}
         </div>
-        <Button size="sm" onClick={() => setDialogTarget({ mode: 'create' })}>
+        <Button size="sm" className="shrink-0 whitespace-nowrap" onClick={() => setDialogTarget({ mode: 'create' })}>
           <Plus className="mr-1 h-4 w-4" />
           추가
         </Button>
