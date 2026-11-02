@@ -28,6 +28,10 @@ type Config struct {
 	Environment           string // "dev" exposes manual subscription billing trigger; "prod" hides it
 	VisitIPSalt           string
 	MessageBlockedPhrases []string
+
+	// HallOfFamePhoneHashSecret keys phone_hash and must never change after the first
+	// import. Empty falls back to JWT_SECRET, whose rotation would re-key every row.
+	HallOfFamePhoneHashSecret string
 }
 
 // PrivacyConsentConfig controls the signup 개인정보 수집·이용 동의 requirement.
@@ -339,6 +343,8 @@ func Load() *Config {
 		Environment:           getEnv("ENV", "prod"),
 		MessageBlockedPhrases: strings.Split(getEnv("MESSAGE_BLOCKED_PHRASES", ""), ","),
 		VisitIPSalt:           getEnv("VISIT_IP_SALT", ""),
+
+		HallOfFamePhoneHashSecret: getEnv("HALL_OF_FAME_PHONE_HASH_SECRET", ""),
 	}
 }
 
