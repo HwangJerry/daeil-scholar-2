@@ -1,6 +1,6 @@
 // DonationImportSection — previews and commits Happy Sharing Excel donation rows
-import { useCallback, useState } from 'react';
-import { FileSpreadsheet, Loader2, Upload } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { ApiClientError } from '../../api/client.ts';
 import { useCommitDonationImport, usePreviewDonationImport } from '../../hooks/useDonationImport.ts';
 import { useToast } from '../../hooks/useToast.ts';
@@ -12,11 +12,10 @@ import type {
   DonationImportPreviewRow,
   DonationImportRowStatus,
 } from '../../types/api.ts';
+import { ExcelFileDropzone } from '../common/ExcelFileDropzone.tsx';
 import { Badge } from '../ui/Badge.tsx';
 import { Button } from '../ui/Button.tsx';
 import { Input } from '../ui/Input.tsx';
-
-const EXCEL_FILE_EXTENSION = '.xlsx';
 
 const STATUS_DETAILS: Record<
   DonationImportRowStatus,
@@ -231,6 +230,7 @@ export function DonationImportSection() {
         </div>
         <ExcelFileDropzone
           file={file}
+          hint="해피나눔 .xlsx 파일 지원"
           onFileSelected={handleFileSelected}
           disabled={previewMutation.isPending || commitMutation.isPending}
           onInvalidFile={() => addToast({
@@ -260,66 +260,6 @@ export function DonationImportSection() {
 
       {commitResult && <CommitResultTable result={commitResult} />}
     </section>
-  );
-}
-
-interface ExcelFileDropzoneProps {
-  file: File | null;
-  onFileSelected: (file: File) => void;
-  onInvalidFile: () => void;
-  disabled: boolean;
-}
-
-function ExcelFileDropzone({ file, onFileSelected, onInvalidFile, disabled }: ExcelFileDropzoneProps) {
-  const [isDragOver, setIsDragOver] = useState(false);
-
-  const processFile = useCallback((selectedFile: File | undefined) => {
-    if (!selectedFile) return;
-    if (!selectedFile.name.toLowerCase().endsWith(EXCEL_FILE_EXTENSION)) {
-      onInvalidFile();
-      return;
-    }
-    onFileSelected(selectedFile);
-  }, [onFileSelected, onInvalidFile]);
-
-  const handleDrop = useCallback((event: React.DragEvent<HTMLLabelElement>) => {
-    event.preventDefault();
-    setIsDragOver(false);
-    if (disabled) return;
-    processFile(event.dataTransfer.files[0]);
-  }, [disabled, processFile]);
-
-  const stateClass = isDragOver
-    ? 'border-royal-indigo bg-royal-indigo/5'
-    : 'border-border hover:border-royal-indigo/50';
-
-  return (
-    <label
-      className={`flex cursor-pointer select-none flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-sm transition-colors ${stateClass} ${disabled ? 'pointer-events-none opacity-60' : ''}`}
-      onDragOver={(event) => { event.preventDefault(); setIsDragOver(true); }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={handleDrop}
-    >
-      <input
-        type="file"
-        accept={EXCEL_FILE_EXTENSION}
-        className="hidden"
-        disabled={disabled}
-        onChange={(event) => {
-          processFile(event.target.files?.[0]);
-          event.target.value = '';
-        }}
-      />
-      {file ? (
-        <FileSpreadsheet className="h-5 w-5 text-royal-indigo" />
-      ) : (
-        <Upload className="h-5 w-5 text-text-tertiary" />
-      )}
-      <span className="text-dark-slate">
-        {file ? file.name : '엑셀 파일을 드래그하거나 클릭하여 선택'}
-      </span>
-      <span className="text-xs text-text-placeholder">해피나눔 .xlsx 파일 지원</span>
-    </label>
   );
 }
 
