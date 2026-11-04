@@ -35,6 +35,9 @@ type handlers struct {
 	adminBannerAd       *handler.AdminBannerAdHandler
 	adminDonation       *handler.AdminDonationHandler
 	adminDonationImport *handler.AdminDonationImportHandler
+	hallOfFame          *handler.HallOfFameHandler
+	adminHallOfFame     *handler.AdminHallOfFameHandler
+	adminHallImport     *handler.AdminHallOfFameImportHandler
 	adminMember         *handler.AdminMemberHandler
 	adminOperator       *handler.AdminOperatorHandler
 	adminDashboard      *handler.AdminDashboardHandler
@@ -138,6 +141,7 @@ func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthS
 		r.Use(mw.AuthMiddleware(authService))
 		r.Use(mw.AdminAuthMiddleware)
 		registerAdminDonationImportPreviewRoute(r, h.adminDonationImport)
+		registerAdminHallOfFameImportPreviewRoute(r, h.adminHallImport)
 	})
 }
 
@@ -151,6 +155,7 @@ func registerPublicRoutes(r chi.Router, h handlers, authService *service.AuthSer
 	// hero response does not depend on the caller.
 	r.With(mw.OptionalAuthMiddleware(authService)).Get("/api/feed/hero", h.feed.GetHero)
 	r.Get("/api/donation/summary", h.donation.GetSummary)
+	r.Get("/api/v1/hall-of-fame", h.hallOfFame.Get)
 	r.Get("/api/settings/public", h.appSetting.Public)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/account-deletion/receipt", h.accountDeletion.Receipt)
 	r.With(mw.LoginRateLimiter(cacheStore)).Post("/api/account-deletion/cancel", h.accountDeletion.Cancel)
@@ -319,6 +324,9 @@ func registerAdminRoutes(r chi.Router, h handlers, authService *service.AuthServ
 		r.Route("/donation", func(donationRouter chi.Router) {
 			registerAdminDonationRoutes(donationRouter, h.adminDonation, h.adminDonationImport)
 		})
+		r.Route("/hall-of-fame", func(hallOfFameRouter chi.Router) {
+			registerAdminHallOfFameRoutes(hallOfFameRouter, h.adminHallOfFame, h.adminHallImport)
+		})
 		r.Get("/member", h.adminMember.List)
 		r.Get("/member/{seq}", h.adminMember.Detail)
 		r.Put("/member/{seq}", h.adminMember.Update)
@@ -368,6 +376,18 @@ func registerAdminDonationRoutes(router chi.Router, donationHandler *handler.Adm
 	router.Post("/orders", donationHandler.CreateOrder)
 	router.Put("/orders/{orderSeq}", donationHandler.UpdateOrder)
 	router.Post("/import/commit", importHandler.Commit)
+}
+
+func registerAdminHallOfFameRoutes(router chi.Router, entryHandler *handler.AdminHallOfFameHandler, importHandler *handler.AdminHallOfFameImportHandler) {
+	router.Get("/", entryHandler.List)
+	router.Post("/", entryHandler.Create)
+	router.Patch("/{id}", entryHandler.Patch)
+	router.Delete("/{id}", entryHandler.Delete)
+	router.Post("/import/commit", importHandler.Commit)
+}
+
+func registerAdminHallOfFameImportPreviewRoute(router chi.Router, importHandler *handler.AdminHallOfFameImportHandler) {
+	router.Post("/api/admin/hall-of-fame/import/preview", importHandler.Preview)
 }
 
 func registerAdminDonationImportPreviewRoute(router chi.Router, importHandler *handler.AdminDonationImportHandler) {

@@ -158,6 +158,12 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 	adminDonationSvc := service.NewAdminDonationService(adminDonationRepo, donationRepo)
 	donationJob := job.NewDonationSnapshotJob(donationRepo, logger)
 	adminDonationOrchestrator := service.NewDonationConfigOrchestrator(adminDonationSvc, donationService, donationJob)
+	hallOfFameRepo := repository.NewHallOfFameRepository(db)
+	hallOfFameSvc := service.NewHallOfFameService(hallOfFameRepo)
+	if cfg.HallOfFamePhoneHashSecret == "" {
+		logger.Warn().Msg("HALL_OF_FAME_PHONE_HASH_SECRET is empty; hall of fame import is disabled")
+	}
+	hallOfFameImportSvc := service.NewHallOfFameImportService(hallOfFameRepo, cfg.JWT.Secret, cfg.HallOfFamePhoneHashSecret)
 	donationImportSvc := service.NewDonationImportService(donationImportRepo, adminDonationSvc, cfg.JWT.Secret, adminDonationOrchestrator)
 	adminMemberSvc := service.NewAdminMemberService(adminMemberRepo)
 	// The realtime inbox event is wired unconditionally: the inbox lists every
@@ -270,6 +276,9 @@ func wireDeps(db *sqlx.DB, cfg *config.Config, logger zerolog.Logger) (*deps, er
 		adminBannerAd:       handler.NewAdminBannerAdHandler(adminBannerAdSvc),
 		adminDonation:       handler.NewAdminDonationHandler(adminDonationOrchestrator),
 		adminDonationImport: handler.NewAdminDonationImportHandler(donationImportSvc, cfg.Upload.MaxFileSizeMB),
+		hallOfFame:          handler.NewHallOfFameHandler(hallOfFameSvc),
+		adminHallOfFame:     handler.NewAdminHallOfFameHandler(hallOfFameSvc),
+		adminHallImport:     handler.NewAdminHallOfFameImportHandler(hallOfFameImportSvc, cfg.Upload.MaxFileSizeMB),
 		adminMember:         handler.NewAdminMemberHandler(adminMemberSvc),
 		adminOperator:       handler.NewAdminOperatorHandler(service.NewAdminOperatorService(repository.NewAdminOperatorRepository(db))),
 		adminDashboard:      handler.NewAdminDashboardHandler(adminDashboardSvc),
