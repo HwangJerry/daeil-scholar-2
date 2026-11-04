@@ -263,6 +263,8 @@
   --layout-feed-post-card-radius: 18px;
   --layout-feed-post-detail-section-spacing: 10px;
   --layout-feed-post-detail-spacing: 16px;
+  --layout-hall-heartbeat-first-amplitude: 0.06;
+  --layout-hall-heartbeat-second-amplitude: 0.035;
   --layout-message-bubble-max-width-ratio: 0.76;
   --layout-navigation-motion-easing-x1: 0.25;
   --layout-navigation-motion-easing-x2: 0.3;
