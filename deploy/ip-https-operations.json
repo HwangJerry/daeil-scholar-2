@@ -25,6 +25,15 @@
   "schedule_kst": ["00:23", "06:23", "12:23", "18:23"],
   "renew_with_days_remaining": 3,
   "health_failure_threshold_hours_remaining": 48,
+  "backend_origin_rollout": {
+    "source_commit": "832ac43a227d201d5ee2337e88a01a96ea2888f7",
+    "server_sha256": "27e3e405217dcde8bff78420c1cb20de84bfcb835821be695bdd5d7f63ee17be",
+    "maintenance_directory": "/app/maintenance/20261108T163152Z-ip-https",
+    "receipt": "/app/maintenance/20261108T163152Z-ip-https/receipt.json",
+    "database_migrations": false,
+    "existing_runtime_configuration_preserved": true,
+    "method": "Verified immutable backend artifact plus MOBILE_ORIGIN drop-in; backend-only restart with automatic rollback on failed checks."
+  },
   "commands": {
     "check_timer": "systemctl list-timers alumni-ip-certificate.timer --no-pager",
     "run_check_or_renewal": "systemctl start alumni-ip-certificate.service",
@@ -39,6 +48,7 @@
     "The existing domain certificate and its Certbot job are unchanged.",
     "The certificate and account private keys remain only on the server; never commit them.",
     "To roll back the IP endpoint, disable this timer and remove only the two 00-alumni-ip vhost configurations, then run httpd -t and reload httpd. IP-based mobile clients would stop connecting.",
-    "Routine release deployment does not install or remove these independently managed files."
+    "Routine release deployment does not install or remove these independently managed files.",
+    "The IP-origin backend was deployed as a maintenance change so the existing account-erasure and retention gates remained unchanged. Its prior binary and receipt are in backend_origin_rollout. Do not use an older release's activation command against this newer binary; prepare a current release first."
   ]
 }
