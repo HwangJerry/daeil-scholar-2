@@ -1,0 +1,44 @@
+{
+  "origin": "https://211.169.249.240",
+  "public_port": 443,
+  "certificate_authority": "Let's Encrypt",
+  "certificate_profile": "shortlived",
+  "acme_client": {
+    "version": "lego 5.6.0",
+    "download": "https://github.com/go-acme/lego/releases/download/v5.6.0/lego_v5.6.0_linux_amd64.tar.gz",
+    "archive_sha256": "f02fc11b6f56b97e387fa7caa0268f86f5a336953b22458e6430e4651fea439a",
+    "installed_binary_sha256": "9ba1a7f9ed951e6a506cf7581fcb0373ee3ae9b6fd58d4572a08400c1e905ba8",
+    "path": "/usr/local/bin/lego-ip"
+  },
+  "private_state_directory": "/etc/alumni-ip-tls",
+  "private_state_directory_mode": "0700",
+  "http01_webroot": "/var/lib/alumni-ip-acme/webroot",
+  "installed_files": {
+    "httpd-ip-acme.conf": "/etc/httpd/conf.d/00-alumni-ip-http.conf",
+    "httpd-ip.conf": "/etc/httpd/conf.d/00-alumni-ip-ssl.conf",
+    "renew-ip-certificate.sh": "/usr/local/sbin/renew-alumni-ip-certificate",
+    "alumni-ip-certificate.service": "/etc/systemd/system/alumni-ip-certificate.service",
+    "alumni-ip-certificate.timer": "/etc/systemd/system/alumni-ip-certificate.timer",
+    "alumni-mobile-origin.conf": "/etc/systemd/system/alumni-backend.service.d/95-mobile-origin.conf",
+    "check_ip_https.go": "build as /usr/local/bin/alumni-ip-https-check with CGO_ENABLED=0 GOOS=linux GOARCH=amd64"
+  },
+  "schedule_kst": ["00:23", "06:23", "12:23", "18:23"],
+  "renew_with_days_remaining": 3,
+  "health_failure_threshold_hours_remaining": 48,
+  "commands": {
+    "check_timer": "systemctl list-timers alumni-ip-certificate.timer --no-pager",
+    "run_check_or_renewal": "systemctl start alumni-ip-certificate.service",
+    "check_last_result": "systemctl show alumni-ip-certificate.service --property=Result --property=ExecMainStatus",
+    "read_logs": "journalctl -u alumni-ip-certificate.service --since today --no-pager",
+    "verify_served_certificate": "/usr/local/bin/alumni-ip-https-check",
+    "external_health_check": "curl --fail https://211.169.249.240/api/health"
+  },
+  "notes": [
+    "The hosting network lacks public-IP loopback; the server-side probe dials 127.0.0.1 but validates the public IP identity, CA chain, expiry and the served certificate fingerprint.",
+    "CentOS's legacy NSS curl rejects the short-lived certificate profile; the dedicated Go probe preserves full TLS verification instead of bypassing it.",
+    "The existing domain certificate and its Certbot job are unchanged.",
+    "The certificate and account private keys remain only on the server; never commit them.",
+    "To roll back the IP endpoint, disable this timer and remove only the two 00-alumni-ip vhost configurations, then run httpd -t and reload httpd. IP-based mobile clients would stop connecting.",
+    "Routine release deployment does not install or remove these independently managed files."
+  ]
+}

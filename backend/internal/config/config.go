@@ -161,7 +161,10 @@ type ServerConfig struct {
 	// AdminOrigin is the admin SPA's own origin (https://adms.daeilfoundation.or.kr).
 	// It is kept apart from AllowedOrigin because AllowedOrigin is also used as the
 	// single redirect base for Kakao web login.
-	AdminOrigin     string
+	AdminOrigin string
+	// MobileOrigin permits first-party web sheets served from the native API IP.
+	// Keep it separate from AllowedOrigin, the Kakao web-login redirect base.
+	MobileOrigin    string
 	SiteBaseURL     string
 	ShutdownTimeout time.Duration
 }
@@ -243,6 +246,7 @@ func Load() *Config {
 			Port:            getEnv("SERVER_PORT", "8080"),
 			AllowedOrigin:   getEnv("ALLOWED_ORIGIN", "http://localhost:8000"),
 			AdminOrigin:     getEnv("ADMIN_ORIGIN", ""),
+			MobileOrigin:    getEnv("MOBILE_ORIGIN", ""),
 			SiteBaseURL:     getEnv("SITE_BASE_URL", "http://localhost:8000"),
 			ShutdownTimeout: getDurationEnv("SHUTDOWN_TIMEOUT", 10*time.Second),
 		},

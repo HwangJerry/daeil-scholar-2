@@ -19,5 +19,8 @@ func configuredOrigins(server config.ServerConfig) []string {
 	if admin := strings.TrimSpace(server.AdminOrigin); admin != "" {
 		origins = append(origins, admin)
 	}
+	if mobile := strings.TrimSpace(server.MobileOrigin); mobile != "" {
+		origins = append(origins, mobile)
+	}
 	return origins
 }

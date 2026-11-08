@@ -1,0 +1,13 @@
+[Unit]
+Description=Renew and verify the alumni mobile IP HTTPS certificate
+After=network-online.target httpd.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/renew-alumni-ip-certificate
+Environment=GOMAXPROCS=1
+Environment=GOMEMLIMIT=64MiB
+UMask=0077
+Nice=10
+TimeoutStartSec=900
