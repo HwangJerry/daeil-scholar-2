@@ -111,6 +111,22 @@ Handler → Service → Repository
 
 Single Gabia cloud server (1-core, 1GB RAM, 50GB HDD). **Apache httpd** reverse proxy → Go `:8080` (CentOS-based server inherited from PHP-era infra; Nginx is dev-only). MariaDB `:3306` on the same box. Very resource-constrained: `GOMEMLIMIT=80MiB`, `GOMAXPROCS=1`.
 
+Native mobile clients use `https://211.169.249.240` with a publicly trusted IP
+certificate. `deploy/httpd-ip-acme.conf` and `deploy/httpd-ip.conf` are installed
+as `00-alumni-ip-http.conf` and `00-alumni-ip-ssl.conf`; their ordering makes the
+IP certificate available to clients that omit SNI. Existing domain/admin vhosts
+remain separate. The IP vhost denies admin APIs.
+`MOBILE_ORIGIN=https://211.169.249.240` allows same-origin mobile web sheets
+through CORS/CSRF checks without changing the domain-based Kakao redirect base.
+
+IP certificates are managed by pinned lego 5.6.0, independently of the legacy
+domain Certbot. `alumni-ip-certificate.timer` checks every six hours, renews with
+three days remaining (or earlier when ACME renewal information requests it),
+validates Apache configuration, reloads it and verifies the served certificate
+and API health. See `deploy/ip-https-operations.json` for paths and commands.
+Do not remove the HTTP-01 webroot exception or replace the IP certificate with
+the domain certificate during ordinary releases.
+
 ## MariaDB 10.1.38 Constraints
 
 **This is critical.** The production database is MariaDB 10.1.38 (EOL 2020). Many modern SQL features are unavailable.

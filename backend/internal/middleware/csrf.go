@@ -3,7 +3,7 @@ package middleware
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
+	"net/url"
 
 	"github.com/dflh-saf/backend/internal/model"
 )
@@ -26,14 +26,9 @@ func CSRFMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 			}
 			referer := r.Header.Get("Referer")
 			if referer != "" {
-				matched := false
-				for _, allowed := range allowedOrigins {
-					if strings.HasPrefix(referer, allowed) {
-						matched = true
-						break
-					}
-				}
-				if !matched {
+				parsed, err := url.Parse(referer)
+				if err != nil || parsed.User != nil || parsed.Host == "" ||
+					!isAllowedCSRFOrigin(parsed.Scheme+"://"+parsed.Host, allowedOrigins) {
 					writeError(w, http.StatusForbidden, "CSRF_REJECTED", "Invalid referer")
 					return
 				}
