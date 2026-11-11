@@ -1058,3 +1058,29 @@ func (r *AuthRepository) FindMemberByIDAndPwdAny(usrID, hashedPwd string) (*mode
 	}
 	return &user, nil
 }
+
+// HasPendingSignup distinguishes an existing submitted application from approved,
+// rejected, unsubmitted, withdrawn and suspended accounts. It never creates a session.
+func (r *AuthRepository) HasPendingSignup(field, value string) (bool, error) {
+	var condition string
+	args := []interface{}{value}
+	switch field {
+	case "id":
+		condition = "USR_ID = ?"
+	case "email":
+		condition = "USR_EMAIL = ?"
+	case "phone":
+		condition = "(USR_PHONE = ? OR " + legacyCanonicalPhoneSQL + " = ?)"
+		value = model.NormalizePhoneNumber(value).String()
+		args = []interface{}{value, value}
+	default:
+		return false, fmt.Errorf("invalid signup availability field")
+	}
+	var exists bool
+	err := r.DB.Get(&exists, `SELECT EXISTS(SELECT 1 FROM WEO_MEMBER
+        WHERE `+condition+` AND USR_STATUS IN ('BAA','BBB','CCC','ZZZ')
+        AND EXISTS (SELECT 1 FROM AUTH_ACCOUNT_STATE a WHERE a.ACCOUNT_ID = WEO_MEMBER.USR_SEQ AND a.STATUS = 'ACTIVE')
+        AND EXISTS (SELECT 1 FROM ALUMNI_VERIFICATION v WHERE v.USR_SEQ = WEO_MEMBER.USR_SEQ
+          AND v.STATUS IN ('pending','reapproval_pending')))`, args...)
+	return exists, err
+}

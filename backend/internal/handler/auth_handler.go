@@ -273,14 +273,23 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, service.ErrInvalidNewPassword):
 			respondError(w, http.StatusBadRequest, "INVALID_PASSWORD", "비밀번호는 UTF-8 기준 8바이트 이상이며 영문, 숫자, 특수문자를 포함해야 합니다")
 		case errors.Is(err, service.ErrIDTaken):
+			if h.respondPendingSignup(w, "id", req.UsrID) {
+				return
+			}
 			respondError(w, http.StatusConflict, "ID_TAKEN", "이미 사용 중인 아이디입니다")
 		case errors.Is(err, service.ErrPhonePendingDeletion):
 			respondError(w, http.StatusConflict, "PHONE_PENDING_DELETION", "탈퇴 처리 중인 전화번호입니다. 탈퇴 처리가 끝난 뒤 다시 가입해주세요")
 		case errors.Is(err, service.ErrPhoneTaken):
+			if h.respondPendingSignup(w, "phone", req.Phone) {
+				return
+			}
 			respondError(w, http.StatusConflict, "PHONE_TAKEN", "이미 등록된 전화번호입니다")
 		case errors.Is(err, service.ErrInvalidPhone):
 			respondError(w, http.StatusBadRequest, "INVALID_PHONE", "유효한 전화번호를 입력해주세요")
 		case errors.Is(err, service.ErrEmailTaken):
+			if h.respondPendingSignup(w, "email", req.Email) {
+				return
+			}
 			respondError(w, http.StatusConflict, "EMAIL_TAKEN", "이미 등록된 이메일입니다")
 		case errors.Is(err, service.ErrTagContainsWhitespace):
 			respondError(w, http.StatusBadRequest, "INVALID_TAG", "태그에 공백을 포함할 수 없습니다")
@@ -306,7 +315,7 @@ func (h *AuthHandler) CheckID(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "아이디 중복 확인에 실패했습니다")
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]bool{"available": available})
+	h.respondSignupAvailability(w, available, "id", usrID)
 }
 
 func (h *AuthHandler) CheckPhone(w http.ResponseWriter, r *http.Request) {
@@ -325,7 +334,7 @@ func (h *AuthHandler) CheckPhone(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "전화번호 중복 확인에 실패했습니다")
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]bool{"available": available})
+	h.respondSignupAvailability(w, available, "phone", phone)
 }
 
 func (h *AuthHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
@@ -340,7 +349,7 @@ func (h *AuthHandler) CheckEmail(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "이메일 중복 확인에 실패했습니다")
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]bool{"available": available})
+	h.respondSignupAvailability(w, available, "email", email)
 }
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -387,4 +396,39 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, current)
+}
+
+const signupPendingMessage = "가입 요청이 정상적으로 처리되었습니다. 검토 후 승인됩니다."
+
+func (h *AuthHandler) respondSignupAvailability(w http.ResponseWriter, available bool, field, value string) {
+	pending := false
+	if !available {
+		var err error
+		pending, err = h.registerSvc.HasPendingSignup(field, value)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "가입 상태 확인에 실패했습니다")
+			return
+		}
+	}
+	response := map[string]bool{"available": available}
+	if pending {
+		response["signupPending"] = true
+	}
+	respondJSON(w, http.StatusOK, response)
+}
+
+func (h *AuthHandler) respondPendingSignup(w http.ResponseWriter, field, value string) bool {
+	if h.registerSvc == nil {
+		return false
+	}
+	pending, err := h.registerSvc.HasPendingSignup(field, value)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "CHECK_FAILED", "가입 상태 확인에 실패했습니다")
+		return true
+	}
+	if !pending {
+		return false
+	}
+	respondError(w, http.StatusConflict, "SIGNUP_ALREADY_PENDING", signupPendingMessage)
+	return true
 }

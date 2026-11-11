@@ -182,3 +182,15 @@ func (s *RegistrationService) Register(req model.RegisterRequest) (*model.User, 
 func (s *RegistrationService) newSignupPasswordCredential(password string) (model.PasswordCredential, error) {
 	return s.hasher.NewCredential(0, model.IdentityProviderLocalUsername, password)
 }
+
+// HasPendingSignup is optional for older repository adapters; absence never
+// manufactures a successful application notice.
+func (s *RegistrationService) HasPendingSignup(field, value string) (bool, error) {
+	reader, ok := s.memberRepo.(interface {
+		HasPendingSignup(string, string) (bool, error)
+	})
+	if !ok {
+		return false, nil
+	}
+	return reader.HasPendingSignup(field, value)
+}
