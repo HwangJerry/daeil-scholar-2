@@ -32,7 +32,7 @@ func NewSocialLinkPhotoHandler(uploader socialSignupPhotoUploader, linkTokens *s
 // Auth is the cached link token; on success the cached SocialLinkData.ProfileImageURL is
 // updated so the eventual /api/auth/social/link submit picks up the new URL by default.
 func (h *SocialLinkPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, socialLinkPhotoMaxBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, socialLinkPhotoMaxBytes+(64<<10))
 	if err := r.ParseMultipartForm(socialLinkPhotoMaxBytes); err != nil {
 		respondError(w, http.StatusBadRequest, "FILE_TOO_LARGE", "File exceeds 5MB limit")
 		return
@@ -64,6 +64,10 @@ func (h *SocialLinkPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer file.Close()
+	if header.Size > socialLinkPhotoMaxBytes {
+		respondError(w, http.StatusBadRequest, "FILE_TOO_LARGE", "사진은 5MB 이하로 선택해 주세요.")
+		return
+	}
 
 	result, err := h.uploader.Upload(file, header, "profile")
 	if err != nil {

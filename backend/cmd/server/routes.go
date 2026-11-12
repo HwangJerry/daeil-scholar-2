@@ -121,7 +121,7 @@ func registerPGRoutes(router chi.Router, h handlers) {
 // registerAPIRoutes registers all /api/* routes with CSRF protection.
 func registerAPIRoutes(router chi.Router, h handlers, authService *service.AuthService, cacheStore *cache.Cache, allowedOrigins []string, cfg *config.Config, gate appVersionGate) {
 	router.Group(func(r chi.Router) {
-		r.Use(mw.MaxBodySize(defaultMaxBodySizeBytes))
+		r.Use(apiBodySizeLimit)
 		r.Use(mw.CSRFMiddleware(allowedOrigins))
 		if gate.policies != nil {
 			r.Use(mw.AppVersionGate(gate.policies))
@@ -392,4 +392,17 @@ func registerAdminHallOfFameImportPreviewRoute(router chi.Router, importHandler 
 
 func registerAdminDonationImportPreviewRoute(router chi.Router, importHandler *handler.AdminDonationImportHandler) {
 	router.Post("/api/admin/donation/import/preview", importHandler.Preview)
+}
+
+// Multipart framing is additional to the advertised 5 MiB photo limit.
+const signupPhotoRequestMaxBytes int64 = (5 << 20) + (64 << 10)
+
+func apiBodySizeLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		limit := defaultMaxBodySizeBytes
+		if r.Method == http.MethodPost && r.URL.Path == "/api/auth/social/link/photo" {
+			limit = signupPhotoRequestMaxBytes
+		}
+		mw.MaxBodySize(limit)(next).ServeHTTP(w, r)
+	})
 }
