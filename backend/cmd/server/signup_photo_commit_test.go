@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"image"
 	"image/png"
 	"io"
@@ -73,7 +74,33 @@ func TestSocialSignupCommitConsumesProofAndCleansOnlyUnusedRealPhoto(t *testing.
 	goldenCount(t, s.db, 1, `SELECT COUNT(*) FROM ALUMNI_PHONE_VERIFICATION WHERE CONSUMED_USR_SEQ=? AND CONSUMED_YN='Y'`, result.Session.User.USRSeq)
 }
 
+func TestSignupPhotoAboveDefaultAPIBodyLimitIsStored(t *testing.T) {
+	s := newGoldenServer(t)
+	store := service.NewSocialLinkTokenStore(s.deps.cacheStore)
+	_, err := store.Put("large-photo", model.SocialLinkData{Provider: "KT", SocialID: "synthetic-large-photo"}, 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := uploadSizedSignupPhoto(t, s, "large-photo", 1024)
+	path := filepath.Join(os.Getenv("UPLOAD_BASE_PATH"), strings.TrimPrefix(url, "/uploads/"))
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Size() <= defaultMaxBodySizeBytes {
+		t.Fatalf("fixture too small: %d", info.Size())
+	}
+	snapshot, err := store.Snapshot("large-photo")
+	if err != nil || snapshot.Data.ProfileImageURL != url {
+		t.Fatalf("uploaded photo not attached: %v", err)
+	}
+}
+
 func uploadRealSignupPhoto(t *testing.T, s *goldenServer, token string) string {
+	return uploadSizedSignupPhoto(t, s, token, 2)
+}
+
+func uploadSizedSignupPhoto(t *testing.T, s *goldenServer, token string, pixels int) string {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -82,7 +109,13 @@ func uploadRealSignupPhoto(t *testing.T, s *goldenServer, token string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := png.Encode(part, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+	photo := image.NewRGBA(image.Rect(0, 0, pixels, pixels))
+	if pixels > 2 {
+		if _, err := rand.Read(photo.Pix); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := png.Encode(part, photo); err != nil {
 		t.Fatal(err)
 	}
 	_ = writer.Close()
