@@ -5,6 +5,8 @@ package repository
 // The active login statuses BBB/CCC/ZZZ exclude withdrawn and inactive accounts.
 // Operator accounts stay approved for administration but are omitted from the
 // directory, detail, filter options and preview counts using canonical admin roles.
+// The explicitly provisioned review/QA identities are also hidden, including if
+// the QA account is approved later. Never infer test identity from a name/prefix.
 
 import (
 	"database/sql"
@@ -13,6 +15,11 @@ import (
 	"github.com/dflh-saf/backend/internal/model"
 	"github.com/jmoiron/sqlx"
 )
+
+const alumniDirectoryEligibility = `v.STATUS = 'approved'
+		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
+		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
+		  AND m.USR_ID NOT IN ('review261112', 'signupqa261112')`
 
 type AlumniRepository struct {
 	DB *sqlx.DB
@@ -29,9 +36,7 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 		SELECT COUNT(*) FROM WEO_MEMBER m
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
-		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
-		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
+		WHERE ` + alumniDirectoryEligibility + `
 		  AND m.USR_SEQ > 0
 	` + where
 
@@ -59,9 +64,7 @@ func (r *AlumniRepository) Search(params model.AlumniSearchParams) ([]model.Alum
 		FROM WEO_MEMBER m
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
-		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
-		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
+		WHERE ` + alumniDirectoryEligibility + `
 		  AND m.USR_SEQ > 0
 	` + where + `
 		ORDER BY m.USR_NAME ASC, m.USR_SEQ ASC
@@ -95,9 +98,7 @@ func (r *AlumniRepository) GetDetail(viewerSeq, userSeq int) (*model.AlumniRecor
 		FROM WEO_MEMBER m
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
-		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
-		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
+		WHERE `+alumniDirectoryEligibility+`
 		  AND m.USR_SEQ = ?
 		LIMIT 1
 	`, viewerSeq, userSeq)
@@ -123,9 +124,7 @@ func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
 		SELECT DISTINCT v.GRADUATION_YEAR
 		FROM ALUMNI_VERIFICATION v
 		JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
-		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
-		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
+		WHERE `+alumniDirectoryEligibility+`
 		  AND v.GRADUATION_YEAR IS NOT NULL
 		ORDER BY v.GRADUATION_YEAR DESC
 	`); err != nil {
@@ -137,9 +136,7 @@ func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
 		SELECT DISTINCT v.COHORT
 		FROM ALUMNI_VERIFICATION v
 		JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
-		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
-		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
+		WHERE `+alumniDirectoryEligibility+`
 		  AND v.COHORT IS NOT NULL AND v.COHORT != ''
 		ORDER BY
 		  CASE WHEN v.COHORT REGEXP '^[0-9]+$' THEN 0 ELSE 1 END,
@@ -154,9 +151,7 @@ func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
 		SELECT DISTINCT v.DEPARTMENT
 		FROM ALUMNI_VERIFICATION v
 		JOIN WEO_MEMBER m ON m.USR_SEQ = v.USR_SEQ
-		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
-		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
+		WHERE `+alumniDirectoryEligibility+`
 		  AND v.DEPARTMENT IS NOT NULL AND v.DEPARTMENT != ''
 		ORDER BY v.DEPARTMENT ASC
 	`); err != nil {
@@ -173,9 +168,7 @@ func (r *AlumniRepository) GetFilters() (*model.AlumniFilters, error) {
 		SELECT DISTINCT m.USR_POSITION
 		FROM WEO_MEMBER m
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
-		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
-		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
+		WHERE `+alumniDirectoryEligibility+`
 		  AND m.USR_POSITION IS NOT NULL AND m.USR_POSITION != ''
 		ORDER BY m.USR_POSITION ASC
 	`); err != nil {
@@ -212,9 +205,7 @@ func (r *AlumniRepository) GetWidgetPreview() ([]string, int, error) {
 		SELECT COUNT(*)
 		FROM WEO_MEMBER m
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
-		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
-		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)`); err != nil {
+		WHERE `+alumniDirectoryEligibility+``); err != nil {
 		return nil, 0, err
 	}
 	var names []string
@@ -222,9 +213,7 @@ func (r *AlumniRepository) GetWidgetPreview() ([]string, int, error) {
 		SELECT m.USR_NAME
 		FROM WEO_MEMBER m
 		JOIN ALUMNI_VERIFICATION v ON v.USR_SEQ = m.USR_SEQ
-		WHERE v.STATUS = 'approved'
-		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
-		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
+		WHERE `+alumniDirectoryEligibility+`
 		ORDER BY m.USR_NAME ASC, m.USR_SEQ ASC
 		LIMIT 5`); err != nil {
 		return nil, 0, err

@@ -56,6 +56,7 @@ func TestAlumniSearchReadsBusinessFieldsInPageQuery(t *testing.T) {
 		WHERE v.STATUS = 'approved'
 		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
+		  AND m.USR_ID NOT IN ('review261112', 'signupqa261112')
 		  AND m.USR_SEQ > 0
 	`).WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(len(tests)))
 	mock.ExpectQuery(`
@@ -69,6 +70,7 @@ func TestAlumniSearchReadsBusinessFieldsInPageQuery(t *testing.T) {
 		WHERE v.STATUS = 'approved'
 		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
 		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
+		  AND m.USR_ID NOT IN ('review261112', 'signupqa261112')
 		  AND m.USR_SEQ > 0
 		ORDER BY m.USR_NAME ASC, m.USR_SEQ ASC
 		LIMIT ? OFFSET ?
