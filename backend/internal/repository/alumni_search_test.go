@@ -55,6 +55,7 @@ func TestAlumniSearchReadsBusinessFieldsInPageQuery(t *testing.T) {
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
 		WHERE v.STATUS = 'approved'
 		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
+		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
 		  AND m.USR_SEQ > 0
 	`).WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(len(tests)))
 	mock.ExpectQuery(`
@@ -67,6 +68,7 @@ func TestAlumniSearchReadsBusinessFieldsInPageQuery(t *testing.T) {
 		LEFT JOIN ALUMNI_JOB_CATEGORY jc ON m.USR_JOB_CAT = jc.AJC_SEQ
 		WHERE v.STATUS = 'approved'
 		  AND m.USR_STATUS IN ('BBB','CCC','ZZZ')
+		  AND NOT EXISTS (SELECT 1 FROM ALUMNI_ADMIN_ROLE ar WHERE ar.USR_SEQ = m.USR_SEQ)
 		  AND m.USR_SEQ > 0
 		ORDER BY m.USR_NAME ASC, m.USR_SEQ ASC
 		LIMIT ? OFFSET ?
